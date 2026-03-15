@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=Inter:wght@300;400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-minecraft: "Press Start 2P", monospace;
+  --font-mono: "VT323", monospace;
+
+  --color-mc-green: #4CAF50;
+  --color-mc-green-dark: #388E3C;
+  --color-mc-green-light: #81C784;
+  --color-mc-bg: #080808;
+  --color-mc-grass: #2E7D32;
+  
+  --animate-spotlight: spotlight 2s ease .75s 1 forwards;
+  
+  @keyframes spotlight {
+    0% {
+      opacity: 0;
+      transform: translate(-72%, -62%) scale(0.5);
+    }
+    100% {
+      opacity: 1;
+      transform: translate(-50%, -40%) scale(1);
+    }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  @keyframes pixel-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #080808;
+  color: #ffffff;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+
