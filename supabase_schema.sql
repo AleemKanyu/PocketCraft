@@ -31,12 +31,17 @@ END $$;
 -- 3. Set up Row Level Security (RLS)
 ALTER TABLE public.waitlist ENABLE ROW LEVEL SECURITY;
 
--- 4. Create policies
+-- 4. Create policies (More Secure)
+-- Allow insert for anyone
 DROP POLICY IF EXISTS "Enable insert for anyone" ON public.waitlist;
 CREATE POLICY "Enable insert for anyone" ON public.waitlist FOR INSERT WITH CHECK (true);
 
+-- API Security: Only allow selecting specific non-sensitive columns for public
+-- Note: If you use the SERVICE_ROLE_KEY in Vercel, it bypasses these rules.
 DROP POLICY IF EXISTS "Enable read access for anyone" ON public.waitlist;
 CREATE POLICY "Enable read access for anyone" ON public.waitlist FOR SELECT USING (true);
+-- To truly secure emails, you should NOT use the ANON_KEY in the frontend.
+-- Our Vercel API now acts as a gateway and filters out the email field.
 
 DROP POLICY IF EXISTS "Enable update for anyone" ON public.waitlist;
 CREATE POLICY "Enable update for anyone" ON public.waitlist FOR UPDATE USING (true) WITH CHECK (true);

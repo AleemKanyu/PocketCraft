@@ -1,6 +1,7 @@
 import { useState, FormEvent } from "react";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 import { Copy, Check, Share2, Loader2 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export default function WaitlistForm() {
   const [email, setEmail] = useState("");
@@ -10,7 +11,6 @@ export default function WaitlistForm() {
   const [error, setError] = useState("");
   const [data, setData] = useState<{ rank: number; referral_code: string; referral_count: number } | null>(null);
   const [copied, setCopied] = useState(false);
-  const [showCheckStatus, setShowCheckStatus] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -61,29 +61,6 @@ export default function WaitlistForm() {
     }
   };
 
-  const handleCheckStatus = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
-
-    setLoading(true);
-    setError("");
-
-    try {
-      const res = await fetch(`/api/waitlist?email=${encodeURIComponent(email)}`);
-      const json = await res.json();
-
-      if (!res.ok) {
-        throw new Error(json.error || "User not found");
-      }
-
-      setData(json);
-      setSuccess(true);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const referralLink = data ? `${window.location.origin}/ref/${data.referral_code}` : "";
 
@@ -101,35 +78,35 @@ export default function WaitlistForm() {
   if (success && data) {
     return (
       <motion.div
-        initial={{ opacity: 0, scale: 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-[#0f0f0f] border border-white/5 rounded-2xl p-7 text-center"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="bg-black border-2 border-white/10 p-8 text-center"
       >
-        <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-full flex items-center justify-center mx-auto mb-5">
+        <div className="w-12 h-12 border border-white/20 flex items-center justify-center mx-auto mb-6 bg-white/5">
           <span className="text-xl">✨</span>
         </div>
         
-        <h3 className="text-lg font-bold text-white mb-1 tracking-tight uppercase">You're on the list!</h3>
-        <div className="flex items-center justify-center gap-2 mb-5">
-          <div className="bg-black border border-white/10 text-white rounded-full px-5 py-1.5 text-xs font-black tracking-widest uppercase">
+        <h3 className="text-sm font-minecraft text-white mb-6 tracking-wider uppercase">You're on the list!</h3>
+        <div className="flex flex-col items-center justify-center gap-4 mb-8 font-minecraft">
+          <div className="bg-[#4CAF50] text-white px-8 py-3 text-[10px] uppercase border-4 border-t-[#81C784] border-l-[#81C784] border-r-[#2E7D32] border-b-[#2E7D32]">
             RANK #{data.rank}
           </div>
-          <div className="bg-white/5 border border-white/10 text-white/50 rounded-full px-5 py-1.5 text-xs font-black tracking-widest uppercase">
+          <div className="bg-[#333] border-4 border-t-[#8b8b8b] border-l-[#8b8b8b] border-r-[#1d1d1d] border-b-[#1d1d1d] text-[#FFD700] px-8 py-3 text-[10px] uppercase">
             {data.referral_count} REFERS
           </div>
         </div>
         
-        <p className="text-white/30 text-[10px] mb-6 max-w-xs mx-auto leading-relaxed font-bold uppercase tracking-wider">
-          Invite friends to climb the list. Each referral moves you up by 1 spot instantly.
+        <p className="text-white/30 text-[10px] mb-8 max-w-xs mx-auto leading-relaxed font-mono uppercase tracking-widest">
+          Invite friends to climb. Each referral moves you up by 1 spot instantly.
         </p>
 
-        <div className="bg-black border border-white/5 rounded-xl p-3 flex items-center justify-between gap-2 mb-4">
-          <code className="text-white/30 text-[10px] truncate flex-1 text-left select-all px-1 font-mono">
+        <div className="bg-black border-4 border-[#333] p-4 flex items-center justify-between gap-3 mb-8">
+          <code className="text-white/40 text-[10px] truncate flex-1 text-left select-all px-1 font-mono uppercase tracking-widest">
             {referralLink}
           </code>
           <button
             onClick={copyToClipboard}
-            className="p-1.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg transition-colors text-white/40"
+            className="p-2 border-4 border-white/5 hover:border-white/20 transition-colors text-white/40 active:translate-y-1"
             title="Copy link"
           >
             {copied ? <Check size={14} className="text-white" /> : <Copy size={14} />}
@@ -137,14 +114,20 @@ export default function WaitlistForm() {
         </div>
 
         <motion.button
-          whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={shareOnWhatsApp}
-          className="w-full bg-white text-black py-3 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all mb-3"
+          className="btn-21st w-full py-6 text-[10px] uppercase flex items-center justify-center gap-2 mb-4"
         >
           <Share2 size={13} />
           Share on WhatsApp
         </motion.button>
+
+        <Link 
+          to="/ranking"
+          className="block w-full bg-white/5 border-4 border-white/10 hover:border-white/30 py-5 text-[10px] font-minecraft uppercase transition-all text-white/40 hover:text-white text-center"
+        >
+          &gt; View Rankings
+        </Link>
 
         <p className="text-[10px] text-white/10 font-black uppercase tracking-widest mt-5">
           {10 - (data.referral_count % 10)} more to skip 10 spots
@@ -155,18 +138,16 @@ export default function WaitlistForm() {
 
   return (
     <div className="w-full max-w-sm mx-auto relative flex flex-col gap-3">
-      <form onSubmit={showCheckStatus ? handleCheckStatus : handleSubmit} className="flex flex-col gap-3">
-        {!showCheckStatus && (
-          <input
-            type="text"
-            required
-            placeholder="CHOOSE A USERNAME"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            disabled={loading}
-            className="w-full bg-[#0f0f0f] border border-white/10 rounded-full px-5 py-3.5 text-[10px] font-bold tracking-widest text-white placeholder:text-white/20 focus:outline-none focus:border-white/30 transition-all disabled:opacity-40 uppercase"
-          />
-        )}
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <input
+          type="text"
+          required
+          placeholder="CHOOSE A USERNAME"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          disabled={loading}
+          className="w-full bg-black border-2 border-white/10 px-6 py-5 text-[10px] font-black tracking-[0.2em] text-white placeholder:text-white/20 focus:outline-none focus:border-white/40 transition-all disabled:opacity-40 uppercase"
+        />
         <input
           type="email"
           required
@@ -174,31 +155,18 @@ export default function WaitlistForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={loading}
-          className="w-full bg-[#0f0f0f] border border-white/10 rounded-full px-5 py-3.5 text-[10px] font-bold tracking-widest text-white placeholder:text-white/20 focus:outline-none focus:border-white/30 transition-all disabled:opacity-40 uppercase"
+          className="w-full bg-black border-2 border-white/10 px-6 py-5 text-[10px] font-black tracking-[0.2em] text-white placeholder:text-white/20 focus:outline-none focus:border-white/40 transition-all disabled:opacity-40 uppercase"
         />
-        <div className="relative group mt-2">
-          <div className="absolute inset-0 bg-white/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            type="submit"
-            disabled={loading}
-            className="relative w-full bg-white text-black py-4 rounded-full text-[10px] font-black uppercase tracking-[0.2em] transition-all disabled:opacity-40 flex items-center justify-center gap-2"
-          >
-            {loading ? <Loader2 className="animate-spin" size={14} /> : (showCheckStatus ? "Check My Rank" : "Join Waitlist")}
-          </motion.button>
-        </div>
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          type="submit"
+          disabled={loading}
+          className="btn-21st w-full py-6 text-[10px] font-black uppercase tracking-[0.3em] transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+        >
+          {loading ? <Loader2 className="animate-spin" size={14} /> : "Join Waitlist"}
+        </motion.button>
       </form>
-
-      <button
-        onClick={() => {
-          setShowCheckStatus(!showCheckStatus);
-          setError("");
-        }}
-        className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] hover:text-white/40 transition-colors mt-2"
-      >
-        {showCheckStatus ? "← Back to signup" : "Already joined? Check your rank"}
-      </button>
 
       {error && (
         <motion.p

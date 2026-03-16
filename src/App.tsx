@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, useParams, Navigate } from "react-router-dom";
 import Home from "./pages/Home";
 import Admin from "./pages/Admin";
-import Leaderboard from "./pages/Leaderboard";
+import Ranking from "./pages/Ranking";
 import { useEffect } from "react";
 
 function RefRedirect() {
@@ -21,7 +21,7 @@ export default function App() {
     <Router>
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/leaderboard" element={<Leaderboard />} />
+        <Route path="/ranking" element={<Ranking />} />
         <Route path="/ref/:code" element={<RefRedirect />} />
         <Route path="/admin" element={<Admin />} />
       </Routes>

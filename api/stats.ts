@@ -28,33 +28,35 @@ const supabase = (supabaseUrl && supabaseKey && isValidUrl(supabaseUrl))
   ? createClient(supabaseUrl, supabaseKey) 
   : null;
 
-const getDiagnostics = () => ({
-  hasUrl: !!supabaseUrl,
-  hasKey: !!supabaseKey,
-  isValidUrl: isValidUrl(supabaseUrl),
-  envKeysPresent: Object.keys(process.env).filter(k => k.includes("SUPABASE"))
-});
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  try {
-    if (supabase) {
-      const { data: leaderboard, error } = await supabase
-        .from("waitlist")
-        .select("username, referral_count, created_at")
-        .order("referral_count", { ascending: false })
-        .order("created_at", { ascending: true })
-        .limit(10);
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-      if (error) throw error;
-      return res.json({ leaderboard });
-    } else {
-      return res.status(500).json({ 
-        error: "Supabase connection not configured. Please add your credentials to Vercel environment variables.",
-        diagnostics: getDiagnostics()
-      });
-    }
+  if (!supabase) {
+    return res.status(500).json({ error: "Supabase not configured" });
+  }
+
+  try {
+    const { count, error } = await supabase
+      .from("waitlist")
+      .select("*", { count: "exact", head: true });
+
+    const { data: users, error: usersError } = await supabase
+      .from("waitlist")
+      .select("username")
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (error || usersError) throw error || usersError;
+
+    return res.json({ 
+      success: true, 
+      count: count || 0,
+      users: users || []
+    });
   } catch (error: any) {
-    console.error("Leaderboard Error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("Stats API Error:", error);
+    return res.status(500).json({ error: error.message || "Internal server error" });
   }
 }

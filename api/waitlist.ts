@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from "@supabase/supabase-js";
-import crypto from "crypto";
+import nodemailer from "nodemailer";
 
 const getEnv = (keys: string[]) => {
   for (const key of keys) {
@@ -29,6 +29,64 @@ const supabase = (supabaseUrl && supabaseKey && isValidUrl(supabaseUrl))
   ? createClient(supabaseUrl, supabaseKey) 
   : null;
 
+const smtpHost = (process.env.SMTP_HOST || "").trim();
+const smtpPort = Number(process.env.SMTP_PORT || "587");
+const smtpSecure = (process.env.SMTP_SECURE || "false").trim().toLowerCase() === "true";
+const smtpUser = (process.env.SMTP_USER || "").trim();
+const smtpPass = (process.env.SMTP_PASS || "").trim();
+const smtpFrom = (process.env.SMTP_FROM || "").trim();
+
+function getBaseUrl(req: VercelRequest) {
+  const envUrl = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.VITE_APP_URL || "").trim();
+  if (envUrl && isValidUrl(envUrl)) return envUrl.replace(/\/$/, "");
+
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  const proto = (req.headers["x-forwarded-proto"] as string) || "https";
+  if (host) return `${proto}://${host}`.replace(/\/$/, "");
+  return "";
+}
+
+function canSendEmails() {
+  return !!(smtpHost && smtpPort && smtpUser && smtpPass && smtpFrom);
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+async function sendReferralEmail(params: { to: string; username: string; referralLink: string }) {
+  if (!canSendEmails()) {
+    return { sent: false, reason: "SMTP not configured" };
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpSecure,
+    auth: {
+      user: smtpUser,
+      pass: smtpPass,
+    },
+  });
+
+  const safeUsername = escapeHtml(params.username);
+
+  await transporter.sendMail({
+    from: smtpFrom,
+    to: params.to,
+    subject: "Your PocketCraft referral link",
+    text: `Hey ${params.username},\n\nYou're on the list.\n\nYour referral link:\n${params.referralLink}\n\nShare it to climb the leaderboard.\n\n- PocketCraft`,
+    html: `<p>Hey ${safeUsername},</p><p>You're on the list.</p><p><strong>Your referral link:</strong><br /><a href="${params.referralLink}">${params.referralLink}</a></p><p>Share it to climb the leaderboard.</p><p>- PocketCraft</p>`,
+  });
+
+  return { sent: true };
+}
+
 const getDiagnostics = () => ({
   hasUrl: !!supabaseUrl,
   hasKey: !!supabaseKey,
@@ -46,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { data: user, error } = await supabase
       .from("waitlist")
-      .select("*")
+      .select("id, username, referral_code, referral_count, created_at")
       .eq("email", email)
       .maybeSingle();
 
@@ -88,7 +146,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Check if email exists
       const { data: existing, error: checkError } = await supabase
         .from("waitlist")
-        .select("*")
+        .select("id, username, referral_code, referral_count, created_at")
         .eq("email", email)
         .maybeSingle();
 
@@ -132,12 +190,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const rank = (rankCount || 0) + 1;
 
-      return res.json({ 
+      const baseUrl = getBaseUrl(req);
+      const referralLink = baseUrl ? `${baseUrl}/ref/${user.referral_code}` : "";
+
+      let email_sent = false;
+      if (referralLink) {
+        try {
+          const result = await sendReferralEmail({
+            to: email,
+            username: user.username,
+            referralLink,
+          });
+          email_sent = result.sent;
+        } catch (mailError) {
+          console.error("Referral email failed:", mailError);
+        }
+      }
+
+      return res.json({
         success: true, 
         position: 0, // We use rank now
         referral_code: user.referral_code, 
         referral_count: user.referral_count,
-        rank 
+        rank,
+        email_sent,
       });
     } else {
       return res.status(500).json({ 

@@ -1,5 +1,5 @@
 import { useState, FormEvent } from "react";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 import { Download, Users, Clock, Trophy, Lock, Loader2 } from "lucide-react";
 
 export default function Admin() {

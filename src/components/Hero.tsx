@@ -1,4 +1,4 @@
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 import WaitlistForm from "./WaitlistForm";
 
 export default function Hero() {
