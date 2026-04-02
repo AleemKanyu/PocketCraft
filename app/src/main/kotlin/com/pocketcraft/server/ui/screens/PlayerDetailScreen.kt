@@ -57,6 +57,7 @@ import com.pocketcraft.server.service.PlayerDataManager
 import com.pocketcraft.server.service.PlayerLocation
 import com.pocketcraft.server.ui.components.DuoToggle
 import com.pocketcraft.server.ui.components.HealthBar
+import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import com.pocketcraft.server.ui.theme.PocketColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -518,7 +519,7 @@ private fun CollapsibleLocationSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(icon)
+                    FlatEmojiIcon(icon, modifier = Modifier.size(18.dp), tint = PocketColors.PrimaryDark)
                     Text(title)
                 }
                 Icon(
@@ -533,7 +534,10 @@ private fun CollapsibleLocationSection(
                 Column(modifier = Modifier.padding(12.dp)) {
                     if (location != null) {
                         Text(location.formatted(), fontSize = 13.sp)
-                        Text("${location.dimensionIcon()} ${location.dimensionDisplay()}", fontSize = 12.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            FlatEmojiIcon(location.dimensionIcon(), modifier = Modifier.size(14.dp), tint = PocketColors.PrimaryDark)
+                            Text(location.dimensionDisplay(), fontSize = 12.sp)
+                        }
                         Spacer(Modifier.height(8.dp))
                         OutlinedButton(onClick = { onTeleport(location) }) {
                             Text("Teleport")

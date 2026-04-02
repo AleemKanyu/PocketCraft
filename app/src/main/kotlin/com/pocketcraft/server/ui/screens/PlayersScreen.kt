@@ -528,7 +528,10 @@ fun WhitelistTab(
                     actions = listOf(
                         PlayerCardAction(
                             label = "Remove",
-                            onClick = { stateHolder.removeWhitelistPlayer(player.name) },
+                            onClick = {
+                                stateHolder.removeWhitelistPlayer(player.name)
+                                FirebaseAnalyticsManager.logPlayerWhitelistRemoved(player.name)
+                            },
                             tint = PocketColors.Offline
                         )
                     )

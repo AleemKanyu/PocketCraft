@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.data.model.Plugin
+import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import com.pocketcraft.server.ui.theme.PocketColors
 
 @Composable
@@ -79,7 +80,7 @@ fun PluginsSection(
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("💡", fontSize = 16.sp)
+                FlatEmojiIcon("💡", modifier = Modifier.size(16.dp), tint = PocketColors.PrimaryDark)
                 Text(
                     "Upload Bukkit/Spigot/Paper compatible .jar plugins. " +
                             "Find plugins at spigotmc.org or hangar.papermc.io",
@@ -97,7 +98,7 @@ fun PluginsSection(
                 contentAlignment = androidx.compose.ui.Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("🧩", fontSize = 40.sp)
+                    FlatEmojiIcon("🧩", modifier = Modifier.size(40.dp), tint = PocketColors.PrimaryDark)
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "No plugins installed",
@@ -120,7 +121,7 @@ fun PluginsSection(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("🧩", fontSize = 28.sp)
+                            FlatEmojiIcon("🧩", modifier = Modifier.size(28.dp), tint = PocketColors.PrimaryDark)
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(plugin.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Text(

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -39,10 +40,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pocketcraft.server.R
 import com.pocketcraft.server.data.model.ServerConfig
+import com.pocketcraft.server.feedback.FeedbackService
+import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.DuoToggle
 import com.pocketcraft.server.ui.components.GameCard
@@ -55,10 +60,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private val WorldTypeLabels = linkedMapOf(
-    "minecraft:normal" to "🌍 Default",
-    "minecraft:flat" to "🟩 Flat",
-    "minecraft:large_biomes" to "🌄 Large Biomes",
-    "minecraft:amplified" to "⛰ Amplified"
+    "minecraft:normal" to "Default",
+    "minecraft:flat" to "Flat",
+    "minecraft:large_biomes" to "Large Biomes",
+    "minecraft:amplified" to "Amplified"
 )
 
 @Composable
@@ -68,7 +73,9 @@ fun SettingsScreen(
 ) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
-    var config by remember(stateHolder.config) { mutableStateOf(stateHolder.config) }
+    var config by remember(stateHolder.config) {
+        mutableStateOf(stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, 20)))
+    }
     var forceGamemode by remember { mutableStateOf(false) }
     var broadcastConsoleToOps by remember { mutableStateOf(false) }
     var hideOnlinePlayers by remember { mutableStateOf(false) }
@@ -76,6 +83,9 @@ fun SettingsScreen(
     var installedVersions by remember { mutableStateOf<List<InstalledVersionInfo>>(emptyList()) }
     var selectedDeleteVersions by remember { mutableStateOf(setOf<String>()) }
     var deletingVersions by remember { mutableStateOf(false) }
+    var feedbackText by remember { mutableStateOf("") }
+    var submittingFeedback by remember { mutableStateOf(false) }
+    var feedbackSent by remember { mutableStateOf(false) }
     val totalRamMb = remember { RamUtils.getTotalRamMb(context) }
     val recommendedViewDistance = remember(totalRamMb) {
         if (totalRamMb >= 7168) 32 else if (totalRamMb >= 6144) 20 else if (totalRamMb >= 4096) 12 else 8
@@ -242,8 +252,8 @@ fun SettingsScreen(
         }
         item {
             val relayOptions = mapOf(
-                "play.pocketcraft.online" to "🌐 Global",
-                "mine.pocketcraft.online" to "🌏 Asia"
+                "play.pocketcraft.online" to "Global",
+                "mine.pocketcraft.online" to "Asia"
             )
             SettingsDropdownRow(
                 label = "Relay Server Location",
@@ -270,7 +280,7 @@ fun SettingsScreen(
 
             if (stateHolder.relayFallbackActive && stateHolder.relayHost.contains("mine")) {
                 Text(
-                    text = "⚠️ India relay is currently offline. Using Global (Singapore) relay as a fallback for connectivity.",
+                    text = "Warning: India relay is currently offline. Using Global (Singapore) relay as a fallback for connectivity.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
@@ -440,7 +450,7 @@ fun SettingsScreen(
                 label = "Max Players",
                 description = "Maximum simultaneous players",
                 min = 1,
-                max = 100,
+                max = 20,
                 value = config.maxPlayers,
                 onValueChange = { config = config.copy(maxPlayers = it) }
             )
@@ -448,7 +458,7 @@ fun SettingsScreen(
         item {
             if (config.maxPlayers > 50) {
                 Text(
-                    text = "⚠️ High player count may increase device temperature and battery drain during extended server usage.",
+                    text = "Warning: High player count may increase device temperature and battery drain during extended server usage.",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0xFFFF9800),
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -501,6 +511,117 @@ fun SettingsScreen(
                 onToggle = { hideOnlinePlayers = it }
             )
         }
+        item { SettingsSection("FEEDBACK & COMMUNITY") }
+        item {
+            GameCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Send Beta Feedback",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = "Your feedback is saved to Firebase Firestore.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                    OutlinedTextField(
+                        value = feedbackText,
+                        onValueChange = { feedbackText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 4,
+                        maxLines = 8,
+                        placeholder = { Text("Report bugs, lag, crashes, or feature ideas...") }
+                    )
+                    DuoButton(
+                        text = when {
+                            submittingFeedback -> "SENDING FEEDBACK..."
+                            feedbackSent -> "SENT"
+                            else -> "SEND FEEDBACK"
+                        },
+                        enabled = !submittingFeedback && !feedbackSent && feedbackText.isNotBlank(),
+                        onClick = {
+                            scope.launch {
+                                submittingFeedback = true
+                                val text = feedbackText.trim()
+                                val result = withContext(Dispatchers.IO) {
+                                    FeedbackService.submitFeedback(context, text, stateHolder.versionLabel)
+                                }
+                                submittingFeedback = false
+
+                                if (result.isSuccess) {
+                                    feedbackText = ""
+                                    feedbackSent = true
+                                    delay(5000)
+                                    feedbackSent = false
+                                } else {
+                                    onMessage("Could not save feedback to Firestore: ${result.exceptionOrNull()?.message}")
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+        item {
+            GameCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Social Links",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                                    .border(2.dp, PocketColors.Primary.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        val opened = FeedbackService.openDiscord(context)
+                                        if (!opened) {
+                                            onMessage("Could not open Discord link on this device.")
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_discord),
+                                    contentDescription = "Discord",
+                                    tint = Color.Unspecified,
+                                    modifier = Modifier.size(30.dp)
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                                    .border(2.dp, PocketColors.Primary.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        val opened = FeedbackService.openInstagram(context)
+                                        if (!opened) {
+                                            onMessage("Could not open Instagram link on this device.")
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_instagram),
+                                    contentDescription = "Instagram",
+                                    tint = Color.Unspecified,
+                                    modifier = Modifier.size(30.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
         item { Spacer(modifier = Modifier.height(32.dp)) }
     }
 }
@@ -536,7 +657,7 @@ private fun SettingsToggleRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(text = icon, fontSize = 24.sp)
+                FlatEmojiIcon(icon, modifier = Modifier.size(24.dp), tint = PocketColors.PrimaryDark)
                 Column {
                     Text(text = label, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
                     description?.let {

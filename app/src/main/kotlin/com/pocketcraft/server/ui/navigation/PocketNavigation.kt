@@ -56,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.R
+import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import com.pocketcraft.server.ui.theme.PocketColors
 
 enum class PocketTab(
@@ -88,8 +89,8 @@ fun PocketTopBar(
 ) {
     var relayMenuExpanded by remember { mutableStateOf(false) }
     val relayOptions = mapOf(
-        "play.pocketcraft.online" to "🌐 Global",
-        "mine.pocketcraft.online" to "🌏 Asia"
+        "play.pocketcraft.online" to "Global",
+        "mine.pocketcraft.online" to "Asia"
     )
 
     TopAppBar(
@@ -136,10 +137,7 @@ fun PocketTopBar(
                         .border(2.dp, PocketColors.Primary.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
                         .size(44.dp)
                 ) {
-                    Text(
-                        text = if (relayHost.contains("mine")) "🌏" else "🌐",
-                        fontSize = 18.sp
-                    )
+                    FlatEmojiIcon(if (relayHost.contains("mine")) "🌏" else "🌐", modifier = Modifier.size(18.dp), tint = PocketColors.PrimaryDark)
                 }
                 DropdownMenu(
                     expanded = relayMenuExpanded,
@@ -154,7 +152,7 @@ fun PocketTopBar(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(label)
                                     if (host == relayHost) {
-                                        Text(" ✓", color = PocketColors.Primary, fontWeight = FontWeight.Bold)
+                                        FlatEmojiIcon("✓", modifier = Modifier.size(14.dp), tint = PocketColors.Primary)
                                     }
                                 }
                             },

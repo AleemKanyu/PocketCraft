@@ -1,5 +1,8 @@
 package com.pocketcraft.server.ui.screens
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -34,9 +37,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.theme.PocketColors
@@ -47,6 +52,7 @@ fun BackupsScreen(
     stateHolder: ServerStateHolder,
     onMessage: (String) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var restoreTarget by remember { mutableStateOf<BackupEntry?>(null) }
     var deleteTarget by remember { mutableStateOf<BackupEntry?>(null) }
@@ -77,7 +83,7 @@ fun BackupsScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "⏳ Creating Backup",
+                            text = "Creating Backup",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
@@ -111,7 +117,7 @@ fun BackupsScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "📥 Restoring Backup",
+                            text = "Restoring Backup",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
@@ -127,7 +133,7 @@ fun BackupsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "⚠️ Do not close the app while restoring",
+                            text = "Warning: Do not close the app while restoring",
                             fontSize = 11.sp,
                             color = PocketColors.Offline,
                             fontWeight = FontWeight.Bold
@@ -161,7 +167,7 @@ fun BackupsScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "💾 Backups Location:",
+                            text = "Backups Location:",
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp
                         )
@@ -199,7 +205,7 @@ fun BackupsScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     GameCard(modifier = Modifier.fillMaxWidth()) {
-                        Text(text = "☁️", fontSize = 48.sp)
+                        FlatEmojiIcon("☁️", modifier = Modifier.size(48.dp), tint = PocketColors.PrimaryDark)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "No backups yet",
@@ -221,7 +227,7 @@ fun BackupsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Text(text = "\uD83D\uDCBE", fontSize = 28.sp)
+                            FlatEmojiIcon("💾", modifier = Modifier.size(28.dp), tint = PocketColors.PrimaryDark)
                             androidx.compose.foundation.layout.Column {
                                 Text(
                                     text = backup.name,
@@ -310,4 +316,10 @@ fun BackupsScreen(
             }
         )
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

@@ -129,7 +129,9 @@ class ServerHostService : Service() {
                 stopInProgress.set(false)
                 relayJob?.cancel()
                 relayJob = null
-                relayManager.disconnect()
+                serviceScope.launch(Dispatchers.IO) {
+                    runCatching { relayManager.unregister() }
+                }
                 tunnelStarted.set(false)
                 stopLogcatBridge()
                 stopServerLogTail()
@@ -211,7 +213,7 @@ class ServerHostService : Service() {
             } finally {
                 serverProcess?.destroyForcibly()
                 serverProcess = null
-                try { relayManager.disconnect() } catch (_: Exception) {}
+                runCatching { relayManager.unregister() }
                 relayJob?.cancel()
                 relayJob = null
                 tunnelStarted.set(false)

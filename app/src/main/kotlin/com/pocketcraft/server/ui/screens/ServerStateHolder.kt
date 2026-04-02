@@ -16,14 +16,17 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import com.pocketcraft.server.analytics.FirebaseAnalyticsManager
 import com.pocketcraft.server.data.model.PlayerInfo
 import com.pocketcraft.server.data.model.ServerConfig
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
+import com.pocketcraft.server.notification.NotificationHelper
 import com.pocketcraft.server.service.ConsoleParser
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.service.ServerPropertiesHelper
 import com.pocketcraft.server.server.ServerHostService
 import com.pocketcraft.server.server.ServerAddressResolver
+import com.pocketcraft.server.sound.SoundManager
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
@@ -89,6 +92,7 @@ class ServerStateHolder(
     private var stopWatchdogJob: Job? = null
     private var periodicWorldSaveJob: Job? = null
     private var pendingRestart = false
+    private var hasAnnouncedServerOnline = false
     private val namedListLock = Any()
     private val worldRegistryKey = "pocketcraft-world-list"
     private val worldSetupRegistryKey = "pocketcraft-world-setup-list"
@@ -230,6 +234,7 @@ class ServerStateHolder(
                     }
                     ServerHostService.EVENT_SERVER_CRASHED -> {
                         appendLog("[ERROR] Server process crashed (${line.ifBlank { "unknown" }}).")
+                        FirebaseAnalyticsManager.logServerCrashed(versionId, line)
                         stopStartupProgressTracking(reset = true)
                         isStopping = false
                         pendingRestart = false
@@ -273,6 +278,7 @@ class ServerStateHolder(
     }
 
     init {
+        NotificationHelper.createChannel(appContext)
         registerReceiver()
         observeOpenServerRiskAcknowledgement()
         refreshAll()
@@ -361,6 +367,7 @@ class ServerStateHolder(
         relayFallbackActive = false
         startupProgressPercent = 0
         startupStatusMessage = "Initializing..."
+        hasAnnouncedServerOnline = false
         startStartupProgressTracking()
         clearLogs()
         onlinePlayers.clear()
@@ -368,6 +375,7 @@ class ServerStateHolder(
         appendLog("[PocketCraft] Internet access: PocketCraft relay")
         appendLog("[PocketCraft] Starting server - this may take 30-60 seconds...")
         markActiveWorldSetupCompleted()
+        FirebaseAnalyticsManager.logServerStarted(versionId, config.maxPlayers)
 
         ServerHostService.start(appContext, versionId)
     }
@@ -377,6 +385,10 @@ class ServerStateHolder(
         pendingRestart = false
         isStopping = true
         appendLog("[PocketCraft] Stopping server...")
+        val durationSeconds = startedAtMillis
+            ?.let { ((System.currentTimeMillis() - it) / 1000L).coerceAtLeast(0L) }
+            ?: 0L
+        FirebaseAnalyticsManager.logServerStopped(versionId, durationSeconds)
         requestWorldSave(reason = "before stop")
         stopPeriodicWorldSave()
         startStopWatchdog()
@@ -486,6 +498,13 @@ class ServerStateHolder(
             startupStatusMessage = "Server ready!"
             if (tps <= 0f) tps = 20f
             if (startedAtMillis == null) startedAtMillis = System.currentTimeMillis()
+            if (!hasAnnouncedServerOnline) {
+                hasAnnouncedServerOnline = true
+                scope.launch {
+                    SoundManager.playServerStart(appContext)
+                }
+                NotificationHelper.notifyServerOnline(appContext, versionId)
+            }
         }
     }
 
@@ -936,6 +955,7 @@ class ServerStateHolder(
     suspend fun saveSettings(next: ServerConfig): String = withContext(Dispatchers.IO) {
         val enforced = next.copy(
             port = singleServerPort,
+            maxPlayers = next.maxPlayers.coerceIn(1, 20),
             viewDistance = next.viewDistance.coerceIn(2, 32),
             simulationDistance = next.simulationDistance.coerceIn(2, 32)
         )
@@ -951,6 +971,7 @@ class ServerStateHolder(
             return@withContext "Stop the server before changing relay location."
         }
         com.pocketcraft.server.data.preferences.AppPreferences(appContext).relayHost = host
+        FirebaseAnalyticsManager.logSettingsChanged("relay_host", host)
         withContext(Dispatchers.Main) {
             relayHost = host
         }
@@ -1250,8 +1271,9 @@ class ServerStateHolder(
                 refreshAll()
             }
             kotlinx.coroutines.delay(500)
+            FirebaseAnalyticsManager.logBackupCreated(config.worldName, backupFile.length())
 
-            return@withContext "✓ Backup created: $backupName\nIncluded: $includedText\nSaved to Downloads folder"
+            return@withContext "Backup created: $backupName\nIncluded: $includedText\nSaved to Downloads folder"
         } catch (e: Exception) {
             android.util.Log.e("ServerBackup", "Backup failed", e)
             withContext(Dispatchers.Main) {
@@ -1259,7 +1281,7 @@ class ServerStateHolder(
                 backupStatusMessage = "Backup failed: ${e.javaClass.simpleName}"
                 isBackingUp = false
             }
-            return@withContext "✗ Backup failed: ${e.message ?: e.javaClass.simpleName}"
+            return@withContext "Backup failed: ${e.message ?: e.javaClass.simpleName}"
         }
     }
 
@@ -1311,8 +1333,9 @@ class ServerStateHolder(
                 restoreProgressPercent = 0
                 restoreStatusMessage = ""
             }
+            FirebaseAnalyticsManager.logBackupRestored(config.worldName, entry.name)
 
-            return@withContext "✓ Backup restored successfully. Start the server to load it."
+            return@withContext "Backup restored successfully. Start the server to load it."
         } catch (e: Exception) {
             android.util.Log.e("ServerRestore", "Restore failed", e)
             withContext(Dispatchers.Main) {
@@ -1320,7 +1343,7 @@ class ServerStateHolder(
                 restoreProgressPercent = 0
                 restoreStatusMessage = ""
             }
-            return@withContext "✗ Restore failed: ${e.message ?: e.javaClass.simpleName}"
+            return@withContext "Restore failed: ${e.message ?: e.javaClass.simpleName}"
         }
     }
 

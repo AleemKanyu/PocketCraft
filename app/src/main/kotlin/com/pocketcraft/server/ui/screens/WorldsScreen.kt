@@ -1,5 +1,8 @@
 package com.pocketcraft.server.ui.screens
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -63,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.pocketcraft.server.WorldImporter
+import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.DuoButtonVariant
 import com.pocketcraft.server.ui.components.GameCard
@@ -131,7 +135,7 @@ fun WorldsScreen(
                             .background(PocketColors.Primary.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("🌍", fontSize = 32.sp)
+                        FlatEmojiIcon("🌍", modifier = Modifier.size(32.dp), tint = PocketColors.PrimaryDark)
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
@@ -173,6 +177,7 @@ fun WorldsScreen(
                         },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
+                        enabled = true,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = PocketColors.Primary)
                     ) {
                         Text("BACKUP", fontWeight = FontWeight.Bold)
@@ -377,9 +382,9 @@ fun WorldsScreen(
             text = {
                 Text(
                     "This will restore:\n" +
-                        "✓ Worlds and dimension data\n" +
-                        "✓ Plugins, mods, and resource packs\n" +
-                        "✓ Server configs and settings\n\n" +
+                        "- Worlds and dimension data\n" +
+                        "- Plugins, mods, and resource packs\n" +
+                        "- Server configs and settings\n\n" +
                         "Your current server files will be overwritten.\n" +
                         "Make sure the server is stopped before restoring."
                 )
@@ -576,7 +581,7 @@ private fun SwipeableWorldSlotItem(
                             contentScale = ContentScale.Crop
                         )
                     } else {
-                        Text("⛏", fontSize = 18.sp)
+                        FlatEmojiIcon("⛏", modifier = Modifier.size(18.dp), tint = PocketColors.PrimaryDark)
                     }
                 }
 
@@ -680,7 +685,7 @@ private fun DimensionUploadRow(
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
-                Text(icon, fontSize = 20.sp)
+                FlatEmojiIcon(icon, modifier = Modifier.size(20.dp), tint = PocketColors.PrimaryDark)
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.Bold, fontSize = 15.sp)
@@ -720,4 +725,10 @@ private fun SectionLabel(title: String) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 4.dp)
     )
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

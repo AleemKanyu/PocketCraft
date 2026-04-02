@@ -31,7 +31,7 @@ object NotificationHelper {
         try {
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)  // Fallback - you may want a custom icon
-                .setContentTitle("✅ Server is Online!")
+                .setContentTitle("Server is Online!")
                 .setContentText("Minecraft $version is ready. Players can now connect.")
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)

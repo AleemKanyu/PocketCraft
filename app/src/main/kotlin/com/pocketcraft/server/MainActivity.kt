@@ -20,9 +20,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.pocketcraft.server.analytics.FirebaseAnalyticsManager
 import com.pocketcraft.server.setup.JreExtractor
+import com.pocketcraft.server.update.GitHubUpdateChecker
 import com.pocketcraft.server.ui.screens.ErrorScreen
 import com.pocketcraft.server.ui.screens.PocketCraftApp
 import com.pocketcraft.server.ui.screens.SplashScreen
@@ -34,12 +34,12 @@ import kotlinx.coroutines.withContext
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         // Initialize Firebase Analytics
         runCatching {
             FirebaseAnalyticsManager.initialize(applicationContext)
+            FirebaseAnalyticsManager.logEvent("app_open")
         }
 
         // Request notification permission on Android 13+
@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
                 var jreError by remember { mutableStateOf<String?>(null) }
                 var jreProgress by remember { mutableStateOf(0) }
                 var jreStatus by remember { mutableStateOf("Preparing Minecraft Runtime...") }
+                var availableUpdate by remember { mutableStateOf<GitHubUpdateChecker.ReleaseInfo?>(null) }
 
                 LaunchedEffect(Unit) {
                     try {
@@ -101,6 +102,10 @@ class MainActivity : ComponentActivity() {
                     if (!prompted && !pm.isIgnoringBatteryOptimizations(packageName)) {
                         showBatteryDialog = true
                     }
+
+                    availableUpdate = withContext(Dispatchers.IO) {
+                        GitHubUpdateChecker.checkForUpdate(applicationContext)
+                    }
                 }
 
                 if (showBatteryDialog) {
@@ -116,6 +121,7 @@ class MainActivity : ComponentActivity() {
                         confirmButton = {
                             TextButton(onClick = {
                                 requestIgnoreBatteryOptimization()
+                                FirebaseAnalyticsManager.logEvent("battery_optimization_prompt", mapOf("action" to "allow"))
                                 applicationContext.getSharedPreferences("app_relay_prefs", MODE_PRIVATE)
                                     .edit()
                                     .putBoolean("battery_opt_prompted", true)
@@ -125,12 +131,37 @@ class MainActivity : ComponentActivity() {
                         },
                         dismissButton = {
                             TextButton(onClick = {
+                                FirebaseAnalyticsManager.logEvent("battery_optimization_prompt", mapOf("action" to "not_now"))
                                 applicationContext.getSharedPreferences("app_relay_prefs", MODE_PRIVATE)
                                     .edit()
                                     .putBoolean("battery_opt_prompted", true)
                                     .apply()
                                 showBatteryDialog = false
                             }) { Text("Not now") }
+                        }
+                    )
+                }
+
+                val update = availableUpdate
+                if (update != null && !showBatteryDialog) {
+                    AlertDialog(
+                        onDismissRequest = { },
+                        title = { Text("Update required") },
+                        text = {
+                            Text(
+                                "You are on ${BuildConfig.VERSION_NAME}. A newer beta release (${update.tagName}) is required to continue. Install the update to use PocketCraft."
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                val openReleaseIntent = Intent(Intent.ACTION_VIEW, Uri.parse(update.htmlUrl))
+                                runCatching {
+                                    startActivity(openReleaseIntent)
+                                    finishAffinity()
+                                }
+                            }) {
+                                Text("Install update")
+                            }
                         }
                     )
                 }

@@ -1,6 +1,15 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 
+fun parseGitHubRepo(remoteUrl: String?): Pair<String, String>? {
+    if (remoteUrl.isNullOrBlank()) return null
+    val cleaned = remoteUrl.removeSuffix(".git").trim()
+    val https = Regex("https://github\\.com/([^/]+)/([^/]+)$", RegexOption.IGNORE_CASE)
+    val ssh = Regex("git@github\\.com:([^/]+)/([^/]+)$", RegexOption.IGNORE_CASE)
+    val match = https.find(cleaned) ?: ssh.find(cleaned) ?: return null
+    return match.groupValues[1] to match.groupValues[2]
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -32,6 +41,16 @@ val hasConfiguredReleaseSigning =
         !configuredReleaseKeyAlias.isNullOrBlank() &&
         !configuredReleaseKeyPassword.isNullOrBlank()
 
+val gitRemoteUrl = runCatching {
+    val process = ProcessBuilder("git", "config", "--get", "remote.origin.url")
+        .directory(rootProject.rootDir)
+        .start()
+    process.inputStream.bufferedReader().use { it.readText().trim() }
+}.getOrNull()
+
+val (githubRepoOwner, githubRepoName) = parseGitHubRepo(gitRemoteUrl)
+    ?: ("AleemKanyu" to "PocketCraft_")
+
 android {
     namespace = "com.pocketcraft.server"
     compileSdk = 34
@@ -43,6 +62,8 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         buildConfigField("String", "RELAY_PUBLIC_DOMAIN", "\"joinmc.link\"")
+        buildConfigField("String", "GITHUB_REPO_OWNER", "\"$githubRepoOwner\"")
+        buildConfigField("String", "GITHUB_REPO_NAME", "\"$githubRepoName\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -62,7 +83,7 @@ android {
     }
     // Prevent .so compression — compressed .so files cannot be dlopen'd
     androidResources {
-        noCompress += listOf("so", "jar", "jks", "xz", "gz")
+        noCompress += listOf("jar", "jks", "xz", "gz")
     }
 
     sourceSets {
@@ -116,7 +137,7 @@ android {
 
     packaging {
         jniLibs {
-            useLegacyPackaging = true
+            useLegacyPackaging = false
         }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -182,5 +203,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
+    implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.android.gms:play-services-ads:23.6.0")
     implementation("com.google.zxing:core:3.5.3")
 }

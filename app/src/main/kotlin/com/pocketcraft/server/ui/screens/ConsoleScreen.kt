@@ -1,5 +1,8 @@
 package com.pocketcraft.server.ui.screens
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.core.RepeatMode
@@ -79,6 +82,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import coil.compose.AsyncImage
 import com.pocketcraft.server.data.model.PlayerInfo
 import com.pocketcraft.server.data.preferences.AppPreferences
@@ -327,7 +331,7 @@ fun ConsoleScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "⚙️ Starting Server",
+                            text = "Starting Server",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
@@ -485,7 +489,7 @@ fun ConsoleScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
-                        "🌍 Set World Seed",
+                        "Set World Seed",
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 20.sp,
                         color = MaterialTheme.colorScheme.onSurface
@@ -631,7 +635,7 @@ private fun ServerIdentityCard(
                                     contentScale = ContentScale.Crop
                                 )
                             } else {
-                                Text(text = "⛏", fontSize = 34.sp)
+                                FlatEmojiIcon("⛏", modifier = Modifier.size(34.dp), tint = PocketColors.PrimaryDark)
                             }
                         }
 
@@ -813,6 +817,7 @@ private fun ServerIdentityCard(
                                 }
                             }
                         },
+                        enabled = true,
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = PocketColors.Primary,
@@ -843,7 +848,7 @@ private fun ServerIdentityCard(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "⚠ Internet relay unavailable",
+                        text = "Warning: Internet relay unavailable",
                         fontWeight = FontWeight.Bold,
                         color = PocketColors.Danger
                     )
@@ -986,7 +991,7 @@ private fun WorldSelectorCard(
                         contentScale = ContentScale.Crop
                     )
                 } else {
-                    Text(text = "⛏", fontSize = 24.sp)
+                    FlatEmojiIcon("⛏", modifier = Modifier.size(24.dp), tint = PocketColors.PrimaryDark)
                 }
             }
 
@@ -1365,4 +1370,10 @@ private fun RamUsageCard(usedMb: Int, maxMb: Int) {
             )
         }
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

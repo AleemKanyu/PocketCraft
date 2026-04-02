@@ -16,8 +16,8 @@
     <string name="apply_restart">Apply &amp; Restart</string>
     <string name="delete_world">Delete World Data</string>
     <string name="delete_world_confirm">This will permanently delete the world. Are you sure?</string>
-    <string name="thermal_warning">⚠️ Device is overheating — consider stopping the server</string>
-    <string name="ram_warning">⚠️ Low RAM detected — performance may be degraded</string>
+    <string name="thermal_warning">Warning: Device is overheating — consider stopping the server</string>
+    <string name="ram_warning">Warning: Low RAM detected — performance may be degraded</string>
     <string name="players_online">%1$d/%2$d players</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Uptime: %1$s</string>
