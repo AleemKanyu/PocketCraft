@@ -45,9 +45,11 @@ object ServerFileManager {
     fun prepareServerProperties(context: Context, versionId: String) {
         val serverDir = getServerDir(context, versionId)
         val props = ServerPropertiesHelper.readProperties(serverDir)
+        val resolvedWorldName = resolveStableWorldName(serverDir, props)
 
         // Forced configuration for runtime compatibility.
         props.setProperty("server-port", "25565")
+        props.setProperty("level-name", resolvedWorldName)
         props.setProperty("online-mode", "false")          // offline / LAN mode always
         props.setProperty("server-ip", "")                 // bind all interfaces
         // Ensure RCON is enabled for in-app console commands
@@ -62,6 +64,28 @@ object ServerFileManager {
         }.onFailure { error ->
             android.util.Log.e("ServerFileManager", "Failed to write server.properties", error)
         }
+    }
+
+    private fun resolveStableWorldName(serverDir: File, props: java.util.Properties): String {
+        val explicit = props.getProperty("level-name")?.trim().orEmpty()
+        if (explicit.isNotBlank()) return explicit
+
+        val fromRegistry = props.getProperty("pocketcraft-world-list")
+            .orEmpty()
+            .split(',')
+            .map { it.trim() }
+            .firstOrNull { it.isNotBlank() && File(serverDir, it).exists() }
+        if (!fromRegistry.isNullOrBlank()) return fromRegistry
+
+        val discoveredWorld = serverDir.listFiles()
+            .orEmpty()
+            .asSequence()
+            .filter { it.isDirectory }
+            .firstOrNull { dir ->
+                File(dir, "level.dat").exists() || File(dir, "region").isDirectory
+            }
+            ?.name
+        return discoveredWorld ?: "world"
     }
 
 

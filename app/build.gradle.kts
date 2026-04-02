@@ -39,7 +39,7 @@ android {
     defaultConfig {
         applicationId = "com.pocketcraft.server"
         minSdk = 25
-        targetSdk = 28
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
         buildConfigField("String", "RELAY_PUBLIC_DOMAIN", "\"joinmc.link\"")

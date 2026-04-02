@@ -87,6 +87,7 @@ class ServerStateHolder(
     private var startupStartedAtMillis: Long? = null
     private var startupProgressJob: Job? = null
     private var stopWatchdogJob: Job? = null
+    private var periodicWorldSaveJob: Job? = null
     private var pendingRestart = false
     private val namedListLock = Any()
     private val worldRegistryKey = "pocketcraft-world-list"
@@ -376,6 +377,8 @@ class ServerStateHolder(
         pendingRestart = false
         isStopping = true
         appendLog("[PocketCraft] Stopping server...")
+        requestWorldSave(reason = "before stop")
+        stopPeriodicWorldSave()
         startStopWatchdog()
         runCatching {
             ServerHostService.stop(appContext)
@@ -398,6 +401,8 @@ class ServerStateHolder(
         pendingRestart = true
         isStopping = true
         appendLog("[PocketCraft] Restart requested...")
+        requestWorldSave(reason = "before restart")
+        stopPeriodicWorldSave()
         startStopWatchdog()
         runCatching {
             ServerHostService.stop(appContext)
@@ -476,6 +481,7 @@ class ServerStateHolder(
             stopStartupProgressTracking(reset = false)
             isStarting = false
             isRunning = true
+            startPeriodicWorldSave()
             startupProgressPercent = 100
             startupStatusMessage = "Server ready!"
             if (tps <= 0f) tps = 20f
@@ -620,6 +626,7 @@ class ServerStateHolder(
                 pendingRestart = false
                 isStarting = false
                 isRunning = false
+                stopPeriodicWorldSave()
                 startedAtMillis = null
                 publicAddress = null
                 tunnelConnecting = false
@@ -634,6 +641,11 @@ class ServerStateHolder(
 
         isStarting = state.isStarting
         isRunning = state.isRunning
+        if (state.isRunning) {
+            startPeriodicWorldSave()
+        } else if (!state.isStarting) {
+            stopPeriodicWorldSave()
+        }
         if (isStarting && startupStartedAtMillis == null) {
             startupStartedAtMillis = System.currentTimeMillis()
             startStartupProgressTracking()
@@ -1369,6 +1381,7 @@ class ServerStateHolder(
     }
 
     fun dispose() {
+        stopPeriodicWorldSave()
         stopStartupProgressTracking(reset = false)
         stopWatchdogJob?.cancel()
         stopWatchdogJob = null
@@ -1392,6 +1405,7 @@ class ServerStateHolder(
                     isStopping = false
                     isStarting = false
                     isRunning = false
+                    stopPeriodicWorldSave()
                     tps = 0f
                     publicAddress = null
                     tunnelConnecting = false
@@ -1404,6 +1418,41 @@ class ServerStateHolder(
                         startServer()
                     }
                     cancel()
+                }
+            }
+        }
+    }
+
+    private fun startPeriodicWorldSave() {
+        if (periodicWorldSaveJob?.isActive == true) return
+        periodicWorldSaveJob = scope.launch(Dispatchers.IO) {
+            while (periodicWorldSaveJob?.isActive == true) {
+                delay(120_000L)
+                if (!isRunning || isStopping) continue
+                runCatching {
+                    sendRconCommand("save-all flush")
+                }.onFailure { error ->
+                    withContext(Dispatchers.Main) {
+                        appendLog("[PocketCraft] Auto-save failed: ${error.message ?: "unknown error"}")
+                    }
+                }
+            }
+        }
+    }
+
+    private fun stopPeriodicWorldSave() {
+        periodicWorldSaveJob?.cancel()
+        periodicWorldSaveJob = null
+    }
+
+    private fun requestWorldSave(reason: String) {
+        scope.launch(Dispatchers.IO) {
+            if (!isRunning) return@launch
+            runCatching {
+                sendRconCommand("save-all flush")
+            }.onSuccess {
+                withContext(Dispatchers.Main) {
+                    appendLog("[PocketCraft] World save requested ($reason).")
                 }
             }
         }
