@@ -1,0 +1,2 @@
+app/src/main/lib/modules filter=lfs diff=lfs merge=lfs -text
+app/src/main/jniLibs/arm64-v8a/libjvm.so filter=lfs diff=lfs merge=lfs -text

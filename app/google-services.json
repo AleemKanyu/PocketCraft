@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "52965868712",
+    "project_id": "pocketcraft-9f9ca",
+    "storage_bucket": "pocketcraft-9f9ca.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:52965868712:android:79418154f90541285e6e9d",
+        "android_client_info": {
+          "package_name": "com.pocketcraft.server"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAmJgiyi9Ri3LiFuCIhFt82pPOB1A3q044"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Safe zone: 21-87 -->
+    <!-- Hexagonal background -->
+    <path
+        android:fillColor="#4A8F50"
+        android:pathData="M54,21 L81,32 L81,76 L54,87 L27,76 L27,32 Z" />
+
+    <!-- Subtle highlight top -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.08"
+        android:pathData="M54,21 L81,32 L54,32 Z" />
+
+    <!-- Left eye -->
+    <path
+        android:fillColor="#1A3E1C"
+        android:pathData="M34,38 Q34,35 37,35 L47,35 Q50,35 50,38 L50,48 Q50,51 47,51 L37,51 Q34,51 34,48 Z" />
+
+    <!-- Left eye highlight -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.12"
+        android:pathData="M36,37 L40,37 L40,41 L36,41 Z" />
+
+    <!-- Right eye -->
+    <path
+        android:fillColor="#1A3E1C"
+        android:pathData="M58,38 Q58,35 61,35 L71,35 Q74,35 74,38 L74,48 Q74,51 71,51 L61,51 Q58,51 58,48 Z" />
+
+    <!-- Right eye highlight -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.12"
+        android:pathData="M60,37 L64,37 L64,41 L60,41 Z" />
+
+    <!-- Mouth top center -->
+    <path
+        android:fillColor="#1A3E1C"
+        android:pathData="M40,58 Q40,55 43,55 L65,55 Q68,55 68,58 L68,65 Q68,68 65,68 L43,68 Q40,68 40,65 Z" />
+
+    <!-- Mouth bottom left -->
+    <path
+        android:fillColor="#1A3E1C"
+        android:pathData="M34,69 Q34,66 37,66 L47,66 Q50,66 50,69 L50,78 Q50,81 47,81 L37,81 Q34,81 34,78 Z" />
+
+    <!-- Mouth bottom right -->
+    <path
+        android:fillColor="#1A3E1C"
+        android:pathData="M58,69 Q58,66 61,66 L71,66 Q74,66 74,69 L74,78 Q74,81 71,81 L61,81 Q58,81 58,78 Z" />
+</vector>

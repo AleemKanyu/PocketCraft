@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server Running</string>
+    <string name="server_stopped">Server Stopped</string>
+    <string name="server_starting">Server Starting…</string>
+    <string name="start_server">Start Server</string>
+    <string name="stop_server">Stop Server</string>
+    <string name="notification_channel_name">Server Status</string>
+    <string name="notification_channel_desc">Shows server running status and controls</string>
+    <string name="tap_to_copy">Tap to copy IP</string>
+    <string name="copied">IP copied to clipboard</string>
+    <string name="how_to_connect">How to Connect</string>
+    <string name="send_command">Send Command</string>
+    <string name="clear_log">Clear Log</string>
+    <string name="apply_restart">Apply &amp; Restart</string>
+    <string name="delete_world">Delete World Data</string>
+    <string name="delete_world_confirm">This will permanently delete the world. Are you sure?</string>
+    <string name="thermal_warning">⚠️ Device is overheating — consider stopping the server</string>
+    <string name="ram_warning">⚠️ Low RAM detected — performance may be degraded</string>
+    <string name="players_online">%1$d/%2$d players</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Uptime: %1$s</string>
+</resources>

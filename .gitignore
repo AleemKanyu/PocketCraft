@@ -1,0 +1,42 @@
+# Gradle
+.gradle/
+build/
+*.apk
+*.jar
+
+# Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+local.properties
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CMake
+.cxx/
+
+# Python
+__pycache__/
+*.pyc
+
+# Generated
+gen/
+out/
+
+# Large cached files
+.jdks/
+.tmp/
+.gradle/
+.gradle-local/
+app/build/
+app/release/
+artifacts/
+.kotlin/
+local.properties
+**.tar.gz
+**.apk
+node_modules/
+.git_backup_*/
