@@ -51,6 +51,7 @@ fun DuoButton(
         DuoButtonVariant.Primary -> Color(0xFF58CC02)
         DuoButtonVariant.Danger -> Color(0xFFC33542)
     }
+    val contentColor = Color.Black
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val offsetY by animateDpAsState(
@@ -99,7 +100,7 @@ fun DuoButton(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = Color.Black,
+                        tint = contentColor,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -108,7 +109,7 @@ fun DuoButton(
                 }
                 Text(
                     text = text,
-                    color = Color.Black,
+                    color = contentColor,
                     style = MaterialTheme.typography.labelLarge.copy(
                         fontFamily = Monocraft,
                         fontWeight = FontWeight.ExtraBold,

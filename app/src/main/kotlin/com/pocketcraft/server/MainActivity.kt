@@ -1,34 +1,43 @@
 package com.pocketcraft.server
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
-import android.provider.Settings
+import android.graphics.Color
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.pocketcraft.server.analytics.FirebaseAnalyticsManager
+import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.setup.JreExtractor
+import com.pocketcraft.server.update.GitHubApkInstaller
 import com.pocketcraft.server.update.GitHubUpdateChecker
+import com.pocketcraft.server.ui.onboarding.OnboardingActivity
 import com.pocketcraft.server.ui.screens.ErrorScreen
 import com.pocketcraft.server.ui.screens.PocketCraftApp
 import com.pocketcraft.server.ui.screens.SplashScreen
 import com.pocketcraft.server.ui.theme.PocketCraftTheme
+import com.pocketcraft.server.ui.theme.PocketColors
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
@@ -36,21 +45,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val preferences = AppPreferences(this)
+        val onboardingCompleted = preferences.onboardingCompleted
+        preferences.recordAppLaunch()
+
+        window.statusBarColor = Color.parseColor("#F5F7F3")
+        window.navigationBarColor = Color.parseColor("#F5F7F3")
+        WindowCompat.setDecorFitsSystemWindows(window, true)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
+        }
+
         // Initialize Firebase Analytics
         runCatching {
             FirebaseAnalyticsManager.initialize(applicationContext)
             FirebaseAnalyticsManager.logEvent("app_open")
-        }
-
-        // Request notification permission on Android 13+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                100
-            )
         }
 
         setContent {
@@ -60,6 +70,12 @@ class MainActivity : ComponentActivity() {
                 var jreProgress by remember { mutableStateOf(0) }
                 var jreStatus by remember { mutableStateOf("Preparing Minecraft Runtime...") }
                 var availableUpdate by remember { mutableStateOf<GitHubUpdateChecker.ReleaseInfo?>(null) }
+                var updatePromptDismissed by remember { mutableStateOf(false) }
+                var isDownloadingUpdate by remember { mutableStateOf(false) }
+                var updateDownloadProgress by remember { mutableStateOf(0) }
+                var updateDownloadStatus by remember { mutableStateOf("Preparing update...") }
+                var updateDownloadError by remember { mutableStateOf<String?>(null) }
+                val updateScope = rememberCoroutineScope()
 
                 LaunchedEffect(Unit) {
                     try {
@@ -90,92 +106,128 @@ class MainActivity : ComponentActivity() {
                         progress = jreProgress / 100f,
                         status = jreStatus
                     )
+                    !onboardingCompleted -> {
+                        SplashScreen(
+                            progress = 1f,
+                            status = "Opening onboarding..."
+                        )
+                        LaunchedEffect(Unit) {
+                            OnboardingActivity.start(this@MainActivity)
+                            finish()
+                        }
+                    }
                     else -> PocketCraftApp()
                 }
 
-                var showBatteryDialog by remember { mutableStateOf(false) }
                 LaunchedEffect(jreReady) {
-                    if (!jreReady) return@LaunchedEffect
-                    val prefs = applicationContext.getSharedPreferences("app_relay_prefs", MODE_PRIVATE)
-                    val prompted = prefs.getBoolean("battery_opt_prompted", false)
-                    val pm = getSystemService(POWER_SERVICE) as PowerManager
-                    if (!prompted && !pm.isIgnoringBatteryOptimizations(packageName)) {
-                        showBatteryDialog = true
-                    }
+                    if (!jreReady || !onboardingCompleted) return@LaunchedEffect
 
                     availableUpdate = withContext(Dispatchers.IO) {
                         GitHubUpdateChecker.checkForUpdate(applicationContext)
                     }
                 }
 
-                if (showBatteryDialog) {
+                val update = availableUpdate
+                if (update != null && !updatePromptDismissed && !isDownloadingUpdate) {
+                    val forceUpdate = update.isForceUpdateDue()
                     AlertDialog(
-                        onDismissRequest = { showBatteryDialog = false },
-                        title = { Text("Allow background performance") },
+                        onDismissRequest = { },
+                        title = { Text(if (forceUpdate) "Update required" else "Update available") },
                         text = {
                             Text(
-                                "For best performance, allow PocketCraft to run in the background without battery restrictions.\n" +
-                                    "This prevents Android from closing your server unexpectedly."
+                                if (forceUpdate) {
+                                    "You are on ${BuildConfig.VERSION_NAME}. Release ${update.releaseName} has been out for more than 3 days, so PocketCraft needs to be updated before you can continue."
+                                } else {
+                                    "You are on ${BuildConfig.VERSION_NAME}. A newer release (${update.releaseName}) is available. You can keep using PocketCraft for now, but updating is recommended."
+                                }
                             )
                         },
                         confirmButton = {
-                            TextButton(onClick = {
-                                requestIgnoreBatteryOptimization()
-                                FirebaseAnalyticsManager.logEvent("battery_optimization_prompt", mapOf("action" to "allow"))
-                                applicationContext.getSharedPreferences("app_relay_prefs", MODE_PRIVATE)
-                                    .edit()
-                                    .putBoolean("battery_opt_prompted", true)
-                                    .apply()
-                                showBatteryDialog = false
-                            }) { Text("Allow") }
+                            Button(
+                                colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Primary),
+                                onClick = {
+                                    val apkUrl = update.downloadUrl
+                                    if (apkUrl.isNullOrBlank()) {
+                                        updateDownloadError = "No APK asset was attached to this release."
+                                        return@Button
+                                    }
+
+                                    updateScope.launch {
+                                        try {
+                                            isDownloadingUpdate = true
+                                            updateDownloadError = null
+                                            updateDownloadStatus = "Downloading update..."
+                                            updateDownloadProgress = 0
+
+                                            val downloadResult = GitHubApkInstaller.downloadApk(
+                                                context = applicationContext,
+                                                downloadUrl = apkUrl,
+                                                onProgress = { progress ->
+                                                    updateDownloadProgress = progress
+                                                    updateDownloadStatus = if (progress < 100) {
+                                                        "Downloading update..."
+                                                    } else {
+                                                        "Download complete. Opening installer..."
+                                                    }
+                                                }
+                                            ).getOrThrow()
+
+                                            isDownloadingUpdate = false
+                                            startActivity(GitHubApkInstaller.buildInstallIntent(applicationContext, downloadResult))
+                                            if (forceUpdate) {
+                                                finishAffinity()
+                                            }
+                                        } catch (error: Throwable) {
+                                            isDownloadingUpdate = false
+                                            updateDownloadError = error.message ?: "Could not download update."
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text(if (forceUpdate) "Update now" else "Install update")
+                            }
                         },
                         dismissButton = {
-                            TextButton(onClick = {
-                                FirebaseAnalyticsManager.logEvent("battery_optimization_prompt", mapOf("action" to "not_now"))
-                                applicationContext.getSharedPreferences("app_relay_prefs", MODE_PRIVATE)
-                                    .edit()
-                                    .putBoolean("battery_opt_prompted", true)
-                                    .apply()
-                                showBatteryDialog = false
-                            }) { Text("Not now") }
+                            if (!forceUpdate) {
+                                TextButton(onClick = { updatePromptDismissed = true }) {
+                                    Text("Later")
+                                }
+                            }
                         }
                     )
                 }
 
-                val update = availableUpdate
-                if (update != null && !showBatteryDialog) {
+                if (isDownloadingUpdate) {
                     AlertDialog(
                         onDismissRequest = { },
-                        title = { Text("Update required") },
+                        title = { Text("Downloading update") },
                         text = {
-                            Text(
-                                "You are on ${BuildConfig.VERSION_NAME}. A newer beta release (${update.tagName}) is required to continue. Install the update to use PocketCraft."
-                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text(updateDownloadStatus)
+                                LinearProgressIndicator(
+                                    progress = { (updateDownloadProgress / 100f).coerceIn(0f, 1f) },
+                                    modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+                                )
+                                Text("${updateDownloadProgress}%")
+                            }
                         },
+                        confirmButton = {}
+                    )
+                }
+
+                if (updateDownloadError != null) {
+                    AlertDialog(
+                        onDismissRequest = { updateDownloadError = null },
+                        title = { Text("Update error") },
+                        text = { Text(updateDownloadError ?: "Unknown error") },
                         confirmButton = {
-                            TextButton(onClick = {
-                                val openReleaseIntent = Intent(Intent.ACTION_VIEW, Uri.parse(update.htmlUrl))
-                                runCatching {
-                                    startActivity(openReleaseIntent)
-                                    finishAffinity()
-                                }
-                            }) {
-                                Text("Install update")
+                            TextButton(onClick = { updateDownloadError = null }) {
+                                Text("OK")
                             }
                         }
                     )
                 }
             }
-        }
-    }
-
-    private fun requestIgnoreBatteryOptimization() {
-        val pm = getSystemService(POWER_SERVICE) as PowerManager
-        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                data = Uri.parse("package:$packageName")
-            }
-            runCatching { startActivity(intent) }
         }
     }
 }

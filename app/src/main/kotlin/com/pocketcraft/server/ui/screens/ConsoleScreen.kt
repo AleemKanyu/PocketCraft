@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.StopCircle
@@ -51,6 +52,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -90,12 +92,14 @@ import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.DuoButtonVariant
 import com.pocketcraft.server.ui.components.GameCard
+import com.pocketcraft.server.ui.components.PocketWorldIcon
 import com.pocketcraft.server.ui.components.StatusBadge
 import com.pocketcraft.server.ui.components.PlayerCard
 import com.pocketcraft.server.ui.components.PlayerCardAction
 import com.pocketcraft.server.ui.components.VersionUpgradeCard
 import com.pocketcraft.server.service.VersionCatalog
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.Monocraft
 import com.pocketcraft.server.util.RamUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -108,7 +112,8 @@ fun ConsoleScreen(
     onViewAllPlayers: () -> Unit,
     onChangeVersion: () -> Unit = {},
     onPlayerSelected: (PlayerInfo) -> Unit = {},
-    onOpenServerDetails: () -> Unit = {}
+    onOpenServerDetails: () -> Unit = {},
+    onAddWorld: () -> Unit = {}
 ) {
     val logListState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -116,6 +121,7 @@ fun ConsoleScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     var worldSeed by remember { mutableStateOf("") }
     var showSeedDialog by remember { mutableStateOf(false) }
+    var showBedrockHelpDialog by remember { mutableStateOf(false) }
     var seedSetupShown by remember { mutableStateOf(false) }
     var showDownloadRequiredDialog by remember { mutableStateOf(false) }
     val isVersionDownloaded = remember(stateHolder.versionLabel) {
@@ -166,10 +172,6 @@ fun ConsoleScreen(
             // Load world seed from preferences
             com.pocketcraft.server.data.preferences.AppPreferencesStore.getWorldSeedFlow(context).collect { seed ->
                 worldSeed = seed
-                // Show dialog only if seed hasn't been set, server is offline, AND we haven't shown it yet this session
-                if (seed.isEmpty() && stateHolder.status == ServerStatus.OFFLINE && !seedSetupShown) {
-                    showSeedDialog = true
-                }
             }
         } catch (e: Exception) {
             android.util.Log.e("ConsoleScreen", "Error loading world seed: ${e.message}")
@@ -221,7 +223,9 @@ fun ConsoleScreen(
             ServerIdentityCard(
                 stateHolder = stateHolder,
                 onChangeVersion = onChangeVersion,
-                onOpenServerDetails = onOpenServerDetails
+                onOpenServerDetails = onOpenServerDetails,
+                onAddWorld = onAddWorld,
+                onOpenBedrockHelp = { showBedrockHelpDialog = true }
             )
         }
         if (stateHolder.status == ServerStatus.ONLINE && !stateHolder.config.whiteList && !stateHolder.openServerRiskAcknowledged) {
@@ -420,7 +424,7 @@ fun ConsoleScreen(
                     }
                 }
             }
-            items(stateHolder.onlinePlayers.take(4), key = { it.name }) { player ->
+            items(stateHolder.onlinePlayers.take(4)) { player ->
                 OnlinePlayerCard(
                     player = player,
                     stateHolder = stateHolder,
@@ -478,48 +482,57 @@ fun ConsoleScreen(
         ) {
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth(0.85f)
+                    .fillMaxWidth(0.9f)
                     .padding(16.dp),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(28.dp),
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp
+                tonalElevation = 10.dp,
+                border = BorderStroke(1.dp, PocketColors.BorderLight)
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    modifier = Modifier.padding(22.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text(
                         "Set World Seed",
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 20.sp,
+                        fontFamily = Monocraft,
+                        fontSize = 22.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
                     Text(
-                        "Enter a seed for your world. Leave empty for a random seed.",
+                        "Enter a seed for your world. Leave it blank for a random world.",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SeedStepRow(step = "1", text = "Choose a seed or let the game generate one for you.")
+                        SeedStepRow(step = "2", text = "Tap Confirm to save it in your server settings.")
+                        SeedStepRow(step = "3", text = "Start the world again to use the new generation seed.")
+                    }
 
                     OutlinedTextField(
                         value = worldSeed,
                         onValueChange = { worldSeed = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(55.dp),
+                            .height(58.dp),
                         label = { Text("World Seed (optional)") },
                         textStyle = MaterialTheme.typography.bodyMedium,
                         singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(18.dp)
                     )
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp),
+                            .padding(top = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Button(
+                        DuoButton(
+                            text = "CONFIRM",
                             onClick = {
                                 showSeedDialog = false
                                 // Mark that we've shown the dialog to prevent it from showing again
@@ -534,14 +547,108 @@ fun ConsoleScreen(
                             },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(45.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = PocketColors.Primary
-                            )
+                        )
+
+                        TextButton(
+                            onClick = { showSeedDialog = false },
+                            modifier = Modifier
+                                .weight(0.9f)
+                                .height(52.dp)
                         ) {
-                            Text("Confirm", fontWeight = FontWeight.Bold)
+                            Text("Cancel", fontWeight = FontWeight.Bold)
                         }
                     }
+                }
+            }
+        }
+    }
+
+    if (showBedrockHelpDialog) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showBedrockHelpDialog = false },
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true,
+                usePlatformDefaultWidth = false
+            )
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth(0.92f)
+                    .padding(16.dp),
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 10.dp,
+                border = BorderStroke(1.dp, PocketColors.BorderLight)
+            ) {
+                Column(
+                    modifier = Modifier.padding(22.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = PocketColors.PrimaryMuted
+                    ) {
+                        Text(
+                            text = "Beta",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            fontWeight = FontWeight.Bold,
+                            color = PocketColors.PrimaryDark,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    Text(
+                        text = "Cross-platform play",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = Monocraft,
+                        fontSize = 22.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Text(
+                        text = "Bedrock is supported for local LAN play while PocketCraft is in beta. Online play will come soon.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 18.sp
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        JoinStepCard(
+                            step = "1",
+                            title = "Start the server",
+                            body = "Wait until PocketCraft shows the server is running."
+                        )
+                        JoinStepCard(
+                            step = "2",
+                            title = "Use full LAN IP",
+                            body = "Enter the full LAN IP exactly as shown in PocketCraft, without adding a port."
+                        )
+                        JoinStepCard(
+                            step = "3",
+                            title = "Stay on the same Wi-Fi",
+                            body = "Bedrock players can join from nearby devices on the same network only for now."
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = PocketColors.PrimaryMuted.copy(alpha = 0.65f)
+                    ) {
+                        Text(
+                            text = "LAN only for now. The online version is coming soon in beta updates.",
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PocketColors.PrimaryDark
+                        )
+                    }
+
+                    DuoButton(
+                        text = "GOT IT",
+                        onClick = { showBedrockHelpDialog = false },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
@@ -564,15 +671,20 @@ fun ConsoleScreen(
 private fun ServerIdentityCard(
     stateHolder: ServerStateHolder,
     onChangeVersion: () -> Unit,
-    onOpenServerDetails: () -> Unit
+    onOpenServerDetails: () -> Unit,
+    onAddWorld: () -> Unit,
+    onOpenBedrockHelp: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val serverRunning = stateHolder.status == ServerStatus.ONLINE
     val canChangeWorld = stateHolder.status == ServerStatus.OFFLINE
     var showWorldSheet by remember { mutableStateOf(false) }
-    var showAddWorldDialog by remember { mutableStateOf(false) }
-    var newWorldName by remember { mutableStateOf("") }
+    val activeWorld = if (stateHolder.worlds.isNotEmpty()) {
+        stateHolder.worlds.firstOrNull { it.isActive } ?: stateHolder.worlds.firstOrNull()
+    } else {
+        null
+    }
 
     val worldItems = if (stateHolder.worlds.isNotEmpty()) {
         stateHolder.worlds
@@ -634,8 +746,15 @@ private fun ServerIdentityCard(
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Crop
                                 )
+                            } else if (!activeWorld?.photoUrl.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = activeWorld?.photoUrl,
+                                    contentDescription = "Active world photo",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
                             } else {
-                                FlatEmojiIcon("⛏", modifier = Modifier.size(34.dp), tint = PocketColors.PrimaryDark)
+                                PocketWorldIcon(modifier = Modifier.size(34.dp))
                             }
                         }
 
@@ -703,7 +822,11 @@ private fun ServerIdentityCard(
                 }
             }
 
-            StatusBadge(status = stateHolder.status, modifier = Modifier.fillMaxWidth())
+            StatusBadge(
+                status = stateHolder.status,
+                bedrockBridgeEnabled = stateHolder.bedrockBridgeEnabled,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
         if (showWorldSheet) {
@@ -744,7 +867,7 @@ private fun ServerIdentityCard(
                             .heightIn(max = 360.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(worldItems, key = { it.name }) { world ->
+                        items(worldItems) { world ->
                             WorldSelectorCard(
                                 world = world,
                                 enabled = canChangeWorld && !world.isActive,
@@ -763,76 +886,13 @@ private fun ServerIdentityCard(
                                 enabled = canChangeWorld,
                                 onClick = {
                                     showWorldSheet = false
-                                    showAddWorldDialog = true
+                                    onAddWorld()
                                 }
                             )
                         }
                     }
                 }
             }
-        }
-
-        if (showAddWorldDialog) {
-            AlertDialog(
-                onDismissRequest = { showAddWorldDialog = false },
-                shape = RoundedCornerShape(24.dp),
-                containerColor = MaterialTheme.colorScheme.surface,
-                title = {
-                    Text(
-                        "Add World",
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 22.sp
-                    )
-                },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            text = "Create a fresh world without replacing your existing ones.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp
-                        )
-                        OutlinedTextField(
-                            value = newWorldName,
-                            onValueChange = { newWorldName = it },
-                            singleLine = true,
-                            label = { Text("World name") },
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                val msg = stateHolder.createWorld(newWorldName)
-                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                if (msg.startsWith("World added")) {
-                                    newWorldName = ""
-                                    showAddWorldDialog = false
-                                    onOpenServerDetails()
-                                } else if (msg.contains("already exists")) {
-                                    newWorldName = ""
-                                    showAddWorldDialog = false
-                                }
-                            }
-                        },
-                        enabled = true,
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = PocketColors.Primary,
-                            contentColor = Color.Black
-                        )
-                    ) {
-                        Text("SAVE")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showAddWorldDialog = false }) {
-                        Text("CANCEL")
-                    }
-                }
-            )
         }
 
         val publicAddress = stateHolder.publicAddress?.takeIf { it.isNotBlank() }
@@ -891,7 +951,7 @@ private fun ServerIdentityCard(
             }
         }
 
-        val localAddress = "${stateHolder.localIp}:${stateHolder.config.port}"
+        val localLanAddress = "${stateHolder.localIp}:${stateHolder.config.port}"
         val canShareAddresses = publicAddress != null || serverRunning
 
         if (canShareAddresses) {
@@ -905,31 +965,51 @@ private fun ServerIdentityCard(
                     modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "Join Addresses",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = PocketColors.Primary
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Join Addresses",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = PocketColors.Primary,
+                            letterSpacing = 0.8.sp
+                        )
+                        IconButton(onClick = onOpenBedrockHelp) {
+                            Icon(
+                                imageVector = Icons.Filled.Info,
+                                contentDescription = "How to join",
+                                tint = PocketColors.PrimaryDark
+                            )
+                        }
+                    }
 
                     AddressValueRow(
-                        label = "Internet",
+                        label = "Java / Internet",
                         address = publicAddress ?: "Unavailable right now",
                         emphasized = publicAddress != null
                     )
 
                     AddressValueRow(
                         label = "LAN",
-                        address = localAddress,
+                        address = localLanAddress,
                         emphasized = false
                     )
 
-                    if (publicAddress == null) {
-                        Text(
-                            text = "Internet hosting is unavailable right now. Players on the same Wi-Fi can still join with the LAN address.",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    OutlinedButton(
+                        onClick = onOpenBedrockHelp,
+                        modifier = Modifier.fillMaxWidth(),
+                        border = BorderStroke(1.dp, PocketColors.BorderDark)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Info,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Bedrock Join Guide", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
 
                     OutlinedButton(
@@ -937,7 +1017,7 @@ private fun ServerIdentityCard(
                             shareServerAddresses(
                                 context = context,
                                 internetAddress = publicAddress,
-                                lanAddress = localAddress.takeIf { serverRunning }
+                                lanAddress = localLanAddress.takeIf { serverRunning }
                             )
                         },
                         enabled = canShareAddresses,
@@ -953,6 +1033,75 @@ private fun ServerIdentityCard(
                         Text("Share Join Addresses", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SeedStepRow(step: String, text: String) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = PocketColors.PrimaryMuted
+        ) {
+            Text(
+                text = step,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                color = PocketColors.PrimaryDark,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp
+            )
+        }
+        Text(
+            text = text,
+            modifier = Modifier.weight(1f),
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun JoinStepCard(step: String, title: String, body: String) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = PocketColors.SurfaceVarLight,
+        border = BorderStroke(1.dp, PocketColors.BorderLight)
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = PocketColors.PrimaryMuted
+            ) {
+                Text(
+                    text = step,
+                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                    color = PocketColors.PrimaryDark,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = body,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -991,7 +1140,7 @@ private fun WorldSelectorCard(
                         contentScale = ContentScale.Crop
                     )
                 } else {
-                    FlatEmojiIcon("⛏", modifier = Modifier.size(24.dp), tint = PocketColors.PrimaryDark)
+                        PocketWorldIcon(modifier = Modifier.size(24.dp))
                 }
             }
 

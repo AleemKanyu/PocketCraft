@@ -63,9 +63,9 @@ private enum class DownloadedContentTab(
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val type: PluginManager.ContentType
 ) {
-    PLUGINS(
-        label = "Plugins",
-        emptyLabel = "No plugins installed yet",
+    MODS(
+        label = "Mods",
+        emptyLabel = "No mods installed yet",
         icon = Icons.Default.Extension,
         type = PluginManager.ContentType.PLUGINS
     ),
@@ -100,8 +100,8 @@ fun DownloadedPluginsScreen(
     fun refresh() {
         items = when (currentTab().type) {
             PluginManager.ContentType.PLUGINS -> PluginManager.listPlugins(context, stateHolder.versionLabel)
+            PluginManager.ContentType.MODS -> PluginManager.listMods(context, stateHolder.versionLabel)
             PluginManager.ContentType.RESOURCE_PACKS -> PluginManager.listResourcePacks(context, stateHolder.versionLabel)
-            PluginManager.ContentType.MODS -> emptyList()
         }
     }
 

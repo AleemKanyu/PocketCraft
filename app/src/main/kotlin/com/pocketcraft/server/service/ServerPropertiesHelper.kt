@@ -18,7 +18,7 @@ object ServerPropertiesHelper {
             // Default properties for a new server
             props["server-port"] = "25565"
             props["motd"] = "A PocketCraft Server"
-            props["max-players"] = "20"
+            props["max-players"] = "5"
             props["difficulty"] = "easy"
             props["gamemode"] = "survival"
             props["online-mode"] = "false"

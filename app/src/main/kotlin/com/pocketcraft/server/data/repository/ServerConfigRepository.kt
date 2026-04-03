@@ -224,7 +224,7 @@ class ServerConfigRepository @Inject constructor(
         return ServerConfig(
             worldName = props["level-name"] ?: "world",
             worldSeed = props["level-seed"] ?: "",
-            maxPlayers = props["max-players"]?.toIntOrNull() ?: 10,
+            maxPlayers = (props["max-players"]?.toIntOrNull() ?: 5).coerceIn(1, 10),
             port = 25565,
             difficulty = props["difficulty"] ?: "normal",
             gameMode = props["gamemode"] ?: "survival",
@@ -253,7 +253,7 @@ class ServerConfigRepository @Inject constructor(
             appendLine("#Minecraft server properties (PocketCraft)")
             appendLine("level-name=${config.worldName}")
             appendLine("level-seed=${config.worldSeed}")
-            appendLine("max-players=${config.maxPlayers}")
+            appendLine("max-players=${config.maxPlayers.coerceIn(1, 10)}")
             appendLine("server-port=25565")
             appendLine("difficulty=${config.difficulty}")
             appendLine("gamemode=${config.gameMode}")

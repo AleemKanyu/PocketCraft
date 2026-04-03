@@ -10,6 +10,10 @@ import com.google.firebase.ktx.Firebase
 import com.google.firebase.firestore.ktx.firestore
 import com.pocketcraft.server.BuildConfig
 import com.pocketcraft.server.data.preferences.AppPreferences
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -31,6 +35,7 @@ object FeedbackService {
 
         return runCatching {
             val prefs = AppPreferences(context)
+            val logDump = createFeedbackLogDump(context, serverVersion)
             val payload = hashMapOf(
                 "message" to trimmed,
                 "userId" to prefs.userId,
@@ -40,6 +45,9 @@ object FeedbackService {
                 "deviceManufacturer" to Build.MANUFACTURER,
                 "deviceModel" to Build.MODEL,
                 "androidSdk" to Build.VERSION.SDK_INT,
+                "logFilePath" to logDump.file.absolutePath,
+                "logFileName" to logDump.file.name,
+                "appLogExcerpt" to logDump.excerpt,
                 "createdAt" to FieldValue.serverTimestamp()
             )
 
@@ -97,6 +105,40 @@ object FeedbackService {
             }
         }.getOrDefault(false)
     }
+}
+
+private data class FeedbackLogDump(
+    val file: File,
+    val excerpt: String
+)
+
+private fun createFeedbackLogDump(context: Context, serverVersion: String): FeedbackLogDump {
+    val logsRoot = File(context.filesDir, "feedback_logs").also { it.mkdirs() }
+    val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+    val outFile = File(logsRoot, "feedback_${serverVersion}_$stamp.txt")
+
+    val serverLogFile = File(context.filesDir, "servers/$serverVersion/logs/latest.log")
+    val serverLogText = runCatching {
+        if (serverLogFile.exists()) serverLogFile.readText() else "No server log file found yet."
+    }.getOrDefault("Could not read latest.log")
+
+    val report = buildString {
+        appendLine("PocketCraft Feedback Log Dump")
+        appendLine("timestamp=$stamp")
+        appendLine("serverVersion=$serverVersion")
+        appendLine("appVersion=${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+        appendLine("device=${Build.MANUFACTURER} ${Build.MODEL}")
+        appendLine("androidSdk=${Build.VERSION.SDK_INT}")
+        appendLine()
+        appendLine("---- latest.log ----")
+        appendLine(serverLogText.takeLast(220_000))
+    }
+
+    outFile.writeText(report)
+    return FeedbackLogDump(
+        file = outFile,
+        excerpt = report.takeLast(12_000)
+    )
 }
 
 private suspend fun <T> Task<T>.awaitTask(): T = suspendCancellableCoroutine { continuation ->

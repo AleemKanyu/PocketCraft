@@ -24,9 +24,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Public
@@ -40,9 +43,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -67,25 +70,29 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.pocketcraft.server.WorldImporter
 import com.pocketcraft.server.ui.components.FlatEmojiIcon
-import com.pocketcraft.server.ui.components.DuoButton
-import com.pocketcraft.server.ui.components.DuoButtonVariant
 import com.pocketcraft.server.ui.components.GameCard
+import com.pocketcraft.server.ui.components.PocketWorldIcon
 import com.pocketcraft.server.ui.theme.PocketColors
 import kotlinx.coroutines.launch
 
 @Composable
 fun WorldsScreen(
     stateHolder: ServerStateHolder,
+    onOpenWorldSetup: (Boolean) -> Unit = {},
     onChangeVersion: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val animatedBackupProgress by animateFloatAsState(
+        targetValue = (stateHolder.backupProgressPercent / 100f).coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 500),
+        label = "worlds_backup_progress"
+    )
     var showResetDialog by remember { mutableStateOf(false) }
     var showRestoreDialog by remember { mutableStateOf<BackupEntry?>(null) }
     var showDeleteDialog by remember { mutableStateOf<BackupEntry?>(null) }
     var showDeleteWorldDialog by remember { mutableStateOf<WorldEntry?>(null) }
-    var showAddWorldDialog by remember { mutableStateOf(false) }
-    var newWorldName by remember { mutableStateOf("") }
+    var downloadActionLocked by remember { mutableStateOf(false) }
     var isImportingWorld by remember { mutableStateOf(false) }
     var importDimension by remember { mutableStateOf("overworld") }
     val worldPickerLauncher = rememberLauncherForActivityResult(
@@ -135,7 +142,7 @@ fun WorldsScreen(
                             .background(PocketColors.Primary.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        FlatEmojiIcon("🌍", modifier = Modifier.size(32.dp), tint = PocketColors.PrimaryDark)
+                        PocketWorldIcon(modifier = Modifier.size(32.dp))
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
@@ -177,10 +184,13 @@ fun WorldsScreen(
                         },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
-                        enabled = true,
+                        enabled = !stateHolder.isBackingUp && !stateHolder.isRestoringBackup,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = PocketColors.Primary)
                     ) {
-                        Text("BACKUP", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (stateHolder.isBackingUp) "BACKING UP..." else "BACKUP",
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                     OutlinedButton(
                         onClick = { showResetDialog = true },
@@ -191,6 +201,52 @@ fun WorldsScreen(
                     ) {
                         Text("RESET", fontWeight = FontWeight.Bold)
                     }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        if (downloadActionLocked || stateHolder.isDownloadingBackup) return@OutlinedButton
+                        downloadActionLocked = true
+                        scope.launch {
+                            try {
+                                val latestBackup = stateHolder.backups.maxByOrNull { it.file.lastModified() }
+                                if (latestBackup == null) {
+                                    Toast.makeText(context, "Create a backup first, then download it.", Toast.LENGTH_SHORT).show()
+                                    return@launch
+                                }
+                                Toast.makeText(context, stateHolder.downloadBackup(latestBackup), Toast.LENGTH_SHORT).show()
+                            } finally {
+                                downloadActionLocked = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = !stateHolder.isDownloadingBackup && !downloadActionLocked,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = PocketColors.DownloadBlue,
+                        disabledContentColor = PocketColors.DownloadBlue.copy(alpha = 0.45f)
+                    )
+                ) {
+                    Text("DOWNLOAD WORLD", fontWeight = FontWeight.Bold)
+                }
+
+                if (stateHolder.isBackingUp) {
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { animatedBackupProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(999.dp))
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "${stateHolder.backupProgressPercent}% - ${stateHolder.backupStatusMessage}",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -203,7 +259,7 @@ fun WorldsScreen(
                 SectionLabel("WORLD SLOTS")
                 Spacer(Modifier.weight(1f))
                 OutlinedButton(
-                    onClick = { showAddWorldDialog = true },
+                    onClick = { onOpenWorldSetup(true) },
                     enabled = stateHolder.status == ServerStatus.OFFLINE,
                     shape = RoundedCornerShape(10.dp),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
@@ -215,7 +271,7 @@ fun WorldsScreen(
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "To delete a world from storage, slide its card to the left.",
+                text = "Slide left to delete. Active worlds can only be deleted when the server is stopped.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 4.dp)
@@ -227,7 +283,7 @@ fun WorldsScreen(
             SwipeableWorldSlotItem(
                 world = world,
                 canSwitch = stateHolder.status == ServerStatus.OFFLINE,
-                canDelete = stateHolder.status == ServerStatus.OFFLINE && stateHolder.worlds.size > 1,
+                canDelete = stateHolder.worlds.size > 1 && (stateHolder.status == ServerStatus.OFFLINE || !world.isActive),
                 onActivate = {
                     scope.launch {
                         val msg = stateHolder.setActiveWorld(world.name)
@@ -343,8 +399,14 @@ fun WorldsScreen(
                 BackupItem(
                     backup = backup,
                     onRestore = { showRestoreDialog = backup },
+                    onDownload = {
+                        scope.launch {
+                            Toast.makeText(context, stateHolder.downloadBackup(backup), Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     onDelete = { showDeleteDialog = backup },
-                    enabled = stateHolder.status == ServerStatus.OFFLINE
+                    enabled = stateHolder.status == ServerStatus.OFFLINE,
+                    isDownloading = stateHolder.isDownloadingBackup
                 )
             }
         }
@@ -464,45 +526,6 @@ fun WorldsScreen(
         )
     }
 
-    if (showAddWorldDialog) {
-        AlertDialog(
-            onDismissRequest = { showAddWorldDialog = false },
-            title = { Text("Create World") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Type a world name. This adds a new world entry without replacing existing worlds.")
-                    OutlinedTextField(
-                        value = newWorldName,
-                        onValueChange = { newWorldName = it },
-                        singleLine = true,
-                        label = { Text("World name") }
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        val msg = stateHolder.createWorld(newWorldName)
-                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                        if (msg.startsWith("World added")) {
-                            newWorldName = ""
-                            showAddWorldDialog = false
-                        } else if (msg.contains("already exists")) {
-                            newWorldName = ""
-                            showAddWorldDialog = false
-                        }
-                    }
-                }) {
-                    Text("SAVE", color = PocketColors.Primary, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddWorldDialog = false }) {
-                    Text("CANCEL")
-                }
-            }
-        )
-    }
 }
 
 @Composable
@@ -581,7 +604,7 @@ private fun SwipeableWorldSlotItem(
                             contentScale = ContentScale.Crop
                         )
                     } else {
-                        FlatEmojiIcon("⛏", modifier = Modifier.size(18.dp), tint = PocketColors.PrimaryDark)
+                        PocketWorldIcon(modifier = Modifier.size(18.dp))
                     }
                 }
 
@@ -632,8 +655,10 @@ private fun SwipeableWorldSlotItem(
 private fun BackupItem(
     backup: com.pocketcraft.server.ui.screens.BackupEntry,
     onRestore: () -> Unit,
+    onDownload: () -> Unit,
     onDelete: () -> Unit,
-    enabled: Boolean
+    enabled: Boolean,
+    isDownloading: Boolean
 ) {
     GameCard(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -656,6 +681,9 @@ private fun BackupItem(
 
             IconButton(onClick = onRestore, enabled = enabled) {
                 Icon(Icons.Default.Restore, "Restore", tint = if (enabled) PocketColors.Primary else MaterialTheme.colorScheme.outline)
+            }
+            IconButton(onClick = onDownload, enabled = !isDownloading) {
+                Icon(Icons.Default.Download, "Download backup to phone", tint = if (!isDownloading) PocketColors.PrimaryDark else MaterialTheme.colorScheme.outline)
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Default.Delete, "Delete", tint = PocketColors.Offline.copy(alpha = 0.7f))

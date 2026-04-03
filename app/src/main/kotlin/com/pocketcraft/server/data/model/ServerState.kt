@@ -13,7 +13,7 @@ sealed class ServerState {
     /** Server is fully running and accepting connections. */
     data class Running(
         val playerCount: Int = 0,
-        val maxPlayers: Int = 10,
+        val maxPlayers: Int = 5,
         val tps: Float = 20f,
         val uptimeSeconds: Long = 0L,
         val localIp: String = "",

@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -26,6 +27,12 @@ object AppPreferencesKeys {
     val AUTO_RESTART_DELAY_SECONDS = stringPreferencesKey("auto_restart_delay_seconds")
     val RELAY_HOST = stringPreferencesKey("relay_host")
     val OPEN_SERVER_RISK_ACKNOWLEDGED = booleanPreferencesKey("open_server_risk_acknowledged")
+    val INITIAL_WORLD_SETUP_SHOWN = booleanPreferencesKey("initial_world_setup_shown")
+    val PENDING_AUTO_DOWNLOAD_VERSION = stringPreferencesKey("pending_auto_download_version")
+    val SOCIAL_PROMO_SHOWN = booleanPreferencesKey("social_promo_shown")
+    val SOCIAL_LINKS_JOINED = booleanPreferencesKey("social_links_joined")
+    val SOCIAL_PROMO_LAST_SHOWN_LAUNCH = intPreferencesKey("social_promo_last_shown_launch")
+    val APP_LAUNCH_COUNT = intPreferencesKey("app_launch_count")
 }
 
 class AppPreferences(private val context: Context) {
@@ -57,6 +64,36 @@ class AppPreferences(private val context: Context) {
         get() = prefs.getString("relay_host", null)
             ?: RelayServers.getBestForTimeZone(java.util.TimeZone.getDefault().id).host
         set(value) = prefs.edit().putString("relay_host", value).apply()
+
+    var onboardingCompleted: Boolean
+        get() = prefs.getBoolean("onboarding_completed", false)
+        set(value) = prefs.edit().putBoolean("onboarding_completed", value).apply()
+
+    var openWorldSetupNextLaunch: Boolean
+        get() = prefs.getBoolean("open_world_setup_next_launch", false)
+        set(value) = prefs.edit().putBoolean("open_world_setup_next_launch", value).apply()
+
+    var appLaunchCount: Int
+        get() = prefs.getInt("app_launch_count", 0)
+        set(value) = prefs.edit().putInt("app_launch_count", value).apply()
+
+    var socialPromoShown: Boolean
+        get() = prefs.getBoolean("social_promo_shown", false)
+        set(value) = prefs.edit().putBoolean("social_promo_shown", value).apply()
+
+    var socialLinksJoined: Boolean
+        get() = prefs.getBoolean("social_links_joined", false)
+        set(value) = prefs.edit().putBoolean("social_links_joined", value).apply()
+
+    var socialPromoLastShownLaunch: Int
+        get() = prefs.getInt("social_promo_last_shown_launch", 0)
+        set(value) = prefs.edit().putInt("social_promo_last_shown_launch", value).apply()
+
+    fun recordAppLaunch(): Int {
+        val next = appLaunchCount + 1
+        appLaunchCount = next
+        return next
+    }
 }
 
 // Keep object-based API for backward compatibility with existing code
@@ -184,6 +221,54 @@ object AppPreferencesStore {
     suspend fun setOpenServerRiskAcknowledged(context: Context, acknowledged: Boolean) {
         context.appPreferencesDataStore.edit { prefs ->
             prefs[AppPreferencesKeys.OPEN_SERVER_RISK_ACKNOWLEDGED] = acknowledged
+        }
+    }
+
+    fun isInitialWorldSetupShownFlow(context: Context): Flow<Boolean> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.INITIAL_WORLD_SETUP_SHOWN] ?: false
+        }
+
+    suspend fun setInitialWorldSetupShown(context: Context, shown: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.INITIAL_WORLD_SETUP_SHOWN] = shown
+        }
+    }
+
+    fun getPendingAutoDownloadVersionFlow(context: Context): Flow<String?> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.PENDING_AUTO_DOWNLOAD_VERSION]
+        }
+
+    suspend fun setPendingAutoDownloadVersion(context: Context, version: String?) {
+        context.appPreferencesDataStore.edit { prefs ->
+            if (version.isNullOrBlank()) {
+                prefs.remove(AppPreferencesKeys.PENDING_AUTO_DOWNLOAD_VERSION)
+            } else {
+                prefs[AppPreferencesKeys.PENDING_AUTO_DOWNLOAD_VERSION] = version
+            }
+        }
+    }
+
+    fun getAppLaunchCount(context: Context): Flow<Int> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.APP_LAUNCH_COUNT] ?: 0
+        }
+
+    suspend fun setAppLaunchCount(context: Context, count: Int) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.APP_LAUNCH_COUNT] = count
+        }
+    }
+
+    fun isSocialPromoShownFlow(context: Context): Flow<Boolean> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.SOCIAL_PROMO_SHOWN] ?: false
+        }
+
+    suspend fun setSocialPromoShown(context: Context, shown: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.SOCIAL_PROMO_SHOWN] = shown
         }
     }
 }

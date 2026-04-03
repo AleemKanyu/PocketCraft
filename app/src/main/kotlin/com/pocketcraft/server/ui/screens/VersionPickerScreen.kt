@@ -142,7 +142,7 @@ fun VersionPickerScreen(
                     Text(
                         text = "POCKETCRAFT",
                         color = PocketColors.PrimaryDark,
-                        style = MaterialTheme.typography.labelLarge
+                        style = MaterialTheme.typography.headlineMedium
                     )
                     Text(
                         text = "Pick Your Minecraft Version",

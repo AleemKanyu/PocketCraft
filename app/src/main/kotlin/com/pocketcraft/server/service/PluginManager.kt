@@ -27,10 +27,14 @@ object PluginManager {
 
     private const val MODRINTH_BASE_URL = "https://api.modrinth.com/v2"
     private const val HANGAR_BASE_URL = "https://hangar.papermc.io/api/v1"
+    private const val GEYSERMC_DOWNLOAD_BASE_URL = "https://download.geysermc.org/v2/projects"
     private const val MEMORY_CACHE_TTL_MS = 3 * 60 * 1000L
     private const val HTTP_CACHE_BYTES = 12L * 1024L * 1024L
     private const val MODRINTH_PROVIDER = "modrinth"
     private const val HANGAR_PROVIDER = "hangar"
+    private val builtInBridgeProjectIds = setOf("geyser", "floodgate", "viaversion")
+    private val builtInBridgeKeywords = setOf("geyser", "floodgate", "viaversion")
+    private val floodgateAuthRegex = Regex("""(?m)^\s*auth-type\s*:\s*floodgate\s*$""")
 
     private val paperCompatibleLoaders = setOf("paper", "spigot", "purpur", "bukkit", "folia")
     private val modLoaderLabels = linkedMapOf(
@@ -150,8 +154,140 @@ object PluginManager {
                     version = metadata.version.orEmpty()
                 )
             }
+            ?.filterNot(::isManagedBridgePlugin)
             ?.sortedByDescending { it.sizeMb }
             ?: emptyList()
+    }
+
+    suspend fun ensureBedrockBridgePlugins(
+        context: Context,
+        versionId: String,
+        onProgress: (String) -> Unit = {}
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val geyser = RemoteCatalogItem(
+            source = MODRINTH_PROVIDER,
+            projectId = "geyser",
+            title = "Geyser",
+            slug = "geyser",
+            iconUrl = null,
+            description = "Built-in Bedrock bridge",
+            downloads = 0L
+        )
+        val floodgateCandidates = listOf(
+            RemoteCatalogItem(
+                source = MODRINTH_PROVIDER,
+                projectId = "floodgate",
+                title = "Floodgate",
+                slug = "floodgate",
+                iconUrl = null,
+                description = "Built-in Bedrock auth bridge",
+                downloads = 0L
+            ),
+            RemoteCatalogItem(
+                source = HANGAR_PROVIDER,
+                projectId = "floodgate",
+                title = "Floodgate",
+                slug = "floodgate",
+                iconUrl = null,
+                description = "Built-in Bedrock auth bridge",
+                downloads = 0L,
+                owner = "GeyserMC"
+            )
+        )
+        val viaVersion = RemoteCatalogItem(
+            source = MODRINTH_PROVIDER,
+            projectId = "viaversion",
+            title = "ViaVersion",
+            slug = "viaversion",
+            iconUrl = null,
+            description = "Built-in Java protocol compatibility for latest Bedrock via Geyser",
+            downloads = 0L
+        )
+
+        installManagedPluginIfMissing(
+            context = context,
+            versionId = versionId,
+            item = geyser,
+            onProgress = onProgress
+        ).fold(
+            onSuccess = {},
+            onFailure = { return@withContext Result.failure(it) }
+        )
+
+        installManagedPluginFromCandidatesIfMissing(
+            context = context,
+            versionId = versionId,
+            candidates = floodgateCandidates,
+            onProgress = onProgress
+        ).fold(
+            onSuccess = {},
+            onFailure = {
+                installManagedPluginFromDirectUrlIfMissing(
+                    context = context,
+                    versionId = versionId,
+                    projectId = "floodgate",
+                    title = "Floodgate",
+                    downloadUrl = "$GEYSERMC_DOWNLOAD_BASE_URL/floodgate/versions/latest/builds/latest/downloads/spigot",
+                    fileNameHint = "Floodgate-Spigot.jar",
+                    onProgress = onProgress
+                ).fold(
+                    onSuccess = {},
+                    onFailure = { error -> return@withContext Result.failure(error) }
+                )
+            }
+        )
+
+        installManagedPluginIfMissing(
+            context = context,
+            versionId = versionId,
+            item = viaVersion,
+            onProgress = onProgress
+        ).onFailure { error ->
+            android.util.Log.w("PluginManager", "ViaVersion auto-install skipped: ${error.message}")
+        }
+
+        ensureManagedPluginEnabled(context, versionId, "geyser")
+        ensureManagedPluginEnabled(context, versionId, "floodgate")
+
+        enforceBedrockBridgeLocalConfig(context, versionId)
+
+        Result.success(Unit)
+    }
+
+    fun enforceBedrockBridgeLocalConfig(context: Context, versionId: String) {
+        val geyserConfigFile = File(getPluginsDir(context, versionId), "Geyser-Spigot/config.yml")
+        geyserConfigFile.parentFile?.mkdirs()
+
+        if (!geyserConfigFile.exists()) {
+            return
+        }
+
+        val original = runCatching { geyserConfigFile.readText() }.getOrDefault("")
+        val updated = when {
+            floodgateAuthRegex.containsMatchIn(original) -> original
+            Regex("""(?m)^\s*auth-type\s*:\s*.+$""").containsMatchIn(original) -> {
+                original.replace(Regex("""(?m)^(\s*auth-type\s*:\s*).+$"""), "$1floodgate")
+            }
+            Regex("""(?m)^\s*remote\s*:\s*$""").containsMatchIn(original) -> {
+                original.replace(
+                    Regex("""(?m)^\s*remote\s*:\s*$"""),
+                    "remote:\n  auth-type: floodgate"
+                )
+            }
+            else -> {
+                original.trimEnd() + "\n\nremote:\n  auth-type: floodgate\n"
+            }
+        }
+
+        if (updated != original) {
+            geyserConfigFile.writeText(updated)
+        }
+    }
+
+    fun isBedrockBridgeEnabled(context: Context, versionId: String): Boolean {
+        val hasGeyser = isManagedPluginEnabled(context, versionId, "geyser")
+        val hasFloodgate = isManagedPluginEnabled(context, versionId, "floodgate")
+        return hasGeyser && hasFloodgate
     }
 
     fun listMods(context: Context, versionId: String): List<Plugin> {
@@ -167,6 +303,7 @@ object PluginManager {
                     version = buildVersionLabel(metadata)
                 )
             }
+            ?.filterNot(::isManagedBridgePlugin)
             ?.sortedByDescending { it.sizeMb }
             ?: emptyList()
     }
@@ -285,7 +422,9 @@ object PluginManager {
                         output.write(buffer, 0, bytes)
                         copied += bytes
                         if (totalBytes > 0) {
-                            onProgress((copied * 100 / totalBytes).toInt().coerceIn(0, 100))
+                            withContext(Dispatchers.Main) {
+                                onProgress((copied * 100 / totalBytes).toInt().coerceIn(0, 100))
+                            }
                         }
                         bytes = input.read(buffer)
                     }
@@ -348,7 +487,9 @@ object PluginManager {
                             output.write(buffer, 0, bytes)
                             downloaded += bytes
                             if (totalBytes > 0) {
-                                onProgress(((downloaded * 100) / totalBytes).toInt().coerceIn(0, 100))
+                                withContext(Dispatchers.Main) {
+                                    onProgress(((downloaded * 100) / totalBytes).toInt().coerceIn(0, 100))
+                                }
                             }
                             bytes = input.read(buffer)
                         }
@@ -455,8 +596,13 @@ object PluginManager {
                 }
             }
         }.map { results ->
-            putCachedCatalog(cacheKey, results)
-            results
+            val filtered = if (type == ContentType.PLUGINS) {
+                results.filterNot(::isManagedBridgeCatalogItem)
+            } else {
+                results
+            }
+            putCachedCatalog(cacheKey, filtered)
+            filtered
         }
     }
 
@@ -880,6 +1026,7 @@ object PluginManager {
                     ArchiveKind.FABRIC_MOD,
                     ArchiveKind.FORGE_MOD,
                     ArchiveKind.NEOFORGE_MOD -> "This file is a mod jar. The current server runtime cannot load it as a plugin."
+                    ArchiveKind.UNKNOWN -> "This .jar is not a valid Paper plugin archive (missing plugin metadata or corrupted file)."
                     else -> null
                 }
             }
@@ -1015,6 +1162,141 @@ object PluginManager {
 
     private fun normalizeCatalogKey(value: String): String {
         return value.lowercase(Locale.US).replace(Regex("[^a-z0-9]+"), "")
+    }
+
+    private suspend fun installManagedPluginIfMissing(
+        context: Context,
+        versionId: String,
+        item: RemoteCatalogItem,
+        onProgress: (String) -> Unit
+    ): Result<Unit> {
+        if (isManagedPluginInstalled(context, versionId, item.projectId)) {
+            ensureManagedPluginEnabled(context, versionId, item.projectId)
+            return Result.success(Unit)
+        }
+        onProgress("Installing ${item.title} bridge plugin…")
+        return installRemoteItem(
+            context = context,
+            item = item,
+            versionId = versionId,
+            type = ContentType.PLUGINS,
+            onProgress = {}
+        ).map { Unit }
+    }
+
+    private suspend fun installManagedPluginFromCandidatesIfMissing(
+        context: Context,
+        versionId: String,
+        candidates: List<RemoteCatalogItem>,
+        onProgress: (String) -> Unit
+    ): Result<Unit> {
+        val primary = candidates.firstOrNull()
+            ?: return Result.failure(IllegalArgumentException("Missing managed plugin candidates"))
+
+        if (isManagedPluginInstalled(context, versionId, primary.projectId)) {
+            ensureManagedPluginEnabled(context, versionId, primary.projectId)
+            return Result.success(Unit)
+        }
+
+        var lastError: Throwable? = null
+        for (candidate in candidates) {
+            onProgress("Installing ${candidate.title} bridge plugin…")
+            val installResult = installRemoteItem(
+                context = context,
+                item = candidate,
+                versionId = versionId,
+                type = ContentType.PLUGINS,
+                onProgress = {}
+            )
+            if (installResult.isSuccess) {
+                return Result.success(Unit)
+            }
+            lastError = installResult.exceptionOrNull()
+        }
+
+        return Result.failure(lastError ?: Exception("Could not install managed plugin."))
+    }
+
+    private suspend fun installManagedPluginFromDirectUrlIfMissing(
+        context: Context,
+        versionId: String,
+        projectId: String,
+        title: String,
+        downloadUrl: String,
+        fileNameHint: String,
+        onProgress: (String) -> Unit
+    ): Result<Unit> {
+        if (isManagedPluginInstalled(context, versionId, projectId)) {
+            ensureManagedPluginEnabled(context, versionId, projectId)
+            return Result.success(Unit)
+        }
+
+        onProgress("Installing ${title} bridge plugin…")
+        return installFromUrl(
+            context = context,
+            sourceUrl = downloadUrl,
+            versionId = versionId,
+            type = ContentType.PLUGINS,
+            fileNameHint = fileNameHint,
+            onProgress = {}
+        ).map { Unit }
+    }
+
+    private fun ensureManagedPluginEnabled(context: Context, versionId: String, projectId: String) {
+        val normalizedProject = normalizeCatalogKey(projectId)
+        val pluginsDir = getPluginsDir(context, versionId)
+        pluginsDir
+            .listFiles { file -> file.name.endsWith(".jar.disabled") }
+            .orEmpty()
+            .forEach { file ->
+                val normalizedName = normalizeCatalogKey(file.name.removeSuffix(".disabled").substringBeforeLast('.'))
+                if (normalizedName.contains(normalizedProject)) {
+                    val enabledFile = File(pluginsDir, file.name.removeSuffix(".disabled"))
+                    runCatching { file.renameTo(enabledFile) }
+                }
+            }
+    }
+
+    private fun isManagedPluginInstalled(context: Context, versionId: String, projectId: String): Boolean {
+        val normalizedProject = normalizeCatalogKey(projectId)
+        return getPluginsDir(context, versionId)
+            .listFiles { file -> file.extension == "jar" || file.name.endsWith(".jar.disabled") }
+            .orEmpty()
+            .any { file ->
+                val normalizedName = normalizeCatalogKey(file.name.removeSuffix(".disabled").substringBeforeLast('.'))
+                val normalizedMetaName = normalizeCatalogKey(readArchiveMetadata(file).name.orEmpty())
+                (normalizedName.contains(normalizedProject) || normalizedMetaName.contains(normalizedProject)) &&
+                    validateInstalledFile(file, ContentType.PLUGINS) == null
+            }
+    }
+
+    private fun isManagedPluginEnabled(context: Context, versionId: String, projectId: String): Boolean {
+        val normalizedProject = normalizeCatalogKey(projectId)
+        return getPluginsDir(context, versionId)
+            .listFiles { file -> file.extension == "jar" }
+            .orEmpty()
+            .any { file ->
+                val normalizedName = normalizeCatalogKey(file.name.substringBeforeLast('.'))
+                val normalizedMetaName = normalizeCatalogKey(readArchiveMetadata(file).name.orEmpty())
+                (normalizedName.contains(normalizedProject) || normalizedMetaName.contains(normalizedProject)) &&
+                    validateInstalledFile(file, ContentType.PLUGINS) == null
+            }
+    }
+
+    private fun isManagedBridgePlugin(plugin: Plugin): Boolean {
+        val candidates = listOf(plugin.name, plugin.fileName)
+            .map(::normalizeCatalogKey)
+        return candidates.any { normalized ->
+            builtInBridgeKeywords.any { keyword -> normalized.contains(keyword) }
+        }
+    }
+
+    private fun isManagedBridgeCatalogItem(item: RemoteCatalogItem): Boolean {
+        val candidates = listOf(item.projectId, item.slug, item.title)
+            .map(::normalizeCatalogKey)
+        return candidates.any { normalized ->
+            builtInBridgeProjectIds.any { projectId -> normalized == projectId || normalized.contains(projectId) }
+        }
     }
 
     private fun sanitizeFileName(fileName: String): String {

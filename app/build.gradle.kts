@@ -34,6 +34,10 @@ val configuredReleaseKeyAlias = localProperties.getProperty("releaseKeyAlias")
     ?: System.getenv("POCKETCRAFT_RELEASE_KEY_ALIAS")
 val configuredReleaseKeyPassword = localProperties.getProperty("releaseKeyPassword")
     ?: System.getenv("POCKETCRAFT_RELEASE_KEY_PASSWORD")
+val configuredGitHubToken = localProperties.getProperty("githubToken")
+    ?: System.getenv("POCKETCRAFT_GITHUB_TOKEN")
+val configuredUpdateManifestUrl = localProperties.getProperty("updateManifestUrl")
+    ?: System.getenv("POCKETCRAFT_UPDATE_MANIFEST_URL")
 
 val hasConfiguredReleaseSigning =
     !configuredReleaseKeystorePath.isNullOrBlank() &&
@@ -64,6 +68,8 @@ android {
         buildConfigField("String", "RELAY_PUBLIC_DOMAIN", "\"joinmc.link\"")
         buildConfigField("String", "GITHUB_REPO_OWNER", "\"$githubRepoOwner\"")
         buildConfigField("String", "GITHUB_REPO_NAME", "\"$githubRepoName\"")
+        buildConfigField("String", "GITHUB_RELEASES_TOKEN", "\"${configuredGitHubToken.orEmpty()}\"")
+        buildConfigField("String", "UPDATE_MANIFEST_URL", "\"${configuredUpdateManifestUrl.orEmpty()}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -110,8 +116,8 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

@@ -12,11 +12,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
@@ -24,7 +24,7 @@ import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Group
-import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.Settings
@@ -56,7 +56,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.R
-import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import com.pocketcraft.server.ui.theme.PocketColors
 
 enum class PocketTab(
@@ -68,7 +67,7 @@ enum class PocketTab(
     CONSOLE("Console", Icons.Outlined.Terminal, Icons.Filled.Terminal),
     PLAYERS("Players", Icons.Outlined.Group, Icons.Filled.Group),
     STORAGE("Storage", Icons.Outlined.FolderOpen, Icons.Filled.Folder),
-    PLUGINS("Plugins", Icons.Outlined.Extension, Icons.Filled.Extension),
+    MODS("Mods", Icons.Outlined.GridView, Icons.Filled.GridView),
     SETTINGS("Settings", Icons.Outlined.Settings, Icons.Filled.Settings)
 }
 
@@ -76,7 +75,7 @@ val bottomNavTabs = listOf(
     PocketTab.HOME,
     PocketTab.PLAYERS,
     PocketTab.STORAGE,
-    PocketTab.PLUGINS,
+    PocketTab.MODS,
     PocketTab.SETTINGS
 )
 
@@ -137,7 +136,12 @@ fun PocketTopBar(
                         .border(2.dp, PocketColors.Primary.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
                         .size(44.dp)
                 ) {
-                    FlatEmojiIcon(if (relayHost.contains("mine")) "🌏" else "🌐", modifier = Modifier.size(18.dp), tint = PocketColors.PrimaryDark)
+                    Icon(
+                        imageVector = Icons.Filled.Public,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = PocketColors.PrimaryDark
+                    )
                 }
                 DropdownMenu(
                     expanded = relayMenuExpanded,
@@ -152,7 +156,12 @@ fun PocketTopBar(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(label)
                                     if (host == relayHost) {
-                                        FlatEmojiIcon("✓", modifier = Modifier.size(14.dp), tint = PocketColors.Primary)
+                                        Icon(
+                                            imageVector = Icons.Filled.CheckCircle,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = PocketColors.Primary
+                                        )
                                     }
                                 }
                             },

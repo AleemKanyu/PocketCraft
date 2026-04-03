@@ -7,6 +7,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.WorkerParameters
 import com.pocketcraft.server.data.repository.ServerConfigRepository
+import com.pocketcraft.server.service.PluginManager
 import com.pocketcraft.server.service.ServerFileManager
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -67,8 +68,21 @@ class SetupWorker @AssistedInject constructor(
                 com.pocketcraft.server.data.model.ServerConfig(worldSeed = worldSeed)
             )
 
-            // Step 5: Mark complete
-            setProgress(data("Setup complete!", 100, 5))
+            // Step 5: Install built-in Bedrock bridge plugins
+            setProgress(data("Installing Bedrock bridge plugins…", 90, 5))
+            PluginManager.ensureBedrockBridgePlugins(
+                context = applicationContext,
+                versionId = serverVersion
+            ).getOrElse { error ->
+                throw IllegalStateException(
+                    "Could not install built-in Bedrock bridge plugins: ${error.message}",
+                    error
+                )
+            }
+            PluginManager.enforceBedrockBridgeLocalConfig(applicationContext, serverVersion)
+
+            // Step 6: Mark complete
+            setProgress(data("Setup complete!", 100, 6))
             configRepository.markSetupComplete()
 
             Result.success()

@@ -11,17 +11,23 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import com.pocketcraft.server.data.preferences.AppPreferences
+import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.data.model.PlayerInfo
 import com.pocketcraft.server.ui.navigation.PocketBottomNav
 import com.pocketcraft.server.ui.navigation.PocketTab
 import com.pocketcraft.server.ui.navigation.PocketTopBar
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -29,13 +35,55 @@ import kotlinx.coroutines.launch
 fun ServerScreen(
     stateHolder: ServerStateHolder,
     onChangeVersion: () -> Unit,
+    onVersionSelected: (String) -> Unit,
     onRequestExit: () -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var currentTab by remember { mutableStateOf(PocketTab.HOME) }
     var selectedPlayer by remember { mutableStateOf<PlayerInfo?>(null) }
-    var showServerDetailsPage by remember { mutableStateOf(false) }
+    var showWorldSetupPage by remember { mutableStateOf(false) }
+    var worldSetupCreateMode by remember { mutableStateOf(false) }
+    var showSetupLoading by remember { mutableStateOf(false) }
+    var setupLoadingProgress by remember { mutableStateOf(0f) }
+
+    fun openWorldSetup(createMode: Boolean) {
+        worldSetupCreateMode = createMode
+        showWorldSetupPage = false
+        showSetupLoading = true
+    }
+
+    LaunchedEffect(Unit) {
+        val prefs = AppPreferences(context)
+        if (prefs.openWorldSetupNextLaunch) {
+            openWorldSetup(createMode = false)
+            prefs.openWorldSetupNextLaunch = false
+        }
+    }
+
+    LaunchedEffect(stateHolder.activeWorldNeedsSetup) {
+        if (!stateHolder.activeWorldNeedsSetup) return@LaunchedEffect
+        val alreadyShown = AppPreferencesStore.isInitialWorldSetupShownFlow(context).first()
+        if (!alreadyShown) {
+            openWorldSetup(createMode = false)
+            AppPreferencesStore.setInitialWorldSetupShown(context, true)
+        }
+    }
+
+    LaunchedEffect(showSetupLoading) {
+        if (!showSetupLoading) return@LaunchedEffect
+        setupLoadingProgress = 0.12f
+        delay(120)
+        setupLoadingProgress = 0.38f
+        delay(180)
+        setupLoadingProgress = 0.74f
+        delay(220)
+        setupLoadingProgress = 1f
+        delay(120)
+        showSetupLoading = false
+        showWorldSetupPage = true
+    }
 
     val showMessage: (String) -> Unit = { message ->
         scope.launch { snackbarHostState.showSnackbar(message) }
@@ -43,8 +91,14 @@ fun ServerScreen(
 
     BackHandler {
         when {
-            showServerDetailsPage -> {
-                showServerDetailsPage = false
+            showSetupLoading -> {
+                showSetupLoading = false
+                setupLoadingProgress = 0f
+            }
+
+            showWorldSetupPage -> {
+                showWorldSetupPage = false
+                worldSetupCreateMode = false
             }
 
             selectedPlayer != null -> {
@@ -76,9 +130,16 @@ fun ServerScreen(
             PocketBottomNav(
                 currentTab = currentTab,
                 onTabSelected = { tab ->
+                    if (showSetupLoading) {
+                        showSetupLoading = false
+                        setupLoadingProgress = 0f
+                    }
+                    if (showWorldSetupPage) {
+                        showWorldSetupPage = false
+                        worldSetupCreateMode = false
+                    }
                     currentTab = tab
                     selectedPlayer = null
-                    showServerDetailsPage = false
                 }
             )
         },
@@ -100,10 +161,18 @@ fun ServerScreen(
                 .padding(padding)
         ) {
             when {
-                showServerDetailsPage -> ServerDetailsScreen(
+                showSetupLoading -> SplashScreen(
+                    progress = setupLoadingProgress,
+                    status = "Preparing setup..."
+                )
+
+                showWorldSetupPage -> WorldSetupScreen(
                     stateHolder = stateHolder,
-                    onBack = { showServerDetailsPage = false },
-                    onMessage = showMessage
+                    createMode = worldSetupCreateMode,
+                    onVersionSelected = onVersionSelected,
+                    onBack = { showWorldSetupPage = false },
+                    onMessage = showMessage,
+                    onComplete = { showWorldSetupPage = false }
                 )
 
                 selectedPlayer != null -> PlayerDetailScreen(
@@ -128,7 +197,11 @@ fun ServerScreen(
                             selectedPlayer = player
                         },
                         onOpenServerDetails = {
-                            showServerDetailsPage = true
+                            openWorldSetup(createMode = false)
+                            currentTab = PocketTab.HOME
+                        },
+                        onAddWorld = {
+                            openWorldSetup(createMode = true)
                             currentTab = PocketTab.HOME
                         }
                     )
@@ -140,6 +213,11 @@ fun ServerScreen(
 
                     PocketTab.STORAGE -> StorageScreen(
                         stateHolder = stateHolder,
+                        onOpenWorldSetup = { createMode ->
+                            openWorldSetup(createMode)
+                            selectedPlayer = null
+                            currentTab = PocketTab.HOME
+                        },
                         onChangeVersion = {
                             if (stateHolder.isNavigationLocked) {
                                 showMessage("Stop the server before changing versions.")
@@ -149,7 +227,7 @@ fun ServerScreen(
                         }
                     )
 
-                    PocketTab.PLUGINS -> PluginsHubScreen(
+                    PocketTab.MODS -> PluginsHubScreen(
                         stateHolder = stateHolder,
                         onMessage = showMessage
                     )

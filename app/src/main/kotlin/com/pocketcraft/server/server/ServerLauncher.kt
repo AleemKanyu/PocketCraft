@@ -3,6 +3,7 @@ package com.pocketcraft.server.server
 import android.content.Context
 import android.os.Build
 import com.pocketcraft.server.NativeLauncher
+import com.pocketcraft.server.service.PluginManager
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.service.ServerPropertiesHelper
 import com.pocketcraft.server.setup.JreExtractor
@@ -10,6 +11,8 @@ import java.io.File
 import java.io.InputStream
 import android.app.ActivityManager
 import com.pocketcraft.server.data.preferences.AppPreferences
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 
 class ServerLauncher(private val context: Context) {
 
@@ -43,6 +46,12 @@ class ServerLauncher(private val context: Context) {
         ServerFileManager.prepareEula(context, versionId)
         ServerFileManager.prepareServerProperties(context, versionId)
         ServerFileManager.prepareRuntimeArtifacts(context, versionId)
+        runBlocking(Dispatchers.IO) {
+            PluginManager.ensureBedrockBridgePlugins(context, versionId).onFailure { error ->
+                onOutput("[PocketCraft] Warning: Could not refresh Bedrock bridge plugins: ${error.message}")
+            }
+        }
+        PluginManager.enforceBedrockBridgeLocalConfig(context, versionId)
 
         val jrePath   = JreExtractor.getJreDir(context).absolutePath
         val serverDirFile = ServerFileManager.getServerDir(context, versionId)

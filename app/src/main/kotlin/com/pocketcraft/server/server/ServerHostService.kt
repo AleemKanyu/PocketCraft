@@ -519,7 +519,16 @@ class ServerHostService : Service() {
                     if (alreadyKnownPort == null) {
                         android.util.Log.i("ServerHostService", "Opening internet relay...")
                     }
-                    relayManager.connectTunnelPool(currentServerPort)
+                    val readyAck = relayManager.connectTunnelPool(currentServerPort)
+                    if (!readyAck) {
+                        currentVersionId?.let {
+                            sendEvent(
+                                it,
+                                EVENT_TUNNEL_FAILED,
+                                "Relay control API is missing phone-ready. Ask relay admin to add /phone-ready compatibility."
+                            )
+                        }
+                    }
 
                     while (isActive) {
                         delay(60_000)

@@ -29,6 +29,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,18 +41,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.pocketcraft.server.R
 import com.pocketcraft.server.data.model.ServerConfig
+import com.pocketcraft.server.data.preferences.AppPreferences
+import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.feedback.FeedbackService
 import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.DuoToggle
 import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.util.playAppHaptic
 import com.pocketcraft.server.util.RamUtils
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -73,8 +79,11 @@ fun SettingsScreen(
 ) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val preferences = remember { AppPreferences(context) }
+    val hapticFeedback = LocalHapticFeedback.current
+    val appFeedbackEnabled by AppPreferencesStore.isSoundEnabledFlow(context).collectAsState(initial = true)
     var config by remember(stateHolder.config) {
-        mutableStateOf(stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, 20)))
+        mutableStateOf(stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, 10)))
     }
     var forceGamemode by remember { mutableStateOf(false) }
     var broadcastConsoleToOps by remember { mutableStateOf(false) }
@@ -92,6 +101,17 @@ fun SettingsScreen(
     }
     val recommendedSimulationDistance = remember(totalRamMb) {
         if (totalRamMb >= 7168) 32 else if (totalRamMb >= 6144) 14 else if (totalRamMb >= 4096) 10 else 6
+    }
+
+    fun playHaptic(doublePulse: Boolean = false) {
+        if (!appFeedbackEnabled) return
+        scope.launch {
+            playAppHaptic(
+                context = context,
+                hapticFeedback = hapticFeedback,
+                doublePulse = doublePulse
+            )
+        }
     }
 
     LaunchedEffect(stateHolder.versionLabel) {
@@ -191,7 +211,10 @@ fun SettingsScreen(
                 description = "Overall game difficulty level",
                 options = listOf("peaceful", "easy", "normal", "hard"),
                 selected = config.difficulty,
-                onSelected = { config = config.copy(difficulty = it) }
+                onSelected = {
+                    playHaptic()
+                    config = config.copy(difficulty = it)
+                }
             )
         }
         item {
@@ -200,7 +223,10 @@ fun SettingsScreen(
                 description = "Default game mode for new players",
                 options = listOf("survival", "creative", "adventure", "spectator"),
                 selected = config.gameMode,
-                onSelected = { config = config.copy(gameMode = it) }
+                onSelected = {
+                    playHaptic()
+                    config = config.copy(gameMode = it)
+                }
             )
         }
         item {
@@ -337,11 +363,28 @@ fun SettingsScreen(
         item { SettingsSection("APP PREFERENCES") }
         item {
             SettingsToggleRow(
+                icon = "🎚️",
+                label = "Sounds & vibrations",
+                description = "Enable premium feedback for taps, errors, and important actions",
+                checked = appFeedbackEnabled,
+                onToggle = { enabled ->
+                    scope.launch {
+                        AppPreferencesStore.setSoundEnabled(context, enabled)
+                    }
+                    playHaptic()
+                }
+            )
+        }
+        item {
+            SettingsToggleRow(
                 icon = "🔄",
                 label = "Auto-Restart",
                 description = "Restart server automatically if it crashes",
                 checked = config.autoRestart,
-                onToggle = { config = config.copy(autoRestart = it) }
+                onToggle = {
+                    playHaptic()
+                    config = config.copy(autoRestart = it)
+                }
             )
         }
 
@@ -358,6 +401,11 @@ fun SettingsScreen(
                     )
                     Text(
                         text = "Remove unused server versions to free storage. Current version is locked.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                    Text(
+                        text = "World backup uploads in PocketCraft should be .zip format.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp
                     )
@@ -394,6 +442,7 @@ fun SettingsScreen(
                                     Checkbox(
                                         checked = checked,
                                         onCheckedChange = {
+                                            playHaptic()
                                             selectedDeleteVersions = if (it) {
                                                 selectedDeleteVersions + item.id
                                             } else {
@@ -423,6 +472,7 @@ fun SettingsScreen(
                         text = if (deletingVersions) "DELETING..." else "DELETE SELECTED",
                         enabled = !deletingVersions && selectedDeleteVersions.isNotEmpty(),
                         onClick = {
+                            playHaptic(doublePulse = true)
                             scope.launch {
                                 deletingVersions = true
                                 val deletedCount = withContext(Dispatchers.IO) {
@@ -450,15 +500,15 @@ fun SettingsScreen(
                 label = "Max Players",
                 description = "Maximum simultaneous players",
                 min = 1,
-                max = 20,
+                max = 10,
                 value = config.maxPlayers,
                 onValueChange = { config = config.copy(maxPlayers = it) }
             )
         }
         item {
-            if (config.maxPlayers > 50) {
+            if (config.maxPlayers > 8) {
                 Text(
-                    text = "Warning: High player count may increase device temperature and battery drain during extended server usage.",
+                    text = "Higher player counts can increase device heat and battery usage.",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0xFFFF9800),
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -481,7 +531,10 @@ fun SettingsScreen(
                 options = listOf("minecraft:normal", "minecraft:flat", "minecraft:large_biomes", "minecraft:amplified"),
                 optionLabels = WorldTypeLabels,
                 selected = normalizeWorldType(levelType),
-                onSelected = { levelType = normalizeWorldType(it) }
+                onSelected = {
+                    playHaptic()
+                    levelType = normalizeWorldType(it)
+                }
             )
         }
         item {
@@ -521,7 +574,7 @@ fun SettingsScreen(
                         fontSize = 15.sp
                     )
                     Text(
-                        text = "Your feedback is saved to Firebase Firestore.",
+                        text = "Your feedback is saved to Firebase Firestore with a local TXT log snapshot.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp
                     )
@@ -541,6 +594,7 @@ fun SettingsScreen(
                         },
                         enabled = !submittingFeedback && !feedbackSent && feedbackText.isNotBlank(),
                         onClick = {
+                            playHaptic()
                             scope.launch {
                                 submittingFeedback = true
                                 val text = feedbackText.trim()
@@ -583,17 +637,21 @@ fun SettingsScreen(
                                     .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
                                     .border(2.dp, PocketColors.Primary.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
                                     .clickable {
+                                        playHaptic()
                                         val opened = FeedbackService.openDiscord(context)
+                                        if (opened) {
+                                            preferences.socialLinksJoined = true
+                                        }
                                         if (!opened) {
                                             onMessage("Could not open Discord link on this device.")
                                         }
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_discord),
+                                SocialAppIcon(
+                                    assetPath = "file:///android_asset/social/discord.png",
+                                    fallbackResId = R.drawable.ic_discord,
                                     contentDescription = "Discord",
-                                    tint = Color.Unspecified,
                                     modifier = Modifier.size(30.dp)
                                 )
                             }
@@ -603,17 +661,21 @@ fun SettingsScreen(
                                     .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
                                     .border(2.dp, PocketColors.Primary.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
                                     .clickable {
+                                        playHaptic()
                                         val opened = FeedbackService.openInstagram(context)
+                                        if (opened) {
+                                            preferences.socialLinksJoined = true
+                                        }
                                         if (!opened) {
                                             onMessage("Could not open Instagram link on this device.")
                                         }
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_instagram),
+                                SocialAppIcon(
+                                    assetPath = "file:///android_asset/social/instagram.png",
+                                    fallbackResId = R.drawable.ic_instagram,
                                     contentDescription = "Instagram",
-                                    tint = Color.Unspecified,
                                     modifier = Modifier.size(30.dp)
                                 )
                             }
@@ -624,6 +686,21 @@ fun SettingsScreen(
         }
         item { Spacer(modifier = Modifier.height(32.dp)) }
     }
+}
+
+@Composable
+private fun SocialAppIcon(
+    assetPath: String? = null,
+    fallbackResId: Int,
+    contentDescription: String,
+    modifier: Modifier = Modifier
+) {
+    AsyncImage(
+        model = assetPath ?: fallbackResId,
+        contentDescription = contentDescription,
+        modifier = modifier,
+        contentScale = ContentScale.Fit
+    )
 }
 
 @Composable

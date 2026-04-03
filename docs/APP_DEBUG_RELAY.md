@@ -236,3 +236,16 @@ Then share:
 1. The app logs (full relay section)
 2. Output of: `curl -X POST http://localhost:8080/phone-ready ...` from relay
 3. Relay server's main code file
+
+---
+
+## Bedrock Over Internet (UDP Path)
+
+For a concrete relay-side design and copy-paste Node reference implementation (control API + TCP tunnel + UDP ingress scaffolding), see:
+
+- `docs/BEDROCK_RELAY_UDP_DESIGN.md`
+
+This includes:
+- Required endpoint contract (`/register`, `/phone-ready`, `/unregister`)
+- Port layout and security group checklist
+- Why Bedrock gameplay still needs end-to-end UDP data path support

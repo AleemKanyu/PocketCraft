@@ -21,6 +21,7 @@ import com.pocketcraft.server.data.model.PlayerInfo
 import com.pocketcraft.server.data.model.ServerConfig
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.notification.NotificationHelper
+import com.pocketcraft.server.service.PluginManager
 import com.pocketcraft.server.service.ConsoleParser
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.service.ServerPropertiesHelper
@@ -153,12 +154,20 @@ class ServerStateHolder(
         private set
     var restoreStatusMessage by mutableStateOf("")
         private set
+    var isDownloadingBackup by mutableStateOf(false)
+        private set
+    var downloadBackupProgressPercent by mutableStateOf(0)
+        private set
+    var downloadBackupStatusMessage by mutableStateOf("")
+        private set
     var startupProgressPercent by mutableStateOf(0)
         private set
     var startupStatusMessage by mutableStateOf("")
         private set
     var activePlayersTab by mutableStateOf(0)
     var openServerRiskAcknowledged by mutableStateOf(false)
+        private set
+    var bedrockBridgeEnabled by mutableStateOf(true)
         private set
 
     val logs = mutableStateListOf<String>()
@@ -282,6 +291,31 @@ class ServerStateHolder(
         registerReceiver()
         observeOpenServerRiskAcknowledgement()
         refreshAll()
+        ensureBedrockBridgeProvisioned()
+    }
+
+    private fun ensureBedrockBridgeProvisioned() {
+        scope.launch(Dispatchers.IO) {
+            try {
+                PluginManager.ensureBedrockBridgePlugins(appContext, versionId)
+                    .onSuccess {
+                        PluginManager.enforceBedrockBridgeLocalConfig(appContext, versionId)
+                    }
+                    .onFailure { error ->
+                        android.util.Log.w("ServerStateHolder", "Failed to provision Bedrock bridge: ${error.message}")
+                    }
+            } catch (e: Exception) {
+                android.util.Log.e("ServerStateHolder", "Bedrock bridge provisioning crashed: ${e.message}", e)
+            }
+            withContext(Dispatchers.Main) {
+                try {
+                    bedrockBridgeEnabled = PluginManager.isBedrockBridgeEnabled(appContext, versionId)
+                } catch (e: Exception) {
+                    android.util.Log.e("ServerStateHolder", "Failed to check Bedrock bridge status: ${e.message}")
+                    bedrockBridgeEnabled = false
+                }
+            }
+        }
     }
 
     private fun observeOpenServerRiskAcknowledgement() {
@@ -342,6 +376,7 @@ class ServerStateHolder(
             replaceAll(worlds, snapshot.worlds)
             relayHost = snapshot.relayHost
             activeWorldNeedsSetup = snapshot.activeWorldNeedsSetup
+            bedrockBridgeEnabled = snapshot.bedrockBridgeEnabled
             applyPersistedRuntimeState(persistedRuntimeState)
             if (!isStarting && !isRunning) {
                 tps = 0f
@@ -373,11 +408,27 @@ class ServerStateHolder(
         onlinePlayers.clear()
         appendLog("[PocketCraft] Booting Paper $versionId...")
         appendLog("[PocketCraft] Internet access: PocketCraft relay")
-        appendLog("[PocketCraft] Starting server - this may take 30-60 seconds...")
-        markActiveWorldSetupCompleted()
-        FirebaseAnalyticsManager.logServerStarted(versionId, config.maxPlayers)
+        appendLog("[PocketCraft] Checking Bedrock bridge plugins...")
 
-        ServerHostService.start(appContext, versionId)
+        scope.launch {
+            val bridgeProvisionResult = withContext(Dispatchers.IO) {
+                PluginManager.ensureBedrockBridgePlugins(appContext, versionId)
+            }
+
+            bridgeProvisionResult.onFailure { error ->
+                appendLog("[PocketCraft] Bedrock bridge setup warning: ${error.message ?: "unknown error"}")
+            }
+
+            bedrockBridgeEnabled = withContext(Dispatchers.IO) {
+                runCatching { PluginManager.isBedrockBridgeEnabled(appContext, versionId) }
+                    .getOrDefault(false)
+            }
+
+            appendLog("[PocketCraft] Starting server - this may take 30-60 seconds...")
+            markActiveWorldSetupCompleted()
+            FirebaseAnalyticsManager.logServerStarted(versionId, config.maxPlayers)
+            ServerHostService.start(appContext, versionId)
+        }
     }
 
     fun stopServer() {
@@ -505,6 +556,7 @@ class ServerStateHolder(
                 }
                 NotificationHelper.notifyServerOnline(appContext, versionId)
             }
+            bedrockBridgeEnabled = PluginManager.isBedrockBridgeEnabled(appContext, versionId)
         }
     }
 
@@ -955,7 +1007,7 @@ class ServerStateHolder(
     suspend fun saveSettings(next: ServerConfig): String = withContext(Dispatchers.IO) {
         val enforced = next.copy(
             port = singleServerPort,
-            maxPlayers = next.maxPlayers.coerceIn(1, 20),
+            maxPlayers = next.maxPlayers.coerceIn(1, 10),
             viewDistance = next.viewDistance.coerceIn(2, 32),
             simulationDistance = next.simulationDistance.coerceIn(2, 32)
         )
@@ -1019,7 +1071,11 @@ class ServerStateHolder(
         "Server details updated for $normalized."
     }
 
-    suspend fun importWorldServerPhoto(worldName: String, sourceUri: Uri): String = withContext(Dispatchers.IO) {
+    suspend fun importWorldServerPhoto(
+        worldName: String,
+        sourceUri: Uri,
+        onProgress: (Int) -> Unit = {}
+    ): String = withContext(Dispatchers.IO) {
         val normalized = sanitizeWorldName(worldName)
         if (normalized.isBlank()) return@withContext ""
 
@@ -1030,11 +1086,28 @@ class ServerStateHolder(
             ?.forEach { it.delete() }
 
         val destination = File(serverPhotosDir, "${normalized}_${UUID.randomUUID().toString().take(8)}.$extension")
+        val totalBytes = appContext.contentResolver.openAssetFileDescriptor(sourceUri, "r")?.length ?: -1L
         appContext.contentResolver.openInputStream(sourceUri)?.use { input ->
             destination.outputStream().use { output ->
-                input.copyTo(output)
+                val buffer = ByteArray(16 * 1024)
+                var copied = 0L
+                var bytesRead = input.read(buffer)
+                while (bytesRead != -1) {
+                    output.write(buffer, 0, bytesRead)
+                    copied += bytesRead
+                    if (totalBytes > 0L) {
+                        withContext(Dispatchers.Main) {
+                            onProgress(((copied * 100L) / totalBytes).toInt().coerceIn(0, 100))
+                        }
+                    }
+                    bytesRead = input.read(buffer)
+                }
             }
         } ?: return@withContext ""
+
+        withContext(Dispatchers.Main) {
+            onProgress(100)
+        }
 
         Uri.fromFile(destination).toString()
     }
@@ -1106,10 +1179,6 @@ class ServerStateHolder(
     }
 
     suspend fun deleteWorld(worldName: String): String = withContext(Dispatchers.IO) {
-        if (isRunning || isStarting || isStopping) {
-            return@withContext "Stop the server before deleting a world."
-        }
-
         val target = sanitizeWorldName(worldName)
         if (target.isBlank()) {
             return@withContext "Enter a valid world name."
@@ -1124,6 +1193,9 @@ class ServerStateHolder(
         }
 
         val activeWorld = sanitizeWorldName(config.worldName.ifBlank { "world" })
+        if ((isRunning || isStarting || isStopping) && activeWorld.equals(match, ignoreCase = true)) {
+            return@withContext "Stop the server before deleting the active world."
+        }
         val remainingWorlds = knownWorlds.filterNot { it.equals(match, ignoreCase = true) }
         val nextActive = if (activeWorld.equals(match, ignoreCase = true)) {
             remainingWorlds.firstOrNull() ?: return@withContext "Choose another world before deleting this one."
@@ -1355,6 +1427,64 @@ class ServerStateHolder(
         "Deleted ${entry.name}."
     }
 
+    suspend fun downloadBackup(entry: BackupEntry): String = withContext(Dispatchers.IO) {
+        if (!entry.file.exists()) {
+            return@withContext "Could not find ${entry.name}."
+        }
+
+        val canStartDownload = withContext(Dispatchers.Main.immediate) {
+            if (isDownloadingBackup) {
+                false
+            } else {
+                isDownloadingBackup = true
+                downloadBackupProgressPercent = 0
+                downloadBackupStatusMessage = "Preparing phone download..."
+                true
+            }
+        }
+        if (!canStartDownload) {
+            return@withContext "Download already in progress..."
+        }
+
+        try {
+            withContext(Dispatchers.Main) {
+                downloadBackupProgressPercent = 5
+                downloadBackupStatusMessage = "Copying ${entry.name} to Downloads..."
+            }
+
+            saveToPersistentBackups(
+                source = entry.file,
+                displayName = entry.file.name,
+                worldName = config.worldName,
+                onProgress = { percent ->
+                    withContext(Dispatchers.Main) {
+                        downloadBackupProgressPercent = percent.coerceIn(0, 100)
+                        downloadBackupStatusMessage = "Copying ${entry.name} to Downloads..."
+                    }
+                }
+            )
+
+            withContext(Dispatchers.Main) {
+                downloadBackupProgressPercent = 100
+                downloadBackupStatusMessage = "Saved to Downloads folder"
+                delay(350)
+                isDownloadingBackup = false
+                downloadBackupProgressPercent = 0
+                downloadBackupStatusMessage = ""
+            }
+
+            "Downloaded ${entry.name} to Downloads folder."
+        } catch (e: Exception) {
+            android.util.Log.e("ServerBackup", "Backup download failed", e)
+            withContext(Dispatchers.Main) {
+                isDownloadingBackup = false
+                downloadBackupProgressPercent = 0
+                downloadBackupStatusMessage = ""
+            }
+            "Download failed: ${e.message ?: e.javaClass.simpleName}"
+        }
+    }
+
     suspend fun resetWorld(): String = withContext(Dispatchers.IO) {
         if (isRunning || isStarting) {
             return@withContext "Stop the server before resetting the world."
@@ -1371,7 +1501,12 @@ class ServerStateHolder(
     }
 
 
-    private fun saveToPersistentBackups(source: File, displayName: String, worldName: String) {
+    private suspend fun saveToPersistentBackups(
+        source: File,
+        displayName: String,
+        worldName: String,
+        onProgress: suspend (Int) -> Unit = {}
+    ) {
         val safeWorldName = sanitizeWorldName(worldName)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val resolver = appContext.contentResolver
@@ -1385,8 +1520,19 @@ class ServerStateHolder(
             val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
                 ?: throw IllegalStateException("Unable to create MediaStore entry")
 
+            val totalBytes = source.length().coerceAtLeast(1L)
             resolver.openOutputStream(uri)?.use { output ->
-                FileInputStream(source).use { input -> input.copyTo(output) }
+                FileInputStream(source).use { input ->
+                    val buffer = ByteArray(16 * 1024)
+                    var copied = 0L
+                    var bytes = input.read(buffer)
+                    while (bytes != -1) {
+                        output.write(buffer, 0, bytes)
+                        copied += bytes
+                        onProgress(((copied * 100L) / totalBytes).toInt().coerceIn(0, 100))
+                        bytes = input.read(buffer)
+                    }
+                }
             } ?: throw IllegalStateException("Unable to open backup output stream")
 
             val publish = android.content.ContentValues().apply {
@@ -1398,8 +1544,20 @@ class ServerStateHolder(
 
         val downloads = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
         val targetDir = File(downloads, "PocketCraftWorldBackups/$safeWorldName").also { it.mkdirs() }
+        val targetFile = File(targetDir, displayName)
+        val totalBytes = source.length().coerceAtLeast(1L)
         FileInputStream(source).use { input ->
-            FileOutputStream(File(targetDir, displayName)).use { output -> input.copyTo(output) }
+            FileOutputStream(targetFile).use { output ->
+                val buffer = ByteArray(16 * 1024)
+                var copied = 0L
+                var bytes = input.read(buffer)
+                while (bytes != -1) {
+                    output.write(buffer, 0, bytes)
+                    copied += bytes
+                    onProgress(((copied * 100L) / totalBytes).toInt().coerceIn(0, 100))
+                    bytes = input.read(buffer)
+                }
+            }
         }
     }
 
@@ -1567,7 +1725,8 @@ class ServerStateHolder(
                 }
                 .orEmpty(),
             relayHost = com.pocketcraft.server.data.preferences.AppPreferences(appContext).relayHost,
-            activeWorldNeedsSetup = !readWorldsWithCompletedSetup(properties).contains(activeWorldName)
+            activeWorldNeedsSetup = !readWorldsWithCompletedSetup(properties).contains(activeWorldName),
+            bedrockBridgeEnabled = PluginManager.isBedrockBridgeEnabled(appContext, versionId)
         )
     }
 
@@ -1576,7 +1735,7 @@ class ServerStateHolder(
         var loaded = ServerConfig(
             worldName = props.getProperty("level-name", "world"),
             worldSeed = props.getProperty("level-seed", ""),
-            maxPlayers = props.getProperty("max-players", "20").toIntOrNull() ?: 20,
+            maxPlayers = (props.getProperty("max-players", "5").toIntOrNull() ?: 5).coerceIn(1, 10),
             port = singleServerPort,
             difficulty = props.getProperty("difficulty", "normal"),
             gameMode = props.getProperty("gamemode", "survival"),
@@ -1608,6 +1767,7 @@ class ServerStateHolder(
 
     private fun saveConfig(config: ServerConfig) {
         val enforcedConfig = config.copy(
+            maxPlayers = config.maxPlayers.coerceIn(1, 10),
             viewDistance = config.viewDistance.coerceIn(2, 32),
             simulationDistance = config.simulationDistance.coerceIn(2, 32)
         )
@@ -2189,7 +2349,8 @@ class ServerStateHolder(
         val banned: List<PlayerInfo>,
         val backups: List<BackupEntry>,
         val relayHost: String,
-        val activeWorldNeedsSetup: Boolean
+        val activeWorldNeedsSetup: Boolean,
+        val bedrockBridgeEnabled: Boolean
     )
 
     private data class PersistedRuntimeState(

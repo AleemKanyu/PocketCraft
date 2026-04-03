@@ -47,6 +47,7 @@ import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.theme.PocketColors
 import kotlinx.coroutines.launch
 
+import androidx.compose.material.icons.filled.Download
 @Composable
 fun BackupsScreen(
     stateHolder: ServerStateHolder,
@@ -60,6 +61,11 @@ fun BackupsScreen(
         targetValue = (stateHolder.backupProgressPercent / 100f).coerceIn(0f, 1f),
         animationSpec = tween(durationMillis = 500),
         label = "backup_progress"
+    )
+    val animatedDownloadProgress by animateFloatAsState(
+        targetValue = (stateHolder.downloadBackupProgressPercent / 100f).coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 500),
+        label = "download_backup_progress"
     )
     val animatedRestoreProgress by animateFloatAsState(
         targetValue = (stateHolder.restoreProgressPercent / 100f).coerceIn(0f, 1f),
@@ -87,6 +93,11 @@ fun BackupsScreen(
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
+    val animatedDownloadProgress by animateFloatAsState(
+        targetValue = (stateHolder.downloadBackupProgressPercent / 100f).coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 500),
+        label = "download_backup_progress"
+    )
                         LinearProgressIndicator(
                             progress = { animatedBackupProgress },
                             modifier = Modifier
@@ -137,6 +148,39 @@ fun BackupsScreen(
                             fontSize = 11.sp,
                             color = PocketColors.Offline,
                             fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        if (stateHolder.isDownloadingBackup) {
+            item {
+                GameCard(modifier = Modifier.fillMaxWidth()) {
+                    androidx.compose.foundation.layout.Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Downloading Backup to Phone",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        LinearProgressIndicator(
+                            progress = { animatedDownloadProgress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(999.dp))
+                        )
+                        Text(
+                            text = "${stateHolder.downloadBackupProgressPercent}% - ${stateHolder.downloadBackupStatusMessage}",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Saved to the phone Downloads folder so you have a local copy.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -255,8 +299,22 @@ fun BackupsScreen(
                                 )
                             }
                             IconButton(
+                                onClick = {
+                                    scope.launch {
+                                        onMessage(stateHolder.downloadBackup(backup))
+                                    }
+                                },
+                                enabled = !stateHolder.isBackingUp && !stateHolder.isRestoringBackup && !stateHolder.isDownloadingBackup
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Download,
+                                    contentDescription = "Download backup to phone",
+                                    tint = PocketColors.PrimaryDark
+                                )
+                            }
+                            IconButton(
                                 onClick = { deleteTarget = backup },
-                                enabled = !stateHolder.isBackingUp && !stateHolder.isRestoringBackup
+                                enabled = !stateHolder.isBackingUp && !stateHolder.isRestoringBackup && !stateHolder.isDownloadingBackup
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Delete,

@@ -43,6 +43,20 @@
 				"$gradle"
 			],
 			"group": "build"
+		},
+		{
+			"label": "assemble-release",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"cd /home/aleemkanyu/.gemini/antigravity/scratch/PocketCraft && JAVA_HOME=/opt/android-studio/jbr PATH=/opt/android-studio/jbr/bin:$PATH ./gradlew :app:assembleRelease --no-daemon --console=plain"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$gradle"
+			],
+			"group": "build"
 		}
 	]
 }

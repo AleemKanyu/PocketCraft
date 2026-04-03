@@ -9,7 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -17,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
-import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -62,6 +60,7 @@ fun ServerPhotoUpload(
                 .clip(RoundedCornerShape(24.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .border(2.dp, PocketColors.Primary.copy(alpha = 0.25f), RoundedCornerShape(24.dp))
+                .clickable { imagePickerLauncher.launch("image/*") }
         ) {
             if (photoUri != null) {
                 AsyncImage(
@@ -101,43 +100,6 @@ fun ServerPhotoUpload(
                         text = "It will show on the main server card.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.End
-        ) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(2.dp, PocketColors.Primary, RoundedCornerShape(18.dp))
-                    .clickable { imagePickerLauncher.launch("image/*") }
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.PhotoCamera,
-                        contentDescription = "Upload photo",
-                        tint = PocketColors.PrimaryDark,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = if (photoUri == null) "UPLOAD FROM PHONE" else "CHANGE PHOTO",
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 12.sp,
-                        color = PocketColors.PrimaryDark,
-                        modifier = Modifier
-                            .padding(top = 1.dp)
                     )
                 }
             }

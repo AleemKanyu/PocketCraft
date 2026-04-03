@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -34,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -65,19 +67,37 @@ fun ServerDetailsScreen(
         )
     }
     var photoChanged by remember(stateHolder.serverPhotoUrl) { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
+    var saveProgress by remember { mutableStateOf(0f) }
 
     suspend fun persistDetails(showMessage: Boolean, closeAfterSave: Boolean) {
+        if (isSaving) return
+        isSaving = true
+        saveProgress = 0f
+
         val trimmedName = serverName.trim().ifBlank { activeWorld }
         val trimmedDescription = serverDescription.trim()
         val existingPhoto = stateHolder.serverPhotoUrl.trim()
-        val photoUrlToSave = when {
-            photoChanged && serverPhotoUri != null ->
-                stateHolder.importWorldServerPhoto(
-                    worldName = activeWorld,
-                    sourceUri = serverPhotoUri!!
-                )
-            photoChanged -> ""
-            else -> existingPhoto
+        val photoUrlToSave = runCatching {
+            when {
+                photoChanged && serverPhotoUri != null -> {
+                    saveProgress = 0.05f
+                    stateHolder.importWorldServerPhoto(
+                        worldName = activeWorld,
+                        sourceUri = serverPhotoUri!!,
+                        onProgress = { percent ->
+                            saveProgress = 0.05f + (percent.coerceIn(0, 100) / 100f) * 0.8f
+                        }
+                    )
+                }
+                photoChanged -> ""
+                else -> existingPhoto
+            }
+        }.getOrElse { error ->
+            isSaving = false
+            saveProgress = 0f
+            if (showMessage) onMessage("Photo upload failed: ${error.message ?: "unknown error"}")
+            return
         }
 
         val nothingChanged =
@@ -86,10 +106,13 @@ fun ServerDetailsScreen(
                 photoUrlToSave == existingPhoto
 
         if (nothingChanged) {
+            isSaving = false
+            saveProgress = 0f
             if (closeAfterSave) onBack()
             return
         }
 
+        saveProgress = saveProgress.coerceAtLeast(0.92f)
         val msg = stateHolder.updateWorldServerDetails(
             worldName = activeWorld,
             displayName = trimmedName,
@@ -97,9 +120,12 @@ fun ServerDetailsScreen(
             description = trimmedDescription
         )
         photoChanged = false
+        saveProgress = 1f
         if (showMessage) {
             onMessage(msg)
         }
+        isSaving = false
+        saveProgress = 0f
         if (closeAfterSave) {
             onBack()
         }
@@ -221,6 +247,26 @@ fun ServerDetailsScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                if (isSaving) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = if (photoChanged) "Uploading and saving server details..." else "Saving server details...",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        LinearProgressIndicator(
+                            progress = { saveProgress.coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(999.dp))
+                        )
+                    }
+                }
+
                 Spacer(Modifier.height(12.dp))
 
                 DuoButton(
@@ -230,7 +276,7 @@ fun ServerDetailsScreen(
                             persistDetails(showMessage = true, closeAfterSave = true)
                         }
                     },
-                    enabled = serverName.isNotBlank(),
+                    enabled = serverName.isNotBlank() && !isSaving,
                     modifier = Modifier.fillMaxWidth()
                 )
             }

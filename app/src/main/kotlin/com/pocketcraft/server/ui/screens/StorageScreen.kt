@@ -50,12 +50,14 @@ import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.service.ServerFileManager
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
 fun StorageScreen(
     stateHolder: ServerStateHolder,
+    onOpenWorldSetup: (Boolean) -> Unit = {},
     onChangeVersion: () -> Unit = {}
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -73,6 +75,7 @@ fun StorageScreen(
         when (selectedTab) {
             0 -> WorldsScreen(
                 stateHolder = stateHolder,
+                onOpenWorldSetup = onOpenWorldSetup,
                 onChangeVersion = onChangeVersion
             )
             else -> ServerFilesBrowser(stateHolder = stateHolder)
@@ -92,6 +95,7 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
     var selectedFile by remember { mutableStateOf<File?>(null) }
     var viewingTextFile by remember { mutableStateOf<File?>(null) }
     var uploadProgress by remember { mutableIntStateOf(0) }
+    var uploadIndeterminate by remember { mutableStateOf(false) }
     var isUploading by remember { mutableStateOf(false) }
     val animatedUploadProgress by animateFloatAsState(
         targetValue = (uploadProgress / 100f).coerceIn(0f, 1f),
@@ -108,18 +112,21 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
     val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
+            val uploadStartedAt = System.currentTimeMillis()
             isUploading = true
             uploadProgress = 0
+            uploadIndeterminate = false
 
             runCatching {
                 val inputStream = context.contentResolver.openInputStream(uri) ?: return@runCatching
                 val fileName = uri.path?.substringAfterLast('/') ?: "uploaded_file"
                 val outputFile = File(currentDir, fileName)
+                val totalBytes = context.contentResolver.openAssetFileDescriptor(uri, "r")?.length ?: -1L
+                uploadIndeterminate = totalBytes <= 0L
 
                 withContext(Dispatchers.IO) {
                     inputStream.use { input ->
                         outputFile.outputStream().use { output ->
-                            val totalBytes = inputStream.available().toLong()
                             val buffer = ByteArray(16 * 1024)
                             var copied = 0L
                             var bytes = input.read(buffer)
@@ -127,17 +134,27 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                                 output.write(buffer, 0, bytes)
                                 copied += bytes
                                 if (totalBytes > 0) {
-                                    uploadProgress = (copied * 100 / totalBytes).toInt().coerceIn(0, 100)
+                                    withContext(Dispatchers.Main) {
+                                        uploadProgress = (copied * 100 / totalBytes).toInt().coerceIn(0, 100)
+                                    }
                                 }
                                 bytes = input.read(buffer)
                             }
                         }
                     }
                 }
+
+                uploadProgress = 100
+            }
+
+            val visibleDuration = System.currentTimeMillis() - uploadStartedAt
+            if (visibleDuration < 300L) {
+                delay(300L - visibleDuration)
             }
 
             isUploading = false
             uploadProgress = 0
+            uploadIndeterminate = false
         }
     }
 
@@ -192,21 +209,32 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "$uploadProgress%",
+                        text = if (uploadIndeterminate) "Uploading..." else "$uploadProgress%",
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 16.sp,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-                LinearProgressIndicator(
-                    progress = { animatedUploadProgress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(999.dp))
-                        .height(8.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                )
+                if (uploadIndeterminate) {
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(999.dp))
+                            .height(8.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        progress = { animatedUploadProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(999.dp))
+                            .height(8.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                    )
+                }
             }
         }
 

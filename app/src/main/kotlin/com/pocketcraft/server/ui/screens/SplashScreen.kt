@@ -3,6 +3,7 @@ package com.pocketcraft.server.ui.screens
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,19 +12,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.Image
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import com.pocketcraft.server.ui.theme.Monocraft
 import androidx.compose.ui.unit.dp
@@ -67,24 +65,23 @@ fun SplashScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Image(
-                    bitmap = ImageBitmap.imageResource(id = R.drawable.minecraft_api_diamond_pickaxe_hd),
+                    painter = painterResource(id = R.drawable.minecraft_api_diamond_pickaxe_hd),
                     contentDescription = "Pickaxe",
-                    modifier = Modifier.height(78.dp),
-                    filterQuality = FilterQuality.None
+                    modifier = Modifier.height(78.dp)
                 )
                 Text(
                     text = "PocketCraft",
                     fontFamily = Monocraft,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 34.sp,
+                    fontSize = 38.sp,
                     color = PocketColors.Primary
                 )
                 Text(
-                    text = "HOST YOUR WORLD",
+                    text = "PREPARING YOUR SERVER ENGINE",
                     color = Color(0xFF9FE6A6),
-                    fontFamily = Monocraft,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraBold
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = FontFamily.SansSerif
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 LinearProgressIndicator(
@@ -102,17 +99,16 @@ fun SplashScreen(
                 ) {
                     Text(
                         text = "${(animatedProgress * 100f).roundToInt()}%",
-                        fontWeight = FontWeight.ExtraBold,
+                        fontWeight = FontWeight.Bold,
                         color = PocketColors.PrimaryDark,
-                        fontFamily = Monocraft,
                         fontSize = 14.sp
                     )
                     Text(
                         text = status,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color(0xFFB8F5BE),
-                        fontFamily = Monocraft,
-                        fontSize = 12.sp
+                        fontSize = 16.sp,
+                        fontFamily = FontFamily.SansSerif
                     )
                 }
             }

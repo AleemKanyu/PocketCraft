@@ -47,6 +47,7 @@ import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.DuoButtonVariant
 import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.Monocraft
 import kotlinx.coroutines.launch
 
 @Composable
@@ -211,24 +212,29 @@ fun FilesScreen(
     if (showSeedDialog) {
         AlertDialog(
             onDismissRequest = { showSeedDialog = false },
-            title = { Text(text = "Change World Seed") },
+            title = { Text(text = "Set World Seed", fontFamily = Monocraft, fontWeight = FontWeight.ExtraBold) },
             text = {
-                OutlinedTextField(
-                    value = seedDraft,
-                    onValueChange = { seedDraft = it },
-                    label = { Text("Seed") },
-                    singleLine = true
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Enter a seed for your world. Leave it empty for a random world.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = seedDraft,
+                        onValueChange = { seedDraft = it },
+                        label = { Text("World Seed (optional)") },
+                        singleLine = true
+                    )
+                }
             },
             confirmButton = {
-                TextButton(onClick = {
+                DuoButton(text = "CONFIRM", onClick = {
                     scope.launch {
                         onMessage(stateHolder.updateSeed(seedDraft))
                     }
                     showSeedDialog = false
-                }) {
-                    Text("SAVE")
-                }
+                })
             },
             dismissButton = {
                 TextButton(onClick = { showSeedDialog = false }) {

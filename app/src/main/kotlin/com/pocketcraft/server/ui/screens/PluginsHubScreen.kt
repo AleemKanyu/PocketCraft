@@ -72,6 +72,7 @@ import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.pocketcraft.server.data.model.Plugin
 import com.pocketcraft.server.service.PluginManager
+import com.pocketcraft.server.ui.components.PocketModsIcon
 import com.pocketcraft.server.ui.theme.PocketColors
 import java.io.File
 import java.util.Locale
@@ -84,7 +85,7 @@ private enum class ContentTab(
     val label: String,
     val type: PluginManager.ContentType
 ) {
-    PLUGINS("Plugins", PluginManager.ContentType.PLUGINS),
+    MODS("Mods", PluginManager.ContentType.PLUGINS),
     PACKS("Resource Packs", PluginManager.ContentType.RESOURCE_PACKS)
 }
 
@@ -121,8 +122,8 @@ fun PluginsHubScreen(
         PluginManager.ensureContentDirs(context, stateHolder.versionLabel)
         when (currentTab().type) {
             PluginManager.ContentType.PLUGINS -> PluginManager.listPlugins(context, stateHolder.versionLabel)
+            PluginManager.ContentType.MODS -> PluginManager.listMods(context, stateHolder.versionLabel)
             PluginManager.ContentType.RESOURCE_PACKS -> PluginManager.listResourcePacks(context, stateHolder.versionLabel)
-            PluginManager.ContentType.MODS -> emptyList()
         }
     }
 
@@ -649,7 +650,7 @@ private fun ContentRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            ItemIcon(item = item, packIcon = packIcon)
+            ItemIcon(item = item, tab = tab, packIcon = packIcon)
             Column(modifier = Modifier.weight(1f)) {
                 Text(item.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
@@ -682,7 +683,7 @@ private fun ContentRow(
 }
 
 @Composable
-private fun ItemIcon(item: Plugin, packIcon: File?) {
+private fun ItemIcon(item: Plugin, tab: ContentTab, packIcon: File?) {
     val fallbackText = item.name.firstOrNull()?.uppercase() ?: "?"
 
     when {
@@ -695,6 +696,15 @@ private fun ItemIcon(item: Plugin, packIcon: File?) {
                     .background(PocketColors.SurfaceVarDark, RoundedCornerShape(8.dp))
             )
         }
+            tab.label == "Mods" -> {
+                PocketModsIcon(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .background(PocketColors.PrimaryMuted, RoundedCornerShape(10.dp))
+                        .padding(6.dp),
+                    tint = Color.Unspecified
+                )
+            }
         else -> {
             Box(
                 modifier = Modifier
@@ -993,7 +1003,7 @@ private fun LocalDetailCardContent(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ItemIcon(item = item, packIcon = detailCard.packIcon)
+            ItemIcon(item = item, tab = detailCard.tab, packIcon = detailCard.packIcon)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = item.name,

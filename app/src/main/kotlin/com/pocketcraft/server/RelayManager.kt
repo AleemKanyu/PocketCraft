@@ -94,38 +94,63 @@ class RelayManager(private val context: Context) {
      */
     suspend fun connectTunnelPool(localPort: Int) = withContext(Dispatchers.IO) {
         android.util.Log.i("RelayManager", "Starting pool of $POOL_SIZE sockets...")
-        notifyPhoneReady(localPort)
+        val readyAck = notifyPhoneReady(localPort)
+        if (!readyAck) {
+            android.util.Log.w(
+                "RelayManager",
+                "Relay control did not acknowledge phone-ready on known endpoints; player status ping may fail until relay API is updated."
+            )
+        }
         topUpPool(localPort)
+        readyAck
     }
 
-    suspend fun notifyPhoneReady(localPort: Int) = withContext(Dispatchers.IO) {
+    suspend fun notifyPhoneReady(localPort: Int): Boolean = withContext(Dispatchers.IO) {
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
         val userId = currentRelaySessionId()
         val relayHost = prefs.relayHost
-        val localIp = com.pocketcraft.server.server.ServerAddressResolver.getLocalIpAddress() ?: "127.0.0.1"
+        val localIp = com.pocketcraft.server.server.ServerAddressResolver.getLocalIpAddress()
 
         android.util.Log.d("RelayManager", "Notifying relay phone-ready (userId=$userId, relay=$relayHost, local=$localIp:$localPort)")
 
-        val url = URL("http://$relayHost:$CONTROL_PORT/phone-ready")
-        val conn = url.openConnection() as HttpURLConnection
-        try {
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.connectTimeout = 10_000
-            conn.readTimeout = 10_000
-            conn.doOutput = true
+        val endpointCandidates = listOf("/phone-ready", "/phone_ready", "/ready", "/phoneReady")
+        val payloadCandidates = buildList {
+            if (!localIp.isNullOrBlank()) {
+                add("""{"userId":"$userId","host":"$localIp","port":$localPort}""")
+                add("""{"userId":"$userId","host":"$localIp"}""")
+            }
+            add("""{"userId":"$userId","port":$localPort}""")
+            add("""{"userId":"$userId"}""")
+        }.distinct()
 
-            val body = """{"userId":"$userId","host":"$localIp","port":$localPort}"""
-            conn.outputStream.write(body.toByteArray(Charsets.UTF_8))
-            conn.outputStream.flush()
-            
-            val code = conn.responseCode
-            android.util.Log.d("RelayManager", "phone-ready notification result: HTTP $code")
-        } catch (e: Exception) {
-            android.util.Log.w("RelayManager", "Failed to notify phone-ready: ${e.message}")
-        } finally {
-            conn.disconnect()
+        for (endpoint in endpointCandidates) {
+            for (body in payloadCandidates) {
+                val url = URL("http://$relayHost:$CONTROL_PORT$endpoint")
+                val conn = url.openConnection() as HttpURLConnection
+                try {
+                    conn.requestMethod = "POST"
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.connectTimeout = 10_000
+                    conn.readTimeout = 10_000
+                    conn.doOutput = true
+
+                    conn.outputStream.write(body.toByteArray(Charsets.UTF_8))
+                    conn.outputStream.flush()
+
+                    val code = conn.responseCode
+                    android.util.Log.d("RelayManager", "phone-ready endpoint $endpoint result: HTTP $code")
+                    if (code in 200..299) {
+                        return@withContext true
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("RelayManager", "Failed $endpoint notify attempt: ${e.message}")
+                } finally {
+                    conn.disconnect()
+                }
+            }
         }
+
+        false
     }
 
     private fun topUpPool(localPort: Int) {

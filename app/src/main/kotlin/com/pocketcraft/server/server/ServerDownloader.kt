@@ -1,6 +1,7 @@
 package com.pocketcraft.server.server
 
 import android.content.Context
+import com.pocketcraft.server.service.PluginManager
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.setup.JreExtractor
 import com.pocketcraft.server.setup.PaperMcDownloader
@@ -38,6 +39,10 @@ object ServerDownloader {
         }
 
         ServerFileManager.prepareEula(context, versionId)
+        onStatus("Installing built-in Bedrock bridge…")
+        PluginManager.ensureBedrockBridgePlugins(context, versionId)
+            .getOrElse { throw it }
+        PluginManager.enforceBedrockBridgeLocalConfig(context, versionId)
         onStatus("Server files ready.")
     }
 
@@ -76,6 +81,10 @@ object ServerDownloader {
         }
 
         ServerFileManager.prepareEula(context, versionId)
+        onStatus("Installing built-in Bedrock bridge…")
+        PluginManager.ensureBedrockBridgePlugins(context, versionId)
+            .getOrElse { throw it }
+        PluginManager.enforceBedrockBridgeLocalConfig(context, versionId)
         onStatus("Done.")
     }
 

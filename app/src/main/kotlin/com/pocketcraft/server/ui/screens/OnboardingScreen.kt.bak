@@ -1,0 +1,744 @@
+package com.pocketcraft.server.ui.screens
+
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.pocketcraft.server.ui.components.PocketWorldIcon
+import com.pocketcraft.server.ui.theme.PocketColors
+
+@Composable
+fun OnboardingScreen(onComplete: () -> Unit) {
+    var currentScreen by remember { mutableStateOf(0) }
+    val totalScreens = 6
+
+    Box(modifier = Modifier.fillMaxSize().background(PocketColors.Background)) {
+        when (currentScreen) {
+            0 -> OnboardingWelcome(
+                onNext = { currentScreen++ },
+                onSkip = onComplete
+            )
+            1 -> OnboardingHowItWorks(
+                onBack = { currentScreen-- },
+                onNext = { currentScreen++ }
+            )
+            2 -> OnboardingImport(
+                onBack = { currentScreen-- },
+                onNext = { currentScreen++ }
+            )
+            3 -> OnboardingFeatures(
+                onBack = { currentScreen-- },
+                onNext = { currentScreen++ }
+            )
+            4 -> OnboardingPermissions(
+                onBack = { currentScreen-- },
+                onContinue = { currentScreen++ }
+            )
+            5 -> OnboardingReady(onComplete = onComplete)
+        }
+
+        // Progress dots
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            repeat(totalScreens) { index ->
+                val isActive = index == currentScreen
+                val activeColor by animateColorAsState(
+                    if (isActive) PocketColors.Primary else PocketColors.Primary.copy(alpha = 0.3f)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(if (isActive) 8.dp else 6.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(activeColor)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OnboardingWelcome(onNext: () -> Unit, onSkip: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Spacer(modifier = Modifier.height(40.dp))
+
+        // Animated pickaxe icon
+        val infiniteTransition = rememberInfiniteTransition()
+        val rotation by infiniteTransition.animateFloat(
+            initialValue = -5f,
+            targetValue = 5f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(600),
+                repeatMode = RepeatMode.Reverse
+            )
+        )
+
+        Box(
+            modifier = Modifier
+                .size(96.dp)
+                .background(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            PocketColors.Primary.copy(alpha = 0.15f),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = RoundedCornerShape(32.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Construction,
+                contentDescription = "Pickaxe",
+                modifier = Modifier
+                    .size(56.dp)
+                    .graphicsLayer(rotationZ = rotation),
+                tint = PocketColors.Primary
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Badge
+        Surface(
+            modifier = Modifier
+                .background(
+                    color = PocketColors.PrimaryMuted,
+                    shape = RoundedCornerShape(100.dp)
+                )
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = "Beta",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = PocketColors.Primary,
+                letterSpacing = 1.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Headline
+        Text(
+            text = "Your phone is now a\nMinecraft server",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = PocketColors.TextPrimary,
+            textAlign = TextAlign.Center,
+            lineHeight = 28.sp
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Subheading
+        Text(
+            text = "Host Java Edition servers for free. No PC required. Share with friends anywhere in the world.",
+            fontSize = 14.sp,
+            color = PocketColors.TextSecondary,
+            textAlign = TextAlign.Center,
+            lineHeight = 20.sp
+        )
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Buttons
+        Button(
+            onClick = onNext,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = PocketColors.Primary
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("Get Started", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        TextButton(
+            onClick = onSkip,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Skip Tour", color = PocketColors.TextSecondary, fontSize = 14.sp)
+        }
+
+        Spacer(modifier = Modifier.height(40.dp))
+    }
+}
+
+@Composable
+private fun OnboardingHowItWorks(onBack: () -> Unit, onNext: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(40.dp))
+
+        Text(
+            text = "How it works",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = PocketColors.TextPrimary
+        )
+
+        Spacer(modifier = Modifier.height(28.sp))
+
+        // Flow diagram
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FlowNode(icon = Icons.Filled.PhoneAndroid, label = "Your\nphone")
+            FlowArrow()
+            FlowNode(icon = Icons.Filled.PublicIcon, label = "Relay\nnetwork")
+            FlowArrow()
+            FlowNode(icon = Icons.Filled.SportsEsports, label = "Friends\njoin")
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Feature cards
+        listOf(
+            Triple(
+                Icons.Filled.FileDownload,
+                "Start your server",
+                "Paper runs locally on your phone using its RAM"
+            ),
+            Triple(
+                Icons.Filled.Link,
+                "Share your address",
+                "You get a unique address like mine.pocketcraft.online:25XXX"
+            ),
+            Triple(
+                Icons.Filled.CheckCircle,
+                "Friends join instantly",
+                "Works with Java Edition. Cracked clients (TLauncher) supported"
+            )
+        ).forEach { (icon, title, desc) ->
+            FeatureCard(icon = icon, title = title, description = desc)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        NavigationRow(onBack = onBack, onNext = onNext)
+
+        Spacer(modifier = Modifier.height(40.dp))
+    }
+}
+
+@Composable
+private fun OnboardingImport(onBack: () -> Unit, onNext: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(40.dp))
+
+        // Aternos/Minehut icon
+        Box(
+            modifier = Modifier
+                .size(80.dp)
+                .background(
+                    color = Color(0xFFFFB14244),
+                    shape = RoundedCornerShape(24.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Cloud,
+                contentDescription = "Migration",
+                modifier = Modifier.size(44.dp),
+                tint = Color(0xFFFFB142)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Text(
+            text = "Moving from Aternos or Minehut?",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = PocketColors.TextPrimary,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Bring your world, plugins, and config with you. No starting over.",
+            fontSize = 14.sp,
+            color = PocketColors.TextSecondary,
+            textAlign = TextAlign.Center,
+            lineHeight = 20.sp
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Feature items
+        listOf(
+            Triple(Icons.Filled.FolderOpen, "Upload world zip", "Export from Aternos, upload here. Same format, works instantly."),
+            Triple(Icons.Filled.Extension, "Keep your plugins", "Install the same .jar files you had. Plugin manager built right in."),
+            Triple(Icons.Filled.Settings, "Config & ops carry over", "server.properties, ops list, whitelist — all preserved.")
+        ).forEach { (icon, title, desc) ->
+            FeatureCardCompact(icon = icon, title = title, description = desc)
+            Spacer(modifier = Modifier.height(10.dp))
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        NavigationRow(onBack = onBack, onNext = onNext)
+
+        Spacer(modifier = Modifier.height(40.dp))
+    }
+}
+
+@Composable
+private fun OnboardingFeatures(onBack: () -> Unit, onNext: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(40.dp))
+
+        Box(
+            modifier = Modifier
+                .size(96.dp)
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = listOf(Color(0xFF1a1a2e), Color(0xFF0d2018))
+                    ),
+                    shape = RoundedCornerShape(28.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Settings,
+                contentDescription = "Control",
+                modifier = Modifier.size(52.dp),
+                tint = PocketColors.Primary
+            )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Text(
+            text = "Full control, right in your pocket",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = PocketColors.TextPrimary,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Not a stripped-down app. The real deal.",
+            fontSize = 14.sp,
+            color = PocketColors.TextSecondary,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // 2x3 grid of features
+        val features = listOf(
+            Pair(Icons.Filled.Extension, "Plugins"),
+            Pair(Icons.Filled.Terminal, "Live Console"),
+            Pair(Icons.Filled.Group, "Players"),
+            Pair(Icons.Filled.Folder, "Files"),
+            Pair(Icons.Filled.CloudUpload, "Backup"),
+            Pair(Icons.Filled.Build, "Config")
+        )
+
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            repeat(3) { row ->
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    repeat(2) { col ->
+                        val index = row * 2 + col
+                        if (index < features.size) {
+                            MiniFeatureCard(icon = features[index].first, label = features[index].second)
+                        } else {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        NavigationRow(onBack = onBack, onNext = onNext)
+
+        Spacer(modifier = Modifier.height(40.dp))
+    }
+}
+
+@Composable
+private fun OnboardingPermissions(onBack: () -> Unit, onContinue: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(40.dp))
+
+        Text(
+            text = "Two quick things",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = PocketColors.TextPrimary
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "These keep your server running without interruption",
+            fontSize = 14.sp,
+            color = PocketColors.TextSecondary,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Battery permission card
+        PermissionCard(
+            icon = Icons.Filled.BatteryChargingFull,
+            title = "Battery Optimization",
+            description = "Prevents Android from killing your server mid-game. We'll take you to settings.",
+            iconBackground = Color(0xFF0d2018)
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Notification permission card
+        PermissionCard(
+            icon = Icons.Filled.NotificationsActive,
+            title = "Notifications",
+            description = "Shows server status and player count while your server is running.",
+            iconBackground = Color(0xFF12112a)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Warning box
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF1a1200), RoundedCornerShape(10.dp))
+                .border(1.dp, Color(0xFFFFB14233), RoundedCornerShape(10.dp))
+                .padding(12.dp)
+        ) {
+            Text(
+                text = "Without these, Android may stop your server after a few minutes of inactivity.",
+                fontSize = 11.sp,
+                color = Color(0xFFFFB142),
+                lineHeight = 16.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Bottom navigation
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onBack, modifier = Modifier.weight(1f)) {
+                Text("← Back", color = PocketColors.TextSecondary, fontSize = 13.sp)
+            }
+            Button(
+                onClick = onContinue,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Primary),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Grant & continue →", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(40.dp))
+    }
+}
+
+@Composable
+private fun OnboardingReady(onComplete: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
+    ) {
+        // Animated checkmark
+        val infiniteTransition = rememberInfiniteTransition()
+        val scale by infiniteTransition.animateFloat(
+            initialValue = 0.8f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1000, delayMillis = 500),
+                repeatMode = RepeatMode.Reverse
+            )
+        )
+
+        Box(modifier = Modifier.size(120.dp), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .size(110.dp)
+                    .background(
+                        brush = Brush.linearGradient(
+                            colors = listOf(Color(0xFF1a1a2e), Color(0xFF0d2018))
+                        ),
+                        shape = RoundedCornerShape(36.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = "Complete",
+                    modifier = Modifier
+                        .size(60.dp)
+                        .scale(scale),
+                    tint = Color(0xFF3DDC84)
+                )
+            }
+        }
+
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "Ready to begin\nyour journey",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = PocketColors.TextPrimary,
+                textAlign = TextAlign.Center,
+                lineHeight = 28.sp
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Your server awaits. Set it up, invite your friends, and start building.",
+                fontSize = 13.sp,
+                color = PocketColors.TextSecondary,
+                textAlign = TextAlign.Center,
+                lineHeight = 18.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Stats row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(PocketColors.PrimaryMuted, RoundedCornerShape(14.dp))
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            StatItem(value = "Free", label = "to host")
+            Divider(modifier = Modifier.width(1.dp).height(40.dp), color = PocketColors.TextSecondary.copy(alpha = 0.2f))
+            StatItem(value = "24/7", label = "while open")
+            Divider(modifier = Modifier.width(1.dp).height(40.dp), color = PocketColors.TextSecondary.copy(alpha = 0.2f))
+            StatItem(value = "∞", label = "players*")
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(
+            onClick = onComplete,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF3DDC84)
+            ),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Text("Let's go →", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+        }
+    }
+}
+
+// ===== Helper Composables =====
+
+@Composable
+private fun FlowNode(icon: androidx.compose.material.icons.Icons, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .background(Color(0xFF16161F), RoundedCornerShape(14.dp))
+                .border(1.5.dp, PocketColors.Primary.copy(alpha = 0.3f), RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(28.dp), tint = PocketColors.Primary)
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(label, fontSize = 10.sp, color = PocketColors.TextSecondary, textAlign = TextAlign.Center, lineHeight = 12.sp)
+    }
+}
+
+@Composable
+private fun FlowArrow() {
+    Text("→", fontSize = 24.sp, color = PocketColors.Primary, modifier = Modifier.padding(bottom = 24.dp))
+}
+
+@Composable
+private fun FeatureCard(icon: androidx.compose.material.icons.Icons, title: String, description: String) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF16161F), RoundedCornerShape(14.dp))
+            .border(1.dp, PocketColors.TextSecondary.copy(alpha = 0.1f), RoundedCornerShape(14.dp))
+            .padding(14.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(32.dp), tint = PocketColors.Primary)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PocketColors.TextPrimary)
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(description, fontSize = 11.sp, color = PocketColors.TextSecondary, lineHeight = 15.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeatureCardCompact(icon: androidx.compose.material.icons.Icons, title: String, description: String) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF16161F), RoundedCornerShape(12.dp))
+            .border(1.dp, PocketColors.TextSecondary.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+            .padding(12.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(28.dp), tint = Color(0xFFFFB142))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = PocketColors.TextPrimary)
+                Text(description, fontSize = 10.sp, color = PocketColors.TextSecondary, lineHeight = 14.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniFeatureCard(icon: androidx.compose.material.icons.Icons, label: String) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .weight(1f)
+            .aspectRatio(1f)
+            .background(Color(0xFF16161F), RoundedCornerShape(12.dp))
+            .border(1.dp, PocketColors.Primary.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+            .padding(12.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
+            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(32.dp), tint = PocketColors.Primary)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(label, fontSize = 11.sp, color = PocketColors.TextSecondary, textAlign = TextAlign.Center)
+        }
+    }
+}
+
+@Composable
+private fun PermissionCard(icon: androidx.compose.material.icons.Icons, title: String, description: String, iconBackground: Color) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF16161F), RoundedCornerShape(12.dp))
+            .border(1.dp, PocketColors.Primary.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+            .padding(12.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(iconBackground, RoundedCornerShape(10.dp))
+                    .border(1.dp, PocketColors.Primary.copy(alpha = 0.3f), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(22.dp), tint = PocketColors.Primary)
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PocketColors.TextPrimary)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(description, fontSize = 11.sp, color = PocketColors.TextSecondary, lineHeight = 15.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatItem(value: String, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = PocketColors.Primary)
+        Text(label, fontSize = 10.sp, color = PocketColors.TextSecondary)
+    }
+}
+
+@Composable
+private fun NavigationRow(onBack: () -> Unit, onNext: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onClick = onBack, modifier = Modifier.weight(1f)) {
+            Text("← Back", color = PocketColors.TextSecondary, fontSize = 13.sp)
+        }
+        TextButton(onClick = onNext, modifier = Modifier.weight(1f)) {
+            Text("Next →", color = PocketColors.Primary, fontSize = 13.sp)
+        }
+    }
+}
