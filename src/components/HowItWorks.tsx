@@ -13,14 +13,14 @@ const steps = [
   {
     number: "02",
     title: "Start Your Server",
-    description: "One tap launches a real Java Edition PaperMC server on your phone.",
+    description: "One tap launches a real Java Edition PaperMC server with built-in Bedrock support on your phone.",
     tag: "1 tap",
     icon: MINECRAFT_ICONS.steps.start,
   },
   {
     number: "03",
     title: "Invite Friends",
-    description: "Share a join link. Anyone can connect directly to your phone — no IP needed.",
+    description: "Share a join link. Java & Bedrock players can connect directly to your phone — no IP needed.",
     tag: "instant",
     icon: MINECRAFT_ICONS.steps.invite,
   },
@@ -50,9 +50,9 @@ const Step: React.FC<StepProps> = ({ step, index }) => {
           initial={{ opacity: 0, scale: 0.5 }}
           animate={isInView ? { opacity: 1, scale: 1 } : {}}
           transition={{ duration: 0.35, delay: index * 0.12 }}
-          className="w-12 h-12 bg-[#333] border-4 border-t-[#8b8b8b] border-l-[#8b8b8b] border-r-[#1d1d1d] border-b-[#1d1d1d] flex items-center justify-center shrink-0 z-10"
+          className="w-12 h-12 bg-[#7FE620] border-none rounded-full flex items-center justify-center shrink-0 z-10 font-bold text-black shadow-[0_4px_0_0_rgba(0,0,0,0.1)]"
         >
-          <span className="text-[10px] font-minecraft text-white tabular-nums">{step.number}</span>
+          <span className="text-sm tabular-nums">{step.number}</span>
         </motion.div>
         {!isLast && (
           <motion.div
@@ -60,7 +60,7 @@ const Step: React.FC<StepProps> = ({ step, index }) => {
             animate={isInView ? { scaleY: 1 } : {}}
             transition={{ duration: 0.5, delay: index * 0.12 + 0.2, ease: "easeInOut" }}
             style={{ originY: 0 }}
-            className="w-1 bg-[#222] flex-1 mt-2"
+            className="w-1 bg-black/10 flex-1 mt-2"
           />
         )}
       </div>
@@ -76,36 +76,41 @@ const Step: React.FC<StepProps> = ({ step, index }) => {
           <img
             src={step.icon}
             alt={`${step.title} icon`}
-            className="w-10 h-10 image-pixelated border-2 border-white/10 bg-black/20 p-1"
+            className="w-10 h-10 image-pixelated"
             onError={(e) => {
               e.currentTarget.onerror = null;
               e.currentTarget.src = "/grass-block.png";
             }}
           />
-          <h3 className="text-sm md:text-lg font-minecraft text-white uppercase tracking-wider">
+          <h3 className="text-lg md:text-xl font-bold text-black uppercase tracking-tight">
             {step.title}
           </h3>
-          <span className="px-3 py-1 bg-[#4CAF50] text-[8px] font-minecraft text-white uppercase border-2 border-t-[#81C784] border-l-[#81C784] border-r-[#2E7D32] border-b-[#2E7D32] w-fit">
+          <span className="px-4 py-1 bg-[#7FE620] text-xs font-bold text-black uppercase rounded-full w-fit shadow-[0_2px_0_0_rgba(0,0,0,0.1)]">
             {step.tag}
           </span>
         </div>
-        <p className="text-xs md:text-sm text-white/30 font-mono uppercase tracking-widest leading-relaxed max-w-sm">{step.description}</p>
+        <p className="text-sm md:text-base text-black/60 font-medium leading-relaxed max-w-sm">{step.description}</p>
       </motion.div>
     </div>
   );
-}
+};
 
 export default function HowItWorks() {
   return (
-    <section className="py-32 px-4 sm:px-6 bg-[#080808] border-t-8 border-[#1a1a1a]">
-      <div className="max-w-4xl mx-auto">
+    <section className="py-32 px-4 sm:px-6 bg-white border-t-4 border-black/5">
+      {/* Gradient blob */}
+      <div className="absolute inset-0 z-0 opacity-5 [mask-image:radial-gradient(ellipse_at_center,transparent_20%,black)] pointer-events-none">
+        <div className="absolute inset-0 bg-[radial-gradient(#1f1f1f_1px,transparent_1px)] [background-size:64px_64px]" />
+      </div>
+
+      <div className="max-w-4xl mx-auto relative z-10">
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between mb-24 gap-8">
           <div>
-            <div className="w-12 h-1 bg-[#4CAF50] mb-8" />
-            <h2 className="text-2xl sm:text-4xl font-minecraft text-white uppercase">How it works</h2>
+            <div className="w-12 h-1 bg-[#7FE620] mb-8" />
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-black uppercase">How it works</h2>
           </div>
-          <p className="text-white/30 text-[10px] md:text-xs font-mono uppercase tracking-[0.2em] max-w-[220px] leading-relaxed">
-            From download to playing in seconds.
+          <p className="text-black/60 text-sm font-medium uppercase tracking-wider max-w-xs leading-relaxed">
+            From download to playing in seconds. With Java & Bedrock crossplay support.
           </p>
         </div>
 

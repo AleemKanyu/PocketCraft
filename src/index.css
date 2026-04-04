@@ -3,17 +3,24 @@
 
 @theme {
   --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --font-minecraft: "Press Start 2P", monospace;
-  --font-mono: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-minecraft: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
 
-  --color-mc-green: #4CAF50;
-  --color-mc-green-dark: #388E3C;
-  --color-mc-green-light: #81C784;
-  --color-mc-bg: #080808;
-  --color-mc-grass: #2E7D32;
-  
+  --color-duo-green: #7FE620;
+  --color-duo-green-dark: #6FD614;
+  --color-duo-green-light: #8FEF35;
+  --color-duo-yellow: #FFD900;
+  --color-duo-blue: #1CB0F6;
+  --color-duo-pink: #FF85B3;
+  --color-duo-purple: #AB47BC;
+  --color-bg-light: #FFFFFF;
+  --color-bg-light-alt: #F8F8F8;
+  --color-text-dark: #1F1F1F;
+  --color-mc-green: #7FE620;
+
   --animate-spotlight: spotlight 2s ease .75s 1 forwards;
-  
+  --animate-float-duo: float-duo 3s ease-in-out infinite;
+
   @keyframes spotlight {
     0% {
       opacity: 0;
@@ -28,6 +35,11 @@
   @keyframes float {
     0%, 100% { transform: translateY(0px); }
     50% { transform: translateY(-10px); }
+  }
+
+  @keyframes float-duo {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-15px) rotate(3deg); }
   }
 
   @keyframes pixel-blink {
@@ -46,13 +58,15 @@
 
 * {
   box-sizing: border-box;
-  border-radius: 0 !important;
+  border-radius: 0.5rem;
 }
 
 body {
   font-family: var(--font-sans);
   font-size: 1.05rem;
   font-weight: 600;
+  background-color: #FFFFFF;
+  color: #1F1F1F;
 }
 
 :where(p, small, label, input, textarea, li, code):not(.font-minecraft) {
@@ -61,66 +75,117 @@ body {
 }
 
 /* Raise contrast for frequently used low-opacity text utility classes */
-.text-white\/10 { color: rgb(255 255 255 / 0.42) !important; }
-.text-white\/20 { color: rgb(255 255 255 / 0.56) !important; }
-.text-white\/30 { color: rgb(255 255 255 / 0.68) !important; }
-.text-white\/40 { color: rgb(255 255 255 / 0.78) !important; }
-.text-white\/50 { color: rgb(255 255 255 / 0.84) !important; }
-.text-white\/60 { color: rgb(255 255 255 / 0.9) !important; }
-.placeholder\:text-white\/20::placeholder { color: rgb(255 255 255 / 0.6) !important; }
-.placeholder\:text-white\/40::placeholder { color: rgb(255 255 255 / 0.76) !important; }
+.text-black\/10 { color: rgb(31 31 31 / 0.2) !important; }
+.text-black\/20 { color: rgb(31 31 31 / 0.35) !important; }
+.text-black\/30 { color: rgb(31 31 31 / 0.5) !important; }
+.text-black\/40 { color: rgb(31 31 31 / 0.65) !important; }
+.text-black\/50 { color: rgb(31 31 31 / 0.75) !important; }
+.text-black\/60 { color: rgb(31 31 31 / 0.85) !important; }
+.placeholder\:text-black\/20::placeholder { color: rgb(31 31 31 / 0.4) !important; }
+.placeholder\:text-black\/40::placeholder { color: rgb(31 31 31 / 0.65) !important; }
 
 .font-minecraft {
-  font-family: var(--font-minecraft) !important;
-  font-weight: 400 !important;
-  letter-spacing: 0.02em !important;
+  font-family: 'Press Start 2P', cursive;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.font-minecraft-word {
+  font-family: var(--font-sans) !important;
+  font-weight: 900 !important;
+}
+
+/* Prevent font-minecraft from affecting headings and other text */
+.font-minecraft h1,
+.font-minecraft h2,
+.font-minecraft h3,
+.font-minecraft h4,
+.font-minecraft h5,
+.font-minecraft h6 {
+  font-family: var(--font-sans) !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.01em !important;
 }
 
 .font-mono {
-  font-family: var(--font-mono) !important;
+  font-family: var(--font-sans) !important;
   font-weight: 600 !important;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-minecraft);
-  letter-spacing: 0.01em;
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
+  font-weight: 800;
 }
 
 button, a, [role="button"] {
   cursor: pointer;
 }
 
-.border-21st {
-  border: 4px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.03);
-  box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 0.5);
-  transition: all 0.1s steps(4);
+/* Duolingo-style button */
+.btn-duo {
+  background: #7FE620;
+  color: white;
+  border: none;
+  border-radius: 0.75rem;
+  box-shadow: 0px 8px 0px 0px rgba(0, 0, 0, 0.15);
+  transition: all 0.1s ease;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 1rem 2rem;
 }
 
-.border-21st:hover {
-  border-color: #ffffff;
-  background: rgba(255, 255, 255, 0.05);
-  transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0px 0px rgba(0, 0, 0, 0.6);
+.btn-duo:hover {
+  transform: translateY(-2px);
+  box-shadow: 0px 12px 0px 0px rgba(0, 0, 0, 0.2);
 }
 
+.btn-duo:active {
+  transform: translateY(2px);
+  box-shadow: 0px 4px 0px 0px rgba(0, 0, 0, 0.15);
+}
+
+/* Duolingo secondary button */
+.btn-duo-secondary {
+  background: transparent;
+  color: #7FE620;
+  border: 3px solid #7FE620;
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 0.75rem 1.5rem;
+}
+
+.btn-duo-secondary:hover {
+  background: #7FE620;
+  color: white;
+}
+
+/* 21st century button (pixelated) - for download */
 .btn-21st {
-  border: 4px solid #ffffff;
-  background: #ffffff;
+  border: 4px solid #000000;
+  background: #7FE620;
   color: #000000;
-  box-shadow: 6px 6px 0px 0px rgba(0, 0, 0, 0.5);
+  box-shadow: 8px 8px 0px 0px rgba(0, 0, 0, 0.15);
   transition: all 0.05s steps(2);
-  font-family: var(--font-minecraft);
+  font-family: var(--font-sans);
+  font-weight: 700;
+  border-radius: 0.5rem;
 }
 
 .btn-21st:hover {
   transform: translate(-2px, -2px);
-  box-shadow: 8px 8px 0px 0px rgba(0, 0, 0, 0.6);
+  box-shadow: 10px 10px 0px 0px rgba(0, 0, 0, 0.2);
 }
 
 .btn-21st:active {
   transform: translate(2px, 2px);
-  box-shadow: 2px 2px 0px 0px rgba(0, 0, 0, 0.5);
+  box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 0.15);
 }
 
 .image-pixelated {
@@ -128,12 +193,12 @@ button, a, [role="button"] {
   image-rendering: crisp-edges;
 }
 
-/* Custom Minecraft UI styles */
-.mc-card {
-  background: #c6c6c6;
-  border: 4px solid #ffffff;
-  border-right-color: #555555;
-  border-bottom-color: #555555;
-  padding: 8px;
-  image-rendering: pixelated;
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;     /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
 }

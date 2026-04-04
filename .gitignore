@@ -6,4 +6,7 @@ coverage/
 *.log
 .env*
 !.env.example
+.env.local
+.env.*.local
 .vercel
+pocketcraft-*.zip

@@ -25,8 +25,9 @@ export default function Footer() {
         </p>
         
         <div className="flex items-center gap-10 text-[10px] font-minecraft uppercase tracking-widest text-white/30">
-          <a href="#" className="hover:text-white transition-colors">Privacy</a>
-          <a href="#" className="hover:text-white transition-colors">Contact</a>
+          <a href="/privacy" className="hover:text-white transition-colors">Privacy</a>
+          <a href="/terms" className="hover:text-white transition-colors">Terms</a>
+          <a href="mailto:support@pocketcraft.online" className="hover:text-white transition-colors">Contact</a>
         </div>
       </div>
       <div className="max-w-4xl mx-auto mt-16 pt-10 border-t border-white/[0.05] text-center text-white/10 text-[10px] font-mono uppercase tracking-[0.3em]">

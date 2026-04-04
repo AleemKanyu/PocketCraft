@@ -4,8 +4,8 @@ import PhoneModel from "./PhoneModel";
 import { Spotlight } from "./ui/spotlight"
 
 export function PocketCraftHero() {
-  const scrollToWaitlist = () => {
-    document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
+  const scrollToDownload = () => {
+    document.getElementById("download")?.scrollIntoView({ behavior: "smooth" });
   };
 
   return (
@@ -43,10 +43,10 @@ export function PocketCraftHero() {
 
               <div className="flex flex-wrap gap-4">
                 <button
-                  onClick={scrollToWaitlist}
+                  onClick={scrollToDownload}
                   className="bg-[#4CAF50] hover:bg-[#66BB6A] px-8 py-3.5 rounded-full text-[#111] font-semibold transition-all shadow-lg shadow-[#4CAF50]/20"
                 >
-                  Join Waitlist
+                  Download APK
                 </button>
                 <button
                   onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}
@@ -54,6 +54,22 @@ export function PocketCraftHero() {
                 >
                   Learn More
                 </button>
+                <a
+                  href="https://discord.gg/NGPzXFYp"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/50 px-8 py-3.5 rounded-full text-white font-medium transition-all flex items-center justify-center"
+                >
+                  Join Discord
+                </a>
+                <a
+                  href="https://www.instagram.com/pocketcraftmc?igsh=NTRnZGI4MHFuYXd3&utm_source=qr"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-[#E1306C]/10 hover:bg-[#E1306C]/20 border border-[#E1306C]/50 px-8 py-3.5 rounded-full text-white font-medium transition-all flex items-center justify-center"
+                >
+                  Instagram
+                </a>
               </div>
 
               <div className="mt-8 flex items-center gap-2">
@@ -63,7 +79,7 @@ export function PocketCraftHero() {
                   ))}
                 </div>
                 <p className="text-[#81C784] text-sm font-medium">
-                  1,200+ players waiting
+                  Android launch is live
                 </p>
               </div>
             </div>

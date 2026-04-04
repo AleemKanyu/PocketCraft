@@ -1,52 +1,86 @@
-import { motion } from "framer-motion";
 import { Link, useLocation } from "react-router-dom";
-import { MINECRAFT_ICONS } from "../lib/minecraft-icons";
+import { motion } from "framer-motion";
+import { useState } from "react";
+import { Menu, X } from "lucide-react";
 
 export default function Navbar() {
+  const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
-  const isHome = location.pathname === "/";
 
-  const scrollToWaitlist = () => {
-    if (isHome) {
-      document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
-    } else {
-      window.location.href = "/#waitlist";
-    }
-  };
+  const links = [
+    { href: "/", label: "Home" },
+    { href: "/faq", label: "FAQ" },
+    { href: "/blog", label: "Blog" },
+    { href: "/roadmap", label: "Roadmap" },
+    { href: "/community", label: "Community" },
+  ];
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#c6c6c6] border-b-8 border-t-[#ffffff] border-l-[#ffffff] border-r-[#555555] border-b-[#555555] h-20 flex items-center">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-3 group">
-          <div className="w-10 h-10 border-4 border-t-[#8b8b8b] border-l-[#8b8b8b] border-r-[#1d1d1d] border-b-[#1d1d1d] bg-[#333] flex items-center justify-center transition-transform group-hover:scale-105 active:translate-y-1">
+    <nav className="sticky top-0 z-50 bg-white border-b-2 border-black/5 backdrop-blur">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
+        <div className="flex items-center justify-between">
+          {/* Logo + App Name */}
+          <Link to="/" className="flex items-center gap-2 sm:gap-3 group">
             <img
-              src={MINECRAFT_ICONS.brand}
-              className="w-6 h-6 image-pixelated"
-              alt="logo"
-              onError={(e) => {
-                e.currentTarget.onerror = null;
-                e.currentTarget.src = "/grass-block.png";
-              }}
+              src="/app-icon.png"
+              alt="PocketCraft"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg"
             />
-          </div>
-          <span className="font-minecraft text-xs md:text-sm text-[#333] uppercase">PocketCraft</span>
-        </Link>
-        
-        <div className="flex items-center gap-6">
-          <Link 
-            to="/ranking"
-            className="text-[#444] hover:text-black font-minecraft text-[10px] tracking-widest transition-colors uppercase"
-          >
-            Ranking
+            <span className="text-lg sm:text-2xl font-extrabold text-black font-minecraft">
+              PocketCraft
+            </span>
           </Link>
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={scrollToWaitlist}
-            className="btn-21st px-6 py-2 text-[10px] uppercase"
+
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center gap-8">
+            {links.map((link) => (
+              <Link
+                key={link.href}
+                to={link.href}
+                className={`font-bold uppercase tracking-wider text-sm transition-colors ${
+                  location.pathname === link.href
+                    ? "text-[#7FE620]"
+                    : "text-black/60 hover:text-black"
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            className="md:hidden text-black p-2"
           >
-            Join
-          </motion.button>
+            {isOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
         </div>
+
+        {/* Mobile Navigation */}
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="md:hidden flex flex-col gap-4 mt-4 pt-4 border-t-2 border-black/5"
+          >
+            {links.map((link) => (
+              <Link
+                key={link.href}
+                to={link.href}
+                onClick={() => setIsOpen(false)}
+                className={`font-bold uppercase tracking-wider text-sm transition-colors ${
+                  location.pathname === link.href
+                    ? "text-[#7FE620]"
+                    : "text-black/60 hover:text-black"
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </motion.div>
+        )}
       </div>
     </nav>
   );

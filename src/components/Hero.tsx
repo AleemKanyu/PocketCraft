@@ -1,7 +1,8 @@
 import { motion } from "framer-motion";
-import WaitlistForm from "./WaitlistForm";
 
 export default function Hero() {
+  const apkUrl = "/api/apk/download";
+
   return (
     <section className="pt-40 pb-20 px-6 relative overflow-hidden min-h-[90vh] flex items-center">
       {/* Animated Background Elements */}
@@ -49,9 +50,15 @@ export default function Hero() {
           </p>
 
           <div className="max-w-md mx-auto">
-            <WaitlistForm />
+            <a
+              href={apkUrl}
+              download
+              className="btn-21st inline-flex items-center justify-center px-10 py-5 text-xs uppercase tracking-[0.2em]"
+            >
+              Download APK
+            </a>
             <p className="mt-6 text-sm font-bold text-[#AFB0B3] uppercase tracking-wider flex items-center justify-center gap-2">
-              <span className="text-xl">🔥</span> 1,200+ players already waiting
+              <span className="text-xl">🔥</span> Android release available now
             </p>
           </div>
         </motion.div>
