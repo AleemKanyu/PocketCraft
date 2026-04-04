@@ -184,45 +184,27 @@ fun PocketCraftApp() {
         ) {
             Surface(
                 modifier = Modifier
-                    .padding(18.dp)
-                    .border(3.dp, Color(0xFF5EDB35), RoundedCornerShape(30.dp)),
-                shape = RoundedCornerShape(30.dp),
-                color = Color(0xFFF6FFE8),
-                tonalElevation = 10.dp
+                    .padding(18.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = PocketColors.Primary.copy(alpha = 0.1f)
             ) {
                 androidx.compose.foundation.layout.Column(
-                    modifier = Modifier.padding(22.dp),
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .background(Color(0xFFDFF7BE), RoundedCornerShape(18.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("👋", fontSize = 24.sp)
-                    }
+                    Text(
+                        text = "Join our community",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp
+                    )
+                    Text(
+                        text = "Follow us on Discord or Instagram",
+                        fontSize = 13.sp,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
                     androidx.compose.foundation.layout.Column(
                         verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "Join the PocketCraft crew",
-                            color = PocketColors.PrimaryDark,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 22.sp
-                        )
-                        Text(
-                            text = "Support us by following and joining our Discord and Instagram community. If you've already joined, you can ignore this.",
-                            color = Color(0xFF48613B),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            lineHeight = 20.sp
-                        )
-                    }
-
-                    androidx.compose.foundation.layout.Column(
-                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)
                     ) {
                         Button(
                             onClick = {
@@ -233,18 +215,11 @@ fun PocketCraftApp() {
                                 showCommunityDialog = false
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CD137)),
-                            shape = RoundedCornerShape(18.dp),
-                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
+                            colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Primary),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(vertical = 10.dp)
                         ) {
-                            CommunitySocialIcon(
-                                assetPath = "file:///android_asset/social/discord.png",
-                                fallbackResId = R.drawable.ic_discord,
-                                contentDescription = "Discord",
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(Modifier.padding(horizontal = 6.dp))
-                            Text("Discord", fontWeight = FontWeight.ExtraBold)
+                            Text("Discord", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
 
                         Button(
@@ -256,18 +231,11 @@ fun PocketCraftApp() {
                                 showCommunityDialog = false
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF35C759)),
-                            shape = RoundedCornerShape(18.dp),
-                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
+                            colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Primary),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(vertical = 10.dp)
                         ) {
-                            CommunitySocialIcon(
-                                assetPath = "file:///android_asset/social/instagram.png",
-                                fallbackResId = R.drawable.ic_instagram,
-                                contentDescription = "Instagram",
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(Modifier.padding(horizontal = 6.dp))
-                            Text("Instagram", fontWeight = FontWeight.ExtraBold)
+                            Text("Instagram", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -276,22 +244,6 @@ fun PocketCraftApp() {
     }
 }
 
-@Composable
-private fun CommunitySocialIcon(
-    assetPath: String,
-    fallbackResId: Int,
-    contentDescription: String,
-    modifier: Modifier = Modifier
-) {
-    AsyncImage(
-        model = assetPath,
-        contentDescription = contentDescription,
-        modifier = modifier,
-        contentScale = ContentScale.Fit,
-        error = painterResource(id = fallbackResId),
-        fallback = painterResource(id = fallbackResId)
-    )
-}
 
 private fun scanDownloadedVersionIds(context: Context): Set<String> {
     val serversRoot = File(context.filesDir, "servers")

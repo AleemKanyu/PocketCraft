@@ -13,7 +13,7 @@ fun PocketWorldIcon(
     tint: Color = Color.Unspecified
 ) {
     Icon(
-        painter = painterResource(R.drawable.ic_world_pixel),
+        painter = painterResource(R.drawable.ic_launcher_foreground),
         contentDescription = null,
         modifier = modifier,
         tint = tint

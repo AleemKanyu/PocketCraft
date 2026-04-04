@@ -84,27 +84,5 @@ fun StatusBadge(
             )
         }
 
-        if (status != ServerStatus.OFFLINE) {
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(end = 34.dp, top = 34.dp),
-                shape = RoundedCornerShape(10.dp),
-                color = if (bedrockBridgeEnabled) {
-                    PocketColors.PrimaryMuted
-                } else {
-                    PocketColors.Offline.copy(alpha = 0.14f)
-                }
-            ) {
-                Text(
-                    text = if (bedrockBridgeEnabled) "BEDROCK ON" else "BEDROCK OFF",
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    color = if (bedrockBridgeEnabled) PocketColors.PrimaryDark else PocketColors.Offline,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 9.sp,
-                    letterSpacing = 0.5.sp
-                )
-            }
-        }
     }
 }
