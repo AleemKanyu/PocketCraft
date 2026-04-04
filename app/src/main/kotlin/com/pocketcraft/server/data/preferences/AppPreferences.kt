@@ -94,6 +94,22 @@ class AppPreferences(private val context: Context) {
         appLaunchCount = next
         return next
     }
+
+    fun getLastUpdateCheckTime(): Long {
+        return prefs.getLong("last_update_check_time", 0)
+    }
+
+    fun setLastUpdateCheckTime(timeMs: Long) {
+        prefs.edit().putLong("last_update_check_time", timeMs).apply()
+    }
+
+    fun isFirstLaunchAfterOnboarding(): Boolean {
+        return prefs.getBoolean("first_launch_after_onboarding", true)
+    }
+
+    fun setFirstLaunchAfterOnboarding(isFirst: Boolean) {
+        prefs.edit().putBoolean("first_launch_after_onboarding", isFirst).apply()
+    }
 }
 
 // Keep object-based API for backward compatibility with existing code

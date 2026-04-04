@@ -51,7 +51,7 @@ object GitHubUpdateChecker {
                 .apply {
                     val token = BuildConfig.GITHUB_RELEASES_TOKEN.trim()
                     if (token.isNotBlank()) {
-                        header("Authorization", "Bearer $token")
+                        header("Authorization", "token $token")
                     }
                 }
                 .build()
@@ -77,9 +77,14 @@ object GitHubUpdateChecker {
                                 val name = asset.optString("name").trim().lowercase()
                                 name.endsWith(".apk")
                             }
-                            ?.optString("browser_download_url")
-                            ?.trim()
-                            ?.takeIf { it.isNotBlank() }
+                            ?.let { asset ->
+                                asset.optString("url")
+                                    .trim()
+                                    .takeIf { it.isNotBlank() }
+                                    ?: asset.optString("browser_download_url")
+                                        .trim()
+                                        .takeIf { it.isNotBlank() }
+                            }
                     }
                 if (tagName.isBlank() || htmlUrl.isBlank()) return@use null
 

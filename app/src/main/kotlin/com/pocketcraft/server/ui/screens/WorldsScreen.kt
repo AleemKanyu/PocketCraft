@@ -92,7 +92,6 @@ fun WorldsScreen(
     var showRestoreDialog by remember { mutableStateOf<BackupEntry?>(null) }
     var showDeleteDialog by remember { mutableStateOf<BackupEntry?>(null) }
     var showDeleteWorldDialog by remember { mutableStateOf<WorldEntry?>(null) }
-    var downloadActionLocked by remember { mutableStateOf(false) }
     var isImportingWorld by remember { mutableStateOf(false) }
     var importDimension by remember { mutableStateOf("overworld") }
     val worldPickerLauncher = rememberLauncherForActivityResult(
@@ -201,36 +200,6 @@ fun WorldsScreen(
                     ) {
                         Text("RESET", fontWeight = FontWeight.Bold)
                     }
-                }
-
-                Spacer(Modifier.height(10.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        if (downloadActionLocked || stateHolder.isDownloadingBackup) return@OutlinedButton
-                        downloadActionLocked = true
-                        scope.launch {
-                            try {
-                                val latestBackup = stateHolder.backups.maxByOrNull { it.file.lastModified() }
-                                if (latestBackup == null) {
-                                    Toast.makeText(context, "Create a backup first, then download it.", Toast.LENGTH_SHORT).show()
-                                    return@launch
-                                }
-                                Toast.makeText(context, stateHolder.downloadBackup(latestBackup), Toast.LENGTH_SHORT).show()
-                            } finally {
-                                downloadActionLocked = false
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    enabled = !stateHolder.isDownloadingBackup && !downloadActionLocked,
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = PocketColors.DownloadBlue,
-                        disabledContentColor = PocketColors.DownloadBlue.copy(alpha = 0.45f)
-                    )
-                ) {
-                    Text("DOWNLOAD WORLD", fontWeight = FontWeight.Bold)
                 }
 
                 if (stateHolder.isBackingUp) {

@@ -83,8 +83,7 @@ class ServerStateHolder(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val serverDir = ServerFileManager.getServerDir(appContext, versionId)
     private val serverPhotosDir = File(serverDir, "server_photos").also { it.mkdirs() }
-    private val backupDirectoryName = "pocketcraft_backups"
-    private val backupsDir = File(serverDir, backupDirectoryName).also { it.mkdirs() }
+    private val backupsDir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "PocketCraft Server Backups").also { it.mkdirs() }
     private val logsQueue = ArrayDeque<String>(240)
     private var receiverRegistered = false
     private var startedAtMillis: Long? = null
@@ -1293,12 +1292,13 @@ class ServerStateHolder(
                 var processedFiles = 0
                 entries.forEach { entry ->
                     withContext(Dispatchers.Main) {
+                        val progress = 10 + ((processedFiles * 85) / fileEntries.size.coerceAtLeast(1))
+                        backupProgressPercent = progress.coerceIn(10, 95)
+                        // Don't show individual file names, just generic progress
                         if (entry.isDirectory) {
-                            backupStatusMessage = "Preparing ${entry.relativePath.removeSuffix("/")}"
+                            backupStatusMessage = "Preparing backup..."
                         } else {
-                            val progress = 10 + ((processedFiles * 85) / fileEntries.size.coerceAtLeast(1))
-                            backupStatusMessage = "Backing up ${entry.relativePath}"
-                            backupProgressPercent = progress.coerceIn(10, 95)
+                            backupStatusMessage = "Backing up..."
                         }
                     }
 
@@ -1326,11 +1326,7 @@ class ServerStateHolder(
             saveToPersistentBackups(backupFile, backupName, activeWorld)
 
             // Determine and display save location
-            val saveLocation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                "Downloads/PocketCraftWorldBackups/$activeWorld"
-            } else {
-                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS).absolutePath + "/PocketCraftWorldBackups/$activeWorld"
-            }
+            val saveLocation = "Downloads/PocketCraft Server Backups"
 
             val includedItems = listOf("Worlds", "Plugins", "Mods", "Resource packs", "Configs", "Server files")
             val includedText = includedItems.joinToString(", ")
@@ -1931,7 +1927,10 @@ class ServerStateHolder(
                 ?.mapTo(knownUuids) { it.nameWithoutExtension }
         }
 
+        // Also include players from usercache.json (includes Bedrock players via Geyser)
         val cachedNames = loadUserCache()
+        knownUuids.addAll(cachedNames.keys)
+
         return knownUuids.map { uuid ->
             PlayerInfo(
                 name = cachedNames[uuid] ?: uuid.take(8),
@@ -2065,8 +2064,7 @@ class ServerStateHolder(
             "plugins",
             "cache",
             "config",
-            "libraries",
-            backupDirectoryName
+            "libraries"
         )
 
         val discovered = serverDir.listFiles()
@@ -2255,7 +2253,6 @@ class ServerStateHolder(
         val entries = mutableListOf<BackupPathEntry>()
         serverDir.listFiles()
             .orEmpty()
-            .filterNot { it.name == backupDirectoryName }
             .sortedBy { it.name.lowercase(Locale.getDefault()) }
             .forEach { child ->
                 collectBackupEntries(child, entries)
@@ -2281,7 +2278,6 @@ class ServerStateHolder(
     private fun clearServerDirectoryForRestore() {
         serverDir.listFiles()
             .orEmpty()
-            .filterNot { it.name == backupDirectoryName }
             .forEach { child ->
                 child.deleteRecursively()
             }

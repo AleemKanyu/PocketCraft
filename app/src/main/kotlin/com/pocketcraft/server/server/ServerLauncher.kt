@@ -62,10 +62,10 @@ class ServerLauncher(private val context: Context) {
         applyAdaptiveDistances(serverDirFile, totalRam, onOutput)
         val prefs = AppPreferences(context)
         val reservedForSystemMb = when {
-            totalRam >= 8192 -> 2048
-            totalRam >= 6144 -> 1536
-            totalRam >= 4096 -> 1280
-            else -> 1024
+            totalRam >= 8192 -> 1536
+            totalRam >= 6144 -> 1024
+            totalRam >= 4096 -> 768
+            else -> 512
         }
         val hardSafeMaxMb = (totalRam - reservedForSystemMb).coerceAtLeast(768)
         val defaultSafeMaxMb = hardSafeMaxMb.coerceAtMost(3072)
@@ -86,8 +86,8 @@ class ServerLauncher(private val context: Context) {
                 Pair(min, max)
             }
             else -> {
-                val max = 1024.coerceAtMost(defaultSafeMaxMb)
-                val min = (max * 0.5).toInt().coerceAtLeast(512)
+                val max = 512.coerceAtMost(defaultSafeMaxMb)
+                val min = (max * 0.5).toInt().coerceAtLeast(256)
                 Pair(min, max)
             }
         }

@@ -1,8 +1,21 @@
 package com.pocketcraft.server
 
 object NativeLauncher {
-    init {
-        System.loadLibrary("launcher")
+    private var libraryLoaded = false
+    private var loadError: Throwable? = null
+
+    fun loadLibrary(): Boolean {
+        if (libraryLoaded) return true
+        if (loadError != null) throw loadError!!
+
+        return try {
+            System.loadLibrary("launcher")
+            libraryLoaded = true
+            true
+        } catch (e: UnsatisfiedLinkError) {
+            loadError = e
+            false
+        }
     }
 
     /**
@@ -20,4 +33,8 @@ object NativeLauncher {
         minRamMb : Int,
         maxRamMb : Int
     ): Int
+
+    init {
+        loadLibrary()
+    }
 }

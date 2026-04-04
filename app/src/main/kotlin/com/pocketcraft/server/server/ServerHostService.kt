@@ -64,6 +64,7 @@ class ServerHostService : Service() {
     private var autoRecoverAttempts: Int = 0
     private var lastNotificationText: String = ""
     private var lastNotificationUpdateMs: Long = 0L
+    private var serverReadyNotificationShown = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -80,9 +81,17 @@ class ServerHostService : Service() {
             return START_NOT_STICKY
         }
 
+        // If service restarts without explicit action but server was running, restart it
+        val hasExplicitStart = intent?.action == ACTION_START && !versionId.isNullOrBlank()
+        val activeVersion = if (!hasExplicitStart) getPersistedActiveVersion(applicationContext) else versionId
 
-        if (intent?.action != ACTION_START || versionId.isNullOrBlank()) {
-            return START_NOT_STICKY
+        if (!hasExplicitStart && activeVersion.isNotBlank()) {
+            // Service restarted after being killed, resume running server
+            return resumeServer(activeVersion)
+        }
+
+        if (!hasExplicitStart || versionId.isNullOrBlank()) {
+            return START_STICKY
         }
 
         if (isLaunching) {
@@ -93,6 +102,7 @@ class ServerHostService : Service() {
         isLaunching = true
         currentVersionId = versionId
         stopReason = "unknown"
+        serverReadyNotificationShown = false
         persistRuntimeState(applicationContext, versionId, RUNTIME_STATE_STARTING)
         resetNotificationState("Starting $versionId")
         startForeground(NOTIFICATION_ID, createForegroundNotification("Starting $versionId"))
@@ -107,15 +117,14 @@ class ServerHostService : Service() {
             versionId = versionId,
             onOutput = { line ->
                 sendEvent(versionId, EVENT_OUTPUT, line)
-                updateNotification(line)
+                // Don't update notification until server is ready
                 if (looksLikeServerReady(line)) {
                     onServerReady()
                 }
             },
             onError = { line ->
                 sendEvent(versionId, EVENT_ERROR, line)
-                updateNotification("Server error", force = true)
-                // During an explicit user stop, shutdown noise should not be treated as a crash.
+                // Don't update notification status
                 if (!stopInProgress.get() && stopReason != "user") {
                     stopReason = if (line.contains("outofmemory", ignoreCase = true) || line.contains("oom", ignoreCase = true)) {
                         "oom"
@@ -161,6 +170,7 @@ class ServerHostService : Service() {
 
                 persistPublicAddress(applicationContext, "")
                 persistRuntimeState(applicationContext, versionId, RUNTIME_STATE_OFFLINE)
+                serverReadyNotificationShown = false
                 releaseWakeLock()
                 if (shouldAutoRecover) {
                     updateNotification("Recovering server...", force = true)
@@ -176,10 +186,8 @@ class ServerHostService : Service() {
     override fun onDestroy() {
         persistPublicAddress(applicationContext, "")
         currentVersionId?.let { persistRuntimeState(applicationContext, it, RUNTIME_STATE_OFFLINE) }
-        if (!stopInProgress.get() && (isLaunching || relayJob != null || serverProcess != null)) {
-            stopReason = "user"
-            stopServer()
-        }
+        // Don't stop server on app close - only stop if explicitly requested by user
+        // The service will keep running in background
         super.onDestroy()
         serviceScope.cancel()
     }
@@ -240,6 +248,9 @@ class ServerHostService : Service() {
         val cleanText = ConsoleParser.stripAnsi(text).trim()
         if (cleanText.isBlank()) return
 
+        // Skip further notification updates after server is ready
+        if (serverReadyNotificationShown && !force) return
+
         val now = SystemClock.elapsedRealtime()
         val normalized = cleanText.lowercase()
         val isImportant = force ||
@@ -273,7 +284,7 @@ class ServerHostService : Service() {
         lastNotificationUpdateMs = SystemClock.elapsedRealtime()
     }
 
-    private fun createForegroundNotification(text: String): Notification {
+    private fun createForegroundNotification(text: String, playSound: Boolean = false): Notification {
         ensureNotificationChannel()
 
         val launchIntent = Intent(this, MainActivity::class.java).apply {
@@ -286,16 +297,22 @@ class ServerHostService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("PocketCraft Server Running")
             .setContentText(text.take(100).ifBlank { "Tap to manage your server" })
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setOngoing(true)
-            .setSilent(true)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(pendingIntent)
-            .build()
+
+        if (playSound) {
+            builder.setSound(android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION))
+        } else {
+            builder.setSilent(true)
+        }
+
+        return builder.build()
     }
 
     private fun ensureNotificationChannel() {
@@ -431,24 +448,30 @@ class ServerHostService : Service() {
         if (portProbeRunning.getAndSet(true)) return
 
         portProbeThread = Thread {
-            while (portProbeRunning.get() && !Thread.currentThread().isInterrupted) {
-                try {
-                    Socket().use { socket ->
-                        socket.connect(InetSocketAddress("127.0.0.1", port), 750)
+            try {
+                while (portProbeRunning.get() && !Thread.currentThread().isInterrupted) {
+                    try {
+                        Socket().use { socket ->
+                            socket.connect(InetSocketAddress("127.0.0.1", port), 750)
+                        }
+                        val line = "[PocketCraft] Server port $port is accepting connections."
+                        sendEvent(versionId, EVENT_OUTPUT, line)
+                        resolveLanEndpoint(port)?.let { endpoint ->
+                            sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] LAN address: $endpoint")
+                        }
+                        updateNotification(line, force = true)
+                        onServerReady()
+                        break
+                    } catch (_: Exception) {
+                        Thread.sleep(1500)
                     }
-                    val line = "[PocketCraft] Server port $port is accepting connections."
-                    sendEvent(versionId, EVENT_OUTPUT, line)
-                    resolveLanEndpoint(port)?.let { endpoint ->
-                        sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] LAN address: $endpoint")
-                    }
-                    updateNotification(line, force = true)
-                    onServerReady()
-                    break
-                } catch (_: Exception) {
-                    Thread.sleep(1500)
                 }
+            } catch (e: InterruptedException) {
+                // Thread was interrupted, exit gracefully
+                Thread.currentThread().interrupt()
+            } finally {
+                portProbeRunning.set(false)
             }
-            portProbeRunning.set(false)
         }.apply {
             name = "server-port-probe"
             isDaemon = true
@@ -483,6 +506,16 @@ class ServerHostService : Service() {
         if (tunnelStarted.getAndSet(true)) {
             android.util.Log.d("ServerHostService", "onServerReady: Tunnel already started, skipping.")
             return
+        }
+
+        // Show "Server is Online" notification once with sound
+        if (!serverReadyNotificationShown) {
+            serverReadyNotificationShown = true
+            val notificationText = "Server is Online! Players can now connect."
+            runCatching {
+                val manager = getSystemService(NotificationManager::class.java)
+                manager.notify(NOTIFICATION_ID, createForegroundNotification(notificationText, playSound = true))
+            }
         }
 
         autoRecoverAttempts = 0
@@ -602,6 +635,95 @@ class ServerHostService : Service() {
         wakeLock = null
     }
 
+    private fun resumeServer(versionId: String): Int {
+        if (isLaunching || currentVersionId != null) {
+            return START_STICKY
+        }
+
+        isLaunching = true
+        currentVersionId = versionId
+        stopReason = "unknown"
+        serverReadyNotificationShown = false
+        persistRuntimeState(applicationContext, versionId, RUNTIME_STATE_STARTING)
+        resetNotificationState("Resuming $versionId")
+        startForeground(NOTIFICATION_ID, createForegroundNotification("Resuming $versionId"))
+        startLogcatBridge(versionId)
+        startServerLogTail(versionId)
+        val serverPort = resolveServerPort(versionId)
+        currentServerPort = serverPort
+        startPortProbe(versionId, serverPort)
+        acquireWakeLock()
+
+        ServerLauncher(applicationContext).startServer(
+            versionId = versionId,
+            onOutput = { line ->
+                sendEvent(versionId, EVENT_OUTPUT, line)
+                // Don't update notification until server is ready
+                if (looksLikeServerReady(line)) {
+                    onServerReady()
+                }
+            },
+            onError = { line ->
+                sendEvent(versionId, EVENT_ERROR, line)
+                updateNotification("Server error", force = true)
+                if (!stopInProgress.get() && stopReason != "user") {
+                    stopReason = if (line.contains("outofmemory", ignoreCase = true) || line.contains("oom", ignoreCase = true)) {
+                        "oom"
+                    } else {
+                        "crash"
+                    }
+                }
+            },
+            onStopped = { exitCode ->
+                isLaunching = false
+                stopInProgress.set(false)
+                relayJob?.cancel()
+                relayJob = null
+                serviceScope.launch(Dispatchers.IO) {
+                    runCatching { relayManager.unregister() }
+                }
+                tunnelStarted.set(false)
+                stopLogcatBridge()
+                stopServerLogTail()
+                stopPortProbe()
+
+                if (exitCode != 0 && stopReason != "user") {
+                    sendEvent(versionId, EVENT_SERVER_CRASHED, "exit_code=$exitCode")
+                    sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Server exited unexpectedly (code $exitCode).")
+                }
+
+                val shouldAutoRecover = exitCode != 0 && shouldScheduleAutoRecover(versionId)
+                if (shouldAutoRecover) {
+                    val attempt = autoRecoverAttempts
+                    val delayMs = (attempt * 4000L).coerceAtMost(15_000L)
+                    sendEvent(
+                        versionId,
+                        EVENT_OUTPUT,
+                        "[PocketCraft] Server exited unexpectedly. Auto-restarting in ${delayMs / 1000}s (attempt $attempt/$AUTO_RECOVER_MAX_ATTEMPTS)..."
+                    )
+                    serviceScope.launch {
+                        kotlinx.coroutines.delay(delayMs)
+                        if (stopReason != "user") {
+                            start(applicationContext, versionId)
+                        }
+                    }
+                }
+
+                persistPublicAddress(applicationContext, "")
+                persistRuntimeState(applicationContext, versionId, RUNTIME_STATE_OFFLINE)
+                serverReadyNotificationShown = false
+                releaseWakeLock()
+                if (shouldAutoRecover) {
+                    updateNotification("Recovering server...", force = true)
+                } else {
+                    updateNotification("Server stopped", force = true)
+                }
+            }
+        )
+
+        return START_STICKY
+    }
+
     private fun resolveLanEndpoint(port: Int): String? {
         val ip = runCatching {
             NetworkInterface.getNetworkInterfaces()
@@ -706,6 +828,11 @@ class ServerHostService : Service() {
                 action = ACTION_STOP
             }
             ContextCompat.startForegroundService(context, intent)
+        }
+
+        fun getPersistedActiveVersion(context: Context): String {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            return prefs.getString(KEY_ACTIVE_VERSION, null).orEmpty()
         }
 
         fun getPersistedRuntimeState(context: Context, versionId: String): String {

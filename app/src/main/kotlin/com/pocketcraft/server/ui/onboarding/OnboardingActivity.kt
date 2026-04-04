@@ -365,14 +365,6 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                                 currentStep--
                             }
                         )
-                    } else {
-                        SkipButton(
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                playHaptic()
-                                onComplete()
-                            }
-                        )
                     }
 
                     val missingPermissionStep = currentStep == 5 && (!backgroundPermissionGranted || !notificationsPermissionGranted)

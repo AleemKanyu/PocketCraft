@@ -14,8 +14,12 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -122,8 +126,29 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(jreReady) {
                     if (!jreReady || !onboardingCompleted) return@LaunchedEffect
 
-                    availableUpdate = withContext(Dispatchers.IO) {
-                        GitHubUpdateChecker.checkForUpdate(applicationContext)
+                    try {
+                        // Don't check for updates on first app launch after onboarding completes
+                        val isFirstLaunchAfterOnboarding = preferences.isFirstLaunchAfterOnboarding()
+                        if (isFirstLaunchAfterOnboarding) {
+                            preferences.setFirstLaunchAfterOnboarding(false)
+                            return@LaunchedEffect
+                        }
+
+                        // Only check for updates twice per day (12 hours apart)
+                        val lastCheckTime = preferences.getLastUpdateCheckTime()
+                        val now = System.currentTimeMillis()
+                        val timeSinceLastCheck = now - lastCheckTime
+                        val TWELVE_HOURS = 12L * 60L * 60L * 1000L
+
+                        if (timeSinceLastCheck >= TWELVE_HOURS) {
+                            availableUpdate = withContext(Dispatchers.IO) {
+                                GitHubUpdateChecker.checkForUpdate(applicationContext)
+                            }
+                            preferences.setLastUpdateCheckTime(now)
+                        }
+                    } catch (e: Exception) {
+                        // Silently ignore update check failures
+                        e.printStackTrace()
                     }
                 }
 
@@ -143,13 +168,12 @@ class MainActivity : ComponentActivity() {
                             )
                         },
                         confirmButton = {
-                            Button(
-                                colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Primary),
+                            OutlinedButton(
                                 onClick = {
                                     val apkUrl = update.downloadUrl
                                     if (apkUrl.isNullOrBlank()) {
                                         updateDownloadError = "No APK asset was attached to this release."
-                                        return@Button
+                                        return@OutlinedButton
                                     }
 
                                     updateScope.launch {
@@ -172,6 +196,13 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             ).getOrThrow()
 
+                                            if (!GitHubApkInstaller.canRequestPackageInstalls(applicationContext)) {
+                                                isDownloadingUpdate = false
+                                                updateDownloadError = "Allow 'Install unknown apps' for PocketCraft, then tap Install update again."
+                                                startActivity(GitHubApkInstaller.buildUnknownAppsSettingsIntent(applicationContext))
+                                                return@launch
+                                            }
+
                                             isDownloadingUpdate = false
                                             startActivity(GitHubApkInstaller.buildInstallIntent(applicationContext, downloadResult))
                                             if (forceUpdate) {
@@ -182,15 +213,18 @@ class MainActivity : ComponentActivity() {
                                             updateDownloadError = error.message ?: "Could not download update."
                                         }
                                     }
-                                }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(2.dp, PocketColors.Primary),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = PocketColors.Primary)
                             ) {
-                                Text(if (forceUpdate) "Update now" else "Install update")
+                                Text(if (forceUpdate) "Update now" else "Install update", fontWeight = FontWeight.Bold)
                             }
                         },
                         dismissButton = {
                             if (!forceUpdate) {
                                 TextButton(onClick = { updatePromptDismissed = true }) {
-                                    Text("Later")
+                                    Text("Later", color = PocketColors.Primary)
                                 }
                             }
                         }

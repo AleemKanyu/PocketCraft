@@ -31,6 +31,7 @@ import com.pocketcraft.server.server.ServerDownloader
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.theme.PocketColors
+import kotlinx.coroutines.delay
 
 @Composable
 fun AutoDownloadScreen(
@@ -40,6 +41,7 @@ fun AutoDownloadScreen(
     var progress by remember { mutableIntStateOf(0) }
     var status by remember { mutableStateOf("Connecting...") }
     var failed by remember { mutableStateOf<String?>(null) }
+    var isComplete by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     LaunchedEffect(versionId) {
@@ -51,6 +53,8 @@ fun AutoDownloadScreen(
                 onStatus = { status = it },
                 onProgress = { progress = it }
             )
+            isComplete = true
+            delay(500) // Brief pause before triggering callback
             onReady()
         } catch (error: Exception) {
             failed = error.message ?: "Unknown download error"
@@ -82,7 +86,11 @@ fun AutoDownloadScreen(
             ) {
                 Text(text = "📦", fontSize = 52.sp)
                 Text(
-                    text = if (failed == null) "Building Your Server" else "Setup Hit A Wall",
+                    text = when {
+                        failed != null -> "Setup Hit A Wall"
+                        isComplete -> "Ready to Go!"
+                        else -> "Building Your Server"
+                    },
                     style = MaterialTheme.typography.headlineLarge,
                     textAlign = TextAlign.Center
                 )

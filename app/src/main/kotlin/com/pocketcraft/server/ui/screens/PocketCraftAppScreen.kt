@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -101,11 +103,8 @@ fun PocketCraftApp() {
     LaunchedEffect(screen) {
         if (screen != Screen.SERVER) return@LaunchedEffect
         val launchCount = preferences.appLaunchCount
-        val shouldPromptThisLaunch = launchCount == 2 || launchCount == 6 || launchCount == 10
-        if (shouldPromptThisLaunch &&
-            !preferences.socialLinksJoined &&
-            preferences.socialPromoLastShownLaunch != launchCount
-        ) {
+        val shouldPrompt = (launchCount == 2 || launchCount == 4) && !preferences.socialLinksJoined
+        if (shouldPrompt) {
             preferences.socialPromoLastShownLaunch = launchCount
             delay(700)
             showCommunityDialog = true
@@ -185,58 +184,76 @@ fun PocketCraftApp() {
             Surface(
                 modifier = Modifier
                     .padding(18.dp),
-                shape = RoundedCornerShape(24.dp),
-                color = PocketColors.Primary.copy(alpha = 0.1f)
+                shape = RoundedCornerShape(28.dp),
+                color = PocketColors.Primary
             ) {
                 androidx.compose.foundation.layout.Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.padding(28.dp),
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = "Join our community",
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 18.sp
-                    )
-                    Text(
-                        text = "Follow us on Discord or Instagram",
-                        fontSize = 13.sp,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    // Discord icon
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .background(Color.Black.copy(alpha = 0.15f), RoundedCornerShape(16.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "Discord",
+                            modifier = Modifier.size(36.dp),
+                            tint = Color.Black
+                        )
+                    }
 
                     androidx.compose.foundation.layout.Column(
-                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Button(
-                            onClick = {
-                                val opened = FeedbackService.openDiscord(context)
-                                if (opened) {
-                                    preferences.socialLinksJoined = true
-                                }
-                                showCommunityDialog = false
-                            },
+                        Text(
+                            text = "Join our Discord",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 22.sp,
+                            color = Color.Black
+                        )
+                        Text(
+                            text = "Connect with the PocketCraft community, share your worlds, and get tips from other players",
+                            fontSize = 14.sp,
+                            color = Color.Black.copy(alpha = 0.65f),
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Primary),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(vertical = 10.dp)
-                        ) {
-                            Text("Discord", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        }
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
 
-                        Button(
-                            onClick = {
-                                val opened = FeedbackService.openInstagram(context)
-                                if (opened) {
-                                    preferences.socialLinksJoined = true
-                                }
-                                showCommunityDialog = false
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Primary),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(vertical = 10.dp)
-                        ) {
-                            Text("Instagram", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        }
+                    Button(
+                        onClick = {
+                            val opened = FeedbackService.openDiscord(context)
+                            if (opened) {
+                                preferences.socialLinksJoined = true
+                            }
+                            showCommunityDialog = false
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 0.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Black.copy(alpha = 0.25f),
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        contentPadding = PaddingValues(vertical = 14.dp)
+                    ) {
+                        Icon(Icons.Default.Add, null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.size(10.dp))
+                        Text("Join Discord", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                    }
+
+                    TextButton(
+                        onClick = { showCommunityDialog = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Maybe later", color = Color.Black.copy(alpha = 0.5f), fontSize = 13.sp)
                     }
                 }
             }

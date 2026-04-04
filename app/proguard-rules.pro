@@ -27,3 +27,6 @@
 # PocketCraft
 -keep class com.pocketcraft.server.data.model.** { *; }
 -keep class com.pocketcraft.server.service.** { *; }
+-keep class com.pocketcraft.server.NativeLauncher { *; }
+-keep class com.pocketcraft.server.server.ServerLauncher { *; }
+-keep class com.pocketcraft.server.server.ServerHostService { *; }

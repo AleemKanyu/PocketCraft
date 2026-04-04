@@ -6,7 +6,8 @@ add_executable(serverwrap serverwrap.c)
 set_target_properties(serverwrap PROPERTIES OUTPUT_NAME "serverwrap" PREFIX "lib" SUFFIX ".so")
 
 # Android 15+ on some devices uses 16KB pages; align ELF LOAD segments accordingly.
-target_link_options(launcher PRIVATE "-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384")
+# Disable RELRO protection for launcher to reduce memory overhead in release builds
+target_link_options(launcher PRIVATE "-Wl,-z,norelro" "-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384")
 target_link_options(serverwrap PRIVATE "-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384")
 
 find_library(log-lib log)

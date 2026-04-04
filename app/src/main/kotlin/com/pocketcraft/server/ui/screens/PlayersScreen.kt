@@ -68,7 +68,7 @@ fun PlayersScreen(
     stateHolder: ServerStateHolder,
     onPlayerSelected: (PlayerInfo) -> Unit = {}
 ) {
-    val tabs = listOf("Online", "Whitelist", "Ops", "Banned", "All Players")
+    val tabs = listOf("Online", "All Players", "Whitelist", "Ops", "Banned")
     var selected by remember { mutableIntStateOf(stateHolder.activePlayersTab) }
 
     LaunchedEffect(selected) {
@@ -130,12 +130,19 @@ fun PlayersScreen(
                 stateHolder = stateHolder,
                 onPlayerSelected = onPlayerSelected
             )
-            1 -> WhitelistTab(
+            1 -> PlayersListTab(
+                players = stateHolder.knownPlayers,
+                emptyTitle = "No known players",
+                emptySubtitle = "Players will appear here once they join your server.",
+                onPlayerSelected = onPlayerSelected,
+                actionLists = { _ -> emptyList() }
+            )
+            2 -> WhitelistTab(
                 stateHolder = stateHolder,
                 players = stateHolder.whitelistPlayers,
                 onPlayerSelected = onPlayerSelected
             )
-            2 -> PlayersListTab(
+            3 -> PlayersListTab(
                 players = stateHolder.opPlayers,
                 emptyTitle = "No operators yet",
                 emptySubtitle = "Promote a player from the Online tab to grant OP access.",
@@ -150,7 +157,7 @@ fun PlayersScreen(
                     )
                 }
             )
-            3 -> PlayersListTab(
+            4 -> PlayersListTab(
                 players = stateHolder.bannedPlayers,
                 emptyTitle = "Ban list is empty",
                 emptySubtitle = "Banned players are stored in `banned-players.json`.",
@@ -164,13 +171,6 @@ fun PlayersScreen(
                         )
                     )
                 }
-            )
-            4 -> PlayersListTab(
-                players = stateHolder.knownPlayers,
-                emptyTitle = "No known players",
-                emptySubtitle = "Players will appear here once they join your server.",
-                onPlayerSelected = onPlayerSelected,
-                actionLists = { _ -> emptyList() }
             )
         }
     }
