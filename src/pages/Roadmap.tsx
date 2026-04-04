@@ -137,7 +137,7 @@ export default function Roadmap() {
             Help shape the future of PocketCraft. Share your feature requests on Discord.
           </p>
           <a
-            href="https://discord.gg/NGPzXFYp"
+            href="https://discord.com/invite/nc7ceYWVfT"
             target="_blank"
             rel="noopener noreferrer"
             className="btn-duo px-12 py-4 inline-block"

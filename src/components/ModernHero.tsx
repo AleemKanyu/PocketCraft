@@ -73,6 +73,9 @@ export function ModernHero() {
           transition={{ duration: 0.5 }}
           className="mb-8 flex flex-wrap items-center justify-center gap-3"
         >
+          <div className="bg-orange-100 border-2 border-orange-300 px-4 py-2 text-[10px] md:text-[11px] font-semibold uppercase rounded-full text-orange-600">
+            🚀 Project in Beta - Expect Some Bugs
+          </div>
           <div className="bg-black/5 border-2 border-black/10 px-4 py-2 text-[10px] md:text-[11px] font-semibold uppercase rounded-full text-black/60">
             Free Forever
           </div>
@@ -121,7 +124,7 @@ export function ModernHero() {
           </button>
 
           <a
-            href="https://discord.gg/NGPzXFYp"
+            href="https://discord.com/invite/nc7ceYWVfT"
             target="_blank"
             rel="noopener noreferrer"
             className="px-10 py-4 bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold text-sm uppercase tracking-wider transition-all rounded-lg shadow-[0_4px_0_0_rgba(88,101,242,0.3)]"

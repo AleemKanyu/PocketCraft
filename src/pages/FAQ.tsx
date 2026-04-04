@@ -116,7 +116,7 @@ export default function FAQ() {
           <h2 className="text-3xl font-extrabold text-black mb-6">Still have questions?</h2>
           <p className="text-black/60 text-lg mb-8">Join the Discord community and chat with other players.</p>
           <a
-            href="https://discord.gg/NGPzXFYp"
+            href="https://discord.com/invite/nc7ceYWVfT"
             target="_blank"
             rel="noopener noreferrer"
             className="btn-duo px-12 py-4 inline-block"

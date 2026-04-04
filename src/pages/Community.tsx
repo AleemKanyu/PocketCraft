@@ -8,7 +8,7 @@ const communityLinks = [
     icon: MessageCircle,
     title: "Discord Server",
     description: "Chat with players, report bugs, and get support from the community.",
-    url: "https://discord.gg/NGPzXFYp",
+    url: "https://discord.com/invite/nc7ceYWVfT",
     color: "#5865F2",
   },
   {
@@ -94,7 +94,7 @@ export default function Community() {
             Jump into Discord and say hello to the PocketCraft community!
           </p>
           <a
-            href="https://discord.gg/NGPzXFYp"
+            href="https://discord.com/invite/nc7ceYWVfT"
             target="_blank"
             rel="noopener noreferrer"
             className="btn-duo px-12 py-4 inline-block"

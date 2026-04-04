@@ -25,6 +25,12 @@ async function startServer() {
     res.json({ downloadUrl: apkUrl });
   });
 
+  // Redirect to GitHub release APK download
+  app.get("/api/apk/download", (_req, res) => {
+    const githubReleaseUrl = "https://github.com/AleemKanyu/PocketCraft/releases/download/v.0.0.1-Beta/pocketcraft.apk";
+    res.redirect(githubReleaseUrl);
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

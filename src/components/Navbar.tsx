@@ -29,6 +29,9 @@ export default function Navbar() {
             <span className="text-lg sm:text-2xl font-extrabold text-black font-minecraft">
               PocketCraft
             </span>
+            <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-orange-100 text-orange-600 ml-2">
+              Beta
+            </span>
           </Link>
 
           {/* Desktop Navigation */}

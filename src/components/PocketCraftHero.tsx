@@ -24,6 +24,12 @@ export function PocketCraftHero() {
             {/* Left content */}
             <div className="flex-1 p-8 md:p-12 relative z-10 flex flex-col justify-center">
               {/* Modern badge */}
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-100/80 border border-orange-300 mb-2 self-start">
+                <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                <span className="font-medium text-xs text-orange-600 tracking-wide uppercase">
+                  Beta - Expect some bugs
+                </span>
+              </div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#4CAF50]/10 border border-[#4CAF50]/20 mb-6 self-start">
                 <div className="w-2 h-2 rounded-full bg-[#4CAF50] animate-pulse" />
                 <span className="font-medium text-xs text-[#4CAF50] tracking-wide uppercase">
@@ -55,7 +61,7 @@ export function PocketCraftHero() {
                   Learn More
                 </button>
                 <a
-                  href="https://discord.gg/NGPzXFYp"
+                  href="https://discord.com/invite/nc7ceYWVfT"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/50 px-8 py-3.5 rounded-full text-white font-medium transition-all flex items-center justify-center"

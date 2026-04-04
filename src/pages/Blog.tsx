@@ -76,7 +76,7 @@ export default function Blog() {
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
             <a
-              href="https://discord.gg/NGPzXFYp"
+              href="https://discord.com/invite/nc7ceYWVfT"
               target="_blank"
               rel="noopener noreferrer"
               className="btn-duo px-8 py-3 inline-block text-sm"
