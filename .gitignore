@@ -10,3 +10,4 @@ coverage/
 .env.*.local
 .vercel
 pocketcraft-*.zip
+hostinger-deploy.zip
