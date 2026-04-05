@@ -76,7 +76,7 @@ android {
         minSdk = 25
         targetSdk = 34
         versionCode = 2
-        versionName = "0.0.1-Beta"
+        versionName = "0.0.2-Beta"
         buildConfigField("String", "RELAY_PUBLIC_DOMAIN", "\"joinmc.link\"")
         buildConfigField("String", "GITHUB_REPO_OWNER", "\"$githubRepoOwner\"")
         buildConfigField("String", "GITHUB_REPO_NAME", "\"$githubRepoName\"")
@@ -133,7 +133,7 @@ android {
             }
             isMinifyEnabled = false
             isShrinkResources = false
-            isDebuggable = true
+            isDebuggable = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

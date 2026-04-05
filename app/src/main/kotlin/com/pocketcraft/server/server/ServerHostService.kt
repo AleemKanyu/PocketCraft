@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import com.pocketcraft.server.MainActivity
 import com.pocketcraft.server.R
 import com.pocketcraft.server.RelayManager
+import com.pocketcraft.server.server.ServerLauncher
 import com.pocketcraft.server.service.ConsoleParser
 import com.pocketcraft.server.service.ServerFileManager
 import java.io.File
@@ -184,6 +185,9 @@ class ServerHostService : Service() {
     }
 
     override fun onDestroy() {
+        // If this service is being destroyed unexpectedly, avoid leaving
+        // a detached JVM process running without relay/control.
+        forceTerminateHostedServer()
         persistPublicAddress(applicationContext, "")
         currentVersionId?.let { persistRuntimeState(applicationContext, it, RUNTIME_STATE_OFFLINE) }
         // Don't stop server on app close - only stop if explicitly requested by user
@@ -201,10 +205,23 @@ class ServerHostService : Service() {
     private fun stopServer() {
         if (!stopInProgress.compareAndSet(false, true)) return
         CoroutineScope(Dispatchers.IO).launch {
+            val inProcessRuntime = serverProcess == null
             try {
-                serverProcess?.outputStream?.let {
-                    it.write("stop\n".toByteArray())
-                    it.flush()
+                if (inProcessRuntime) {
+                    // Native in-process JVM has no Process handle; stop it via RCON.
+                    runCatching { sendRconStop() }
+
+                    // Give Paper time to flush chunks and fully close sockets.
+                    val deadline = SystemClock.elapsedRealtime() + STOP_GRACE_PERIOD_MS
+                    while (SystemClock.elapsedRealtime() < deadline) {
+                        if (!isLocalServerPortOpen(currentServerPort)) break
+                        delay(300)
+                    }
+                } else {
+                    serverProcess?.outputStream?.let {
+                        it.write("stop\n".toByteArray())
+                        it.flush()
+                    }
                 }
 
                 val proc = serverProcess
@@ -219,8 +236,7 @@ class ServerHostService : Service() {
             } catch (e: Exception) {
                 android.util.Log.e("PocketCraft", "Error during stop: ${e.message}")
             } finally {
-                serverProcess?.destroyForcibly()
-                serverProcess = null
+                forceTerminateHostedServer()
                 runCatching { relayManager.unregister() }
                 relayJob?.cancel()
                 relayJob = null
@@ -229,6 +245,9 @@ class ServerHostService : Service() {
                 stopServerLogTail()
                 stopPortProbe()
                 releaseWakeLock()
+                // Clear launch state before emitting STOPPED so restart listeners can
+                // immediately request a fresh start without hitting "already starting".
+                isLaunching = false
                 currentVersionId?.let { versionId ->
                     persistPublicAddress(applicationContext, "")
                     persistRuntimeState(applicationContext, versionId, RUNTIME_STATE_OFFLINE)
@@ -236,12 +255,35 @@ class ServerHostService : Service() {
                 }
                 // Fallback stop signal when version-scoped event cannot be emitted.
                 sendBroadcast(Intent(EVENT_STOPPED).setPackage(packageName))
-                isLaunching = false
                 stopForeground(STOP_FOREGROUND_REMOVE)
+
+                if (inProcessRuntime && isLocalServerPortOpen(currentServerPort)) {
+                    // Last resort for native/in-process mode: kill :server process to guarantee
+                    // complete stop before UI triggers automatic restart.
+                    android.util.Log.w("PocketCraft", "Server still accepting on port $currentServerPort after stop grace period. Killing host process.")
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                    return@launch
+                }
+
                 stopSelf()
                 stopInProgress.set(false)
             }
         }
+    }
+
+    private fun isLocalServerPortOpen(port: Int): Boolean {
+        return runCatching {
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress("127.0.0.1", port), 250)
+                true
+            }
+        }.getOrDefault(false)
+    }
+
+    private fun forceTerminateHostedServer() {
+        runCatching { ServerLauncher.requestForceStop() }
+        runCatching { serverProcess?.destroyForcibly() }
+        serverProcess = null
     }
 
     private fun updateNotification(text: String, force: Boolean = false) {

@@ -24,9 +24,10 @@ import com.pocketcraft.server.ui.theme.PocketCraftTheme
 import com.google.firebase.crashlytics.ktx.crashlytics
 import com.google.firebase.ktx.Firebase
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
@@ -58,23 +59,26 @@ class MainActivity : ComponentActivity() {
             isAppearanceLightNavigationBars = true
         }
 
-        val analyticsConsent = runBlocking {
-            AppPreferencesStore.isAnalyticsConsentFlow(applicationContext).first()
-        }
-        val crashDiagnosticsConsent = runBlocking {
-            AppPreferencesStore.isCrashDiagnosticsConsentFlow(applicationContext).first()
-        }
+        // Never block startup on DataStore reads; OEM builds may ANR the activity.
+        lifecycleScope.launch(Dispatchers.IO) {
+            val analyticsConsent = runCatching {
+                AppPreferencesStore.isAnalyticsConsentFlow(applicationContext).first()
+            }.getOrDefault(false)
 
-        // Initialize Firebase Analytics only when consent has been granted.
-        runCatching {
-            FirebaseAnalyticsManager.initialize(applicationContext, collectionEnabled = analyticsConsent)
-            if (analyticsConsent) {
-                FirebaseAnalyticsManager.logEvent("app_open")
+            val crashDiagnosticsConsent = runCatching {
+                AppPreferencesStore.isCrashDiagnosticsConsentFlow(applicationContext).first()
+            }.getOrDefault(true)
+
+            runCatching {
+                FirebaseAnalyticsManager.initialize(applicationContext, collectionEnabled = analyticsConsent)
+                if (analyticsConsent) {
+                    FirebaseAnalyticsManager.logEvent("app_open")
+                }
             }
-        }
 
-        runCatching {
-            Firebase.crashlytics.setCrashlyticsCollectionEnabled(crashDiagnosticsConsent)
+            runCatching {
+                Firebase.crashlytics.setCrashlyticsCollectionEnabled(crashDiagnosticsConsent)
+            }
         }
 
         setContent {

@@ -96,7 +96,7 @@
             android:exported="false"
             android:foregroundServiceType="dataSync"
             android:process=":server"
-            android:stopWithTask="true" />
+            android:stopWithTask="false" />
 
         <service
             android:name=".broadcast.PocketCraftMessagingService"

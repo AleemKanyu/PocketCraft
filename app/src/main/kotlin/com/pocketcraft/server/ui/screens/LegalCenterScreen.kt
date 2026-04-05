@@ -89,23 +89,6 @@ fun LegalCenterScreen(
         }
 
         item {
-            GameCard(modifier = Modifier.fillMaxWidth()) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Where to put dependency/policy strike text",
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 15.sp
-                    )
-                    Text(
-                        text = "Keep it in internal release documentation and legal/compliance review notes. Do not paste strike-risk text into user-facing privacy policy unless required by counsel.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp
-                    )
-                }
-            }
-        }
-
-        item {
             DuoButton(
                 text = "BACK TO SETTINGS",
                 onClick = onBack,

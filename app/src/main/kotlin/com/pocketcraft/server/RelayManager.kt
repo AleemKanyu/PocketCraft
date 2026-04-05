@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
+import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
 import java.util.concurrent.atomic.AtomicInteger
@@ -109,15 +110,29 @@ class RelayManager(private val context: Context) {
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
         val userId = currentRelaySessionId()
         val relayHost = prefs.relayHost
-        val localIp = com.pocketcraft.server.server.ServerAddressResolver.getLocalIpAddress()
+        val localIpCandidates = buildList {
+            add(com.pocketcraft.server.server.ServerAddressResolver.getLocalIpAddress())
+            add(resolveRouteLocalIp(relayHost))
+        }
+            .filterNotNull()
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.startsWith("127.") && it != "0.0.0.0" }
+            .distinct()
+
+        val localIp = localIpCandidates.firstOrNull()
 
         android.util.Log.d("RelayManager", "Notifying relay phone-ready (userId=$userId, relay=$relayHost, local=$localIp:$localPort)")
 
         val endpointCandidates = listOf("/phone-ready", "/phone_ready", "/ready", "/phoneReady")
         val payloadCandidates = buildList {
-            if (!localIp.isNullOrBlank()) {
-                add("""{"userId":"$userId","host":"$localIp","port":$localPort}""")
-                add("""{"userId":"$userId","host":"$localIp"}""")
+            for (candidateHost in localIpCandidates) {
+                // Try common key variants for relay compatibility.
+                add("""{"userId":"$userId","host":"$candidateHost","port":$localPort}""")
+                add("""{"userId":"$userId","host":"$candidateHost"}""")
+                add("""{"userId":"$userId","ip":"$candidateHost","port":$localPort}""")
+                add("""{"userId":"$userId","ip":"$candidateHost"}""")
+                add("""{"userId":"$userId","localIp":"$candidateHost","port":$localPort}""")
+                add("""{"userId":"$userId","localHost":"$candidateHost","port":$localPort}""")
             }
             add("""{"userId":"$userId","port":$localPort}""")
             add("""{"userId":"$userId"}""")
@@ -151,6 +166,18 @@ class RelayManager(private val context: Context) {
         }
 
         false
+    }
+
+    private fun resolveRouteLocalIp(relayHost: String): String? {
+        return runCatching {
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress(relayHost, CONTROL_PORT), 1500)
+                socket.localAddress?.hostAddress
+            }
+        }
+            .getOrNull()
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
     }
 
     private fun topUpPool(localPort: Int) {

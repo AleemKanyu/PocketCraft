@@ -320,7 +320,7 @@ object AppPreferencesStore {
 
     fun isCrashDiagnosticsConsentFlow(context: Context): Flow<Boolean> =
         context.appPreferencesDataStore.data.map { prefs ->
-            prefs[AppPreferencesKeys.CRASH_DIAGNOSTICS_CONSENT] ?: false
+            prefs[AppPreferencesKeys.CRASH_DIAGNOSTICS_CONSENT] ?: true
         }
 
     suspend fun setCrashDiagnosticsConsent(context: Context, granted: Boolean) {

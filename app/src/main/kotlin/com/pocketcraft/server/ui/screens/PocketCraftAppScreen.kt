@@ -545,12 +545,12 @@ fun PocketCraftApp() {
                     text = "ESSENTIAL ONLY",
                     onClick = {
                         scope.launch {
-                            AppPreferencesStore.setCrashDiagnosticsConsent(context, false)
+                            AppPreferencesStore.setCrashDiagnosticsConsent(context, true)
                             AppPreferencesStore.setAnalyticsConsent(context, false)
                             AppPreferencesStore.setAdsConsent(context, false)
                             AppPreferencesStore.setLegalVersionAccepted(context, BuildConfig.LEGAL_POLICY_VERSION)
                             runCatching {
-                                Firebase.crashlytics.setCrashlyticsCollectionEnabled(false)
+                                Firebase.crashlytics.setCrashlyticsCollectionEnabled(true)
                             }
                             FirebaseAnalyticsManager.setCollectionEnabled(false)
                             showConsentDialog = false
