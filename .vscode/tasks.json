@@ -57,6 +57,17 @@
 				"$gradle"
 			],
 			"group": "build"
+		},
+		{
+			"label": "license-report",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"cd /home/aleemkanyu/.gemini/antigravity/scratch/PocketCraft && JAVA_HOME=/opt/android-studio/jbr PATH=/opt/android-studio/jbr/bin:$PATH ./gradlew generateLicenseReport --no-daemon --console=plain"
+			],
+			"isBackground": false,
+			"group": "build"
 		}
 	]
 }

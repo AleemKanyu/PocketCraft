@@ -1,5 +1,7 @@
 package com.pocketcraft.server.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -47,7 +50,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.pocketcraft.server.BuildConfig
 import com.pocketcraft.server.R
+import com.pocketcraft.server.analytics.FirebaseAnalyticsManager
 import com.pocketcraft.server.data.model.ServerConfig
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
@@ -56,9 +61,15 @@ import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.DuoToggle
 import com.pocketcraft.server.ui.components.GameCard
+import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
+import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.util.playAppHaptic
+import com.pocketcraft.server.update.GitHubApkInstaller
+import com.pocketcraft.server.update.GitHubUpdateChecker
 import com.pocketcraft.server.util.RamUtils
+import com.google.firebase.crashlytics.ktx.crashlytics
+import com.google.firebase.ktx.Firebase
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -75,13 +86,18 @@ private val WorldTypeLabels = linkedMapOf(
 @Composable
 fun SettingsScreen(
     stateHolder: ServerStateHolder,
-    onMessage: (String) -> Unit
+    onMessage: (String) -> Unit,
+    onOpenLegalPage: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val preferences = remember { AppPreferences(context) }
     val hapticFeedback = LocalHapticFeedback.current
     val appFeedbackEnabled by AppPreferencesStore.isSoundEnabledFlow(context).collectAsState(initial = true)
+    val notificationsEnabled by AppPreferencesStore.isNotificationsEnabledFlow(context).collectAsState(initial = true)
+    val analyticsConsentGranted by AppPreferencesStore.isAnalyticsConsentFlow(context).collectAsState(initial = false)
+    val crashDiagnosticsConsentGranted by AppPreferencesStore.isCrashDiagnosticsConsentFlow(context).collectAsState(initial = false)
+    val adsConsentGranted by AppPreferencesStore.isAdsConsentFlow(context).collectAsState(initial = false)
     var config by remember(stateHolder.config) {
         mutableStateOf(stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, 10)))
     }
@@ -95,6 +111,9 @@ fun SettingsScreen(
     var feedbackText by remember { mutableStateOf("") }
     var submittingFeedback by remember { mutableStateOf(false) }
     var feedbackSent by remember { mutableStateOf(false) }
+    var checkingForUpdate by remember { mutableStateOf(false) }
+    var downloadingUpdate by remember { mutableStateOf(false) }
+    var updateDownloadProgress by remember { mutableIntStateOf(0) }
     val totalRamMb = remember { RamUtils.getTotalRamMb(context) }
     val recommendedViewDistance = remember(totalRamMb) {
         if (totalRamMb >= 7168) 32 else if (totalRamMb >= 6144) 20 else if (totalRamMb >= 4096) 12 else 8
@@ -387,6 +406,72 @@ fun SettingsScreen(
                 }
             )
         }
+        item {
+            SettingsToggleRow(
+                icon = "🔔",
+                label = "Push announcements",
+                description = "Allow app broadcast notifications and FCM topic subscriptions.",
+                checked = notificationsEnabled,
+                onToggle = { enabled ->
+                    scope.launch {
+                        AppPreferencesStore.setNotificationsEnabled(context, enabled)
+                    }
+                }
+            )
+        }
+
+        item { SettingsSection("PRIVACY & LEGAL") }
+        item {
+            SettingsToggleRow(
+                icon = "📊",
+                label = "Usage analytics",
+                description = "Allow Firebase Analytics to collect app usage metrics and diagnostics events.",
+                checked = analyticsConsentGranted,
+                onToggle = { granted ->
+                    scope.launch {
+                        AppPreferencesStore.setAnalyticsConsent(context, granted)
+                        if (granted) {
+                            FirebaseAnalyticsManager.initialize(context.applicationContext, collectionEnabled = true)
+                            FirebaseAnalyticsManager.logEvent("analytics_consent_granted")
+                        } else {
+                            FirebaseAnalyticsManager.setCollectionEnabled(false)
+                        }
+                        AppPreferencesStore.setLegalVersionAccepted(context, BuildConfig.LEGAL_POLICY_VERSION)
+                    }
+                }
+            )
+        }
+        item {
+            SettingsToggleRow(
+                icon = "🧾",
+                label = "Personalized ads",
+                description = "Allow ad requests through Google Mobile Ads SDK.",
+                checked = adsConsentGranted,
+                onToggle = { granted ->
+                    scope.launch {
+                        AppPreferencesStore.setAdsConsent(context, granted)
+                        AppPreferencesStore.setLegalVersionAccepted(context, BuildConfig.LEGAL_POLICY_VERSION)
+                    }
+                }
+            )
+        }
+        item {
+            SettingsToggleRow(
+                icon = "🛠️",
+                label = "Crash diagnostics",
+                description = "Help us fix stability issues in this development build. Only crash traces and technical bug logs are collected, not personal chat or world content.",
+                checked = crashDiagnosticsConsentGranted,
+                onToggle = { granted ->
+                    scope.launch {
+                        AppPreferencesStore.setCrashDiagnosticsConsent(context, granted)
+                        runCatching {
+                            Firebase.crashlytics.setCrashlyticsCollectionEnabled(granted)
+                        }
+                        AppPreferencesStore.setLegalVersionAccepted(context, BuildConfig.LEGAL_POLICY_VERSION)
+                    }
+                }
+            )
+        }
 
         item {
             SettingsSection("DEVICE STORAGE")
@@ -569,6 +654,89 @@ fun SettingsScreen(
             GameCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
+                        text = "App Updates",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = "Manually check GitHub for a newer PocketCraft build.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                    if (downloadingUpdate) {
+                        Text(
+                            text = "Downloading update: $updateDownloadProgress%",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp
+                        )
+                    }
+                    DuoButton(
+                        text = when {
+                            downloadingUpdate -> "DOWNLOADING..."
+                            checkingForUpdate -> "CHECKING..."
+                            else -> "CHECK FOR UPDATE"
+                        },
+                        enabled = !checkingForUpdate && !downloadingUpdate,
+                        onClick = {
+                            playHaptic()
+                            scope.launch {
+                                checkingForUpdate = true
+                                val update = withContext(Dispatchers.IO) {
+                                    GitHubUpdateChecker.checkForUpdate(context)
+                                }
+                                checkingForUpdate = false
+
+                                if (update == null) {
+                                    onMessage("You are already on the latest version.")
+                                    return@launch
+                                }
+
+                                val apkUrl = update.downloadUrl
+                                if (apkUrl.isNullOrBlank()) {
+                                    onMessage("Update found (${update.tagName}) but no APK asset is attached.")
+                                    return@launch
+                                }
+
+                                try {
+                                    downloadingUpdate = true
+                                    updateDownloadProgress = 0
+                                    val downloadResult = GitHubApkInstaller.downloadApk(
+                                        context = context.applicationContext,
+                                        downloadUrl = apkUrl,
+                                        onProgress = { progress ->
+                                            updateDownloadProgress = progress
+                                        }
+                                    ).getOrThrow()
+
+                                    if (!GitHubApkInstaller.canRequestPackageInstalls(context.applicationContext)) {
+                                        downloadingUpdate = false
+                                        onMessage("Allow 'Install unknown apps' for PocketCraft, then try again.")
+                                        context.startActivity(
+                                            GitHubApkInstaller.buildUnknownAppsSettingsIntent(context.applicationContext)
+                                        )
+                                        return@launch
+                                    }
+
+                                    downloadingUpdate = false
+                                    onMessage("Update downloaded. Opening installer...")
+                                    context.startActivity(
+                                        GitHubApkInstaller.buildInstallIntent(context.applicationContext, downloadResult)
+                                    )
+                                } catch (error: Throwable) {
+                                    downloadingUpdate = false
+                                    onMessage("Update download failed: ${error.message}")
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+        item {
+            GameCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
                         text = "Send Beta Feedback",
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 15.sp
@@ -584,7 +752,9 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 4,
                         maxLines = 8,
-                        placeholder = { Text("Report bugs, lag, crashes, or feature ideas...") }
+                        placeholder = { Text("Report bugs, lag, crashes, or feature ideas...") },
+                        shape = duoTextFieldShape(),
+                        colors = duoOutlinedTextFieldColors()
                     )
                     DuoButton(
                         text = when {
@@ -684,6 +854,48 @@ fun SettingsScreen(
                 }
             }
         }
+        item { SettingsSection("LEGAL DOCUMENTS") }
+        item {
+            GameCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Review legal links",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        text = "Policy version: ${BuildConfig.LEGAL_POLICY_VERSION}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                    SimpleLegalLink(
+                        label = "Legal Center",
+                        onClick = {
+                            playHaptic()
+                            onOpenLegalPage()
+                        }
+                    )
+                    SimpleLegalLink(
+                        label = "Privacy Policy",
+                        onClick = {
+                            playHaptic()
+                            if (!openExternalUrl(context, BuildConfig.PRIVACY_POLICY_URL)) {
+                                onMessage("Could not open Privacy Policy URL.")
+                            }
+                        }
+                    )
+                    SimpleLegalLink(
+                        label = "Terms of Service",
+                        onClick = {
+                            playHaptic()
+                            if (!openExternalUrl(context, BuildConfig.TERMS_OF_USE_URL)) {
+                                onMessage("Could not open Terms of Use URL.")
+                            }
+                        }
+                    )
+                }
+            }
+        }
         item { Spacer(modifier = Modifier.height(32.dp)) }
     }
 }
@@ -713,6 +925,48 @@ fun SettingsSection(title: String) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 16.dp, start = 4.dp, bottom = 4.dp)
     )
+}
+
+@Composable
+private fun SimpleLegalLink(
+    label: String,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .border(
+                    width = 1.dp,
+                    color = PocketColors.Primary.copy(alpha = 0.18f),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f),
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp
+            )
+            Icon(
+                imageVector = Icons.Filled.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
 }
 
 @Composable
@@ -787,7 +1041,8 @@ private fun SettingsInputRow(
                 enabled = enabled,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                shape = RoundedCornerShape(18.dp)
+                shape = duoTextFieldShape(),
+                colors = duoOutlinedTextFieldColors()
             )
         }
     }
@@ -1027,4 +1282,15 @@ private fun deleteInstalledVersions(
         }
     }
     return deleted
+}
+
+private fun openExternalUrl(context: android.content.Context, url: String): Boolean {
+    if (url.isBlank()) return false
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    return runCatching {
+        context.startActivity(intent)
+        true
+    }.getOrDefault(false)
 }

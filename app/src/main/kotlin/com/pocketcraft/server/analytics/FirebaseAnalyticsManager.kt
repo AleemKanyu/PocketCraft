@@ -13,10 +13,18 @@ import com.google.firebase.ktx.Firebase
 object FirebaseAnalyticsManager {
     private var analytics: FirebaseAnalytics? = null
 
-    fun initialize(context: Context) {
+    fun initialize(context: Context, collectionEnabled: Boolean = true) {
         try {
             analytics = Firebase.analytics
-            analytics?.setAnalyticsCollectionEnabled(true)
+            analytics?.setAnalyticsCollectionEnabled(collectionEnabled)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun setCollectionEnabled(enabled: Boolean) {
+        try {
+            analytics?.setAnalyticsCollectionEnabled(enabled)
         } catch (e: Exception) {
             e.printStackTrace()
         }

@@ -11,20 +11,23 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,11 +59,13 @@ data class VersionItem(
 )
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun VersionPickerScreen(
     selectedVersion: String,
     showWorldSetupHint: Boolean = false,
     worldName: String = "world",
-    onVersionSelected: (String) -> Unit
+    onVersionSelected: (String) -> Unit,
+    embeddedInSheet: Boolean = false
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -119,8 +124,10 @@ fun VersionPickerScreen(
         }
     }
 
-    Box(
-        modifier = Modifier
+    val rootModifier = if (embeddedInSheet) {
+        Modifier.fillMaxWidth()
+    } else {
+        Modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
@@ -131,28 +138,38 @@ fun VersionPickerScreen(
                     )
                 )
             )
-    ) {
+    }
+
+    Box(modifier = rootModifier) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = if (embeddedInSheet) {
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 460.dp)
+            } else {
+                Modifier.fillMaxSize()
+            },
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
-                GameCard(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "POCKETCRAFT",
-                        color = PocketColors.PrimaryDark,
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                    Text(
-                        text = "Pick Your Minecraft Version",
-                        style = MaterialTheme.typography.displayMedium
-                    )
-                    Text(
-                        text = "Choose your world engine and launch in minutes.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 6.dp)
-                    )
+            if (!embeddedInSheet) {
+                item {
+                    GameCard(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "POCKETCRAFT",
+                            color = PocketColors.PrimaryDark,
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+                        Text(
+                            text = "Pick Your Minecraft Version",
+                            style = MaterialTheme.typography.displayMedium
+                        )
+                        Text(
+                            text = "Choose your world engine and launch in minutes.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
                 }
             }
 
@@ -235,37 +252,62 @@ fun VersionPickerScreen(
         }
 
         deleteTarget?.let { target ->
-            AlertDialog(
-                onDismissRequest = { deleteTarget = null },
-                title = { Text("Delete downloaded version?") },
-                text = {
-                    Text("This removes Minecraft Java ${target.id} from phone storage. Worlds and backups remain untouched.")
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        val deletingId = target.id
+            val deleteVersionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            ModalBottomSheet(
+                onDismissRequest = {
+                    scope.launch {
+                        deleteVersionSheetState.hide()
                         deleteTarget = null
-                        scope.launch {
-                            val deleted = withContext(Dispatchers.IO) {
-                                deleteDownloadedVersion(context.applicationContext, deletingId)
-                            }
-                            if (deleted) {
-                                downloadedVersions = downloadedVersions - deletingId
-                                bannerMessage = "Deleted version $deletingId from device storage."
-                            } else {
-                                bannerMessage = "Could not delete version $deletingId. Try again."
-                            }
-                        }
-                    }) {
-                        Text("Delete", color = PocketColors.Offline)
                     }
                 },
-                dismissButton = {
-                    TextButton(onClick = { deleteTarget = null }) {
+                sheetState = deleteVersionSheetState,
+                dragHandle = null,
+                containerColor = MaterialTheme.colorScheme.surface,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Delete downloaded version?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                    Text(
+                        "This removes Minecraft Java ${target.id} from phone storage. Worlds and backups remain untouched.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(
+                        onClick = {
+                            val deletingId = target.id
+                            scope.launch {
+                                val deleted = withContext(Dispatchers.IO) {
+                                    deleteDownloadedVersion(context.applicationContext, deletingId)
+                                }
+                                deleteVersionSheetState.hide()
+                                deleteTarget = null
+                                if (deleted) {
+                                    downloadedVersions = downloadedVersions - deletingId
+                                    bannerMessage = "Deleted version $deletingId from device storage."
+                                } else {
+                                    bannerMessage = "Could not delete version $deletingId. Try again."
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Delete", color = PocketColors.Offline)
+                    }
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                deleteVersionSheetState.hide()
+                                deleteTarget = null
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Text("Cancel")
                     }
                 }
-            )
+            }
         }
     }
 }

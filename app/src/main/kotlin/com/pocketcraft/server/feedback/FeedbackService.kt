@@ -28,6 +28,8 @@ object FeedbackService {
     private const val DISCORD_APP_URL = "discord://invite/NGPzXFYp"
     private const val INSTAGRAM_WEB_URL = "https://www.instagram.com/pocketcraftmc?igsh=NTRnZGI4MHFuYXd3&utm_source=qr"
     private const val INSTAGRAM_APP_URL = "instagram://user?username=pocketcraftmc"
+    private const val SOCIAL_PROMPTS_COLLECTION = "social_prompts"
+    private const val FIELD_DISCORD_POPUP_SHOWN = "discordPopupShown"
 
     suspend fun submitFeedback(context: Context, message: String, serverVersion: String): Result<Unit> {
         val trimmed = message.trim()
@@ -104,6 +106,46 @@ object FeedbackService {
                 else -> false
             }
         }.getOrDefault(false)
+    }
+
+    fun openPlayStore(context: Context): Boolean {
+        val packageName = context.packageName
+        val playStoreIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$packageName"))
+
+        return runCatching {
+            context.startActivity(playStoreIntent)
+            true
+        }.getOrDefault(false)
+    }
+
+    suspend fun hasDiscordPopupBeenShown(context: Context): Result<Boolean> = runCatching {
+        val prefs = AppPreferences(context)
+        val snapshot = withTimeoutOrNull(8.seconds) {
+            Firebase.firestore
+                .collection(SOCIAL_PROMPTS_COLLECTION)
+                .document(prefs.userId)
+                .get()
+                .awaitTask()
+        } ?: throw TimeoutException("Checking Discord popup state timed out")
+
+        snapshot.getBoolean(FIELD_DISCORD_POPUP_SHOWN) == true
+    }
+
+    suspend fun markDiscordPopupShown(context: Context): Result<Unit> = runCatching {
+        val prefs = AppPreferences(context)
+        val payload = hashMapOf(
+            "userId" to prefs.userId,
+            FIELD_DISCORD_POPUP_SHOWN to true,
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+
+        withTimeoutOrNull(8.seconds) {
+            Firebase.firestore
+                .collection(SOCIAL_PROMPTS_COLLECTION)
+                .document(prefs.userId)
+                .set(payload, com.google.firebase.firestore.SetOptions.merge())
+                .awaitTask()
+        } ?: throw TimeoutException("Saving Discord popup state timed out")
     }
 }
 

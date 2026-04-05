@@ -33,6 +33,12 @@ object AppPreferencesKeys {
     val SOCIAL_LINKS_JOINED = booleanPreferencesKey("social_links_joined")
     val SOCIAL_PROMO_LAST_SHOWN_LAUNCH = intPreferencesKey("social_promo_last_shown_launch")
     val APP_LAUNCH_COUNT = intPreferencesKey("app_launch_count")
+    val ANALYTICS_CONSENT = booleanPreferencesKey("analytics_consent")
+    val CRASH_DIAGNOSTICS_CONSENT = booleanPreferencesKey("crash_diagnostics_consent")
+    val ADS_CONSENT = booleanPreferencesKey("ads_consent")
+    val LEGAL_VERSION_ACCEPTED = stringPreferencesKey("legal_version_accepted")
+    val DISCORD_POPUP_SHOWN_ON_FIRST_LAUNCH = booleanPreferencesKey("discord_popup_shown_on_first_launch")
+    val INSTAGRAM_POPUP_SHOWN = booleanPreferencesKey("instagram_popup_shown")
 }
 
 class AppPreferences(private val context: Context) {
@@ -88,6 +94,14 @@ class AppPreferences(private val context: Context) {
     var socialPromoLastShownLaunch: Int
         get() = prefs.getInt("social_promo_last_shown_launch", 0)
         set(value) = prefs.edit().putInt("social_promo_last_shown_launch", value).apply()
+
+    var discordPopupShownOnFirstLaunch: Boolean
+        get() = prefs.getBoolean("discord_popup_shown_on_first_launch", false)
+        set(value) = prefs.edit().putBoolean("discord_popup_shown_on_first_launch", value).apply()
+
+    var instagramPopupShown: Boolean
+        get() = prefs.getBoolean("instagram_popup_shown", false)
+        set(value) = prefs.edit().putBoolean("instagram_popup_shown", value).apply()
 
     fun recordAppLaunch(): Int {
         val next = appLaunchCount + 1
@@ -285,6 +299,50 @@ object AppPreferencesStore {
     suspend fun setSocialPromoShown(context: Context, shown: Boolean) {
         context.appPreferencesDataStore.edit { prefs ->
             prefs[AppPreferencesKeys.SOCIAL_PROMO_SHOWN] = shown
+        }
+    }
+
+    fun isAnalyticsConsentFlow(context: Context): Flow<Boolean> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.ANALYTICS_CONSENT] ?: false
+        }
+
+    suspend fun setAnalyticsConsent(context: Context, granted: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.ANALYTICS_CONSENT] = granted
+        }
+    }
+
+    fun isAdsConsentFlow(context: Context): Flow<Boolean> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.ADS_CONSENT] ?: false
+        }
+
+    fun isCrashDiagnosticsConsentFlow(context: Context): Flow<Boolean> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.CRASH_DIAGNOSTICS_CONSENT] ?: false
+        }
+
+    suspend fun setCrashDiagnosticsConsent(context: Context, granted: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.CRASH_DIAGNOSTICS_CONSENT] = granted
+        }
+    }
+
+    suspend fun setAdsConsent(context: Context, granted: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.ADS_CONSENT] = granted
+        }
+    }
+
+    fun getLegalVersionAcceptedFlow(context: Context): Flow<String?> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.LEGAL_VERSION_ACCEPTED]
+        }
+
+    suspend fun setLegalVersionAccepted(context: Context, version: String) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.LEGAL_VERSION_ACCEPTED] = version
         }
     }
 }

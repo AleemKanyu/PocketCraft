@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
@@ -100,11 +101,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.pocketcraft.server.MainActivity
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.R
 import com.pocketcraft.server.service.VersionCatalog
+import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
+import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.Monocraft
 import com.pocketcraft.server.ui.theme.PocketCraftTheme
@@ -133,6 +138,16 @@ class OnboardingActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val onboardingBg = AndroidColor.parseColor("#DFF3D8")
+        window.navigationBarColor = onboardingBg
+        window.statusBarColor = AndroidColor.parseColor("#F5FAF1")
+        WindowCompat.setDecorFitsSystemWindows(window, true)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
+        }
+
         setContent {
             PocketCraftTheme {
                 OnboardingScreen(
@@ -1173,8 +1188,9 @@ private fun OnboardingSetupScreen(
                     tint = PocketColors.PrimaryDark
                 )
             },
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
+            shape = duoTextFieldShape(),
+            modifier = Modifier.fillMaxWidth(),
+            colors = duoOutlinedTextFieldColors()
         )
 
         OutlinedTextField(
@@ -1188,8 +1204,9 @@ private fun OnboardingSetupScreen(
                     tint = PocketColors.PrimaryDark
                 )
             },
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
+            shape = duoTextFieldShape(),
+            modifier = Modifier.fillMaxWidth(),
+            colors = duoOutlinedTextFieldColors()
         )
 
         Box(
@@ -1223,7 +1240,7 @@ private fun OnboardingSetupScreen(
                     disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     disabledTrailingIconColor = PocketColors.PrimaryDark
                 ),
-                shape = RoundedCornerShape(16.dp),
+                shape = duoTextFieldShape(),
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -1257,8 +1274,9 @@ private fun OnboardingSetupScreen(
                     tint = PocketColors.PrimaryDark
                 )
             },
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
+            shape = duoTextFieldShape(),
+            modifier = Modifier.fillMaxWidth(),
+            colors = duoOutlinedTextFieldColors()
         )
 
         Surface(

@@ -6,6 +6,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -51,6 +53,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -200,38 +203,62 @@ fun PocketBottomNav(
     currentTab: PocketTab,
     onTabSelected: (PocketTab) -> Unit
 ) {
-    NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp,
+    val navShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(navShape)
+            .background(PocketColors.Primary)
     ) {
-        bottomNavTabs.forEach { tab ->
-            val selected = currentTab == tab
-            NavigationBarItem(
-                selected = selected,
-                onClick = { onTabSelected(tab) },
-                icon = {
-                    Icon(
-                        imageVector = if (selected) tab.selectedIcon else tab.icon,
-                        contentDescription = tab.label,
-                        modifier = Modifier.size(24.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(12.dp)
+                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.26f),
+                            Color.Transparent
+                        )
                     )
-                },
-                label = {
-                    Text(
-                        text = tab.label.uppercase(),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 1.5.sp
-                    )
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = PocketColors.Primary,
-                    selectedTextColor = PocketColors.Primary,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    indicatorColor = Color.Transparent
                 )
-            )
+                .align(Alignment.TopCenter)
+        )
+
+        NavigationBar(
+            containerColor = Color.Transparent,
+            tonalElevation = 0.dp,
+        ) {
+            bottomNavTabs.forEach { tab ->
+                val selected = currentTab == tab
+                NavigationBarItem(
+                    selected = selected,
+                    onClick = { onTabSelected(tab) },
+                    icon = {
+                        Icon(
+                            imageVector = if (selected) tab.selectedIcon else tab.icon,
+                            contentDescription = tab.label,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = tab.label,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color.White,
+                        selectedTextColor = Color.White,
+                        unselectedIconColor = Color.White.copy(alpha = 0.72f),
+                        unselectedTextColor = Color.White.copy(alpha = 0.72f),
+                        indicatorColor = Color.Transparent
+                    )
+                )
+            }
         }
     }
 }

@@ -21,13 +21,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Restore
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +51,7 @@ import kotlinx.coroutines.launch
 
 import androidx.compose.material.icons.filled.Download
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun BackupsScreen(
     stateHolder: ServerStateHolder,
     onMessage: (String) -> Unit
@@ -335,49 +338,100 @@ fun BackupsScreen(
     }
 
     restoreTarget?.let { target ->
-        AlertDialog(
-            onDismissRequest = { restoreTarget = null },
-            title = { Text(text = "Restore backup?") },
-            text = {
-                Text(text = "This will restore the full server snapshot from ${target.name}. Current worlds, plugins, mods, packs, and configs will be replaced.")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch { onMessage(stateHolder.restoreBackup(target)) }
+        val restoreSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    restoreSheetState.hide()
                     restoreTarget = null
-                }) {
-                    Text("Restore")
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { restoreTarget = null }) {
+            sheetState = restoreSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(text = "Restore backup?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text(
+                    text = "This will restore the full server snapshot from ${target.name}. Current worlds, plugins, mods, packs, and configs will be replaced.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            onMessage(stateHolder.restoreBackup(target))
+                            restoreSheetState.hide()
+                            restoreTarget = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Restore")
+                }
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            restoreSheetState.hide()
+                            restoreTarget = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("Cancel")
                 }
             }
-        )
+        }
     }
 
     deleteTarget?.let { target ->
-        AlertDialog(
-            onDismissRequest = { deleteTarget = null },
-            title = { Text(text = "Delete backup?") },
-            text = {
-                Text(text = "This permanently removes ${target.name}.")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch { onMessage(stateHolder.deleteBackup(target)) }
+        val deleteSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    deleteSheetState.hide()
                     deleteTarget = null
-                }) {
-                    Text("Delete", color = PocketColors.Offline)
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) {
+            sheetState = deleteSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(text = "Delete backup?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text(text = "This permanently removes ${target.name}.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            onMessage(stateHolder.deleteBackup(target))
+                            deleteSheetState.hide()
+                            deleteTarget = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Delete", color = PocketColors.Offline)
+                }
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            deleteSheetState.hide()
+                            deleteTarget = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("Cancel")
                 }
             }
-        )
+        }
     }
 }
 

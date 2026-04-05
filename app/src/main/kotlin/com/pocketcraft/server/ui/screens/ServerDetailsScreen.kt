@@ -43,6 +43,8 @@ import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.components.ServerDescriptionField
 import com.pocketcraft.server.ui.components.ServerPhotoUpload
+import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
+import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -229,7 +231,8 @@ fun ServerDetailsScreen(
                     singleLine = true,
                     label = { Text("Server name") },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp)
+                    shape = duoTextFieldShape(),
+                    colors = duoOutlinedTextFieldColors()
                 )
 
                 ServerDescriptionField(

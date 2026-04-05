@@ -17,17 +17,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,11 +49,14 @@ import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.DuoButtonVariant
 import com.pocketcraft.server.ui.components.GameCard
+import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
+import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.Monocraft
 import kotlinx.coroutines.launch
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun FilesScreen(
     stateHolder: ServerStateHolder,
     onChangeVersion: () -> Unit,
@@ -210,65 +216,112 @@ fun FilesScreen(
     }
 
     if (showSeedDialog) {
-        AlertDialog(
-            onDismissRequest = { showSeedDialog = false },
-            title = { Text(text = "Set World Seed", fontFamily = Monocraft, fontWeight = FontWeight.ExtraBold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "Enter a seed for your world. Leave it empty for a random world.",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedTextField(
-                        value = seedDraft,
-                        onValueChange = { seedDraft = it },
-                        label = { Text("World Seed (optional)") },
-                        singleLine = true
-                    )
+        val seedSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    seedSheetState.hide()
+                    showSeedDialog = false
                 }
             },
-            confirmButton = {
-                DuoButton(text = "CONFIRM", onClick = {
-                    scope.launch {
-                        onMessage(stateHolder.updateSeed(seedDraft))
-                    }
-                    showSeedDialog = false
-                })
-            },
-            dismissButton = {
-                TextButton(onClick = { showSeedDialog = false }) {
+            sheetState = seedSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(text = "Set World Seed", fontFamily = Monocraft, fontWeight = FontWeight.ExtraBold)
+                Text(
+                    text = "Enter a seed for your world. Leave it empty for a random world.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = seedDraft,
+                    onValueChange = { seedDraft = it },
+                    label = { Text("World Seed (optional)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = duoTextFieldShape(),
+                    colors = duoOutlinedTextFieldColors()
+                )
+                DuoButton(
+                    text = "CONFIRM",
+                    onClick = {
+                        scope.launch {
+                            onMessage(stateHolder.updateSeed(seedDraft))
+                            seedSheetState.hide()
+                            showSeedDialog = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            seedSheetState.hide()
+                            showSeedDialog = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("CANCEL")
                 }
             }
-        )
+        }
     }
 
     if (showDeleteWorldDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteWorldDialog = false },
-            title = { Text(text = "Delete Active World?") },
-            text = {
-                Text(
-                    text = "This will permanently delete ${stateHolder.config.worldName} and switch to another saved world if one exists."
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        onMessage(stateHolder.deleteWorld(stateHolder.config.worldName))
-                    }
+        val deleteWorldSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    deleteWorldSheetState.hide()
                     showDeleteWorldDialog = false
-                }) {
-                    Text("DELETE", color = PocketColors.Offline, fontWeight = FontWeight.Bold)
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteWorldDialog = false }) {
+            sheetState = deleteWorldSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(text = "Delete Active World?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text(
+                    text = "This will permanently delete ${stateHolder.config.worldName} and switch to another saved world if one exists.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            onMessage(stateHolder.deleteWorld(stateHolder.config.worldName))
+                            deleteWorldSheetState.hide()
+                            showDeleteWorldDialog = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("DELETE", color = PocketColors.Offline, fontWeight = FontWeight.Bold)
+                }
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            deleteWorldSheetState.hide()
+                            showDeleteWorldDialog = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("CANCEL")
                 }
             }
-        )
+        }
     }
 }
 

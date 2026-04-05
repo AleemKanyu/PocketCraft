@@ -1,5 +1,6 @@
 package com.pocketcraft.server.ui.screens
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,31 +34,43 @@ import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.theme.PocketColors
 import kotlinx.coroutines.delay
 
+private const val TAG_AUTO_DOWNLOAD = "AutoDownloadScreen"
+
 @Composable
 fun AutoDownloadScreen(
     versionId: String,
     onReady: () -> Unit
 ) {
+    var retryToken by remember { mutableIntStateOf(0) }
     var progress by remember { mutableIntStateOf(0) }
     var status by remember { mutableStateOf("Connecting...") }
     var failed by remember { mutableStateOf<String?>(null) }
     var isComplete by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    LaunchedEffect(versionId) {
+    LaunchedEffect(versionId, retryToken) {
+        progress = 0
+        failed = null
+        isComplete = false
+        Log.i(TAG_AUTO_DOWNLOAD, "download flow started version=$versionId retryToken=$retryToken")
         try {
             status = "Downloading Paper $versionId..."
             ServerDownloader.downloadPaperJarOnMain(
                 context = context,
                 versionId = versionId,
                 onStatus = { status = it },
-                onProgress = { progress = it }
+                onProgress = { progress = it },
+                forceDownload = true
             )
+            status = "Finalizing download..."
             isComplete = true
+            Log.i(TAG_AUTO_DOWNLOAD, "download flow completed version=$versionId")
             delay(500) // Brief pause before triggering callback
             onReady()
-        } catch (error: Exception) {
+        } catch (error: Throwable) {
             failed = error.message ?: "Unknown download error"
+            status = "Download failed. Check internet and retry."
+            Log.e(TAG_AUTO_DOWNLOAD, "download flow failed version=$versionId", error)
         }
     }
 
@@ -116,7 +129,9 @@ fun AutoDownloadScreen(
                 if (failed != null) {
                     DuoButton(
                         text = "TRY AGAIN",
-                        onClick = onReady,
+                        onClick = {
+                            retryToken += 1
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                 } else {

@@ -17,6 +17,7 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 val localProperties = Properties().apply {
@@ -38,6 +39,10 @@ val configuredGitHubToken = localProperties.getProperty("githubToken")
     ?: System.getenv("POCKETCRAFT_GITHUB_TOKEN")
 val configuredUpdateManifestUrl = localProperties.getProperty("updateManifestUrl")
     ?: System.getenv("POCKETCRAFT_UPDATE_MANIFEST_URL")
+val configuredPrivacyPolicyUrl = localProperties.getProperty("privacyPolicyUrl")
+    ?: System.getenv("POCKETCRAFT_PRIVACY_POLICY_URL")
+val configuredTermsOfUseUrl = localProperties.getProperty("termsOfUseUrl")
+    ?: System.getenv("POCKETCRAFT_TERMS_OF_USE_URL")
 
 val hasConfiguredReleaseSigning =
     !configuredReleaseKeystorePath.isNullOrBlank() &&
@@ -53,23 +58,33 @@ val gitRemoteUrl = runCatching {
 }.getOrNull()
 
 val (githubRepoOwner, githubRepoName) = parseGitHubRepo(gitRemoteUrl)
-    ?: ("AleemKanyu" to "PocketCraft_")
+    ?.let { (owner, repo) -> owner to repo.trimEnd('_') }
+    ?: ("AleemKanyu" to "PocketCraft")
+
+val legalPrivacyPolicyUrl = configuredPrivacyPolicyUrl?.trim().takeUnless { it.isNullOrBlank() }
+    ?: "https://pocketcraft.online/privacy"
+val legalTermsOfUseUrl = configuredTermsOfUseUrl?.trim().takeUnless { it.isNullOrBlank() }
+    ?: "https://pocketcraft.online/terms"
 
 android {
     namespace = "com.pocketcraft.server"
     compileSdk = 34
+    buildToolsVersion = "34.0.0"
 
     defaultConfig {
         applicationId = "com.pocketcraft.server"
         minSdk = 25
         targetSdk = 34
         versionCode = 2
-        versionName = "0.2.0"
+        versionName = "0.0.1-Beta"
         buildConfigField("String", "RELAY_PUBLIC_DOMAIN", "\"joinmc.link\"")
         buildConfigField("String", "GITHUB_REPO_OWNER", "\"$githubRepoOwner\"")
         buildConfigField("String", "GITHUB_REPO_NAME", "\"$githubRepoName\"")
         buildConfigField("String", "GITHUB_RELEASES_TOKEN", "\"${configuredGitHubToken.orEmpty()}\"")
         buildConfigField("String", "UPDATE_MANIFEST_URL", "\"${configuredUpdateManifestUrl.orEmpty()}\"")
+        buildConfigField("String", "PRIVACY_POLICY_URL", "\"$legalPrivacyPolicyUrl\"")
+        buildConfigField("String", "TERMS_OF_USE_URL", "\"$legalTermsOfUseUrl\"")
+        buildConfigField("String", "LEGAL_POLICY_VERSION", "\"2026-04-06\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -209,7 +224,11 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
+    implementation(libs.firebase.crashlytics)
     implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-messaging-ktx")
+    implementation("com.google.firebase:firebase-config-ktx")
+    implementation("com.google.firebase:firebase-inappmessaging-display-ktx")
     implementation("com.google.android.gms:play-services-ads:23.6.0")
     implementation("com.google.zxing:core:3.5.3")
 }

@@ -45,12 +45,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -76,6 +78,7 @@ import com.pocketcraft.server.ui.theme.PocketColors
 import kotlinx.coroutines.launch
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun WorldsScreen(
     stateHolder: ServerStateHolder,
     onOpenWorldSetup: (Boolean) -> Unit = {},
@@ -383,116 +386,198 @@ fun WorldsScreen(
 
     // Dialogs
     if (showResetDialog) {
-        AlertDialog(
-            onDismissRequest = { showResetDialog = false },
-            title = { Text("Reset World?") },
-            text = { Text("This will permanently delete the current world folder. Make sure you have a backup if you want to keep your progress.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        val msg = stateHolder.resetWorld()
-                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    }
+        val resetSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    resetSheetState.hide()
                     showResetDialog = false
-                }) {
-                    Text("RESET WORLD", color = PocketColors.Offline, fontWeight = FontWeight.Bold)
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showResetDialog = false }) {
+            sheetState = resetSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Reset World?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text("This will permanently delete the current world folder. Make sure you have a backup if you want to keep your progress.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            val msg = stateHolder.resetWorld()
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            resetSheetState.hide()
+                            showResetDialog = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("RESET WORLD", color = PocketColors.Offline, fontWeight = FontWeight.Bold)
+                }
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            resetSheetState.hide()
+                            showResetDialog = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("CANCEL")
                 }
             }
-        )
+        }
     }
 
     showRestoreDialog?.let { backup ->
-        AlertDialog(
-            onDismissRequest = { showRestoreDialog = null },
-            title = { Text("Restore Backup?") },
-            text = {
+        val restoreSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    restoreSheetState.hide()
+                    showRestoreDialog = null
+                }
+            },
+            sheetState = restoreSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Restore Backup?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                 Text(
                     "This will restore:\n" +
                         "- Worlds and dimension data\n" +
                         "- Plugins, mods, and resource packs\n" +
                         "- Server configs and settings\n\n" +
                         "Your current server files will be overwritten.\n" +
-                        "Make sure the server is stopped before restoring."
+                        "Make sure the server is stopped before restoring.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        val msg = stateHolder.restoreBackup(backup)
-                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    }
-                    showRestoreDialog = null
-                }) {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            val msg = stateHolder.restoreBackup(backup)
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            restoreSheetState.hide()
+                            showRestoreDialog = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("RESTORE", color = PocketColors.Primary, fontWeight = FontWeight.Bold)
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRestoreDialog = null }) {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            restoreSheetState.hide()
+                            showRestoreDialog = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("CANCEL")
                 }
             }
-        )
+        }
     }
 
     showDeleteDialog?.let { backup ->
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = null },
-            title = { Text("Delete Backup?") },
-            text = { Text("Are you sure you want to delete ${backup.name}?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        val msg = stateHolder.deleteBackup(backup)
-                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    }
+        val deleteBackupSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    deleteBackupSheetState.hide()
                     showDeleteDialog = null
-                }) {
-                    Text("DELETE", color = PocketColors.Offline, fontWeight = FontWeight.Bold)
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = null }) {
+            sheetState = deleteBackupSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Delete Backup?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text("Are you sure you want to delete ${backup.name}?", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            val msg = stateHolder.deleteBackup(backup)
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            deleteBackupSheetState.hide()
+                            showDeleteDialog = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("DELETE", color = PocketColors.Offline, fontWeight = FontWeight.Bold)
+                }
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            deleteBackupSheetState.hide()
+                            showDeleteDialog = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("CANCEL")
                 }
             }
-        )
+        }
     }
 
     showDeleteWorldDialog?.let { world ->
-        AlertDialog(
-            onDismissRequest = { showDeleteWorldDialog = null },
-            title = { Text("Delete World?") },
-            text = {
+        val deleteWorldSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    deleteWorldSheetState.hide()
+                    showDeleteWorldDialog = null
+                }
+            },
+            sheetState = deleteWorldSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Delete World?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                 Text(
                     if (world.isActive) {
                         "Delete ${world.name}? PocketCraft will switch to another saved world first."
                     } else {
                         "Delete ${world.name}? This removes the world from storage."
-                    }
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        val msg = stateHolder.deleteWorld(world.name)
-                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    }
-                    showDeleteWorldDialog = null
-                }) {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            val msg = stateHolder.deleteWorld(world.name)
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            deleteWorldSheetState.hide()
+                            showDeleteWorldDialog = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("DELETE", color = PocketColors.Offline, fontWeight = FontWeight.Bold)
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteWorldDialog = null }) {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            deleteWorldSheetState.hide()
+                            showDeleteWorldDialog = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("CANCEL")
                 }
             }
-        )
+        }
     }
 
 }

@@ -142,26 +142,41 @@ object GitHubUpdateChecker {
     }
 
     private fun compareVersions(a: String, b: String): Int {
-        val left = normalizeVersion(a)
-        val right = normalizeVersion(b)
+        val left = parseVersion(a)
+        val right = parseVersion(b)
 
-        val max = maxOf(left.size, right.size)
+        val max = maxOf(left.coreParts.size, right.coreParts.size)
         for (i in 0 until max) {
-            val l = left.getOrElse(i) { 0 }
-            val r = right.getOrElse(i) { 0 }
+            val l = left.coreParts.getOrElse(i) { 0 }
+            val r = right.coreParts.getOrElse(i) { 0 }
             if (l != r) return l.compareTo(r)
         }
-        return 0
+        if (left.suffix.isBlank() && right.suffix.isNotBlank()) return -1
+        if (left.suffix.isNotBlank() && right.suffix.isBlank()) return 1
+        return left.suffix.compareTo(right.suffix, ignoreCase = true)
     }
 
-    private fun normalizeVersion(raw: String): List<Int> {
+    private data class ParsedVersion(
+        val coreParts: List<Int>,
+        val suffix: String
+    )
+
+    private fun parseVersion(raw: String): ParsedVersion {
         val withoutPrefix = raw.trim().removePrefix("v").removePrefix("V")
         val core = withoutPrefix.substringBefore('-').substringBefore('+')
-        return core
+        val suffix = withoutPrefix
+            .substringAfter('-', missingDelimiterValue = "")
+            .substringBefore('+')
+            .trim()
+
+        return ParsedVersion(
+            coreParts = core
             .split('.')
             .map { part -> part.filter { it.isDigit() } }
             .filter { it.isNotBlank() }
             .mapNotNull { digits -> digits.toIntOrNull() }
-            .ifEmpty { listOf(0) }
+            .ifEmpty { listOf(0) },
+            suffix = suffix
+        )
     }
 }

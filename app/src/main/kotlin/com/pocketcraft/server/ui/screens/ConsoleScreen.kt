@@ -67,6 +67,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -98,6 +99,8 @@ import com.pocketcraft.server.ui.components.StatusBadge
 import com.pocketcraft.server.ui.components.PlayerCard
 import com.pocketcraft.server.ui.components.PlayerCardAction
 import com.pocketcraft.server.ui.components.VersionUpgradeCard
+import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
+import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.service.VersionCatalog
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.Monocraft
@@ -108,13 +111,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun ConsoleScreen(
     stateHolder: ServerStateHolder,
     onViewAllPlayers: () -> Unit,
     onChangeVersion: () -> Unit = {},
     onPlayerSelected: (PlayerInfo) -> Unit = {},
     onOpenServerDetails: () -> Unit = {},
-    onAddWorld: () -> Unit = {}
+    onAddWorld: () -> Unit = {},
+    topContentBelowServerCard: (@Composable () -> Unit)? = null
 ) {
     val logListState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -226,45 +231,54 @@ fun ConsoleScreen(
                 onChangeVersion = onChangeVersion,
                 onOpenServerDetails = onOpenServerDetails,
                 onAddWorld = onAddWorld,
-                onOpenBedrockHelp = { showBedrockHelpDialog = true }
+                onOpenBedrockHelp = { showBedrockHelpDialog = true },
+                topContentBetweenServerAndAddress = topContentBelowServerCard
             )
         }
         if (stateHolder.status == ServerStatus.ONLINE && !stateHolder.config.whiteList && !stateHolder.openServerRiskAcknowledged) {
             item {
-                androidx.compose.material3.Card(
-                    colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color(0xFF1A1200)),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, PocketColors.Starting),
-                    modifier = Modifier.fillMaxWidth()
+                androidx.compose.material3.Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFFF9F3E7),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE7C88B)),
+                    shadowElevation = 5.dp
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.Warning,
-                                contentDescription = null,
-                                tint = PocketColors.Starting,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
+                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .background(Color(0xFFFFDFAE), RoundedCornerShape(10.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = Color(0xFFCD8A00),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                             Text(
                                 "Open server — anyone can join",
-                                color = PocketColors.Starting,
-                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF6F4E00),
+                                fontWeight = FontWeight.ExtraBold,
                                 fontSize = 13.sp
                             )
                         }
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(6.dp))
                         Text(
-                            "Whitelist is disabled. Any player can connect to your server.",
-                            color = Color(0xFFB3B3B3),
-                            fontSize = 12.sp
+                            "Whitelist is off, so any player who knows the address can join until you lock it down.",
+                            color = Color(0xFF7C6536),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
                         )
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(10.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = { stateHolder.enableWhitelist() },
-                                border = androidx.compose.foundation.BorderStroke(1.dp, PocketColors.Online),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = PocketColors.Online)
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD7B36A)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF8F5C00))
                             ) {
                                 Text("Enable Whitelist", fontSize = 12.sp)
                             }
@@ -451,39 +465,68 @@ fun ConsoleScreen(
 
     // World Seed Dialog
     if (showDownloadRequiredDialog) {
-        AlertDialog(
-            onDismissRequest = { showDownloadRequiredDialog = false },
-            title = { Text("No version downloaded") },
-            text = { Text("Download a compatible Minecraft version from the Home screen before starting the server.") },
-            confirmButton = {
-                TextButton(onClick = {
+        val downloadRequiredSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    downloadRequiredSheetState.hide()
                     showDownloadRequiredDialog = false
-                    onChangeVersion()
-                }) {
-                    Text("Download")
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showDownloadRequiredDialog = false }) {
+            sheetState = downloadRequiredSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("No version downloaded", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text(
+                    "Download a compatible Minecraft version from the Home screen before starting the server.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            downloadRequiredSheetState.hide()
+                            showDownloadRequiredDialog = false
+                            onChangeVersion()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Download")
+                }
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            downloadRequiredSheetState.hide()
+                            showDownloadRequiredDialog = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("Cancel")
                 }
             }
-        )
+        }
     }
 
     // World Seed Dialog
     if (showSeedDialog) {
-        androidx.compose.ui.window.Dialog(
+        val seedSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
             onDismissRequest = { },
-            properties = androidx.compose.ui.window.DialogProperties(
-                dismissOnBackPress = false,
-                dismissOnClickOutside = false,
-                usePlatformDefaultWidth = false
-            )
+            sheetState = seedSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ) {
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth(0.9f)
+                    .fillMaxWidth()
                     .padding(16.dp),
                 shape = RoundedCornerShape(28.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -523,7 +566,8 @@ fun ConsoleScreen(
                         label = { Text("World Seed (optional)") },
                         textStyle = MaterialTheme.typography.bodyMedium,
                         singleLine = true,
-                        shape = RoundedCornerShape(18.dp)
+                        shape = duoTextFieldShape(),
+                        colors = duoOutlinedTextFieldColors()
                     )
 
                     Row(
@@ -535,23 +579,26 @@ fun ConsoleScreen(
                         DuoButton(
                             text = "CONFIRM",
                             onClick = {
-                                showSeedDialog = false
-                                // Mark that we've shown the dialog to prevent it from showing again
                                 scope.launch {
+                                    seedSheetState.hide()
+                                    showSeedDialog = false
                                     try {
                                         com.pocketcraft.server.data.preferences.AppPreferencesStore.setSeedSetupShown(context, true)
                                     } catch (e: Exception) {
                                         android.util.Log.e("ConsoleScreen", "Error marking seed setup as shown: ${e.message}")
                                     }
                                 }
-                                // WorldSeed will be saved to preferences and used on next server start
                             },
-                            modifier = Modifier
-                                .weight(1f)
+                            modifier = Modifier.weight(1f)
                         )
 
                         TextButton(
-                            onClick = { showSeedDialog = false },
+                            onClick = {
+                                scope.launch {
+                                    seedSheetState.hide()
+                                    showSeedDialog = false
+                                }
+                            },
                             modifier = Modifier
                                 .weight(0.9f)
                                 .height(52.dp)
@@ -565,17 +612,22 @@ fun ConsoleScreen(
     }
 
     if (showBedrockHelpDialog) {
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { showBedrockHelpDialog = false },
-            properties = androidx.compose.ui.window.DialogProperties(
-                dismissOnBackPress = true,
-                dismissOnClickOutside = true,
-                usePlatformDefaultWidth = false
-            )
+        val bedrockHelpSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    bedrockHelpSheetState.hide()
+                    showBedrockHelpDialog = false
+                }
+            },
+            sheetState = bedrockHelpSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ) {
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth(0.92f)
+                    .fillMaxWidth()
                     .padding(16.dp),
                 shape = RoundedCornerShape(28.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -647,7 +699,12 @@ fun ConsoleScreen(
 
                     DuoButton(
                         text = "GOT IT",
-                        onClick = { showBedrockHelpDialog = false },
+                        onClick = {
+                            scope.launch {
+                                bedrockHelpSheetState.hide()
+                                showBedrockHelpDialog = false
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -674,7 +731,8 @@ private fun ServerIdentityCard(
     onChangeVersion: () -> Unit,
     onOpenServerDetails: () -> Unit,
     onAddWorld: () -> Unit,
-    onOpenBedrockHelp: () -> Unit
+    onOpenBedrockHelp: () -> Unit,
+    topContentBetweenServerAndAddress: (@Composable () -> Unit)? = null
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
@@ -814,7 +872,7 @@ private fun ServerIdentityCard(
                         )
                         Spacer(modifier = Modifier.width(3.dp))
                         Text(
-                            text = if (canChangeWorld) "Tap card to switch world or edit details" else "Stop server to switch world",
+                                text = if (canChangeWorld) "One tap to swap your world or edit details" else "Stop the server to switch worlds",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
                             fontWeight = FontWeight.SemiBold
@@ -896,6 +954,8 @@ private fun ServerIdentityCard(
             }
         }
 
+        topContentBetweenServerAndAddress?.invoke()
+
         val publicAddress = stateHolder.publicAddress?.takeIf { it.isNotBlank() }
 
         if (stateHolder.tunnelError != null && publicAddress == null) {
@@ -963,29 +1023,16 @@ private fun ServerIdentityCard(
                 border = BorderStroke(1.dp, PocketColors.BorderDark)
             ) {
                 Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Join Addresses",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = PocketColors.Primary,
-                            letterSpacing = 0.8.sp
-                        )
-                        IconButton(onClick = onOpenBedrockHelp) {
-                            Icon(
-                                imageVector = Icons.Filled.Info,
-                                contentDescription = "How to join",
-                                tint = PocketColors.PrimaryDark
-                            )
-                        }
-                    }
+                    Text(
+                        text = "Join Addresses",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = PocketColors.Primary,
+                        letterSpacing = 0.8.sp
+                    )
 
                     AddressValueRow(
                         label = "Java / Internet",
@@ -1391,11 +1438,12 @@ private fun ConsoleCard(
                 onValueChange = onCommandChange,
                 placeholder = { Text(text = "Send command...", fontSize = 13.sp) },
                 modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp),
+                shape = duoTextFieldShape(),
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyMedium.copy(
                     fontFamily = FontFamily.Monospace
-                )
+                ),
+                colors = duoOutlinedTextFieldColors()
             )
             Button(
                 onClick = onSend,

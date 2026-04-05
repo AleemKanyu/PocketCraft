@@ -19,7 +19,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -27,15 +26,18 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import com.pocketcraft.server.ui.components.PlayerActionButton
 import com.pocketcraft.server.ui.components.PlayerActionType
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -73,6 +75,7 @@ private data class PlayerLiveSnapshot(
 )
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun PlayerDetailScreen(
     stateHolder: ServerStateHolder,
     player: PlayerInfo,
@@ -384,50 +387,104 @@ fun PlayerDetailScreen(
 
     if (teleportConfirm != null) {
         val loc = teleportConfirm!!
-        AlertDialog(
-            onDismissRequest = { teleportConfirm = null },
-            title = { Text("Teleport player to this location?") },
-            text = { Text("${loc.formatted()}\n${loc.dimension}") },
-            confirmButton = {
-                TextButton(onClick = {
-                    val cmd = if (loc.dimension == "minecraft:overworld") {
-                        "tp ${player.name} ${loc.x} ${loc.y} ${loc.z}"
-                    } else {
-                        "execute in ${loc.dimension} run tp ${player.name} ${loc.x} ${loc.y} ${loc.z}"
-                    }
-                    stateHolder.sendCommand(cmd)
+        val teleportSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    teleportSheetState.hide()
                     teleportConfirm = null
-                }) { Text("Teleport") }
+                }
             },
-            dismissButton = { TextButton(onClick = { teleportConfirm = null }) { Text("Cancel") } }
-        )
+            sheetState = teleportSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Teleport player to this location?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text("${loc.formatted()}\n${loc.dimension}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(
+                    onClick = {
+                        val cmd = if (loc.dimension == "minecraft:overworld") {
+                            "tp ${player.name} ${loc.x} ${loc.y} ${loc.z}"
+                        } else {
+                            "execute in ${loc.dimension} run tp ${player.name} ${loc.x} ${loc.y} ${loc.z}"
+                        }
+                        stateHolder.sendCommand(cmd)
+                        scope.launch {
+                            teleportSheetState.hide()
+                            teleportConfirm = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Teleport") }
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            teleportSheetState.hide()
+                            teleportConfirm = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Cancel") }
+            }
+        }
     }
 
     if (confirmDeleteData) {
-        AlertDialog(
-            onDismissRequest = { confirmDeleteData = false },
-            title = { Text("Delete selected data?") },
-            text = { Text("This action cannot be undone.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        PlayerDataManager.deletePlayerData(
-                            context = context,
-                            serverVersion = stateHolder.versionLabel,
-                            playerUuid = player.uuid,
-                            deleteExperience = delXp,
-                            deleteInventory = false,
-                            deleteEnderChest = delEnder,
-                            deletePlayerData = delPlayer,
-                            deleteStats = delStats,
-                            deleteAdvancements = delAdv
-                        )
-                        confirmDeleteData = false
-                    }
-                }) { Text("Delete", color = PocketColors.Danger) }
+        val deleteDataSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    deleteDataSheetState.hide()
+                    confirmDeleteData = false
+                }
             },
-            dismissButton = { TextButton(onClick = { confirmDeleteData = false }) { Text("Cancel") } }
-        )
+            sheetState = deleteDataSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Delete selected data?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text("This action cannot be undone.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            PlayerDataManager.deletePlayerData(
+                                context = context,
+                                serverVersion = stateHolder.versionLabel,
+                                playerUuid = player.uuid,
+                                deleteExperience = delXp,
+                                deleteInventory = false,
+                                deleteEnderChest = delEnder,
+                                deletePlayerData = delPlayer,
+                                deleteStats = delStats,
+                                deleteAdvancements = delAdv
+                            )
+                            deleteDataSheetState.hide()
+                            confirmDeleteData = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Delete", color = PocketColors.Danger) }
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            deleteDataSheetState.hide()
+                            confirmDeleteData = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Cancel") }
+            }
+        }
     }
 }
 

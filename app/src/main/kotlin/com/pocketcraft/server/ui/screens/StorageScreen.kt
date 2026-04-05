@@ -22,15 +22,17 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.UploadFile
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -85,6 +87,7 @@ fun StorageScreen(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -312,23 +315,41 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
 
     if (selectedFile != null) {
         val file = selectedFile!!
-        AlertDialog(
-            onDismissRequest = { selectedFile = null },
-            title = { Text(file.name) },
-            text = { Text("Choose an action") },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (file.extension.lowercase() in setOf("txt", "log", "json", "properties", "yml", "yaml")) {
-                        viewingTextFile = file
-                    }
+        val fileActionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    fileActionSheetState.hide()
                     selectedFile = null
-                }) {
-                    Text("View")
                 }
             },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = {
+            sheetState = fileActionSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(file.name, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+                Text("Choose an action", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            fileActionSheetState.hide()
+                            if (file.extension.lowercase() in setOf("txt", "log", "json", "properties", "yml", "yaml")) {
+                                viewingTextFile = file
+                            }
+                            selectedFile = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("View")
+                }
+                TextButton(
+                    onClick = {
                         runCatching {
                             context.startActivity(
                                 Intent(Intent.ACTION_SEND).apply {
@@ -337,33 +358,67 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                                 }
                             )
                         }
-                        selectedFile = null
-                    }) { Text("Share") }
-                    TextButton(onClick = {
+                        scope.launch {
+                            fileActionSheetState.hide()
+                            selectedFile = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Share")
+                }
+                TextButton(
+                    onClick = {
                         file.delete()
-                        selectedFile = null
-                    }) { Text("Delete") }
+                        scope.launch {
+                            fileActionSheetState.hide()
+                            selectedFile = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             }
-        )
+        }
     }
 
     if (viewingTextFile != null) {
         val file = viewingTextFile!!
-        AlertDialog(
-            onDismissRequest = { viewingTextFile = null },
-            title = { Text(file.name) },
-            text = {
+        val textFileSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    textFileSheetState.hide()
+                    viewingTextFile = null
+                }
+            },
+            sheetState = textFileSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(file.name, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
                 Text(
                     text = runCatching { file.readText() }.getOrDefault("Unable to open file."),
                     style = MaterialTheme.typography.bodySmall
                 )
-            },
-            confirmButton = {
-                TextButton(onClick = { viewingTextFile = null }) {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            textFileSheetState.hide()
+                            viewingTextFile = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("Close")
                 }
             }
-        )
+        }
     }
 }

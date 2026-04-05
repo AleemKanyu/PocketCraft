@@ -1,12 +1,14 @@
 package com.pocketcraft.server.server
 
 import android.content.Context
+import android.util.Log
 import com.pocketcraft.server.service.PluginManager
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.setup.JreExtractor
 import com.pocketcraft.server.setup.PaperMcDownloader
 
 object ServerDownloader {
+    private const val TAG = "ServerDownloader"
 
     /**
      * Full preparation: extract JRE if needed, then download the Paper JAR.
@@ -59,8 +61,10 @@ object ServerDownloader {
         context: Context,
         versionId: String,
         onStatus: (String) -> Unit,
-        onProgress: (Int) -> Unit
+        onProgress: (Int) -> Unit,
+        forceDownload: Boolean = false
     ) {
+        Log.i(TAG, "downloadPaperJarOnMain version=$versionId forceDownload=$forceDownload")
         if (!JreExtractor.isExtracted(context)) {
             onStatus("Preparing Java runtime…")
             JreExtractor.extractIfNeeded(context)
@@ -68,16 +72,24 @@ object ServerDownloader {
             onStatus("Java runtime ready.")
         }
 
-        if (!ServerFileManager.isServerJarReady(context, versionId)) {
+        val jarReady = ServerFileManager.isServerJarReady(context, versionId)
+        Log.i(TAG, "download check version=$versionId jarReady=$jarReady forceDownload=$forceDownload")
+        if (forceDownload || !jarReady) {
             onStatus("Downloading Paper $versionId…")
+            if (forceDownload) {
+                runCatching { ServerFileManager.getServerJarFile(context, versionId).delete() }
+                Log.i(TAG, "force deleted existing jar for version=$versionId")
+            }
             // Collect the IO-backed flow on whichever dispatcher the caller is on (Main).
             // Each emit() crosses into Main because collect {} runs on that dispatcher.
             PaperMcDownloader(PaperMcDownloader.buildClient(), versionId)
                 .download(ServerFileManager.getServerDir(context, versionId))
                 .collect { p -> onProgress(p) }
+            Log.i(TAG, "download finished version=$versionId")
         } else {
             onStatus("Server files already downloaded.")
             onProgress(100)
+            Log.w(TAG, "download skipped because jar already ready for version=$versionId")
         }
 
         ServerFileManager.prepareEula(context, versionId)
@@ -86,6 +98,7 @@ object ServerDownloader {
             .getOrElse { throw it }
         PluginManager.enforceBedrockBridgeLocalConfig(context, versionId)
         onStatus("Done.")
+        Log.i(TAG, "version preparation completed version=$versionId")
     }
 
     // Legacy — kept for compatibility but prefer downloadPaperJarOnMain
@@ -98,7 +111,8 @@ object ServerDownloader {
             context    = context,
             versionId  = versionId,
             onStatus   = {},
-            onProgress = onProgress
+            onProgress = onProgress,
+            forceDownload = false
         )
     }
 }

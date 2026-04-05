@@ -22,13 +22,14 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FolderZip
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
@@ -37,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +56,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import com.pocketcraft.server.data.model.Plugin
 import com.pocketcraft.server.service.PluginManager
+import com.pocketcraft.server.ui.components.duoTextFieldColors
+import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
 import kotlinx.coroutines.launch
 
@@ -78,6 +82,7 @@ private enum class DownloadedContentTab(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun DownloadedPluginsScreen(
     stateHolder: ServerStateHolder,
     onBack: () -> Unit,
@@ -253,106 +258,151 @@ fun DownloadedPluginsScreen(
     }
 
     deleteTarget?.let { item ->
-        AlertDialog(
-            onDismissRequest = { deleteTarget = null },
-            title = { Text("Delete ${item.name}?") },
-            text = { Text("This removes the file from the current server version.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    val deleted = PluginManager.deleteContent(
-                        context = context,
-                        versionId = stateHolder.versionLabel,
-                        type = currentTab().type,
-                        plugin = item
-                    )
+        val deleteSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    deleteSheetState.hide()
                     deleteTarget = null
-                    if (deleted) {
-                        refresh()
-                        onMessage("${item.name} deleted.")
-                    } else {
-                        onMessage("Could not delete ${item.name}.")
-                    }
-                }) {
-                    Text("Delete", color = PocketColors.Danger)
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) {
+            sheetState = deleteSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Delete ${item.name}?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text("This removes the file from the current server version.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(
+                    onClick = {
+                        val deleted = PluginManager.deleteContent(
+                            context = context,
+                            versionId = stateHolder.versionLabel,
+                            type = currentTab().type,
+                            plugin = item
+                        )
+                        scope.launch {
+                            deleteSheetState.hide()
+                            deleteTarget = null
+                            if (deleted) {
+                                refresh()
+                                onMessage("${item.name} deleted.")
+                            } else {
+                                onMessage("Could not delete ${item.name}.")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Delete", color = PocketColors.Danger)
+                }
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            deleteSheetState.hide()
+                            deleteTarget = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("Cancel")
                 }
             }
-        )
+        }
     }
 
     if (showAddDialog) {
-        AlertDialog(
-            onDismissRequest = { showAddDialog = false },
-            title = { Text("Add ${currentTab().label}") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TextButton(
-                        onClick = {
+        val addSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    addSheetState.hide()
+                    showAddDialog = false
+                }
+            },
+            sheetState = addSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Add ${currentTab().label}", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            addSheetState.hide()
                             showAddDialog = false
                             uploadLauncher.launch("*/*")
                         }
-                    ) {
-                        Text("Upload from device")
-                    }
-                    TextField(
-                        value = urlInput,
-                        onValueChange = { urlInput = it },
-                        singleLine = true,
-                        placeholder = { Text("Paste direct download URL") },
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            focusedIndicatorColor = PocketColors.Primary,
-                            unfocusedIndicatorColor = Color.Transparent
-                        )
-                    )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Upload from device")
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val cleanUrl = urlInput.trim()
-                    if (cleanUrl.isBlank()) {
-                        Toast.makeText(context, "Paste a direct URL first.", Toast.LENGTH_SHORT).show()
-                        return@TextButton
-                    }
-                    scope.launch {
-                        isDownloading = true
-                        downloadProgress = 0
-                        val result = PluginManager.installFromUrl(
-                            context = context,
-                            sourceUrl = cleanUrl,
-                            versionId = stateHolder.versionLabel,
-                            type = currentTab().type,
-                            fileNameHint = null,
-                            onProgress = { downloadProgress = it.coerceIn(0, 100) }
-                        )
-                        isDownloading = false
-                        showAddDialog = false
-                        urlInput = ""
-                        result.onSuccess {
-                            refresh()
-                            onMessage("${currentTab().label.dropLastWhile { it == 's' }} downloaded. Restart the server to apply changes.")
-                        }.onFailure {
-                            onMessage(it.message ?: "Download failed.")
+                TextField(
+                    value = urlInput,
+                    onValueChange = { urlInput = it },
+                    singleLine = true,
+                    placeholder = { Text("Paste direct download URL") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = duoTextFieldShape(),
+                    colors = duoTextFieldColors()
+                )
+                TextButton(
+                    onClick = {
+                        val cleanUrl = urlInput.trim()
+                        if (cleanUrl.isBlank()) {
+                            Toast.makeText(context, "Paste a direct URL first.", Toast.LENGTH_SHORT).show()
+                            return@TextButton
                         }
-                    }
-                }) {
+                        scope.launch {
+                            isDownloading = true
+                            downloadProgress = 0
+                            val result = PluginManager.installFromUrl(
+                                context = context,
+                                sourceUrl = cleanUrl,
+                                versionId = stateHolder.versionLabel,
+                                type = currentTab().type,
+                                fileNameHint = null,
+                                onProgress = { downloadProgress = it.coerceIn(0, 100) }
+                            )
+                            isDownloading = false
+                            showAddDialog = false
+                            urlInput = ""
+                            addSheetState.hide()
+                            result.onSuccess {
+                                refresh()
+                                onMessage("${currentTab().label.dropLastWhile { it == 's' }} downloaded. Restart the server to apply changes.")
+                            }.onFailure {
+                                onMessage(it.message ?: "Download failed.")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("Download")
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    urlInput = ""
-                    showAddDialog = false
-                }) {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            urlInput = ""
+                            addSheetState.hide()
+                            showAddDialog = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("Cancel")
                 }
             }
-        )
+        }
     }
 }
 

@@ -28,16 +28,18 @@ import androidx.compose.material.icons.filled.Forest
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.runtime.Composable
@@ -54,8 +56,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.pocketcraft.server.WorldImporter
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.service.VersionCatalog
@@ -63,6 +63,8 @@ import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.components.ServerDescriptionField
 import com.pocketcraft.server.ui.components.ServerPhotoUpload
+import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
+import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -70,6 +72,7 @@ import kotlinx.coroutines.launch
 private enum class WorldImportSlot { MAIN, NETHER, END }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun WorldSetupScreen(
     stateHolder: ServerStateHolder,
     createMode: Boolean = false,
@@ -356,7 +359,8 @@ fun WorldSetupScreen(
                         singleLine = true,
                         label = { Text("World name (required)") },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp)
+                        shape = duoTextFieldShape(),
+                        colors = duoOutlinedTextFieldColors()
                     )
                 }
 
@@ -366,7 +370,8 @@ fun WorldSetupScreen(
                     singleLine = true,
                     label = { Text("Server name (required)") },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp)
+                    shape = duoTextFieldShape(),
+                    colors = duoOutlinedTextFieldColors()
                 )
 
                 val hasSelectedVersion = selectedVersion.isNotBlank()
@@ -385,20 +390,9 @@ fun WorldSetupScreen(
                             tint = PocketColors.PrimaryDark
                         )
                     },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = if (hasSelectedVersion) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        unfocusedTextColor = if (hasSelectedVersion) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    ),
+                    colors = duoOutlinedTextFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp)
+                    shape = duoTextFieldShape()
                 )
 
                 OutlinedTextField(
@@ -414,7 +408,8 @@ fun WorldSetupScreen(
                     },
                     label = { Text("World seed (optional)") },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp)
+                    shape = duoTextFieldShape(),
+                    colors = duoOutlinedTextFieldColors()
                 )
 
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -510,13 +505,22 @@ fun WorldSetupScreen(
     }
 
     if (showVersionDialog) {
-        Dialog(
-            onDismissRequest = { showVersionDialog = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
+        val versionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    versionSheetState.hide()
+                    showVersionDialog = false
+                }
+            },
+            sheetState = versionSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ) {
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth(0.92f)
+                    .fillMaxWidth()
                     .padding(16.dp),
                 shape = RoundedCornerShape(28.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -562,8 +566,11 @@ fun WorldSetupScreen(
                                 val selected = version == selectedVersion
                                 Surface(
                                     onClick = {
-                                        selectedVersion = version
-                                        showVersionDialog = false
+                                        scope.launch {
+                                            selectedVersion = version
+                                            versionSheetState.hide()
+                                            showVersionDialog = false
+                                        }
                                     },
                                     shape = RoundedCornerShape(18.dp),
                                     color = if (selected) PocketColors.PrimaryMuted else MaterialTheme.colorScheme.surfaceVariant,
@@ -599,7 +606,14 @@ fun WorldSetupScreen(
                     }
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { showVersionDialog = false }) {
+                        TextButton(
+                            onClick = {
+                                scope.launch {
+                                    versionSheetState.hide()
+                                    showVersionDialog = false
+                                }
+                            }
+                        ) {
                             Text("Done")
                         }
                     }
