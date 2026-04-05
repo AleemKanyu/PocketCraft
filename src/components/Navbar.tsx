@@ -8,11 +8,12 @@ export default function Navbar() {
   const location = useLocation();
 
   const links = [
-    { href: "/", label: "Home" },
-    { href: "/faq", label: "FAQ" },
-    { href: "/blog", label: "Blog" },
-    { href: "/roadmap", label: "Roadmap" },
-    { href: "/community", label: "Community" },
+    { href: "/", label: "Home", external: false },
+    { href: "/#faq", label: "FAQ", external: true },
+    { href: "/blog", label: "Blog", external: false },
+    { href: "/roadmap", label: "Roadmap", external: false },
+    { href: "/community", label: "Community", external: false },
+    { href: "/legal", label: "Legal", external: false },
   ];
 
   return (
@@ -22,32 +23,43 @@ export default function Navbar() {
           {/* Logo + App Name */}
           <Link to="/" className="flex items-center gap-2 sm:gap-3 group">
             <img
-              src="/app-icon.png"
+              src="/app-icon-rounded.png"
               alt="PocketCraft"
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-black/10"
             />
             <span className="text-lg sm:text-2xl font-extrabold text-black font-minecraft">
               PocketCraft
-            </span>
-            <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-orange-100 text-orange-600 ml-2">
-              Beta
             </span>
           </Link>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-8">
             {links.map((link) => (
-              <Link
-                key={link.href}
-                to={link.href}
-                className={`font-bold uppercase tracking-wider text-sm transition-colors ${
-                  location.pathname === link.href
-                    ? "text-[#7FE620]"
-                    : "text-black/60 hover:text-black"
-                }`}
-              >
-                {link.label}
-              </Link>
+              link.external ? (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className={`font-bold uppercase tracking-wider text-sm transition-colors ${
+                    location.pathname === "/" && location.hash === "#faq"
+                      ? "text-[#7FE620]"
+                      : "text-black/60 hover:text-black"
+                  }`}
+                >
+                  {link.label}
+                </a>
+              ) : (
+                <Link
+                  key={link.href}
+                  to={link.href}
+                  className={`font-bold uppercase tracking-wider text-sm transition-colors ${
+                    location.pathname === link.href
+                      ? "text-[#7FE620]"
+                      : "text-black/60 hover:text-black"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              )
             ))}
           </div>
 
@@ -69,18 +81,33 @@ export default function Navbar() {
             className="md:hidden flex flex-col gap-4 mt-4 pt-4 border-t-2 border-black/5"
           >
             {links.map((link) => (
-              <Link
-                key={link.href}
-                to={link.href}
-                onClick={() => setIsOpen(false)}
-                className={`font-bold uppercase tracking-wider text-sm transition-colors ${
-                  location.pathname === link.href
-                    ? "text-[#7FE620]"
-                    : "text-black/60 hover:text-black"
-                }`}
-              >
-                {link.label}
-              </Link>
+              link.external ? (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setIsOpen(false)}
+                  className={`font-bold uppercase tracking-wider text-sm transition-colors ${
+                    location.pathname === "/" && location.hash === "#faq"
+                      ? "text-[#7FE620]"
+                      : "text-black/60 hover:text-black"
+                  }`}
+                >
+                  {link.label}
+                </a>
+              ) : (
+                <Link
+                  key={link.href}
+                  to={link.href}
+                  onClick={() => setIsOpen(false)}
+                  className={`font-bold uppercase tracking-wider text-sm transition-colors ${
+                    location.pathname === link.href
+                      ? "text-[#7FE620]"
+                      : "text-black/60 hover:text-black"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              )
             ))}
           </motion.div>
         )}

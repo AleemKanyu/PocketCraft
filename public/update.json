@@ -1,8 +1,8 @@
 {
-  "version": "0.0.1",
-  "tag_name": "v0.0.1",
-  "release_name": "PocketCraft 0.0.1",
-  "html_url": "https://github.com/AleemKanyu/PocketCraft_/releases/v0.0.1",
-  "download_url": "https://github.com/AleemKanyu/PocketCraft_/releases/download/v0.0.1/pocketcraft-release.apk",
+  "version": "0.0.1-Beta",
+  "tag_name": "v.0.0.1-Beta",
+  "release_name": "PocketCraft 0.0.1 Beta",
+  "html_url": "https://github.com/AleemKanyu/PocketCraft/releases/tag/v.0.0.1-Beta",
+  "download_url": "https://github.com/AleemKanyu/PocketCraft/releases/download/v.0.0.1-Beta/PocketCraft.apk",
   "published_at": "2026-04-04T00:00:00Z"
 }
