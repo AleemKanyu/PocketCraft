@@ -6,6 +6,8 @@ import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
 import Roadmap from "./pages/Roadmap";
 import Community from "./pages/Community";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
 
 function AppRoutes() {
   useScrollToTop();
@@ -18,6 +20,8 @@ function AppRoutes() {
       <Route path="/blog/:id" element={<BlogPost />} />
       <Route path="/roadmap" element={<Roadmap />} />
       <Route path="/community" element={<Community />} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

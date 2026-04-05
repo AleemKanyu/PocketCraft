@@ -56,9 +56,15 @@
   }
 }
 
+/* ===== GLOBAL RESET ===== */
 * {
   box-sizing: border-box;
   border-radius: 0.5rem;
+}
+
+/* ===== SMOOTH THEME TRANSITION ===== */
+html {
+  transition: background-color 0.4s ease, color 0.4s ease;
 }
 
 body {
@@ -67,6 +73,12 @@ body {
   font-weight: 600;
   background-color: #FFFFFF;
   color: #1F1F1F;
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+html.dark body {
+  background-color: #0a0a0a;
+  color: #e8e8e8;
 }
 
 :where(p, small, label, input, textarea, li, code):not(.font-minecraft) {
@@ -74,7 +86,7 @@ body {
   font-weight: 600;
 }
 
-/* Raise contrast for frequently used low-opacity text utility classes */
+/* ===== CONTRAST OVERRIDES ===== */
 .text-black\/10 { color: rgb(31 31 31 / 0.2) !important; }
 .text-black\/20 { color: rgb(31 31 31 / 0.35) !important; }
 .text-black\/30 { color: rgb(31 31 31 / 0.5) !important; }
@@ -84,6 +96,15 @@ body {
 .placeholder\:text-black\/20::placeholder { color: rgb(31 31 31 / 0.4) !important; }
 .placeholder\:text-black\/40::placeholder { color: rgb(31 31 31 / 0.65) !important; }
 
+/* Dark mode contrast overrides */
+html.dark .text-black\/10 { color: rgb(255 255 255 / 0.15) !important; }
+html.dark .text-black\/20 { color: rgb(255 255 255 / 0.25) !important; }
+html.dark .text-black\/30 { color: rgb(255 255 255 / 0.4) !important; }
+html.dark .text-black\/40 { color: rgb(255 255 255 / 0.55) !important; }
+html.dark .text-black\/50 { color: rgb(255 255 255 / 0.65) !important; }
+html.dark .text-black\/60 { color: rgb(255 255 255 / 0.8) !important; }
+
+/* ===== TYPOGRAPHY ===== */
 .font-minecraft {
   font-family: 'Press Start 2P', cursive;
   font-weight: 400;
@@ -97,13 +118,8 @@ body {
   font-weight: 900 !important;
 }
 
-/* Prevent font-minecraft from affecting headings and other text */
-.font-minecraft h1,
-.font-minecraft h2,
-.font-minecraft h3,
-.font-minecraft h4,
-.font-minecraft h5,
-.font-minecraft h6 {
+.font-minecraft h1, .font-minecraft h2, .font-minecraft h3,
+.font-minecraft h4, .font-minecraft h5, .font-minecraft h6 {
   font-family: var(--font-sans) !important;
   font-weight: 800 !important;
   letter-spacing: -0.01em !important;
@@ -124,14 +140,14 @@ button, a, [role="button"] {
   cursor: pointer;
 }
 
-/* Duolingo-style button */
+/* ===== BUTTONS ===== */
 .btn-duo {
   background: #7FE620;
   color: white;
   border: none;
   border-radius: 0.75rem;
   box-shadow: 0px 8px 0px 0px rgba(0, 0, 0, 0.15);
-  transition: all 0.1s ease;
+  transition: all 0.15s ease;
   font-family: var(--font-sans);
   font-weight: 700;
   font-size: 1rem;
@@ -141,6 +157,7 @@ button, a, [role="button"] {
 .btn-duo:hover {
   transform: translateY(-2px);
   box-shadow: 0px 12px 0px 0px rgba(0, 0, 0, 0.2);
+  filter: brightness(1.1);
 }
 
 .btn-duo:active {
@@ -148,7 +165,6 @@ button, a, [role="button"] {
   box-shadow: 0px 4px 0px 0px rgba(0, 0, 0, 0.15);
 }
 
-/* Duolingo secondary button */
 .btn-duo-secondary {
   background: transparent;
   color: #7FE620;
@@ -166,7 +182,16 @@ button, a, [role="button"] {
   color: white;
 }
 
-/* 21st century button (pixelated) - for download */
+html.dark .btn-duo-secondary {
+  color: #8FEF35;
+  border-color: #8FEF35;
+}
+
+html.dark .btn-duo-secondary:hover {
+  background: #7FE620;
+  color: white;
+}
+
 .btn-21st {
   border: 4px solid #000000;
   background: #7FE620;
@@ -188,17 +213,176 @@ button, a, [role="button"] {
   box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 0.15);
 }
 
+/* ===== UTILITY CLASSES ===== */
 .image-pixelated {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
 
-/* Hide scrollbar but keep functionality */
 .scrollbar-hide {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;     /* Firefox */
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 .scrollbar-hide::-webkit-scrollbar {
-  display: none;  /* Chrome, Safari and Opera */
+  display: none;
+}
+
+/* ===== ANIMATIONS ===== */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(127, 230, 32, 0.15); }
+  50% { box-shadow: 0 0 40px rgba(127, 230, 32, 0.35); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+@keyframes float-gentle {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes sparkle {
+  0%, 100% { opacity: 0; transform: scale(0); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+.animate-glow-pulse { animation: glow-pulse 3s ease-in-out infinite; }
+.animate-shimmer { animation: shimmer 3s linear infinite; }
+.animate-gradient-shift { animation: gradient-shift 8s ease infinite; }
+.animate-pulse-ring { animation: pulse-ring 2s ease-out infinite; }
+.animate-float-gentle { animation: float-gentle 4s ease-in-out infinite; }
+
+/* ===== ANDROID PHONE FRAME ===== */
+.phone-frame {
+  position: relative;
+  border-radius: 1.5rem;
+  background: #111111;
+  padding: 8px 8px 12px 8px; /* Slightly thicker bottom chin */
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.1),
+    0 25px 50px -12px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+/* Punch-hole camera */
+.phone-frame::before {
+  content: "";
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 12px;
+  background: #000;
+  border-radius: 50%;
+  z-index: 20;
+  box-shadow: inset 0 -1px 2px rgba(255,255,255,0.2);
+}
+
+.phone-frame::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 1.5rem;
+  pointer-events: none;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0) 40%,
+    rgba(255, 255, 255, 0) 60%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  z-index: 15;
+}
+
+.phone-screen {
+  border-radius: 1rem;
+  overflow: hidden;
+  position: relative;
+  z-index: 10;
+  aspect-ratio: 9 / 19.5;
+}
+
+/* Android side buttons */
+.phone-frame .side-button-right {
+  position: absolute;
+  right: -3px;
+  top: 90px;
+  width: 3px;
+  height: 40px;
+  background: #2a2a2a;
+  border-radius: 0 2px 2px 0;
+}
+
+.phone-frame .side-button-left-1 {
+  display: none; /* Android usually has volume on right or top/bottom */
+}
+
+.phone-frame .side-button-left-2 {
+  position: absolute;
+  right: -3px;
+  top: 140px;
+  width: 3px;
+  height: 60px; /* Volume rocker */
+  background: #2a2a2a;
+  border-radius: 0 2px 2px 0;
+  left: auto;
+}
+
+.phone-frame .side-button-left-3 {
+  display: none;
+}
+
+/* ===== 3D TILT CARD ===== */
+.tilt-card {
+  transform-style: preserve-3d;
+  perspective: 1000px;
+  transition: transform 0.3s ease;
+}
+
+.tilt-card:hover {
+  transform: rotateY(-3deg) rotateX(3deg) scale(1.02);
+}
+
+/* ===== SECTION TRANSITIONS ===== */
+.section-transition {
+  transition: background-color 0.4s ease, border-color 0.4s ease;
+}
+
+/* ===== LEGAL PAGE STYLES ===== */
+.legal-page h3 {
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+}
+
+.legal-page p {
+  margin-bottom: 1rem;
+  line-height: 1.8;
+}
+
+.legal-page ul {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+}
+
+.legal-page li {
+  margin-bottom: 0.5rem;
+  line-height: 1.7;
 }
