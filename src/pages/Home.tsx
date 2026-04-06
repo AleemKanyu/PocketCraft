@@ -3,9 +3,11 @@ import HowItWorks from "../components/HowItWorks";
 import Screenshots from "../components/Screenshots";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "../lib/ThemeContext";
+import { createPortal } from "react-dom";
+import { useLowEndDevice } from "../hooks/useLowEndDevice";
 
 const DiscordIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
@@ -39,6 +41,18 @@ const Home = () => {
   const apkUrl = "/api/apk/download";
   const [showDiscordModal, setShowDiscordModal] = useState(false);
   const { theme } = useTheme();
+  const isLowEnd = useLowEndDevice();
+
+  useEffect(() => {
+    if (!showDiscordModal) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [showDiscordModal]);
 
   const handleApkDownload = () => {
     setShowDiscordModal(true);
@@ -117,16 +131,20 @@ const Home = () => {
           theme === "dark" ? "bg-[#0a0a0a] border-white/5" : "bg-white border-black/5"
         }`}
       >
-        <motion.div
-          className="absolute top-1/3 right-0 w-96 h-96 bg-[#7FE620]/10 rounded-full blur-3xl pointer-events-none"
-          animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
-          transition={{ duration: 6, repeat: Infinity }}
-        />
-        <motion.div
-          className="absolute bottom-0 left-0 w-72 h-72 bg-[#1CB0F6]/8 rounded-full blur-3xl pointer-events-none"
-          animate={{ scale: [1.2, 1, 1.2] }}
-          transition={{ duration: 8, repeat: Infinity }}
-        />
+        {!isLowEnd && (
+          <>
+            <motion.div
+              className="absolute top-1/3 right-0 w-96 h-96 bg-[#7FE620]/10 rounded-full blur-3xl pointer-events-none"
+              animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
+              transition={{ duration: 6, repeat: Infinity }}
+            />
+            <motion.div
+              className="absolute bottom-0 left-0 w-72 h-72 bg-[#1CB0F6]/8 rounded-full blur-3xl pointer-events-none"
+              animate={{ scale: [1.2, 1, 1.2] }}
+              transition={{ duration: 8, repeat: Infinity }}
+            />
+          </>
+        )}
 
         <div className="max-w-xl mx-auto text-center relative z-10">
           <motion.div
@@ -183,7 +201,7 @@ const Home = () => {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: 0.5 }}
-            whileHover={{ scale: 1.05, y: -3 }}
+            whileHover={isLowEnd ? undefined : { scale: 1.05, y: -3 }}
             whileTap={{ scale: 0.98 }}
           >
             Download APK
@@ -201,13 +219,20 @@ const Home = () => {
             After download: open file -&gt; allow unknown apps -&gt; install.
           </motion.p>
 
+        </div>
+      </section>
+
+      <Footer />
+
+      {typeof document !== "undefined" &&
+        createPortal(
           <AnimatePresence>
             {showDiscordModal && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+                className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
                 onClick={(e) => {
                   if (e.target === e.currentTarget) {
                     setShowDiscordModal(false);
@@ -235,7 +260,7 @@ const Home = () => {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="btn-duo px-8 py-3 inline-flex items-center justify-center gap-2 font-bold uppercase text-sm"
-                      whileHover={{ scale: 1.03 }}
+                      whileHover={isLowEnd ? undefined : { scale: 1.03 }}
                       whileTap={{ scale: 0.98 }}
                     >
                       <DiscordIcon className="w-4 h-4" />
@@ -246,7 +271,7 @@ const Home = () => {
                       className={`px-8 py-3 border-2 rounded-lg transition-colors font-bold uppercase text-sm ${
                         theme === "dark" ? "border-white/20 hover:bg-white/5 text-white/60" : "border-black/20 hover:bg-black/5"
                       }`}
-                      whileHover={{ scale: 1.03 }}
+                      whileHover={isLowEnd ? undefined : { scale: 1.03 }}
                       whileTap={{ scale: 0.98 }}
                     >
                       Maybe Later
@@ -255,11 +280,9 @@ const Home = () => {
                 </motion.div>
               </motion.div>
             )}
-          </AnimatePresence>
-        </div>
-      </section>
-
-      <Footer />
+          </AnimatePresence>,
+          document.body,
+        )}
     </div>
   );
 };

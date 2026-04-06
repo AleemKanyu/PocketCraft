@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { MINECRAFT_ICONS } from "../lib/minecraft-icons";
 import { useTheme } from "../lib/ThemeContext";
+import { useLowEndDevice } from "../hooks/useLowEndDevice";
 
 const DiscordIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
@@ -25,6 +26,8 @@ const FloatingItem = ({
 }) => (
   <motion.img
     src={src}
+    loading="lazy"
+    decoding="async"
     initial={{ opacity: 0, scale: 0.5, scaleX: flipX ? -0.5 : 0.5, x: initialX, y: initialY }}
     animate={{
       opacity: 0.8,
@@ -68,6 +71,7 @@ const Sparkle = ({ delay, x, y }: { delay: number; x: string; y: string }) => (
 
 export function ModernHero() {
   const { theme } = useTheme();
+  const isLowEnd = useLowEndDevice();
 
   const scrollToDownload = () => {
     document.getElementById("download")?.scrollIntoView({ behavior: "smooth" });
@@ -92,41 +96,47 @@ export function ModernHero() {
       theme === "dark" ? "bg-[#0a0a0a]" : "bg-white"
     }`}>
       {/* Animated gradient background */}
-      <div className={`absolute inset-0 animate-gradient-shift pointer-events-none ${
+      <div className={`absolute inset-0 ${isLowEnd ? "" : "animate-gradient-shift"} pointer-events-none ${
         theme === "dark"
           ? "bg-gradient-to-br from-[#7FE620]/5 via-[#0a0a0a] to-[#1CB0F6]/5"
           : "bg-gradient-to-br from-[#7FE620]/10 via-white to-[#1CB0F6]/5"
       }`} style={{ backgroundSize: "400% 400%" }} />
 
       {/* Colorful gradient blobs */}
-      <motion.div
-        className={`absolute top-20 left-10 w-72 h-72 rounded-full blur-3xl pointer-events-none ${
-          theme === "dark" ? "bg-[#7FE620]/10" : "bg-[#7FE620]/20"
-        }`}
-        animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
-        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <motion.div
-        className={`absolute top-1/3 right-20 w-96 h-96 rounded-full blur-3xl pointer-events-none ${
-          theme === "dark" ? "bg-[#1CB0F6]/8" : "bg-[#1CB0F6]/15"
-        }`}
-        animate={{ scale: [1.2, 1, 1.2], opacity: [0.2, 0.5, 0.2] }}
-        transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <motion.div
-        className={`absolute bottom-1/4 left-1/3 w-80 h-80 rounded-full blur-3xl pointer-events-none ${
-          theme === "dark" ? "bg-[#FFD900]/5" : "bg-[#FFD900]/10"
-        }`}
-        animate={{ scale: [1, 1.3, 1] }}
-        transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-      />
+      {!isLowEnd && (
+        <>
+          <motion.div
+            className={`absolute top-20 left-10 w-72 h-72 rounded-full blur-3xl pointer-events-none ${
+              theme === "dark" ? "bg-[#7FE620]/10" : "bg-[#7FE620]/20"
+            }`}
+            animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
+            transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <motion.div
+            className={`absolute top-1/3 right-20 w-96 h-96 rounded-full blur-3xl pointer-events-none ${
+              theme === "dark" ? "bg-[#1CB0F6]/8" : "bg-[#1CB0F6]/15"
+            }`}
+            animate={{ scale: [1.2, 1, 1.2], opacity: [0.2, 0.5, 0.2] }}
+            transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <motion.div
+            className={`absolute bottom-1/4 left-1/3 w-80 h-80 rounded-full blur-3xl pointer-events-none ${
+              theme === "dark" ? "bg-[#FFD900]/5" : "bg-[#FFD900]/10"
+            }`}
+            animate={{ scale: [1, 1.3, 1] }}
+            transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+          />
+        </>
+      )}
 
       {/* Sparkle particles */}
-      <div className="absolute inset-0 pointer-events-none z-0">
-        {sparkles.map((s, i) => (
-          <Sparkle key={i} {...s} />
-        ))}
-      </div>
+      {!isLowEnd && (
+        <div className="absolute inset-0 pointer-events-none z-0">
+          {sparkles.map((s, i) => (
+            <Sparkle key={i} {...s} />
+          ))}
+        </div>
+      )}
 
       {/* Subtle grid background */}
       <div className={`absolute inset-0 z-0 opacity-5 [mask-image:radial-gradient(ellipse_at_center,transparent_20%,black)] pointer-events-none`}>
@@ -138,12 +148,14 @@ export function ModernHero() {
       </div>
 
       {/* Floating Minecraft assets are desktop-only so they don't overlap mobile hero text */}
-      <div className="hidden md:block">
-        <FloatingItem src={MINECRAFT_ICONS.hero.diamond} delay={1.5} initialX="-35vw" initialY="-30vh" flipX />
-        <FloatingItem src={MINECRAFT_ICONS.hero.pickaxe} delay={0.8} initialX="-40vw" initialY="20vh" flipX />
-        <FloatingItem src={MINECRAFT_ICONS.hero.diamond} delay={1.5} initialX="35vw" initialY="-30vh" />
-        <FloatingItem src={MINECRAFT_ICONS.hero.trident} delay={0.8} initialX="40vw" initialY="20vh" />
-      </div>
+      {!isLowEnd && (
+        <div className="hidden md:block">
+          <FloatingItem src={MINECRAFT_ICONS.hero.diamond} delay={1.5} initialX="-35vw" initialY="-30vh" flipX />
+          <FloatingItem src={MINECRAFT_ICONS.hero.pickaxe} delay={0.8} initialX="-40vw" initialY="20vh" flipX />
+          <FloatingItem src={MINECRAFT_ICONS.hero.diamond} delay={1.5} initialX="35vw" initialY="-30vh" />
+          <FloatingItem src={MINECRAFT_ICONS.hero.trident} delay={0.8} initialX="40vw" initialY="20vh" />
+        </div>
+      )}
 
       {/* Mobile-only decorative items placed in open space below text */}
       <div className="md:hidden absolute bottom-8 inset-x-0 pointer-events-none z-0">
@@ -151,17 +163,21 @@ export function ModernHero() {
           src={MINECRAFT_ICONS.hero.pickaxe}
           alt=""
           aria-hidden="true"
+          loading="lazy"
+          decoding="async"
           className="absolute left-6 w-10 h-10 image-pixelated opacity-50"
-          animate={{ y: [0, 8, 0], rotate: [-8, 8, -8] }}
-          transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+          animate={isLowEnd ? undefined : { y: [0, 8, 0], rotate: [-8, 8, -8] }}
+          transition={isLowEnd ? undefined : { duration: 5, repeat: Infinity, ease: "easeInOut" }}
         />
         <motion.img
           src={MINECRAFT_ICONS.hero.diamond}
           alt=""
           aria-hidden="true"
+          loading="lazy"
+          decoding="async"
           className="absolute right-6 w-9 h-9 image-pixelated opacity-55"
-          animate={{ y: [0, 8, 0], rotate: [8, -8, 8] }}
-          transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
+          animate={isLowEnd ? undefined : { y: [0, 8, 0], rotate: [8, -8, 8] }}
+          transition={isLowEnd ? undefined : { duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
         />
       </div>
 

@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { useRef, useEffect, useState } from "react";
 import { useTheme } from "../lib/ThemeContext";
+import { useLowEndDevice } from "../hooks/useLowEndDevice";
 
 const screenshots = [
   { id: 1, title: "Homepage", image: "/homepage.png" },
@@ -16,14 +17,15 @@ interface ScreenshotCardProps {
   screenshot: (typeof screenshots)[0];
   index: number;
   theme: string;
+  isLowEnd: boolean;
 }
 
-const ScreenshotCard = ({ screenshot, index, theme }: ScreenshotCardProps) => {
+const ScreenshotCard = ({ screenshot, index, theme, isLowEnd }: ScreenshotCardProps) => {
   return (
     <motion.div
       initial={{ opacity: 0, y: 30, scale: 0.9 }}
       whileInView={{ opacity: 1, y: 0, scale: 1 }}
-      viewport={{ once: false, margin: "-50px" }}
+      viewport={{ once: true, margin: "-50px" }}
       transition={{
         duration: 0.6,
         delay: index * 0.08,
@@ -34,7 +36,7 @@ const ScreenshotCard = ({ screenshot, index, theme }: ScreenshotCardProps) => {
       {/* Phone Frame */}
       <motion.div
         className="relative phone-frame w-44 sm:w-56 md:w-64"
-        whileHover={{ y: -8, rotateY: -3, rotateX: 2 }}
+        whileHover={isLowEnd ? undefined : { y: -8, rotateY: -3, rotateX: 2 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
         style={{ perspective: 1000 }}
       >
@@ -57,6 +59,8 @@ const ScreenshotCard = ({ screenshot, index, theme }: ScreenshotCardProps) => {
           <img
             src={screenshot.image}
             alt={screenshot.title}
+            loading="lazy"
+            decoding="async"
             className="w-full h-full object-cover"
             onError={(e) => {
               e.currentTarget.src =
@@ -79,7 +83,7 @@ const ScreenshotCard = ({ screenshot, index, theme }: ScreenshotCardProps) => {
       <motion.p
         initial={{ opacity: 0 }}
         whileInView={{ opacity: 1 }}
-        viewport={{ once: false }}
+        viewport={{ once: true }}
         transition={{ duration: 0.3, delay: index * 0.08 + 0.2 }}
         className={`text-center text-xs sm:text-sm font-bold uppercase tracking-wider mt-4 sm:mt-6 ${
           theme === "dark" ? "text-white/70" : "text-black"
@@ -95,40 +99,52 @@ export default function Screenshots() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const { theme } = useTheme();
+  const isLowEnd = useLowEndDevice();
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
+    let ticking = false;
     const handleScroll = () => {
-      const scrollLeft = container.scrollLeft;
-      const cardWidth = container.scrollWidth / screenshots.length;
-      const index = Math.round(scrollLeft / cardWidth);
-      setCurrentIndex(Math.min(index, screenshots.length - 1));
+      if (ticking) return;
+
+      ticking = true;
+      requestAnimationFrame(() => {
+        const scrollLeft = container.scrollLeft;
+        const cardWidth = container.scrollWidth / screenshots.length;
+        const index = Math.round(scrollLeft / cardWidth);
+        setCurrentIndex(Math.min(index, screenshots.length - 1));
+        ticking = false;
+      });
     };
 
-    container.addEventListener("scroll", handleScroll);
-    
-    const scrollInterval = setInterval(() => {
-      if (!container) return;
-      const scrollLeft = container.scrollLeft;
-      const cardWidth = container.scrollWidth / screenshots.length;
-      const index = Math.round(scrollLeft / cardWidth);
-      let nextIndex = index + 1;
-      if (nextIndex >= screenshots.length) {
-        nextIndex = 0;
-      }
-      container.scrollTo({
-        left: cardWidth * nextIndex,
-        behavior: "smooth"
-      });
-    }, 3000);
+    container.addEventListener("scroll", handleScroll, { passive: true });
+
+    const shouldAutoScroll = !isLowEnd && window.matchMedia("(min-width: 768px)").matches;
+    let scrollInterval: ReturnType<typeof setInterval> | undefined;
+
+    if (shouldAutoScroll) {
+      scrollInterval = setInterval(() => {
+        const scrollLeft = container.scrollLeft;
+        const cardWidth = container.scrollWidth / screenshots.length;
+        const index = Math.round(scrollLeft / cardWidth);
+        let nextIndex = index + 1;
+        if (nextIndex >= screenshots.length) {
+          nextIndex = 0;
+        }
+        container.scrollTo({
+          left: cardWidth * nextIndex,
+          behavior: "smooth"
+        });
+      }, 4500);
+    }
 
     return () => {
       container.removeEventListener("scroll", handleScroll);
-      clearInterval(scrollInterval);
+      if (scrollInterval) clearInterval(scrollInterval);
     };
-  }, []);
+  }, [isLowEnd]);
 
   return (
     <section className={`py-12 sm:py-24 md:py-40 px-3 sm:px-6 border-t-4 relative overflow-hidden section-transition ${
@@ -142,8 +158,8 @@ export default function Screenshots() {
           className={`absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] rounded-full blur-3xl ${
             theme === "dark" ? "bg-[#7FE620]/5" : "bg-[#7FE620]/8"
           }`}
-          animate={{ scale: [1, 1.1, 1] }}
-          transition={{ duration: 8, repeat: Infinity }}
+          animate={isLowEnd ? undefined : { scale: [1, 1.1, 1] }}
+          transition={isLowEnd ? undefined : { duration: 8, repeat: Infinity }}
         />
       </div>
 
@@ -220,7 +236,7 @@ export default function Screenshots() {
           >
             {screenshots.map((screenshot, index) => (
               <div key={screenshot.id} style={{ scrollSnapAlign: "center" }}>
-                <ScreenshotCard screenshot={screenshot} index={index} theme={theme} />
+                <ScreenshotCard screenshot={screenshot} index={index} theme={theme} isLowEnd={isLowEnd} />
               </div>
             ))}
           </div>
