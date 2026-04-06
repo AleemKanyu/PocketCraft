@@ -12,9 +12,8 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
-  const defaultGithubApkUrl = "https://github.com/AleemKanyu/PocketCraft/releases/download/v.0.0.1-Beta/PocketCraft.apk";
-  const apkUrl = process.env.VITE_APK_URL || process.env.GITHUB_APK_URL || defaultGithubApkUrl;
+  const PORT = process.env.PORT || 3000;
+  const apkUrl = process.env.VITE_APK_URL || "/downloads/pocketcraft.apk";
 
   app.use(express.json());
 
