@@ -22,7 +22,7 @@ export default function Footer() {
   const { theme } = useTheme();
 
   return (
-    <footer className="relative py-20 px-4 sm:px-6 bg-[#080808] overflow-hidden">
+    <footer className="relative z-0 py-20 px-4 sm:px-6 bg-[#080808] overflow-hidden">
       {/* Animated gradient top border */}
       <div className="absolute top-0 left-0 right-0 h-1">
         <div
@@ -57,7 +57,7 @@ export default function Footer() {
               <motion.img
                 src={MINECRAFT_ICONS.brand}
                 alt="PocketCraft"
-                className="w-10 h-10 image-pixelated"
+                className="w-10 h-10 rounded-full object-cover border border-white/15"
                 whileHover={{ rotate: 12 }}
                 transition={{ type: "spring", stiffness: 300 }}
                 onError={(e) => {
@@ -195,7 +195,7 @@ export default function Footer() {
               Download APK
             </motion.a>
             <p className="text-white/20 text-[10px] mt-3 uppercase tracking-wider">
-              v0.0.1-Beta • Android 8.0+
+              Stable release • Android 8.0+
             </p>
           </motion.div>
         </div>

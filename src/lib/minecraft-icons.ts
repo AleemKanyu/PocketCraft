@@ -2,7 +2,7 @@ const MC_ASSETS_BASE =
   "https://cdn.jsdelivr.net/gh/InventivetalentDev/minecraft-assets@1.21.4/assets/minecraft/textures";
 
 export const MINECRAFT_ICONS = {
-  brand: "/app-icon.png",
+  brand: "/app-icon-circle-hd.png",
   hero: {
     sword: `${MC_ASSETS_BASE}/item/trident.png`,
     diamond: `${MC_ASSETS_BASE}/item/diamond.png`,

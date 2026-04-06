@@ -8,7 +8,7 @@ const screenshots = [
   { id: 3, title: "Server Settings", image: "/serversettings.png" },
   { id: 4, title: "Advanced Settings", image: "/advanced settings.png" },
   { id: 5, title: "Version Selection", image: "/version selection screen.png" },
-  { id: 6, title: "Player Dashboard", image: "/player dashboard.png" },
+  { id: 6, title: "Player Dashboard", image: "/playerdashboard.png" },
   { id: 7, title: "Backup & Restore", image: "/world backup adn restore screen.png" },
 ];
 
