@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = parseInt(process.env.PORT || "3000", 10);
   const apkUrl = process.env.VITE_APK_URL || "/downloads/pocketcraft.apk";
 
   app.use(express.json());

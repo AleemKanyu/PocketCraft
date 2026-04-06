@@ -42,7 +42,7 @@ const FloatingItem = ({
 );
 
 // Sparkle particle component
-const Sparkle = ({ delay, x, y }: { delay: number; x: string; y: string }) => (
+const Sparkle = ({ delay, x, y }: { delay: number; x: string; y: string; key?: number | string }) => (
   <motion.div
     className="absolute w-1.5 h-1.5 rounded-full bg-[#7FE620]"
     style={{ left: x, top: y }}
@@ -118,7 +118,7 @@ export function ModernHero() {
       {/* Sparkle particles */}
       <div className="absolute inset-0 pointer-events-none z-0">
         {sparkles.map((s, i) => (
-          <Sparkle key={i} {...s} />
+          <Sparkle key={i} x={s.x} y={s.y} delay={s.delay} />
         ))}
       </div>
 
@@ -171,6 +171,7 @@ export function ModernHero() {
 
         {/* Staggered headline */}
         <motion.h1
+          aria-label="Host your Minecraft server from your phone"
           className={`text-4xl md:text-7xl leading-tight mb-6 font-extrabold ${
             theme === "dark" ? "text-white" : "text-black"
           }`}

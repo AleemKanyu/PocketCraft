@@ -47,7 +47,7 @@ const faqs = [
   },
 ];
 
-const FAQItem = ({ faq, index }: { faq: (typeof faqs)[0]; index: number }) => {
+const FAQItem = ({ faq, index }: { faq: (typeof faqs)[0]; index: number; key?: number | string }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   return (

@@ -34,6 +34,7 @@ const CommunityCard = ({
   url: string;
   color: string;
   index: number;
+  key?: number | string;
 }) => (
   <motion.a
     href={url}
