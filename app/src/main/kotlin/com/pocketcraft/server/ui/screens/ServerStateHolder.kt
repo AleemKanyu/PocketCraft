@@ -1752,12 +1752,6 @@ class ServerStateHolder(
             hardcore = props.getProperty("hardcore", "false").toBoolean(),
             maxRamMb = props.getProperty("pocketcraft-max-ram-mb", "1024").toIntOrNull() ?: 1024
         )
-        if (loaded.viewDistance == 6 && loaded.simulationDistance == 4) {
-            loaded = loaded.copy(
-                viewDistance = adaptiveViewDistance(),
-                simulationDistance = adaptiveSimulationDistance()
-            )
-        }
         return loaded
     }
 
@@ -1894,8 +1888,8 @@ class ServerStateHolder(
         val simulation = props.getProperty("simulation-distance", adaptiveSimulationDistance().toString()).toIntOrNull()
             ?: adaptiveSimulationDistance()
 
-        props["view-distance"] = view.coerceIn(6, adaptiveViewDistance()).toString()
-        props["simulation-distance"] = simulation.coerceIn(4, adaptiveSimulationDistance()).toString()
+        props["view-distance"] = view.coerceIn(2, 32).toString()
+        props["simulation-distance"] = simulation.coerceIn(2, 32).toString()
         props["sync-chunk-writes"] = "false"
         props["network-compression-threshold"] = "512"
         ServerPropertiesHelper.saveProperties(serverDir, props)

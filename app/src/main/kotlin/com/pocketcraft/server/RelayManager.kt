@@ -35,6 +35,9 @@ class RelayManager(private val context: Context) {
     private val connectingSockets = AtomicInteger(0)
     private var poolJob = SupervisorJob()
     private var poolScope = CoroutineScope(Dispatchers.IO + poolJob)
+    private var tunnelHeartbeatJob: kotlinx.coroutines.Job? = null
+    @Volatile
+    private var activeTunnelLocalPort: Int? = null
 
     data class RelayAddress(val host: String, val port: Int, val isFallback: Boolean = false) {
         override fun toString() = "$host:$port"
@@ -95,6 +98,22 @@ class RelayManager(private val context: Context) {
      */
     suspend fun connectTunnelPool(localPort: Int) = withContext(Dispatchers.IO) {
         android.util.Log.i("RelayManager", "Starting pool of $POOL_SIZE sockets...")
+        activeTunnelLocalPort = localPort
+        tunnelHeartbeatJob?.cancel()
+        tunnelHeartbeatJob = poolScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(30_000)
+                val currentLocalPort = activeTunnelLocalPort ?: break
+                val readyAck = notifyPhoneReady(currentLocalPort)
+                if (!readyAck) {
+                    android.util.Log.w(
+                        "RelayManager",
+                        "Relay heartbeat did not get phone-ready acknowledgment; refreshing socket pool."
+                    )
+                }
+                topUpPool(currentLocalPort)
+            }
+        }
         val readyAck = notifyPhoneReady(localPort)
         if (!readyAck) {
             android.util.Log.w(
@@ -315,9 +334,8 @@ class RelayManager(private val context: Context) {
                     val lowLatencyWarmup = totalBytes <= LOW_LATENCY_WARMUP_BYTES ||
                         (System.nanoTime() - bridgeStartedAt) <= LOW_LATENCY_WARMUP_NS
                     val shouldFlush = lowLatencyWarmup ||
-                        bytesRead <= 256 ||
-                        unflushedBytes >= 8192 ||
-                        (unflushedBytes > 0 && (System.nanoTime() - lastFlushTime) > 50_000_000) // 50ms
+                        unflushedBytes >= 16_384 ||
+                        (unflushedBytes > 0 && (System.nanoTime() - lastFlushTime) > 30_000_000) // 30ms
 
                     if (shouldFlush) {
                         output.flush()
@@ -364,9 +382,8 @@ class RelayManager(private val context: Context) {
                     val lowLatencyWarmup = totalBytes <= LOW_LATENCY_WARMUP_BYTES ||
                         (System.nanoTime() - bridgeStartedAt) <= LOW_LATENCY_WARMUP_NS
                     val shouldFlush = lowLatencyWarmup ||
-                        bytesRead <= 256 ||
-                        unflushedBytes >= 1024 ||
-                        (unflushedBytes > 0 && (System.nanoTime() - lastFlushTime) > 100_000_000) // 100ms
+                        unflushedBytes >= 16_384 ||
+                        (unflushedBytes > 0 && (System.nanoTime() - lastFlushTime) > 30_000_000) // 30ms
 
                     if (shouldFlush) {
                         output.flush()
@@ -416,6 +433,9 @@ class RelayManager(private val context: Context) {
      * Call this when the server stops.
      */
     fun disconnect() {
+        tunnelHeartbeatJob?.cancel()
+        tunnelHeartbeatJob = null
+        activeTunnelLocalPort = null
         poolJob.cancel()
         poolJob = SupervisorJob()
         poolScope = CoroutineScope(Dispatchers.IO + poolJob)

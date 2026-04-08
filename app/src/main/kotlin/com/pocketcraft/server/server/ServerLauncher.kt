@@ -59,7 +59,6 @@ class ServerLauncher(private val context: Context) {
         val serverDir = serverDirFile.absolutePath
         val tmpDir    = File(context.filesDir, "runtime-tmp").also { it.mkdirs() }.absolutePath
         val totalRam = getTotalRamMb(context)
-        applyAdaptiveDistances(serverDirFile, totalRam, onOutput)
         val prefs = AppPreferences(context)
         val reservedForSystemMb = when {
             totalRam >= 8192 -> 1536
