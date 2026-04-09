@@ -8,7 +8,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.time.Instant
-import java.util.concurrent.TimeUnit
 
 object GitHubUpdateChecker {
 
@@ -17,6 +16,7 @@ object GitHubUpdateChecker {
     data class ReleaseInfo(
         val tagName: String,
         val releaseName: String,
+        val body: String,
         val htmlUrl: String,
         val downloadUrl: String?,
         val publishedAtMillis: Long?
@@ -30,76 +30,96 @@ object GitHubUpdateChecker {
     private val client = OkHttpClient()
 
     suspend fun checkForUpdate(context: Context): ReleaseInfo? = withContext(Dispatchers.IO) {
+        fetchLatestRelease(context)?.takeIf { compareVersions(it.tagName, BuildConfig.VERSION_NAME) > 0 }
+    }
+
+    suspend fun fetchLatestRelease(context: Context): ReleaseInfo? = withContext(Dispatchers.IO) {
         runCatching {
-            val currentVersion = BuildConfig.VERSION_NAME
             val manifestUrl = BuildConfig.UPDATE_MANIFEST_URL.trim()
-            if (manifestUrl.isNotBlank()) {
-                val hosted = fetchHostedManifest(manifestUrl)
-                if (hosted != null && compareVersions(hosted.tagName, currentVersion) > 0) {
-                    return@runCatching hosted
-                }
-            }
+            val hostedRelease = manifestUrl.takeIf { it.isNotBlank() }?.let(::fetchHostedManifest)
 
             val owner = BuildConfig.GITHUB_REPO_OWNER.trim()
             val repo = BuildConfig.GITHUB_REPO_NAME.trim()
-            if (owner.isBlank() || repo.isBlank()) return@runCatching null
-            val url = "https://api.github.com/repos/$owner/$repo/releases/latest"
-            val request = Request.Builder()
-                .url(url)
-                .header("Accept", "application/vnd.github+json")
-                .header("User-Agent", "PocketCraft/${BuildConfig.VERSION_NAME}")
-                .apply {
-                    val token = BuildConfig.GITHUB_RELEASES_TOKEN.trim()
-                    if (token.isNotBlank()) {
-                        header("Authorization", "token $token")
-                    }
-                }
-                .build()
+            val githubRelease = if (owner.isBlank() || repo.isBlank()) {
+                null
+            } else {
+                fetchGitHubRelease(owner = owner, repo = repo)
+            }
 
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use null
-                val body = response.body?.string().orEmpty()
-                if (body.isBlank()) return@use null
+            pickNewestRelease(hostedRelease, githubRelease)
+        }.getOrNull()
+    }
 
-                val release = JSONObject(body)
-                val tagName = release.optString("tag_name").trim()
-                val htmlUrl = release.optString("html_url").trim()
-                val releaseName = release.optString("name").ifBlank { tagName }
-                val publishedAtMillis = release.optString("published_at")
-                    .takeIf { it.isNotBlank() }
-                    ?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
-                val downloadUrl = release.optJSONArray("assets")
-                    ?.let { assets ->
-                        (0 until assets.length())
-                            .asSequence()
-                            .mapNotNull { index -> assets.optJSONObject(index) }
-                            .firstOrNull { asset ->
-                                val name = asset.optString("name").trim().lowercase()
-                                name.endsWith(".apk")
-                            }
-                            ?.let { asset ->
-                                asset.optString("url")
+    private fun fetchGitHubRelease(owner: String, repo: String): ReleaseInfo? {
+        val url = "https://api.github.com/repos/$owner/$repo/releases/latest"
+        val request = Request.Builder()
+            .url(url)
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", "PocketCraft/${BuildConfig.VERSION_NAME}")
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return null
+            val body = response.body?.string().orEmpty()
+            if (body.isBlank()) return null
+
+            val release = JSONObject(body)
+            val tagName = release.optString("tag_name").trim()
+            val htmlUrl = release.optString("html_url").trim()
+            val releaseName = release.optString("name").ifBlank { tagName }
+            val publishedAtMillis = release.optString("published_at")
+                .takeIf { it.isNotBlank() }
+                ?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
+            val downloadUrl = release.optJSONArray("assets")
+                ?.let { assets ->
+                    (0 until assets.length())
+                        .asSequence()
+                        .mapNotNull { index -> assets.optJSONObject(index) }
+                        .firstOrNull { asset ->
+                            val name = asset.optString("name").trim().lowercase()
+                            name.endsWith(".apk")
+                        }
+                        ?.let { asset ->
+                            asset.optString("browser_download_url")
+                                .trim()
+                                .takeIf { it.isNotBlank() }
+                                ?: asset.optString("url")
                                     .trim()
                                     .takeIf { it.isNotBlank() }
-                                    ?: asset.optString("browser_download_url")
-                                        .trim()
-                                        .takeIf { it.isNotBlank() }
-                            }
-                    }
-                if (tagName.isBlank() || htmlUrl.isBlank()) return@use null
+                        }
+                }
+            if (tagName.isBlank() || htmlUrl.isBlank()) return null
 
-                val hasNewVersion = compareVersions(tagName, currentVersion) > 0
-                if (!hasNewVersion) return@use null
+            return ReleaseInfo(
+                tagName = tagName,
+                releaseName = releaseName,
+                body = release.optString("body").trim(),
+                htmlUrl = htmlUrl,
+                downloadUrl = downloadUrl,
+                publishedAtMillis = publishedAtMillis
+            )
+        }
+    }
 
-                ReleaseInfo(
-                    tagName = tagName,
-                    releaseName = releaseName,
-                    htmlUrl = htmlUrl,
-                    downloadUrl = downloadUrl,
-                    publishedAtMillis = publishedAtMillis
-                )
-            }
-        }.getOrNull()
+    private fun pickNewestRelease(first: ReleaseInfo?, second: ReleaseInfo?): ReleaseInfo? {
+        if (first == null) return second
+        if (second == null) return first
+
+        return when {
+            compareVersions(first.tagName, second.tagName) > 0 -> first
+            compareVersions(first.tagName, second.tagName) < 0 -> second
+            else -> ReleaseInfo(
+                tagName = second.tagName.ifBlank { first.tagName },
+                releaseName = second.releaseName.ifBlank { first.releaseName },
+                body = second.body.ifBlank { first.body },
+                htmlUrl = second.htmlUrl.ifBlank { first.htmlUrl },
+                downloadUrl = second.downloadUrl ?: first.downloadUrl,
+                publishedAtMillis = maxOf(
+                    first.publishedAtMillis ?: Long.MIN_VALUE,
+                    second.publishedAtMillis ?: Long.MIN_VALUE
+                ).takeIf { it != Long.MIN_VALUE }
+            )
+        }
     }
 
     private fun fetchHostedManifest(manifestUrl: String): ReleaseInfo? {
@@ -134,6 +154,7 @@ object GitHubUpdateChecker {
             return ReleaseInfo(
                 tagName = tagName,
                 releaseName = releaseName,
+                body = json.optString("body").trim(),
                 htmlUrl = htmlUrl,
                 downloadUrl = downloadUrl,
                 publishedAtMillis = publishedAtMillis
@@ -141,7 +162,7 @@ object GitHubUpdateChecker {
         }
     }
 
-    private fun compareVersions(a: String, b: String): Int {
+    fun compareVersions(a: String, b: String): Int {
         val left = parseVersion(a)
         val right = parseVersion(b)
 
@@ -151,8 +172,8 @@ object GitHubUpdateChecker {
             val r = right.coreParts.getOrElse(i) { 0 }
             if (l != r) return l.compareTo(r)
         }
-        if (left.suffix.isBlank() && right.suffix.isNotBlank()) return -1
-        if (left.suffix.isNotBlank() && right.suffix.isBlank()) return 1
+        if (left.suffix.isBlank() && right.suffix.isNotBlank()) return 1
+        if (left.suffix.isNotBlank() && right.suffix.isBlank()) return -1
         return left.suffix.compareTo(right.suffix, ignoreCase = true)
     }
 

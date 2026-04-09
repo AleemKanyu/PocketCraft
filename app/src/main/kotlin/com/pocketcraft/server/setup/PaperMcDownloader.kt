@@ -11,11 +11,9 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
-import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 
 private const val PAPER_API = "https://api.papermc.io/v2/projects/paper"
-private const val MOJANG_MANIFEST_URL = "https://launchermeta.mojang.com/mc/game/version_manifest.json"
 private const val POCKETCRAFT_USER_AGENT = "PocketCraft/1.0"
 
 /**
@@ -35,25 +33,23 @@ class PaperMcDownloader(private val client: OkHttpClient, private val paperVersi
     fun download(targetDir: File): Flow<Int> = flow {
         emit(0)
         Log.i(tag, "download start version=$paperVersion targetDir=${targetDir.absolutePath}")
-        var usedMojangFallback = false
-        val downloadUrl = try {
-            val build = fetchLatestBuildWithRetry()
+        val build = try {
+            fetchLatestBuildWithRetry()
+        } catch (paperError: Exception) {
+            Log.e(tag, "download source resolution failed version=$paperVersion", paperError)
+            throw Exception(
+                "Paper is required for plugins and Bedrock support. " +
+                    "Could not resolve a Paper build for $paperVersion: ${paperError.message ?: "unknown error"}",
+                paperError
+            )
+        }
+        val downloadUrl = run {
             Log.i(tag, "using Paper build=${build.number} file=${build.fileName} version=$paperVersion")
             "$PAPER_API/versions/$paperVersion/builds/${build.number}/downloads/${build.fileName}"
-        } catch (paperError: Exception) {
-            val fallback = runCatching { fetchMojangServerJarUrl() }.getOrNull()
-            if (fallback != null) {
-                usedMojangFallback = true
-                Log.w(tag, "Paper API failed for version=$paperVersion; falling back to Mojang server jar", paperError)
-                fallback
-            } else {
-                Log.e(tag, "download source resolution failed version=$paperVersion", paperError)
-                throw Exception("Could not connect to PaperMC API. Check your internet connection.", paperError)
-            }
         }
-        Log.i(tag, "resolved download url source=${if (usedMojangFallback) "mojang" else "paper"} version=$paperVersion")
+        Log.i(tag, "resolved download url source=paper version=$paperVersion")
 
-        emit(if (usedMojangFallback) 8 else 5)
+        emit(5)
         val targetFile = File(targetDir, jarName)
 
         if (targetFile.exists()) {
@@ -62,8 +58,7 @@ class PaperMcDownloader(private val client: OkHttpClient, private val paperVersi
 
         try {
             downloadFile(downloadUrl, targetFile) { percent ->
-                val floor = if (usedMojangFallback) 8 else 5
-                emit(floor + (percent * 0.9).toInt())
+                emit(5 + (percent * 0.9).toInt())
             }
         } catch (e: Exception) {
             targetFile.delete()
@@ -111,80 +106,35 @@ class PaperMcDownloader(private val client: OkHttpClient, private val paperVersi
             val body = resp.body?.string() ?: throw Exception("Empty API response")
             val json = JSONObject(body)
             val builds = json.getJSONArray("builds")
-            
-            var latest: PaperBuild? = null
+
+            var latestPreferred: PaperBuild? = null
+            var latestAny: PaperBuild? = null
             for (i in (builds.length() - 1) downTo 0) {
                 val buildJson = builds.getJSONObject(i)
-                val channel = buildJson.optString("channel", "default")
+                val num = buildJson.getInt("build")
+                val fileName = buildJson
+                    .getJSONObject("downloads")
+                    .getJSONObject("application")
+                    .getString("name")
+                if (latestAny == null) {
+                    latestAny = PaperBuild(num, fileName)
+                }
+                val channel = buildJson.optString("channel", "default").lowercase()
                 if (channel == "default" || channel == "stable") {
-                    val num = buildJson.getInt("build")
-                    val fileName = buildJson
-                        .getJSONObject("downloads")
-                        .getJSONObject("application")
-                        .getString("name")
-                    latest = PaperBuild(num, fileName)
+                    latestPreferred = PaperBuild(num, fileName)
                     break
                 }
             }
-            
-            latest ?: throw Exception("No stable builds found for $paperVersion")
+
+            latestPreferred ?: latestAny ?: throw Exception("No Paper builds found for $paperVersion")
         }
     }
 
-                private suspend fun fetchMojangServerJarUrl(): String = withContext(Dispatchers.IO) {
-                    val manifestReq = Request.Builder()
-                        .url(MOJANG_MANIFEST_URL)
-                        .header("Accept", "application/json")
-                        .header("User-Agent", POCKETCRAFT_USER_AGENT)
-                        .build()
-
-                    val manifestResponse = client.newCall(manifestReq).execute()
-                    val versionDetailUrl = manifestResponse.use { resp ->
-                        if (!resp.isSuccessful) {
-                            throw Exception("Mojang manifest request failed with HTTP ${resp.code}")
-                        }
-                        val body = resp.body?.string().orEmpty()
-                        if (body.isBlank()) throw Exception("Empty Mojang manifest response")
-
-                        val manifest = JSONObject(body)
-                        val versions = manifest.optJSONArray("versions") ?: throw Exception("Missing Mojang versions array")
-                        var detailUrl: String? = null
-                        for (i in 0 until versions.length()) {
-                            val entry = versions.optJSONObject(i) ?: continue
-                            if (entry.optString("id") == paperVersion) {
-                                detailUrl = entry.optString("url").takeIf { it.isNotBlank() }
-                                break
-                            }
-                        }
-                        detailUrl ?: throw Exception("Mojang version $paperVersion not found")
-                    }
-
-                    val detailReq = Request.Builder()
-                        .url(versionDetailUrl)
-                        .header("Accept", "application/json")
-                        .header("User-Agent", POCKETCRAFT_USER_AGENT)
-                        .build()
-                    val detailResponse = client.newCall(detailReq).execute()
-                    detailResponse.use { resp ->
-                        if (!resp.isSuccessful) {
-                            throw Exception("Mojang version detail failed with HTTP ${resp.code}")
-                        }
-                        val body = resp.body?.string().orEmpty()
-                        if (body.isBlank()) throw Exception("Empty Mojang version detail response")
-
-                        val detail = JSONObject(body)
-                        val downloads = detail.optJSONObject("downloads") ?: throw Exception("Missing downloads in Mojang version detail")
-                        val server = downloads.optJSONObject("server") ?: throw Exception("Server JAR missing for version $paperVersion")
-                        server.optString("url").takeIf { it.isNotBlank() }
-                            ?: throw Exception("Mojang server JAR URL missing")
-                    }
-                }
-
     private suspend fun downloadFile(url: String, target: File, onProgress: suspend (Int) -> Unit) {
-                    val req = Request.Builder()
-                        .url(url)
-                        .header("User-Agent", POCKETCRAFT_USER_AGENT)
-                        .build()
+        val req = Request.Builder()
+            .url(url)
+            .header("User-Agent", POCKETCRAFT_USER_AGENT)
+            .build()
         val response = client.newCall(req).execute()
         response.use { resp ->
             if (!resp.isSuccessful) {

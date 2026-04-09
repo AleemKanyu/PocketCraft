@@ -16,7 +16,7 @@ data class RelayServerConfig(
 object RelayServers {
     val SINGAPORE = RelayServerConfig(
         host = "play.pocketcraft.online",
-        displayName = "Global (Singapore)",
+        displayName = "Global",
         region = "Global",
         icon = "🌐",
         description = "Global CDN with worldwide coverage",
@@ -25,7 +25,7 @@ object RelayServers {
 
     val MUMBAI = RelayServerConfig(
         host = "mine.pocketcraft.online",
-        displayName = "Asia (Mumbai)",
+        displayName = "Asia",
         region = "Asia",
         icon = "🌏",
         description = "Optimized for players in India and South Asia",

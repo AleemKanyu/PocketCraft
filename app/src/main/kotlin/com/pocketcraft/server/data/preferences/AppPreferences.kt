@@ -103,6 +103,34 @@ class AppPreferences(private val context: Context) {
         get() = prefs.getBoolean("instagram_popup_shown", false)
         set(value) = prefs.edit().putBoolean("instagram_popup_shown", value).apply()
 
+    var lastSeenChangelogVersion: String
+        get() = prefs.getString("last_seen_changelog_version", "").orEmpty()
+        set(value) = prefs.edit().putString("last_seen_changelog_version", value).apply()
+
+    var lastLaunchedAppVersion: String
+        get() = prefs.getString("last_launched_app_version", "").orEmpty()
+        set(value) = prefs.edit().putString("last_launched_app_version", value).apply()
+
+    var pendingFeedbackPromptTitle: String
+        get() = prefs.getString("pending_feedback_prompt_title", "").orEmpty()
+        set(value) = prefs.edit().putString("pending_feedback_prompt_title", value).apply()
+
+    var pendingFeedbackPromptBody: String
+        get() = prefs.getString("pending_feedback_prompt_body", "").orEmpty()
+        set(value) = prefs.edit().putString("pending_feedback_prompt_body", value).apply()
+
+    var pendingFeedbackPromptCta: String
+        get() = prefs.getString("pending_feedback_prompt_cta", "").orEmpty()
+        set(value) = prefs.edit().putString("pending_feedback_prompt_cta", value).apply()
+
+    fun clearPendingFeedbackPrompt() {
+        prefs.edit()
+            .remove("pending_feedback_prompt_title")
+            .remove("pending_feedback_prompt_body")
+            .remove("pending_feedback_prompt_cta")
+            .apply()
+    }
+
     fun recordAppLaunch(): Int {
         val next = appLaunchCount + 1
         appLaunchCount = next

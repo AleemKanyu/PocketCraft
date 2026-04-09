@@ -12,18 +12,30 @@ jobs:
 
       - name: Generate update.json
         run: |
-          RELEASE=${{ github.event.release }}
-          APK_URL=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/AleemKanyu/PocketCraft_/releases/latest | jq -r '.assets[] | select(.name | endswith(".apk")) | .browser_download_url')
-          cat > update.json << EOF
-          {
-            "version": "${{ github.event.release.tag_name }}",
-            "tag_name": "${{ github.event.release.tag_name }}",
-            "release_name": "${{ github.event.release.name }}",
-            "html_url": "${{ github.event.release.html_url }}",
-            "download_url": "$APK_URL",
-            "published_at": "${{ github.event.release.published_at }}"
-          }
-          EOF
+          RELEASE_JSON=$(curl -s https://api.github.com/repos/AleemKanyu/PocketCraft/releases/latest)
+          APK_URL=$(printf '%s' "$RELEASE_JSON" | jq -r '.assets[] | select(.name | endswith(".apk")) | .browser_download_url' | head -n 1)
+          TAG_NAME=$(printf '%s' "$RELEASE_JSON" | jq -r '.tag_name')
+          RELEASE_NAME=$(printf '%s' "$RELEASE_JSON" | jq -r '.name')
+          HTML_URL=$(printf '%s' "$RELEASE_JSON" | jq -r '.html_url')
+          PUBLISHED_AT=$(printf '%s' "$RELEASE_JSON" | jq -r '.published_at')
+          BODY=$(printf '%s' "$RELEASE_JSON" | jq -r '.body // ""')
+          jq -n \
+            --arg version "$TAG_NAME" \
+            --arg tag_name "$TAG_NAME" \
+            --arg release_name "$RELEASE_NAME" \
+            --arg html_url "$HTML_URL" \
+            --arg download_url "$APK_URL" \
+            --arg published_at "$PUBLISHED_AT" \
+            --arg body "$BODY" \
+            '{
+              version: $version,
+              tag_name: $tag_name,
+              release_name: $release_name,
+              html_url: $html_url,
+              download_url: $download_url,
+              published_at: $published_at,
+              body: $body
+            }' > update.json
 
       - name: Deploy to Hostinger
         run: |

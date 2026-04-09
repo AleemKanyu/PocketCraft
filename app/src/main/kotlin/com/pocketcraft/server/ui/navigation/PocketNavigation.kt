@@ -15,7 +15,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Group
@@ -51,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Brush
@@ -87,6 +90,9 @@ val bottomNavTabs = listOf(
 fun PocketTopBar(
     relayHost: String,
     onRelayHostChange: (String) -> Unit,
+    isDarkTheme: Boolean,
+    onDarkThemeChange: (Boolean) -> Unit,
+    onOpenRelayRegionPage: () -> Unit = {},
     relayLocked: Boolean = false
 ) {
     var relayMenuExpanded by remember { mutableStateOf(false) }
@@ -105,10 +111,10 @@ fun PocketTopBar(
                     modifier = Modifier
                         .size(44.dp)
                         .background(
-                            Color(0xFFEAF6D8),
+                            MaterialTheme.colorScheme.surfaceVariant,
                             RoundedCornerShape(16.dp)
                         )
-                        .border(2.dp, PocketColors.Primary.copy(alpha = 0.14f), RoundedCornerShape(16.dp))
+                        .border(2.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
                         .padding(5.dp)
                 ) {
                     Image(
@@ -129,65 +135,86 @@ fun PocketTopBar(
             }
         },
         actions = {
-            Box {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 IconButton(
-                    onClick = { if (!relayLocked) relayMenuExpanded = true },
-                    enabled = !relayLocked,
+                    onClick = { onDarkThemeChange(!isDarkTheme) },
                     modifier = Modifier
-                        .padding(end = 8.dp)
-                        .background(PocketColors.PrimaryMuted, RoundedCornerShape(16.dp))
-                        .border(2.dp, PocketColors.Primary.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
+                        .padding(start = 6.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
+                        .border(2.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
                         .size(44.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Public,
-                        contentDescription = null,
+                        imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                        contentDescription = if (isDarkTheme) "Switch to light mode" else "Switch to dark mode",
                         modifier = Modifier.size(18.dp),
-                        tint = PocketColors.PrimaryDark
+                        tint = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else PocketColors.PrimaryDark
                     )
                 }
-                DropdownMenu(
-                    expanded = relayMenuExpanded,
-                    onDismissRequest = { relayMenuExpanded = false },
-                    shape = RoundedCornerShape(22.dp),
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    shadowElevation = 10.dp
-                ) {
-                    relayOptions.forEach { (host, label) ->
-                        DropdownMenuItem(
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(label)
-                                    if (host == relayHost) {
-                                        Icon(
-                                            imageVector = Icons.Filled.CheckCircle,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(14.dp),
-                                            tint = PocketColors.Primary
-                                        )
-                                    }
-                                }
-                            },
-                            onClick = {
-                                relayMenuExpanded = false
-                                if (!relayLocked) {
-                                    onRelayHostChange(host)
-                                }
-                            }
+
+                Box {
+                    IconButton(
+                        onClick = { if (!relayLocked) onOpenRelayRegionPage() },
+                        enabled = !relayLocked,
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .background(PocketColors.PrimaryMuted, RoundedCornerShape(16.dp))
+                            .border(2.dp, PocketColors.Primary.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
+                            .size(44.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Public,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = PocketColors.PrimaryDark
                         )
                     }
-                    androidx.compose.material3.HorizontalDivider()
-                    DropdownMenuItem(
-                        text = { 
-                            Text(
-                                "More servers coming soon...",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    DropdownMenu(
+                        expanded = relayMenuExpanded,
+                        onDismissRequest = { relayMenuExpanded = false },
+                        shape = RoundedCornerShape(22.dp),
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        shadowElevation = 10.dp
+                    ) {
+                        relayOptions.forEach { (host, label) ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(label)
+                                        if (host == relayHost) {
+                                            Icon(
+                                                imageVector = Icons.Filled.CheckCircle,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(14.dp),
+                                                tint = PocketColors.Primary
+                                            )
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    relayMenuExpanded = false
+                                    if (!relayLocked) {
+                                        onRelayHostChange(host)
+                                    }
+                                }
                             )
-                        },
-                        onClick = { relayMenuExpanded = false },
-                        enabled = false
-                    )
+                        }
+                        androidx.compose.material3.HorizontalDivider()
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    "More servers coming soon...",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                            },
+                            onClick = { relayMenuExpanded = false },
+                            enabled = false
+                        )
+                    }
                 }
             }
         },
@@ -204,12 +231,17 @@ fun PocketBottomNav(
     onTabSelected: (PocketTab) -> Unit
 ) {
     val navShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val navBackground = PocketColors.Primary
+    val selectedColor = if (isDarkTheme) Color(0xFF0C1815) else Color.White
+    val unselectedColor = if (isDarkTheme) Color(0xFF0C1815).copy(alpha = 0.72f) else Color.White.copy(alpha = 0.72f)
+    val shineColor = Color.White.copy(alpha = 0.26f)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(navShape)
-            .background(PocketColors.Primary)
+            .background(navBackground)
     ) {
         Box(
             modifier = Modifier
@@ -219,7 +251,7 @@ fun PocketBottomNav(
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.26f),
+                            shineColor,
                             Color.Transparent
                         )
                     )
@@ -251,10 +283,10 @@ fun PocketBottomNav(
                         )
                     },
                     colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = Color.White,
-                        selectedTextColor = Color.White,
-                        unselectedIconColor = Color.White.copy(alpha = 0.72f),
-                        unselectedTextColor = Color.White.copy(alpha = 0.72f),
+                        selectedIconColor = selectedColor,
+                        selectedTextColor = selectedColor,
+                        unselectedIconColor = unselectedColor,
+                        unselectedTextColor = unselectedColor,
                         indicatorColor = Color.Transparent
                     )
                 )

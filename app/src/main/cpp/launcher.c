@@ -228,6 +228,7 @@ Java_com_pocketcraft_server_NativeLauncher_launchJVM(
     char jansi_tmp_opt[512];
     char netty_tmp_opt[512];
     char jna_boot_opt[1024];
+    char jna_library_opt[1024];
     char user_home_opt[1024];
     char language_opt[128];
     char timezone_opt[256];
@@ -349,7 +350,8 @@ Java_com_pocketcraft_server_NativeLauncher_launchJVM(
     snprintf(jna_tmp_opt, sizeof(jna_tmp_opt), "-Djna.tmpdir=%s", tmp_dir);
     snprintf(jansi_tmp_opt, sizeof(jansi_tmp_opt), "-Djansi.tmpdir=%s", tmp_dir);
     snprintf(netty_tmp_opt, sizeof(netty_tmp_opt), "-Dio.netty.native.workdir=%s", tmp_dir);
-    snprintf(jna_boot_opt, sizeof(jna_boot_opt), "-Djna.boot.library.path=%s", native_lib_dir);
+    snprintf(jna_boot_opt, sizeof(jna_boot_opt), "-Djna.boot.library.path=%s:%s", native_lib_dir, shim_dir);
+    snprintf(jna_library_opt, sizeof(jna_library_opt), "-Djna.library.path=%s:%s", native_lib_dir, shim_dir);
     snprintf(user_home_opt, sizeof(user_home_opt), "-Duser.home=%s", server_dir);
     snprintf(language_opt, sizeof(language_opt), "-Duser.language=%s",
         getenv("LANG") ? getenv("LANG") : "en");
@@ -370,6 +372,7 @@ Java_com_pocketcraft_server_NativeLauncher_launchJVM(
         jansi_tmp_opt,
         netty_tmp_opt,
         jna_boot_opt,
+        jna_library_opt,
         user_home_opt,
         language_opt,
         timezone_opt,
@@ -377,6 +380,7 @@ Java_com_pocketcraft_server_NativeLauncher_launchJVM(
         os_version_opt,
         "-Djava.net.preferIPv4Stack=true",
         "-Djava.net.preferIPv6Addresses=false",
+        "-Dpaper.playerconnection.keepalive=90",
         "-Dorg.jline.terminal.jna=false",
         "-Dorg.jline.terminal.jni=false",
         "-Dorg.jline.terminal.dumb=true",

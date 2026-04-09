@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.MaterialTheme
 import com.pocketcraft.server.ui.theme.PocketColors
 
 @Composable
@@ -25,19 +26,25 @@ fun DuoToggle(
     enabled: Boolean = true
 ) {
     val trackShape = RoundedCornerShape(12.dp)
+    val colorScheme = MaterialTheme.colorScheme
     val thumbOffset = animateDpAsState(
         targetValue = if (checked) 24.dp else 0.dp,
         label = "duo_toggle_offset"
     )
     val trackColor = when {
-        !enabled -> Materialized.DisabledTrack
+        !enabled -> colorScheme.surfaceVariant.copy(alpha = 0.6f)
         checked -> PocketColors.Primary
-        else -> Materialized.OffTrack
+        else -> colorScheme.surfaceVariant
     }
     val borderColor = when {
-        !enabled -> Materialized.DisabledBorder
+        !enabled -> colorScheme.outline.copy(alpha = 0.45f)
         checked -> Color(0xFF4AA502)
-        else -> Materialized.OffBorder
+        else -> colorScheme.outline.copy(alpha = 0.8f)
+    }
+    val thumbColor = if (enabled) {
+        colorScheme.surface
+    } else {
+        colorScheme.surface.copy(alpha = 0.7f)
     }
 
     Box(
@@ -55,15 +62,8 @@ fun DuoToggle(
                 .offset(x = thumbOffset.value)
                 .size(width = 20.dp, height = 18.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color.White)
+                .background(thumbColor)
                 .border(1.5.dp, borderColor.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
         )
     }
-}
-
-private object Materialized {
-    val OffTrack = Color(0xFFF1F3EA)
-    val OffBorder = Color(0xFFD7DEC4)
-    val DisabledTrack = Color(0xFFE6E8E0)
-    val DisabledBorder = Color(0xFFCFD3C6)
 }

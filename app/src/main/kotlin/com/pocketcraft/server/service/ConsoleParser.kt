@@ -13,14 +13,16 @@ object ConsoleParser {
     private val DONE_REGEX = Regex("""Done \([\d.]+s\)! For help, type""")
 
     // e.g. "[17:30:05 INFO]: UUID of player Steve is 123e4567-..."
-    private val JOIN_WITH_UUID_REGEX = Regex("""UUID of player ([A-Za-z0-9_]+) is ([a-f0-9\-]+)""")
+    // Floodgate/Geyser names may be prefixed (for example ".Steve"), so do not
+    // restrict this to Java-only username characters.
+    private val JOIN_WITH_UUID_REGEX = Regex("""UUID of player (\S+) is ([a-f0-9\-]+)""", RegexOption.IGNORE_CASE)
 
     // e.g. "[17:30:06 INFO]: Steve joined the game"
-    private val JOINED_GAME_REGEX = Regex("""([A-Za-z0-9_]+) joined the game""", RegexOption.IGNORE_CASE)
+    private val JOINED_GAME_REGEX = Regex("""(\S+) joined the game""", RegexOption.IGNORE_CASE)
 
     // e.g. "Steve lost connection", "Steve left the game", "Steve was kicked", "Steve disconnected"
     private val LEAVE_REGEX = Regex(
-        """([A-Za-z0-9_]+) (lost connection|left the game|was kicked|disconnected)""",
+        """(\S+) (lost connection|left the game|was kicked|disconnected)""",
         RegexOption.IGNORE_CASE
     )
 

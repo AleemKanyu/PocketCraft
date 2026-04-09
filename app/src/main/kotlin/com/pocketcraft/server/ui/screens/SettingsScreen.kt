@@ -196,7 +196,7 @@ fun SettingsScreen(
             SettingsSliderRow(
                 label = "View Distance",
                 description = "How far chunks are loaded for players",
-                min = 2,
+                min = 3,
                 max = 32,
                 value = config.viewDistance,
                 enabled = true,
@@ -207,7 +207,7 @@ fun SettingsScreen(
             SettingsSliderRow(
                 label = "Simulation Distance",
                 description = "How far away crops grow and mobs move",
-                min = 2,
+                min = 3,
                 max = 32,
                 value = config.simulationDistance,
                 enabled = true,
@@ -286,15 +286,6 @@ fun SettingsScreen(
         }
 
         item { SettingsSection("NETWORKING") }
-        item {
-            SettingsInputRow(
-                label = "Server Port",
-                description = "Fixed per device to prevent multiple-port hosting",
-                value = config.port.toString(),
-                onValueChange = {},
-                readOnly = true
-            )
-        }
         item {
             val relayOptions = mapOf(
                 "play.pocketcraft.online" to "Global",

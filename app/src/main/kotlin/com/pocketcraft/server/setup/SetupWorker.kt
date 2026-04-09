@@ -6,9 +6,9 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.WorkerParameters
-import com.pocketcraft.server.data.repository.ServerConfigRepository
 import com.pocketcraft.server.service.PluginManager
 import com.pocketcraft.server.service.ServerFileManager
+import com.pocketcraft.server.service.ServerPropertiesHelper
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import okhttp3.OkHttpClient
@@ -30,8 +30,7 @@ const val SERVER_VERSION_KEY = "server_version"
 @HiltWorker
 class SetupWorker @AssistedInject constructor(
     @Assisted appContext: Context,
-    @Assisted workerParams: WorkerParameters,
-    private val configRepository: ServerConfigRepository
+    @Assisted workerParams: WorkerParameters
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
@@ -64,9 +63,10 @@ class SetupWorker @AssistedInject constructor(
             // Step 4: Write server config
             setProgress(data("Writing server config…", 80, 4))
             val worldSeed = inputData.getString(WORLD_SEED_KEY).orEmpty()
-            configRepository.saveConfig(
-                com.pocketcraft.server.data.model.ServerConfig(worldSeed = worldSeed)
-            )
+            ServerFileManager.prepareServerProperties(applicationContext, serverVersion)
+            val props = ServerPropertiesHelper.readProperties(versionDir)
+            props["level-seed"] = worldSeed
+            ServerPropertiesHelper.saveProperties(versionDir, props)
 
             // Step 5: Install built-in Bedrock bridge plugins
             setProgress(data("Installing Bedrock bridge plugins…", 90, 5))
@@ -83,7 +83,7 @@ class SetupWorker @AssistedInject constructor(
 
             // Step 6: Mark complete
             setProgress(data("Setup complete!", 100, 6))
-            configRepository.markSetupComplete()
+            File(applicationContext.filesDir, ".setup_done").writeText("done")
 
             Result.success()
         } catch (e: Exception) {

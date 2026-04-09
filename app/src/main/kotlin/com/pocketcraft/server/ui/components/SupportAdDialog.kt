@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -31,10 +32,17 @@ fun SupportAdDialog(
     onDismiss: () -> Unit,
     onWatchAd: () -> Unit
 ) {
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val dialogColor = if (isDarkTheme) MaterialTheme.colorScheme.surface else Color(0xFF12121A)
+    val titleColor = if (isDarkTheme) PocketColors.TextDark else PocketColors.Primary
+    val bodyColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFFCCCCCC)
+    val buttonColor = if (isDarkTheme) PocketColors.SurfaceVarDark else PocketColors.Primary
+    val buttonTextColor = if (isDarkTheme) PocketColors.TextDark else Color.White
+    val skipColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF888888)
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(24.dp),
-            color = Color(0xFF12121A),
+            color = dialogColor,
             tonalElevation = 8.dp
         ) {
             Column(
@@ -48,14 +56,14 @@ fun SupportAdDialog(
                     text = "☕  Support PocketCraft",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFF6C63FF),
+                    color = titleColor,
                     textAlign = TextAlign.Center
                 )
 
                 Text(
                     text = "PocketCraft is completely free. Watching a short ad while your server starts helps us cover server costs. Thank you! 🙏",
                     fontSize = 14.sp,
-                    color = Color(0xFFCCCCCC),
+                    color = bodyColor,
                     textAlign = TextAlign.Center,
                     lineHeight = 20.sp
                 )
@@ -70,8 +78,8 @@ fun SupportAdDialog(
                         onClick = onWatchAd,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF6C63FF),
-                            contentColor = Color.White
+                            containerColor = buttonColor,
+                            contentColor = buttonTextColor
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -88,7 +96,7 @@ fun SupportAdDialog(
                     ) {
                         Text(
                             text = "Skip",
-                            color = Color(0xFF888888),
+                            color = skipColor,
                             fontSize = 14.sp
                         )
                     }

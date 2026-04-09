@@ -1,15 +1,17 @@
 package com.pocketcraft.server
 
-import android.media.MediaPlayer
 import android.os.Bundle
 import android.graphics.Color
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.pocketcraft.server.analytics.FirebaseAnalyticsManager
@@ -19,8 +21,11 @@ import com.pocketcraft.server.setup.JreExtractor
 import com.pocketcraft.server.ui.onboarding.OnboardingActivity
 import com.pocketcraft.server.ui.screens.ErrorScreen
 import com.pocketcraft.server.ui.screens.PocketCraftApp
+import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.screens.SplashScreen
 import com.pocketcraft.server.ui.theme.PocketCraftTheme
+import com.pocketcraft.server.ui.util.ThemePreference
+import com.pocketcraft.server.ui.util.ThemePreferenceStore
 import com.google.firebase.crashlytics.ktx.crashlytics
 import com.google.firebase.ktx.Firebase
 import dagger.hilt.android.AndroidEntryPoint
@@ -32,31 +37,21 @@ import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    private fun playStartupSound() {
-        runCatching {
-            val player = MediaPlayer.create(this, R.raw.startup_chime) ?: return
-            player.setOnCompletionListener { it.release() }
-            player.setOnErrorListener { mp, _, _ ->
-                mp.release()
-                true
-            }
-            player.start()
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val preferences = AppPreferences(this)
         val onboardingCompleted = preferences.onboardingCompleted
         preferences.recordAppLaunch()
+        val initialThemePreference = ThemePreferenceStore.load(this)
+        val initialDarkTheme = initialThemePreference.resolve(systemDark = ThemePreferenceStore.isSystemDark(this))
 
-        window.statusBarColor = Color.parseColor("#F5F7F3")
-        window.navigationBarColor = Color.parseColor("#F5F7F3")
+        window.statusBarColor = if (initialDarkTheme) PocketColors.BgDark.toArgb() else Color.parseColor("#F5F7F3")
+        window.navigationBarColor = if (initialDarkTheme) PocketColors.SurfaceDark.toArgb() else PocketColors.Primary.toArgb()
         WindowCompat.setDecorFitsSystemWindows(window, true)
         WindowInsetsControllerCompat(window, window.decorView).apply {
-            isAppearanceLightStatusBars = true
-            isAppearanceLightNavigationBars = true
+            isAppearanceLightStatusBars = !initialDarkTheme
+            isAppearanceLightNavigationBars = !initialDarkTheme
         }
 
         // Never block startup on DataStore reads; OEM builds may ANR the activity.
@@ -82,12 +77,37 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            PocketCraftTheme {
+            var themePreference by remember { mutableStateOf(initialThemePreference) }
+            val systemDarkTheme = isSystemInDarkTheme()
+            val darkTheme = themePreference.resolve(systemDark = systemDarkTheme)
+
+            PocketCraftTheme(darkTheme = darkTheme) {
                 var jreReady by remember { mutableStateOf(false) }
                 var jreError by remember { mutableStateOf<String?>(null) }
                 var jreProgress by remember { mutableStateOf(0) }
                 var jreStatus by remember { mutableStateOf("Preparing Minecraft Runtime...") }
-                var startupSoundPlayed by remember { mutableStateOf(false) }
+
+                SideEffect {
+                    val showingSplash = jreError == null && (!jreReady || !onboardingCompleted)
+                    val statusBarColor = when {
+                        showingSplash && darkTheme -> PocketColors.BgDark.toArgb()
+                        showingSplash -> Color.parseColor("#F5F7F3")
+                        darkTheme -> PocketColors.BgDark.toArgb()
+                        else -> Color.parseColor("#F5F7F3")
+                    }
+                    val navigationBarColor = when {
+                        showingSplash && darkTheme -> PocketColors.BgDark.toArgb()
+                        showingSplash -> Color.parseColor("#E6F1DF")
+                        darkTheme -> PocketColors.Primary.toArgb()
+                        else -> PocketColors.Primary.toArgb()
+                    }
+                    window.statusBarColor = statusBarColor
+                    window.navigationBarColor = navigationBarColor
+                    WindowInsetsControllerCompat(window, window.decorView).apply {
+                        isAppearanceLightStatusBars = !darkTheme
+                        isAppearanceLightNavigationBars = !darkTheme
+                    }
+                }
 
                 LaunchedEffect(Unit) {
                     try {
@@ -106,13 +126,6 @@ class MainActivity : ComponentActivity() {
                         jreReady = true
                     } catch (e: Throwable) {
                         jreError = e.message ?: "Unknown runtime initialization failure"
-                    }
-                }
-
-                LaunchedEffect(jreReady, onboardingCompleted) {
-                    if (jreReady && onboardingCompleted && !startupSoundPlayed) {
-                        startupSoundPlayed = true
-                        playStartupSound()
                     }
                 }
 
@@ -135,7 +148,17 @@ class MainActivity : ComponentActivity() {
                             finish()
                         }
                     }
-                    else -> PocketCraftApp()
+                    else -> PocketCraftApp(
+                        isDarkTheme = darkTheme,
+                        onDarkThemeChange = { enabled ->
+                            val nextPreference = if (enabled) ThemePreference.DARK else ThemePreference.LIGHT
+                            if (themePreference != nextPreference) {
+                                themePreference = nextPreference
+                                ThemePreferenceStore.save(this@MainActivity, nextPreference)
+                                FirebaseAnalyticsManager.logThemeChanged(nextPreference.name.lowercase())
+                            }
+                        }
+                    )
                 }
             }
         }

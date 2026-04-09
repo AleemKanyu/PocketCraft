@@ -27,6 +27,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.pocketPopupAccentContainerColor
+import com.pocketcraft.server.ui.theme.pocketPopupAccentTintColor
 import com.pocketcraft.server.update.GitHubUpdateChecker
 import kotlinx.coroutines.launch
 
@@ -48,6 +50,8 @@ fun AppUpdateScreen(
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isBusy = isDownloading || isAwaitingInstallPermission
+    val accentContainerColor = pocketPopupAccentContainerColor()
+    val accentTintColor = pocketPopupAccentTintColor()
 
     ModalBottomSheet(
         onDismissRequest = {
@@ -69,7 +73,7 @@ fun AppUpdateScreen(
         ) {
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = PocketColors.PrimaryMuted,
+                color = accentContainerColor,
                 tonalElevation = 0.dp
             ) {
                 Box(
@@ -80,7 +84,7 @@ fun AppUpdateScreen(
                         imageVector = Icons.Filled.Update,
                         contentDescription = null,
                         modifier = Modifier.size(34.dp),
-                        tint = PocketColors.PrimaryDark
+                        tint = accentTintColor
                     )
                 }
             }

@@ -95,6 +95,7 @@ fun WorldsScreen(
     var showRestoreDialog by remember { mutableStateOf<BackupEntry?>(null) }
     var showDeleteDialog by remember { mutableStateOf<BackupEntry?>(null) }
     var showDeleteWorldDialog by remember { mutableStateOf<WorldEntry?>(null) }
+    var showImportGuide by remember { mutableStateOf(false) }
     var isImportingWorld by remember { mutableStateOf(false) }
     var importDimension by remember { mutableStateOf("overworld") }
     val worldPickerLauncher = rememberLauncherForActivityResult(
@@ -272,24 +273,34 @@ fun WorldsScreen(
         item {
             SectionLabel("IMPORT DIMENSIONS")
             Spacer(Modifier.height(8.dp))
-            GameCard(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "Import guide",
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 14.sp
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "Aternos exports can be uploaded as 3 separate ZIPs: Overworld, Nether, and The End.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "Most other world backups already include all dimensions in one archive, so a single world backup import is enough.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            GameCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showImportGuide = true }
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Import guide",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 14.sp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Tap to see how world and dimension imports work.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             Spacer(Modifier.height(8.dp))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -575,6 +586,48 @@ fun WorldsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("CANCEL")
+                }
+            }
+        }
+    }
+
+    if (showImportGuide) {
+        val importGuideSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    importGuideSheetState.hide()
+                    showImportGuide = false
+                }
+            },
+            sheetState = importGuideSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Import Guide", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text(
+                    "Aternos exports can be uploaded as 3 separate ZIPs: Overworld, Nether, and The End.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "Most other world backups already include all dimensions in one archive, so a single world backup import is enough.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            importGuideSheetState.hide()
+                            showImportGuide = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("CLOSE")
                 }
             }
         }

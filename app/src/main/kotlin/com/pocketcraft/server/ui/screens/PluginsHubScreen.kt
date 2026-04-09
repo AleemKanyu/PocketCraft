@@ -65,6 +65,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -118,6 +120,9 @@ fun PluginsHubScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var catalogRetryToken by remember { mutableIntStateOf(0) }
     var detailCard by remember { mutableStateOf<ContentDetailCard?>(null) }
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val selectedTabColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary
+    val unselectedTabColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f) else MaterialTheme.colorScheme.onSurfaceVariant
 
     val resourcePackIcons = remember { mutableStateMapOf<String, File?>() }
 
@@ -224,7 +229,11 @@ fun PluginsHubScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        TabRow(selectedTabIndex = selectedTab) {
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = MaterialTheme.colorScheme.background,
+            contentColor = selectedTabColor
+        ) {
             ContentTab.entries.forEachIndexed { index, tab ->
                 Tab(
                     selected = selectedTab == index,
@@ -232,6 +241,8 @@ fun PluginsHubScreen(
                         selectedTab = index
                         query = ""
                     },
+                    selectedContentColor = selectedTabColor,
+                    unselectedContentColor = unselectedTabColor,
                     text = { Text(tab.label) }
                 )
             }
@@ -264,7 +275,7 @@ fun PluginsHubScreen(
                             "Downloading: $downloadProgress%"
                         },
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = pluginsHubMutedTextColor()
                     )
                 }
             }
@@ -329,7 +340,7 @@ fun PluginsHubScreen(
                     item {
                         Card(
                             shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
                         ) {
                             Row(
                                 modifier = Modifier
@@ -344,7 +355,7 @@ fun PluginsHubScreen(
                                 )
                                 Text(
                                     text = "Loading online results...",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = pluginsHubMutedTextColor()
                                 )
                             }
                         }
@@ -355,7 +366,7 @@ fun PluginsHubScreen(
                         Card(
                             shape = RoundedCornerShape(16.dp),
                             border = BorderStroke(1.dp, PocketColors.Offline),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
                         ) {
                             Column(
                                 modifier = Modifier.padding(18.dp),
@@ -368,7 +379,7 @@ fun PluginsHubScreen(
                                 )
                                 Text(
                                     text = "Searches are cached and rate-limited, so retrying in a moment usually works.",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = pluginsHubMutedTextColor(),
                                     fontSize = 12.sp
                                 )
                             }
@@ -449,7 +460,7 @@ fun PluginsHubScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text("Delete ${deleting.name}?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
-                Text("This will permanently remove the file from this server version.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("This will permanently remove the file from this server version.", color = pluginsHubMutedTextColor())
                 TextButton(
                     onClick = {
                         PluginManager.deleteContent(
@@ -629,7 +640,7 @@ private fun SectionHeader(
             Text(
                 text = subtitle,
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = pluginsHubMutedTextColor()
             )
         }
 
@@ -637,7 +648,10 @@ private fun SectionHeader(
             OutlinedButton(
                 onClick = onAction,
                 enabled = actionEnabled,
-                border = BorderStroke(1.dp, PocketColors.BorderDark)
+                border = BorderStroke(1.dp, pluginsHubBorderColor()),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = if (pluginsHubIsDarkTheme()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary
+                )
             ) {
                 if (actionLabel == "Add") {
                     Icon(
@@ -657,7 +671,7 @@ private fun SectionHeader(
 private fun EmptyDownloadedCard(tab: ContentTab) {
     Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
     ) {
         Box(
             modifier = Modifier
@@ -667,7 +681,7 @@ private fun EmptyDownloadedCard(tab: ContentTab) {
         ) {
             Text(
                 text = "No downloaded ${tab.label.lowercase(Locale.US)} yet for this version.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = pluginsHubMutedTextColor()
             )
         }
     }
@@ -677,7 +691,7 @@ private fun EmptyDownloadedCard(tab: ContentTab) {
 private fun EmptyOnlineCard(tab: ContentTab) {
     Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
     ) {
         Box(
             modifier = Modifier
@@ -687,7 +701,7 @@ private fun EmptyOnlineCard(tab: ContentTab) {
         ) {
             Text(
                 text = "No online ${tab.label.lowercase(Locale.US)} matched this search.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = pluginsHubMutedTextColor()
             )
         }
     }
@@ -707,8 +721,8 @@ private fun ContentRow(
             .fillMaxWidth()
             .clickable(onClick = onShowDetails),
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, PocketColors.BorderDark),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        border = BorderStroke(1.dp, pluginsHubBorderColor()),
+        colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
     ) {
         Row(
             modifier = Modifier
@@ -728,7 +742,7 @@ private fun ContentRow(
                         append("${"%.2f".format(item.sizeMb)} MB")
                     },
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = pluginsHubMutedTextColor(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -801,8 +815,8 @@ private fun RemoteContentRow(
             .fillMaxWidth()
             .clickable(onClick = onShowDetails),
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, PocketColors.BorderDark),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        border = BorderStroke(1.dp, pluginsHubBorderColor()),
+        colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
     ) {
         Column(
             modifier = Modifier
@@ -850,7 +864,7 @@ private fun RemoteContentRow(
                             formatDownloads(item.downloads)
                         ).joinToString(" • "),
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = pluginsHubMutedTextColor(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -874,12 +888,12 @@ private fun RemoteContentRow(
                     !item.canInstall && item.isSupported -> {
                         Surface(
                             shape = RoundedCornerShape(999.dp),
-                            color = Color(0xFFE8F7EA)
+                            color = pluginsHubSupportedChipContainerColor()
                         ) {
                             Text(
                                 text = "Supported Mod",
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                color = Color(0xFF1D7D3B),
+                                color = pluginsHubSupportedChipContentColor(),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp
                             )
@@ -888,19 +902,25 @@ private fun RemoteContentRow(
                     !item.canInstall -> {
                         Surface(
                             shape = RoundedCornerShape(999.dp),
-                            color = Color(0xFFFFF2D9)
+                            color = pluginsHubUnsupportedChipContainerColor()
                         ) {
                             Text(
                                 text = "Unsupported",
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                color = Color(0xFF8A5B00),
+                                color = pluginsHubUnsupportedChipContentColor(),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp
                             )
                         }
                     }
                     else -> {
-                        TextButton(onClick = onInstall, enabled = !isDownloading) {
+                        TextButton(
+                            onClick = onInstall,
+                            enabled = !isDownloading,
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = if (pluginsHubIsDarkTheme()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary
+                            )
+                        ) {
                             Text(if (isDownloading) "Installing..." else "Install")
                         }
                     }
@@ -910,7 +930,7 @@ private fun RemoteContentRow(
             Text(
                 text = item.description,
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = pluginsHubMutedTextColor(),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -919,7 +939,7 @@ private fun RemoteContentRow(
                 Text(
                     text = item.supportMessage,
                     fontSize = 11.sp,
-                    color = if (item.canInstall) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF8A5B00)
+                    color = if (item.canInstall) pluginsHubMutedTextColor() else pluginsHubUnsupportedChipContentColor()
                 )
             }
         }
@@ -932,15 +952,16 @@ fun SearchBar(
     onQueryChange: (String) -> Unit,
     placeholder: String = "Search..."
 ) {
+    val hintColor = pluginsHubHintColor()
     TextField(
         value = query,
         onValueChange = onQueryChange,
-        placeholder = { Text(placeholder, color = PocketColors.TextMuted, fontSize = 14.sp) },
+        placeholder = { Text(placeholder, color = hintColor, fontSize = 14.sp) },
         leadingIcon = {
             Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = null,
-                tint = PocketColors.TextMuted,
+                tint = hintColor,
                 modifier = Modifier.size(18.dp)
             )
         },
@@ -950,7 +971,7 @@ fun SearchBar(
                     Icon(
                         imageVector = Icons.Default.Clear,
                         contentDescription = null,
-                        tint = PocketColors.TextMuted,
+                        tint = hintColor,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -989,8 +1010,8 @@ private fun ContentDetailDialog(
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 4.dp),
             shape = RoundedCornerShape(28.dp),
-            border = BorderStroke(2.dp, PocketColors.Primary.copy(alpha = 0.18f)),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            border = BorderStroke(2.dp, pluginsHubBorderColor()),
+            colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
         ) {
             when (detailCard) {
                 is ContentDetailCard.Local -> LocalDetailCardContent(
@@ -1023,7 +1044,7 @@ private fun LocalDetailCardContent(
 ) {
     val item = detailCard.item
     val statusLabel = if (item.enabled) "Enabled" else "Disabled"
-    val statusColor = if (item.enabled) PocketColors.Primary else MaterialTheme.colorScheme.onSurfaceVariant
+    val statusColor = if (item.enabled) PocketColors.Primary else pluginsHubMutedTextColor()
 
     Column(
         modifier = Modifier.padding(20.dp),
@@ -1044,7 +1065,7 @@ private fun LocalDetailCardContent(
                 Text(
                     text = detailCard.tab.label.dropLastWhile { it == 's' },
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = pluginsHubMutedTextColor()
                 )
             }
             Surface(
@@ -1091,8 +1112,8 @@ private fun RemoteDetailCardContent(
     }
     val stateChipColor = when {
         detailCard.installed -> PocketColors.PrimaryMuted
-        !item.canInstall && item.isSupported -> Color(0xFFE8F7EA)
-        !item.canInstall -> Color(0xFFFFF2D9)
+        !item.canInstall && item.isSupported -> pluginsHubSupportedChipContainerColor()
+        !item.canInstall -> pluginsHubUnsupportedChipContainerColor()
         else -> PocketColors.PrimaryMuted
     }
 
@@ -1137,7 +1158,7 @@ private fun RemoteDetailCardContent(
                 Text(
                     text = item.author?.takeIf { it.isNotBlank() } ?: "Community listing",
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = pluginsHubMutedTextColor()
                 )
             }
             Surface(
@@ -1150,7 +1171,8 @@ private fun RemoteDetailCardContent(
                     fontSize = 12.sp,
                     color = when {
                         detailCard.installed -> PocketColors.Primary
-                        !item.canInstall -> Color(0xFF8A5B00)
+                        !item.canInstall && item.isSupported -> pluginsHubSupportedChipContentColor()
+                        !item.canInstall -> pluginsHubUnsupportedChipContentColor()
                         else -> PocketColors.Primary
                     },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
@@ -1187,7 +1209,7 @@ private fun DetailLine(
             text = label.uppercase(),
             fontSize = 11.sp,
             fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = pluginsHubMutedTextColor()
         )
         Text(
             text = value,
@@ -1195,6 +1217,65 @@ private fun DetailLine(
             color = MaterialTheme.colorScheme.onSurface
         )
     }
+}
+
+@Composable
+private fun pluginsHubIsDarkTheme(): Boolean = MaterialTheme.colorScheme.background.luminance() < 0.5f
+
+@Composable
+private fun pluginsHubCardColor(): Color = if (pluginsHubIsDarkTheme()) {
+    lerp(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surfaceVariant, 0.22f)
+} else {
+    MaterialTheme.colorScheme.surface
+}
+
+@Composable
+private fun pluginsHubMutedTextColor(): Color = if (pluginsHubIsDarkTheme()) {
+    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.84f)
+} else {
+    MaterialTheme.colorScheme.onSurfaceVariant
+}
+
+@Composable
+private fun pluginsHubHintColor(): Color = if (pluginsHubIsDarkTheme()) {
+    Color(0xFFA7D4C3)
+} else {
+    PocketColors.TextMuted
+}
+
+@Composable
+private fun pluginsHubBorderColor(): Color = if (pluginsHubIsDarkTheme()) {
+    PocketColors.BorderDark.copy(alpha = 0.92f)
+} else {
+    PocketColors.BorderDark
+}
+
+@Composable
+private fun pluginsHubSupportedChipContainerColor(): Color = if (pluginsHubIsDarkTheme()) {
+    Color(0xFF21483B)
+} else {
+    Color(0xFFE8F7EA)
+}
+
+@Composable
+private fun pluginsHubSupportedChipContentColor(): Color = if (pluginsHubIsDarkTheme()) {
+    Color(0xFFB9E7D4)
+} else {
+    Color(0xFF1D7D3B)
+}
+
+@Composable
+private fun pluginsHubUnsupportedChipContainerColor(): Color = if (pluginsHubIsDarkTheme()) {
+    Color(0xFF4A3F2D)
+} else {
+    Color(0xFFFFF2D9)
+}
+
+@Composable
+private fun pluginsHubUnsupportedChipContentColor(): Color = if (pluginsHubIsDarkTheme()) {
+    Color(0xFFF3D48E)
+} else {
+    Color(0xFF8A5B00)
 }
 
 private fun normalizeInstallKey(value: String): String {

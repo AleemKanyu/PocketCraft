@@ -181,6 +181,9 @@ fun PlayersScreen(
     }
 }
 
+private fun canonicalPlayerName(name: String): String =
+    name.trim().trimStart('.', '!', '*').lowercase()
+
 @Composable
 fun PlayersOnlineTab(
     stateHolder: ServerStateHolder,
@@ -190,6 +193,7 @@ fun PlayersOnlineTab(
     var visibleCount by remember { mutableIntStateOf(10) }
 
     val players = stateHolder.onlinePlayers
+        .distinctBy { canonicalPlayerName(it.name) }
     val filtered = players.filter { it.name.contains(searchQuery, ignoreCase = true) }
 
     Column(
@@ -312,7 +316,9 @@ fun PlayersOnlineTab(
                     onOpenDetails = { onPlayerSelected(player) },
                     onKick = { stateHolder.kickPlayer(player.name) },
                     onBan = { stateHolder.banPlayer(player.name) },
-                    onOp = { stateHolder.opPlayer(player.name) }
+                    onOp = {
+                        if (player.isOp) stateHolder.removeOp(player.name) else stateHolder.opPlayer(player.name)
+                    }
                 )
             }
         }
@@ -625,7 +631,17 @@ fun PlayersListTab(
     onPlayerSelected: (PlayerInfo) -> Unit,
     actionLists: (PlayerInfo) -> List<PlayerCardAction>
 ) {
-    if (players.isEmpty()) {
+    val dedupedPlayers = players
+        .groupBy { canonicalPlayerName(it.name) }
+        .values
+        .map { group ->
+            group.maxWithOrNull(
+                compareBy<PlayerInfo> { it.isOp }
+                    .thenBy { it.uuid.isNotBlank() }
+                    .thenByDescending { it.name.startsWith(".").not() }
+            ) ?: group.first()
+        }
+    if (dedupedPlayers.isEmpty()) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -648,13 +664,13 @@ fun PlayersListTab(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(players) { player ->
+            items(dedupedPlayers) { player ->
                 PlayerCard(
                     username = player.name,
                     subtitle = if (player.uuid.isNotEmpty()) player.uuid.take(8) else "Player info",
                     avatarUrl = "https://mc-heads.net/avatar/${player.name}/64",
-                    badgeText = "MANAGED",
-                    badgeColor = PocketColors.Primary,
+                    badgeText = if (player.isOp) "OPED" else "MANAGED",
+                    badgeColor = if (player.isOp) PocketColors.PrimaryDark else PocketColors.Primary,
                     onClick = { onPlayerSelected(player) },
                     actions = actionLists(player)
                 )

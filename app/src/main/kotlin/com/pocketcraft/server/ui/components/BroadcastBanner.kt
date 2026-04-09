@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,10 +58,36 @@ fun BroadcastBanner(
     outerPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
     modifier: Modifier = Modifier
 ) {
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val (accent, container, headline) = when (message.type) {
         "critical" -> Triple(PocketColors.ConsoleError, PocketColors.ConsoleError.copy(alpha = 0.1f), "Critical Broadcast")
         "warning" -> Triple(PocketColors.ConsoleWarn, PocketColors.ConsoleWarn.copy(alpha = 0.14f), "Important Broadcast")
         else -> Triple(PocketColors.PrimaryDark, PocketColors.Primary.copy(alpha = 0.12f), "Broadcast")
+    }
+    val bannerColor = when (message.type) {
+        "critical" -> if (isDarkTheme) Color(0xFF2F1A22) else Color(0xFFFFE1E7)
+        "warning" -> if (isDarkTheme) Color(0xFF21362D) else Color(0xFFFFE8CC)
+        else -> if (isDarkTheme) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.44f) else PocketColors.Primary.copy(alpha = 0.1f)
+    }
+    val bannerBorder = when (message.type) {
+        "critical" -> if (isDarkTheme) PocketColors.ConsoleError.copy(alpha = 0.42f) else Color(0xFFFFB3C1)
+        "warning" -> if (isDarkTheme) Color(0xFF4C7B66) else Color(0xFFEA580C).copy(alpha = 0.4f)
+        else -> if (isDarkTheme) PocketColors.SurfaceVarDark.copy(alpha = 0.55f) else PocketColors.Primary.copy(alpha = 0.22f)
+    }
+    val headingColor = when (message.type) {
+        "critical" -> if (isDarkTheme) PocketColors.TextDark else Color(0xFF7F1D1D)
+        "warning" -> if (isDarkTheme) PocketColors.TextDark else Color(0xFF78350F)
+        else -> if (isDarkTheme) PocketColors.TextDark else PocketColors.PrimaryDark
+    }
+    val bodyColor = when (message.type) {
+        "critical" -> if (isDarkTheme) PocketColors.TextDark.copy(alpha = 0.84f) else Color(0xFF991B1B)
+        "warning" -> if (isDarkTheme) PocketColors.TextDark.copy(alpha = 0.82f) else Color(0xFF92400E)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val chipColor = when (message.type) {
+        "critical" -> if (isDarkTheme) PocketColors.ConsoleError.copy(alpha = 0.18f) else Color(0xFFFFD5DB)
+        "warning" -> if (isDarkTheme) Color(0xFF2F4F42) else Color(0xFFFEDBA8)
+        else -> if (isDarkTheme) PocketColors.SurfaceVarDark.copy(alpha = 0.35f) else PocketColors.Primary.copy(alpha = 0.14f)
     }
     val icon = if (message.type == "info") Icons.Default.Info else Icons.Default.Warning
     var showDetails by remember { mutableStateOf(false) }
@@ -77,8 +104,8 @@ fun BroadcastBanner(
                 .padding(outerPadding)
                 .let { base -> if (enableDetailsSheet) base.clickable { showDetails = true } else base },
             shape = RoundedCornerShape(16.dp),
-            color = Color(0xFFFFE8CC),
-            border = BorderStroke(1.5.dp, Color(0xFFEA580C).copy(alpha = 0.4f)),
+            color = bannerColor,
+            border = BorderStroke(1.5.dp, bannerBorder),
             shadowElevation = 4.dp
         ) {
             Row(
@@ -89,7 +116,7 @@ fun BroadcastBanner(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = Color(0xFFD97706),
+                    tint = accent,
                     modifier = Modifier
                         .padding(top = 2.dp)
                         .size(20.dp)
@@ -102,7 +129,7 @@ fun BroadcastBanner(
                     ) {
                         Text(
                             text = message.title.ifBlank { headline },
-                            color = Color(0xFF78350F),
+                            color = headingColor,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 13.sp,
                             maxLines = 1,
@@ -110,11 +137,11 @@ fun BroadcastBanner(
                         )
                         Surface(
                             shape = RoundedCornerShape(4.dp),
-                            color = Color(0xFFFEDBA8)
+                            color = chipColor
                         ) {
                             Text(
                                 text = "From Dev",
-                                color = Color(0xFFA16207),
+                                color = headingColor,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 9.sp,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -125,7 +152,7 @@ fun BroadcastBanner(
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = message.body,
-                            color = Color(0xFF92400E),
+                            color = bodyColor,
                             fontSize = 12.sp,
                             lineHeight = 16.sp,
                             maxLines = 2,
@@ -142,7 +169,7 @@ fun BroadcastBanner(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Dismiss",
-                            tint = Color(0xFFA16207),
+                            tint = headingColor,
                             modifier = Modifier.size(14.dp)
                         )
                     }

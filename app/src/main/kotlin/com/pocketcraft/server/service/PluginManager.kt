@@ -34,8 +34,6 @@ object PluginManager {
     private const val HANGAR_PROVIDER = "hangar"
     private val builtInBridgeProjectIds = setOf("geyser", "floodgate", "viaversion")
     private val builtInBridgeKeywords = setOf("geyser", "floodgate", "viaversion")
-    private val floodgateAuthRegex = Regex("""(?m)^\s*auth-type\s*:\s*floodgate\s*$""")
-
     private val paperCompatibleLoaders = setOf("paper", "spigot", "purpur", "bukkit", "folia")
     private val modLoaderLabels = linkedMapOf(
         "fabric" to "Fabric",
@@ -263,25 +261,92 @@ object PluginManager {
         }
 
         val original = runCatching { geyserConfigFile.readText() }.getOrDefault("")
-        val updated = when {
-            floodgateAuthRegex.containsMatchIn(original) -> original
-            Regex("""(?m)^\s*auth-type\s*:\s*.+$""").containsMatchIn(original) -> {
-                original.replace(Regex("""(?m)^(\s*auth-type\s*:\s*).+$"""), "$1floodgate")
-            }
-            Regex("""(?m)^\s*remote\s*:\s*$""").containsMatchIn(original) -> {
-                original.replace(
-                    Regex("""(?m)^\s*remote\s*:\s*$"""),
-                    "remote:\n  auth-type: floodgate"
-                )
-            }
-            else -> {
-                original.trimEnd() + "\n\nremote:\n  auth-type: floodgate\n"
-            }
-        }
+        var updated = original
+        updated = ensureYamlSectionValue(updated, "bedrock", "address", "0.0.0.0")
+        updated = ensureYamlSectionValue(updated, "bedrock", "port", "19132")
+        updated = ensureYamlSectionValue(updated, "bedrock", "clone-remote-port", "false")
+        updated = ensureYamlSectionValue(updated, "bedrock", "motd1", "PocketCraft Server")
+        updated = ensureYamlSectionValue(updated, "bedrock", "motd2", "Tap to join")
+        updated = ensureYamlSectionValue(updated, "remote", "address", "127.0.0.1")
+        updated = ensureYamlSectionValue(updated, "remote", "port", "25565")
+        updated = ensureYamlSectionValue(updated, "remote", "auth-type", "floodgate")
+        updated = ensureTopLevelYamlValue(updated, "passthrough-motd", "false")
+        updated = ensureTopLevelYamlValue(updated, "passthrough-player-counts", "false")
 
         if (updated != original) {
             geyserConfigFile.writeText(updated)
         }
+    }
+
+    private fun ensureTopLevelYamlValue(
+        original: String,
+        key: String,
+        value: String
+    ): String {
+        val lines = original
+            .ifBlank { "" }
+            .split('\n')
+            .toMutableList()
+        val keyIndex = lines.indexOfFirst { line ->
+            line.trimStart() == "$key: $value" || (!line.startsWith(" ") && !line.startsWith("\t") && line.trimStart().startsWith("$key:"))
+        }
+        if (keyIndex != -1) {
+            lines[keyIndex] = "$key: $value"
+        } else {
+            if (lines.size == 1 && lines[0].isBlank()) lines.clear()
+            if (lines.isNotEmpty() && lines.last().isNotBlank()) lines += ""
+            lines += "$key: $value"
+        }
+        return lines.joinToString("\n").trimEnd() + "\n"
+    }
+
+    private fun ensureYamlSectionValue(
+        original: String,
+        section: String,
+        key: String,
+        value: String
+    ): String {
+        val lines = original
+            .ifBlank { "" }
+            .split('\n')
+            .toMutableList()
+
+        var sectionStart = lines.indexOfFirst { it.trim() == "$section:" }
+        if (sectionStart == -1) {
+            if (lines.size == 1 && lines[0].isBlank()) {
+                lines.clear()
+            }
+            if (lines.isNotEmpty() && lines.last().isNotBlank()) {
+                lines += ""
+            }
+            lines += "$section:"
+            lines += "  $key: $value"
+            return lines.joinToString("\n").trimEnd() + "\n"
+        }
+
+        var sectionEnd = lines.size
+        for (index in (sectionStart + 1) until lines.size) {
+            val line = lines[index]
+            val trimmed = line.trim()
+            if (trimmed.isBlank() || trimmed.startsWith("#")) continue
+            if (!line.startsWith(" ") && !line.startsWith("\t")) {
+                sectionEnd = index
+                break
+            }
+        }
+
+        val keyIndex = ((sectionStart + 1) until sectionEnd).firstOrNull { index ->
+            val line = lines[index]
+            (line.startsWith(" ") || line.startsWith("\t")) && line.trimStart().startsWith("$key:")
+        }
+
+        if (keyIndex != null) {
+            lines[keyIndex] = "  $key: $value"
+        } else {
+            lines.add(sectionEnd, "  $key: $value")
+        }
+
+        return lines.joinToString("\n").trimEnd() + "\n"
     }
 
     fun isBedrockBridgeEnabled(context: Context, versionId: String): Boolean {

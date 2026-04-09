@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
-import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.BackHandler
@@ -27,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,6 +44,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -57,6 +59,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import com.pocketcraft.server.BuildConfig
+import com.pocketcraft.server.broadcast.FeedbackPromptCenter
+import com.pocketcraft.server.broadcast.FeedbackPromptPayload
 import com.pocketcraft.server.broadcast.PocketCraftMessagingService
 import com.pocketcraft.server.feedback.FeedbackService
 import com.pocketcraft.server.analytics.FirebaseAnalyticsManager
@@ -67,6 +71,7 @@ import com.pocketcraft.server.R
 import com.pocketcraft.server.ui.components.BroadcastBanner
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.pocketPopupAccentContainerColor
 import com.pocketcraft.server.update.GitHubApkInstaller
 import com.pocketcraft.server.update.GitHubUpdateChecker
 import com.pocketcraft.server.viewmodel.BroadcastViewModel
@@ -83,7 +88,10 @@ private const val TAG_POCKETCRAFT_APP = "PocketCraftApp"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PocketCraftApp() {
+fun PocketCraftApp(
+    isDarkTheme: Boolean,
+    onDarkThemeChange: (Boolean) -> Unit
+) {
     var screen by remember { mutableStateOf(Screen.SERVER) }
     var transitionTarget by remember { mutableStateOf<Screen?>(null) }
     var versionId by remember { mutableStateOf("1.21.1") }
@@ -99,6 +107,13 @@ fun PocketCraftApp() {
     var pendingConsentDialog by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var updateInfo by remember { mutableStateOf<GitHubUpdateChecker.ReleaseInfo?>(null) }
+    var showChangelogDialog by remember { mutableStateOf(false) }
+    var changelogInfo by remember { mutableStateOf<GitHubUpdateChecker.ReleaseInfo?>(null) }
+    var pendingFeedbackPrompt by remember { mutableStateOf<FeedbackPromptPayload?>(null) }
+    var showFeedbackPromptDialog by remember { mutableStateOf(false) }
+    var feedbackPromptInput by remember { mutableStateOf("") }
+    var sendingFeedbackPrompt by remember { mutableStateOf(false) }
+    var feedbackPromptError by remember { mutableStateOf<String?>(null) }
     var isDownloadingUpdate by remember { mutableStateOf(false) }
     var updateDownloadProgress by remember { mutableStateOf(0) }
     var updateDownloadStatus by remember { mutableStateOf("Preparing update...") }
@@ -106,6 +121,7 @@ fun PocketCraftApp() {
     var awaitingInstallPermission by remember { mutableStateOf(false) }
     var pendingInstallResult by remember { mutableStateOf<GitHubApkInstaller.DownloadResult?>(null) }
     var homeScreenReady by remember { mutableStateOf(false) }
+    var releaseCheckHandled by remember { mutableStateOf(false) }
     var showDiscordButtonFromRemoteConfig by remember { mutableStateOf(true) }
     var showInstagramButtonFromRemoteConfig by remember { mutableStateOf(true) }
     var sessionClosedBroadcastIds by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -122,15 +138,37 @@ fun PocketCraftApp() {
     val analyticsConsentGranted by AppPreferencesStore.isAnalyticsConsentFlow(context).collectAsState(initial = false)
     val adsConsentGranted by AppPreferencesStore.isAdsConsentFlow(context).collectAsState(initial = false)
     val legalVersionAccepted by AppPreferencesStore.getLegalVersionAcceptedFlow(context).collectAsState(initial = null)
+    val isFirstLaunchAfterInstallOrUpdate = remember(BuildConfig.VERSION_NAME) {
+        preferences.lastLaunchedAppVersion != BuildConfig.VERSION_NAME
+    }
+    val colorScheme = MaterialTheme.colorScheme
+    val popupAccentContainerColor = pocketPopupAccentContainerColor()
     val hasPendingBroadcast by remember(configBanner, broadcasts, sessionClosedBroadcastIds) {
         mutableStateOf(
             (configBanner != null && configBanner!!.id !in sessionClosedBroadcastIds) ||
                 broadcasts.any { it.id !in sessionClosedBroadcastIds }
         )
     }
+    val hasBlockingSheet = showVersionPickerDialog ||
+        showConsentDialog ||
+        showCommunityDialog ||
+        showInstagramDialog ||
+        showFeedbackPromptDialog ||
+        showUpdateDialog ||
+        showChangelogDialog ||
+        isDownloadingUpdate ||
+        awaitingInstallPermission ||
+        updateDownloadError != null ||
+        showExitDialog
 
     DisposableEffect(stateHolder) {
         onDispose { stateHolder.dispose() }
+    }
+
+    LaunchedEffect(BuildConfig.VERSION_NAME) {
+        if (preferences.lastLaunchedAppVersion != BuildConfig.VERSION_NAME) {
+            preferences.lastLaunchedAppVersion = BuildConfig.VERSION_NAME
+        }
     }
 
     LaunchedEffect(notificationsEnabled) {
@@ -161,6 +199,26 @@ fun PocketCraftApp() {
 
     LaunchedEffect(Unit) {
         RemoteConfigManager.initialize(context)
+    }
+
+    LaunchedEffect(Unit) {
+        val title = preferences.pendingFeedbackPromptTitle
+        val body = preferences.pendingFeedbackPromptBody
+        if (title.isNotBlank() || body.isNotBlank()) {
+            pendingFeedbackPrompt = FeedbackPromptPayload(
+                title = title.ifBlank { "Help improve PocketCraft" },
+                body = body.ifBlank { "Tell us what is working well and what we should fix next." },
+                ctaLabel = preferences.pendingFeedbackPromptCta.ifBlank { "Send feedback" }
+            )
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        FeedbackPromptCenter.pendingPrompt.collect { prompt ->
+            if (prompt != null) {
+                pendingFeedbackPrompt = prompt
+            }
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -285,6 +343,7 @@ fun PocketCraftApp() {
 
     LaunchedEffect(
         pendingInstagramDialog,
+        pendingFeedbackPrompt,
         showVersionPickerDialog,
         showConsentDialog,
         showCommunityDialog,
@@ -300,21 +359,52 @@ fun PocketCraftApp() {
         if (!pendingInstagramDialog) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
         if (!showInstagramButtonFromRemoteConfig) return@LaunchedEffect
-        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showCommunityDialog || showUpdateDialog || isDownloadingUpdate || awaitingInstallPermission || updateDownloadError != null || showExitDialog || showInstagramDialog || hasPendingBroadcast
+        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showCommunityDialog || showUpdateDialog || isDownloadingUpdate || awaitingInstallPermission || updateDownloadError != null || showExitDialog || showInstagramDialog || showFeedbackPromptDialog || hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
         showInstagramDialog = true
         pendingInstagramDialog = false
     }
 
+    LaunchedEffect(
+        pendingFeedbackPrompt,
+        showVersionPickerDialog,
+        showConsentDialog,
+        showCommunityDialog,
+        showInstagramDialog,
+        showUpdateDialog,
+        isDownloadingUpdate,
+        awaitingInstallPermission,
+        updateDownloadError,
+        showExitDialog,
+        screen,
+        homeScreenReady,
+        hasPendingBroadcast
+    ) {
+        if (pendingFeedbackPrompt == null) return@LaunchedEffect
+        if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
+        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showCommunityDialog || showInstagramDialog || showUpdateDialog || isDownloadingUpdate || awaitingInstallPermission || updateDownloadError != null || showExitDialog || hasPendingBroadcast
+        if (hasBlockingPopup) return@LaunchedEffect
+        showFeedbackPromptDialog = true
+    }
+
     SideEffect {
         val window = activity?.window ?: return@SideEffect
-        val navColor = when {
-            showVersionPickerDialog || showConsentDialog || showCommunityDialog || showInstagramDialog || showUpdateDialog || isDownloadingUpdate || awaitingInstallPermission || updateDownloadError != null || showExitDialog -> AndroidColor.parseColor("#F5F7F3")
-            screen == Screen.SERVER -> AndroidColor.parseColor("#58CC02")
-            else -> AndroidColor.parseColor("#F5F7F3")
+        val statusBarColor = when {
+            hasBlockingSheet -> colorScheme.surface.toArgb()
+            screen == Screen.SERVER -> colorScheme.surface.toArgb()
+            else -> colorScheme.background.toArgb()
         }
-        window.navigationBarColor = navColor
-        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightNavigationBars = navColor != AndroidColor.parseColor("#58CC02")
+        val navBarColor = when {
+            hasBlockingSheet -> colorScheme.surface.toArgb()
+            screen == Screen.SERVER -> PocketColors.Primary.toArgb()
+            else -> colorScheme.background.toArgb()
+        }
+        window.statusBarColor = statusBarColor
+        window.navigationBarColor = navBarColor
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = colorScheme.surface.luminance() > 0.5f
+            isAppearanceLightNavigationBars = Color(navBarColor).luminance() > 0.5f
+        }
     }
 
     DisposableEffect(lifecycleOwner, awaitingInstallPermission, pendingInstallResult) {
@@ -343,16 +433,32 @@ fun PocketCraftApp() {
         }
     }
 
-    LaunchedEffect(screen, homeScreenReady) {
-        if (screen != Screen.SERVER || !homeScreenReady) {
+    LaunchedEffect(screen, homeScreenReady, hasPendingBroadcast, hasBlockingSheet, releaseCheckHandled) {
+        if (releaseCheckHandled) {
             return@LaunchedEffect
         }
+        if (screen != Screen.SERVER || !homeScreenReady || hasPendingBroadcast || hasBlockingSheet) {
+            return@LaunchedEffect
+        }
+
+        releaseCheckHandled = true
         scope.launch {
-            val update = GitHubUpdateChecker.checkForUpdate(context)
-            if (update != null) {
-                updateInfo = update
-                delay(500)
-                showUpdateDialog = true
+            val latestRelease = GitHubUpdateChecker.fetchLatestRelease(context)
+            if (latestRelease == null) return@launch
+            when {
+                GitHubUpdateChecker.compareVersions(latestRelease.tagName, BuildConfig.VERSION_NAME) > 0 -> {
+                    updateInfo = latestRelease
+                    delay(500)
+                    showUpdateDialog = true
+                }
+                GitHubUpdateChecker.compareVersions(latestRelease.tagName, BuildConfig.VERSION_NAME) == 0 &&
+                    isFirstLaunchAfterInstallOrUpdate &&
+                    latestRelease.body.isNotBlank() &&
+                    preferences.lastSeenChangelogVersion != latestRelease.tagName -> {
+                    changelogInfo = latestRelease
+                    delay(500)
+                    showChangelogDialog = true
+                }
             }
         }
     }
@@ -398,6 +504,8 @@ fun PocketCraftApp() {
                 onChangeVersion = { showVersionPickerDialog = true },
                 onVersionSelected = ::requestVersionChange,
                 onRequestExit = { showExitDialog = true },
+                isDarkTheme = isDarkTheme,
+                onDarkThemeChange = onDarkThemeChange,
                 homeTopContent = {
                     if (screen == Screen.SERVER && homeScreenReady) {
                         configBanner?.let { banner ->
@@ -650,7 +758,7 @@ fun PocketCraftApp() {
             ) {
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = PocketColors.PrimaryMuted,
+                    color = popupAccentContainerColor,
                     tonalElevation = 0.dp
                 ) {
                     Box(
@@ -748,7 +856,7 @@ fun PocketCraftApp() {
             ) {
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = PocketColors.PrimaryMuted,
+                    color = popupAccentContainerColor,
                     tonalElevation = 0.dp
                 ) {
                     Box(
@@ -911,6 +1019,115 @@ fun PocketCraftApp() {
                 updateDownloadError = null
             }
         )
+    }
+
+    if (showChangelogDialog && changelogInfo != null) {
+        AppChangelogScreen(
+            releaseInfo = changelogInfo!!,
+            onDismiss = {
+                preferences.lastSeenChangelogVersion = changelogInfo!!.tagName
+                showChangelogDialog = false
+            }
+        )
+    }
+
+    if (showFeedbackPromptDialog && pendingFeedbackPrompt != null) {
+        val feedbackSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    feedbackSheetState.hide()
+                    showFeedbackPromptDialog = false
+                    pendingFeedbackPrompt = null
+                    feedbackPromptInput = ""
+                    feedbackPromptError = null
+                    preferences.clearPendingFeedbackPrompt()
+                    FeedbackPromptCenter.clear()
+                }
+            },
+            sheetState = feedbackSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = pendingFeedbackPrompt!!.title,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 22.sp
+                )
+                Text(
+                    text = pendingFeedbackPrompt!!.body,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 20.sp,
+                    fontSize = 14.sp
+                )
+                OutlinedTextField(
+                    value = feedbackPromptInput,
+                    onValueChange = {
+                        feedbackPromptInput = it
+                        feedbackPromptError = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 4,
+                    maxLines = 6,
+                    label = { Text("Your feedback") }
+                )
+                if (!feedbackPromptError.isNullOrBlank()) {
+                    Text(
+                        text = feedbackPromptError!!,
+                        color = PocketColors.Danger,
+                        fontSize = 12.sp
+                    )
+                }
+                DuoButton(
+                    text = if (sendingFeedbackPrompt) "SENDING..." else pendingFeedbackPrompt!!.ctaLabel.uppercase(),
+                    onClick = {
+                        scope.launch {
+                            val message = feedbackPromptInput.trim()
+                            if (message.isBlank()) {
+                                feedbackPromptError = "Write a short message first."
+                                return@launch
+                            }
+                            sendingFeedbackPrompt = true
+                            feedbackPromptError = null
+                            val result = FeedbackService.submitFeedback(context, message, versionId)
+                            sendingFeedbackPrompt = false
+                            if (result.isSuccess) {
+                                feedbackSheetState.hide()
+                                showFeedbackPromptDialog = false
+                                pendingFeedbackPrompt = null
+                                feedbackPromptInput = ""
+                                preferences.clearPendingFeedbackPrompt()
+                                FeedbackPromptCenter.clear()
+                            } else {
+                                feedbackPromptError = result.exceptionOrNull()?.message ?: "Could not send feedback right now."
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            feedbackSheetState.hide()
+                            showFeedbackPromptDialog = false
+                            pendingFeedbackPrompt = null
+                            feedbackPromptInput = ""
+                            feedbackPromptError = null
+                            preferences.clearPendingFeedbackPrompt()
+                            FeedbackPromptCenter.clear()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Later")
+                }
+            }
+        }
     }
 }
 

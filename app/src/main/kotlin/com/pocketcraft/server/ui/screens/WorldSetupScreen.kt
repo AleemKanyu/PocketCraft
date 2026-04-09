@@ -99,7 +99,7 @@ fun WorldSetupScreen(
     var worldSeed by remember(stateHolder.config.worldSeed) { mutableStateOf(stateHolder.config.worldSeed) }
 
     var renderDistanceValue by remember(stateHolder.config.viewDistance) {
-        mutableStateOf(stateHolder.config.viewDistance.coerceIn(2, 32).toFloat())
+        mutableStateOf(stateHolder.config.viewDistance.coerceIn(3, 32).toFloat())
     }
     var maxPlayersValue by remember(stateHolder.config.maxPlayers) {
         mutableStateOf(stateHolder.config.maxPlayers.coerceIn(1, 10).toFloat())
@@ -417,8 +417,8 @@ fun WorldSetupScreen(
                     Slider(
                         value = renderDistanceValue,
                         onValueChange = { renderDistanceValue = it },
-                        valueRange = 2f..32f,
-                        steps = 29
+                        valueRange = 3f..32f,
+                        steps = 28
                     )
                 }
 

@@ -20,6 +20,8 @@ class ServerLauncher(private val context: Context) {
         @Volatile
         private var activeExternalProcess: Process? = null
 
+        fun hasActiveExternalProcess(): Boolean = activeExternalProcess?.isAlive == true
+
         fun requestForceStop() {
             activeExternalProcess?.let { process ->
                 runCatching {
@@ -59,6 +61,10 @@ class ServerLauncher(private val context: Context) {
         val serverDir = serverDirFile.absolutePath
         val tmpDir    = File(context.filesDir, "runtime-tmp").also { it.mkdirs() }.absolutePath
         val totalRam = getTotalRamMb(context)
+        applyRelayReadyRuntimeProfile(serverDirFile, onOutput)
+        applyRelayReadyPaperGlobalConfig(serverDirFile, onOutput)
+        applyRelayReadySpigotConfig(serverDirFile, onOutput)
+        applyRelayReadyPaperWorldDefaults(serverDirFile, onOutput)
         val prefs = AppPreferences(context)
         val reservedForSystemMb = when {
             totalRam >= 8192 -> 1536
@@ -139,17 +145,41 @@ class ServerLauncher(private val context: Context) {
             var result = -1
             try {
                 result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    onOutput("[PocketCraft] Launching isolated JVM bootstrap on Android ${Build.VERSION.RELEASE}.")
-                    NativeLauncher.launchJVM(
-                        jrePath = jrePath,
-                        jarPath = jarPath,
-                        serverDir = serverDir,
-                        tmpDir = tmpDir,
-                        nativeLibDir = context.applicationInfo.nativeLibraryDir,
-                        shimDir = shimDir.absolutePath,
-                        minRamMb = minRamMb,
-                        maxRamMb = maxRamMb
-                    )
+                    val externalExit = runCatching {
+                        launchExternalJvm(
+                            javaBin = javaBin,
+                            jrePath = jrePath,
+                            jarPath = jarPath,
+                            serverDir = serverDir,
+                            tmpDir = tmpDir,
+                            shimDir = shimDir,
+                            minRamMb = minRamMb,
+                            maxRamMb = maxRamMb,
+                            onOutput = onOutput,
+                            onError = onError
+                        )
+                    }.getOrElse { error ->
+                        onOutput(
+                            "[PocketCraft] External JVM launch failed before startup on Android ${Build.VERSION.RELEASE}: ${error.message}. Falling back to isolated bootstrap."
+                        )
+                        Int.MIN_VALUE
+                    }
+
+                    if (externalExit == Int.MIN_VALUE || externalExit == 126 || externalExit == 127) {
+                        onOutput("[PocketCraft] Launching isolated JVM bootstrap on Android ${Build.VERSION.RELEASE}.")
+                        NativeLauncher.launchJVM(
+                            jrePath = jrePath,
+                            jarPath = jarPath,
+                            serverDir = serverDir,
+                            tmpDir = tmpDir,
+                            nativeLibDir = context.applicationInfo.nativeLibraryDir,
+                            shimDir = shimDir.absolutePath,
+                            minRamMb = minRamMb,
+                            maxRamMb = maxRamMb
+                        )
+                    } else {
+                        externalExit
+                    }
                 } else {
                     launchExternalJvm(
                         javaBin = javaBin,
@@ -211,8 +241,8 @@ class ServerLauncher(private val context: Context) {
             append(nativeLibDir)
         }
 
-        val jnaBootPath = context.applicationInfo.nativeLibraryDir
-        val jnaLibraryPath = "$jnaBootPath:${shimDir.absolutePath}"
+        val jnaBootPath = "$nativeLibDir:${shimDir.absolutePath}"
+        val jnaLibraryPath = jnaBootPath
  
         val vmArgs = mutableListOf(
             "-Xmx${maxRamMb}m",
@@ -231,6 +261,7 @@ class ServerLauncher(private val context: Context) {
             "-Dos.version=Android-${Build.VERSION.RELEASE}",
             "-Djava.net.preferIPv4Stack=true",
             "-Djava.net.preferIPv6Addresses=false",
+            "-Dpaper.playerconnection.keepalive=90",
             "-Dorg.jline.terminal.jna=false",
             "-Dorg.jline.terminal.jni=false",
             "-Dorg.jline.terminal.dumb=true",
@@ -342,6 +373,134 @@ class ServerLauncher(private val context: Context) {
         return raw.coerceIn(512, 4096)
     }
 
+    private fun applyRelayReadyRuntimeProfile(
+        serverDir: File,
+        onOutput: (String) -> Unit
+    ) {
+        val props = ServerPropertiesHelper.readProperties(serverDir)
+        val currentView = props.getProperty("view-distance", ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE.toString())
+            .toIntOrNull()
+            ?: ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE
+        val currentSimulation = props.getProperty(
+            "simulation-distance",
+            ServerPropertiesHelper.DEFAULT_SIMULATION_DISTANCE.toString()
+        ).toIntOrNull() ?: ServerPropertiesHelper.DEFAULT_SIMULATION_DISTANCE
+        val currentCompression = props.getProperty(
+            "network-compression-threshold",
+            ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD.toString()
+        ).toIntOrNull()
+        val currentEntityBroadcast = props.getProperty(
+            "entity-broadcast-range-percentage",
+            ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT.toString()
+        ).toIntOrNull()
+
+        val tunedView = currentView.coerceIn(3, 32)
+        val tunedSimulation = currentSimulation.coerceIn(3, 32)
+        val tunedCompression = when {
+            currentCompression == null -> ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD
+            currentCompression < 0 -> ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD
+            currentCompression > 512 -> ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD
+            else -> currentCompression
+        }
+        val tunedEntityBroadcast = when {
+            currentEntityBroadcast == null -> ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
+            currentEntityBroadcast <= 0 -> ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
+            else -> currentEntityBroadcast.coerceAtMost(ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT)
+        }
+
+        var changed = false
+        if (tunedView != currentView) {
+            props["view-distance"] = tunedView.toString()
+            changed = true
+        }
+        if (tunedSimulation != currentSimulation) {
+            props["simulation-distance"] = tunedSimulation.toString()
+            changed = true
+        }
+        if (tunedCompression != currentCompression) {
+            props["network-compression-threshold"] = tunedCompression.toString()
+            changed = true
+        }
+        if (tunedEntityBroadcast != currentEntityBroadcast) {
+            props["entity-broadcast-range-percentage"] = tunedEntityBroadcast.toString()
+            changed = true
+        }
+        if (props.getProperty("sync-chunk-writes") != "false") {
+            props["sync-chunk-writes"] = "false"
+            changed = true
+        }
+
+        if (changed) {
+            ServerPropertiesHelper.saveProperties(serverDir, props)
+            onOutput("[PocketCraft] Internet relay profile applied.")
+        }
+        onOutput(
+            "[PocketCraft] Relay runtime profile: compression=$tunedCompression, view=$tunedView, simulation=$tunedSimulation, entity-range=$tunedEntityBroadcast%"
+        )
+    }
+
+    private fun applyRelayReadyPaperGlobalConfig(
+        serverDir: File,
+        onOutput: (String) -> Unit
+    ) {
+        val configDir = File(serverDir, "config").also { it.mkdirs() }
+        val paperGlobal = File(configDir, "paper-global.yml")
+        val original = runCatching { paperGlobal.readText() }.getOrDefault("")
+
+        var updated = original
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "auto-config-send-distance", "true")
+        // The previous relay profile throttled chunk loading too aggressively, which left
+        // Bedrock players with slow terrain pop-in. Let Paper use its own defaults again.
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-generates", "0")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", "0")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-generate-rate", "-1.0")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-load-rate", "100")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-send-rate", "75")
+        updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "2")
+
+        if (updated != original) {
+            paperGlobal.writeText(updated)
+            onOutput("[PocketCraft] Paper relay tuning applied: client send distance + faster chunk send/load defaults")
+        }
+    }
+
+    private fun applyRelayReadySpigotConfig(
+        serverDir: File,
+        onOutput: (String) -> Unit
+    ) {
+        val spigotFile = File(serverDir, "spigot.yml")
+        val original = runCatching { spigotFile.readText() }.getOrDefault("")
+
+        var updated = original
+        // Spigot can override both distances; keep them on "default" so the current
+        // server.properties value is always the one Paper actually uses.
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "view-distance", "default")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "simulation-distance", "default")
+
+        if (updated != original) {
+            spigotFile.writeText(updated)
+            onOutput("[PocketCraft] Spigot view-distance overrides cleared so server.properties stays in control.")
+        }
+    }
+
+    private fun applyRelayReadyPaperWorldDefaults(
+        serverDir: File,
+        onOutput: (String) -> Unit
+    ) {
+        val configDir = File(serverDir, "config").also { it.mkdirs() }
+        val paperWorldDefaults = File(configDir, "paper-world-defaults.yml")
+        val original = runCatching { paperWorldDefaults.readText() }.getOrDefault("")
+
+        var updated = original
+        // Unload chunks promptly so clients do not keep a long trail of previously sent chunks.
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "delay-chunk-unloads-by", "0s")
+
+        if (updated != original) {
+            paperWorldDefaults.writeText(updated)
+            onOutput("[PocketCraft] Paper world defaults updated for immediate chunk unloads.")
+        }
+    }
+
     private fun applyAdaptiveDistances(
         serverDir: File,
         totalRamMb: Int,
@@ -386,10 +545,10 @@ class ServerLauncher(private val context: Context) {
     private fun resolveAdaptiveViewDistanceNew(totalRamMb: Int): Int {
         // Lower initial view distance for new world generation
         return when {
-            totalRamMb >= 7168 -> 16
-            totalRamMb >= 6144 -> 12
-            totalRamMb >= 4096 -> 8
-            totalRamMb >= 3072 -> 6
+            totalRamMb >= 7168 -> 5
+            totalRamMb >= 6144 -> 5
+            totalRamMb >= 4096 -> 5
+            totalRamMb >= 3072 -> 5
             else -> 4
         }
     }
@@ -397,32 +556,130 @@ class ServerLauncher(private val context: Context) {
     private fun resolveAdaptiveSimulationDistanceNew(totalRamMb: Int): Int {
         // Lower initial simulation distance for new world generation
         return when {
-            totalRamMb >= 7168 -> 12
-            totalRamMb >= 6144 -> 8
-            totalRamMb >= 4096 -> 6
-            totalRamMb >= 3072 -> 4
+            totalRamMb >= 7168 -> 4
+            totalRamMb >= 6144 -> 4
+            totalRamMb >= 4096 -> 4
+            totalRamMb >= 3072 -> 3
             else -> 3
         }
     }
 
     private fun resolveAdaptiveViewDistance(totalRamMb: Int): Int {
         return when {
-            totalRamMb >= 7168 -> 32
-            totalRamMb >= 6144 -> 24
-            totalRamMb >= 4096 -> 16
-            totalRamMb >= 3072 -> 12
-            else -> 8
+            totalRamMb >= 7168 -> 5
+            totalRamMb >= 6144 -> 5
+            totalRamMb >= 4096 -> 5
+            totalRamMb >= 3072 -> 4
+            else -> 4
         }
     }
 
     private fun resolveAdaptiveSimulationDistance(totalRamMb: Int): Int {
         return when {
-            totalRamMb >= 7168 -> 24
-            totalRamMb >= 6144 -> 16
-            totalRamMb >= 4096 -> 12
-            totalRamMb >= 3072 -> 8
-            else -> 6
+            totalRamMb >= 7168 -> 4
+            totalRamMb >= 6144 -> 4
+            totalRamMb >= 4096 -> 4
+            totalRamMb >= 3072 -> 3
+            else -> 3
         }
+    }
+
+    private fun resolveRelayReadyViewDistance(totalRamMb: Int): Int {
+        return when {
+            totalRamMb >= 6144 -> 5
+            totalRamMb >= 4096 -> 5
+            totalRamMb >= 3072 -> 4
+            else -> 4
+        }
+    }
+
+    private fun resolveRelayReadySimulationDistance(totalRamMb: Int): Int {
+        return when {
+            totalRamMb >= 6144 -> 4
+            totalRamMb >= 4096 -> 4
+            totalRamMb >= 3072 -> 3
+            else -> 3
+        }
+    }
+
+    private fun ensureYamlSectionValue(
+        original: String,
+        section: String,
+        key: String,
+        value: String
+    ): String = ensureYamlPathValue(original, listOf(section), key, value)
+
+    private fun ensureYamlPathValue(
+        original: String,
+        path: List<String>,
+        key: String,
+        value: String
+    ): String {
+        val lines = original
+            .ifBlank { "" }
+            .split('\n')
+            .toMutableList()
+
+        if (lines.size == 1 && lines[0].isBlank()) {
+            lines.clear()
+        }
+
+        var searchStart = 0
+        var searchEnd = lines.size
+
+        path.forEachIndexed { depth, section ->
+            val indent = "  ".repeat(depth)
+            val sectionIndex = (searchStart until searchEnd).firstOrNull { index ->
+                val line = lines[index]
+                line.trim() == "$section:" && leadingYamlIndent(line) == indent.length
+            }
+
+            val actualIndex = if (sectionIndex != null) {
+                sectionIndex
+            } else {
+                val insertionIndex = searchEnd
+                lines.add(insertionIndex, "$indent$section:")
+                searchEnd += 1
+                insertionIndex
+            }
+
+            searchStart = actualIndex + 1
+            searchEnd = findYamlSectionEnd(lines, actualIndex)
+        }
+
+        val keyIndent = "  ".repeat(path.size)
+        val keyIndex = (searchStart until searchEnd).firstOrNull { index ->
+            val line = lines[index]
+            leadingYamlIndent(line) == keyIndent.length && line.trimStart().startsWith("$key:")
+        }
+
+        if (keyIndex != null) {
+            lines[keyIndex] = "$keyIndent$key: $value"
+        } else {
+            lines.add(searchEnd, "$keyIndent$key: $value")
+        }
+
+        return lines.joinToString("\n").trimEnd() + "\n"
+    }
+
+    private fun findYamlSectionEnd(
+        lines: List<String>,
+        sectionStart: Int
+    ): Int {
+        val sectionIndent = leadingYamlIndent(lines[sectionStart])
+        for (index in (sectionStart + 1) until lines.size) {
+            val line = lines[index]
+            val trimmed = line.trim()
+            if (trimmed.isBlank() || trimmed.startsWith("#")) continue
+            if (leadingYamlIndent(line) <= sectionIndent) {
+                return index
+            }
+        }
+        return lines.size
+    }
+
+    private fun leadingYamlIndent(line: String): Int {
+        return line.takeWhile { it == ' ' || it == '\t' }.length
     }
 
     private fun getTotalRamMb(context: Context): Int {

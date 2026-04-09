@@ -657,20 +657,21 @@ class ServerStateHolder(
     private fun upsertOnlinePlayer(name: String, uuid: String) {
         val normalizedName = name.trim()
         if (normalizedName.isBlank()) return
+        val canonicalName = canonicalPlayerName(normalizedName)
 
         val normalizedUuid = uuid.trim().ifBlank {
             sequenceOf(
-                onlinePlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid,
-                knownPlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid,
-                whitelistPlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid,
-                opPlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid
+                onlinePlayers.firstOrNull { canonicalPlayerName(it.name) == canonicalName }?.uuid,
+                knownPlayers.firstOrNull { canonicalPlayerName(it.name) == canonicalName }?.uuid,
+                whitelistPlayers.firstOrNull { canonicalPlayerName(it.name) == canonicalName }?.uuid,
+                opPlayers.firstOrNull { canonicalPlayerName(it.name) == canonicalName }?.uuid
             ).filterNotNull().firstOrNull().orEmpty()
         }
 
-        val isPlayerOp = opPlayers.any { it.name.equals(normalizedName, ignoreCase = true) }
+        val isPlayerOp = opPlayers.any { canonicalPlayerName(it.name) == canonicalName }
         val existingIndex = onlinePlayers.indexOfFirst {
             (normalizedUuid.isNotBlank() && it.uuid == normalizedUuid) ||
-                it.name.equals(normalizedName, ignoreCase = true)
+                canonicalPlayerName(it.name) == canonicalName
         }
         val existingPlayer = onlinePlayers.getOrNull(existingIndex)
         val mergedPlayer = PlayerInfo(
@@ -772,7 +773,7 @@ class ServerStateHolder(
         if (normalizedName.isBlank()) return
 
         runCatching {
-            sendCommand("kick $normalizedName Removed by PocketCraft")
+            sendCommand("""kick @a[name="${escapeSelectorName(normalizedName)}"] Removed by PocketCraft""")
             // Remove immediately for UI feedback; parser/refresh will reconcile authoritative state.
             onlinePlayers.removeAll { it.name.equals(normalizedName, ignoreCase = true) }
         }.onFailure { error ->
@@ -850,6 +851,18 @@ class ServerStateHolder(
             withContext(Dispatchers.Main) {
                 if (error != null) {
                     appendLog("[PocketCraft] Failed to grant OP to $normalizedName: ${error.message}")
+                } else {
+                    val normalizedUuid = onlinePlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid
+                        ?: knownPlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid
+                        .orEmpty()
+                    onlinePlayers.replaceAllMatching(
+                        normalizedName = normalizedName,
+                        uuid = normalizedUuid
+                    ) { player -> player.copy(isOp = true) }
+                    knownPlayers.replaceAllMatching(
+                        normalizedName = normalizedName,
+                        uuid = normalizedUuid
+                    ) { player -> player.copy(isOp = true) }
                 }
                 refreshAll()
             }
@@ -860,6 +873,8 @@ class ServerStateHolder(
         val normalizedName = name.trim()
         if (normalizedName.isBlank()) return
 
+        sendCommand("deop $normalizedName")
+
         scope.launch(Dispatchers.IO) {
             val error = mutateNamedList("ops.json") { list ->
                 list.filterNot { it.name.equals(normalizedName, ignoreCase = true) }
@@ -868,6 +883,18 @@ class ServerStateHolder(
             withContext(Dispatchers.Main) {
                 if (error != null) {
                     appendLog("[PocketCraft] Failed to remove OP from $normalizedName: ${error.message}")
+                } else {
+                    val normalizedUuid = onlinePlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid
+                        ?: knownPlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid
+                        .orEmpty()
+                    onlinePlayers.replaceAllMatching(
+                        normalizedName = normalizedName,
+                        uuid = normalizedUuid
+                    ) { player -> player.copy(isOp = false) }
+                    knownPlayers.replaceAllMatching(
+                        normalizedName = normalizedName,
+                        uuid = normalizedUuid
+                    ) { player -> player.copy(isOp = false) }
                 }
                 refreshAll()
             }
@@ -1007,8 +1034,8 @@ class ServerStateHolder(
         val enforced = next.copy(
             port = singleServerPort,
             maxPlayers = next.maxPlayers.coerceIn(1, 10),
-            viewDistance = next.viewDistance.coerceIn(2, 32),
-            simulationDistance = next.simulationDistance.coerceIn(2, 32)
+            viewDistance = next.viewDistance.coerceIn(3, 32),
+            simulationDistance = next.simulationDistance.coerceIn(3, 32)
         )
         saveConfig(enforced)
         withContext(Dispatchers.Main) {
@@ -1603,11 +1630,16 @@ class ServerStateHolder(
     private fun startPeriodicWorldSave() {
         if (periodicWorldSaveJob?.isActive == true) return
         periodicWorldSaveJob = scope.launch(Dispatchers.IO) {
+            val saveIntervalMs = when {
+                totalRamGb <= 3 -> 8 * 60_000L
+                totalRamGb <= 4 -> 6 * 60_000L
+                else -> 4 * 60_000L
+            }
             while (periodicWorldSaveJob?.isActive == true) {
-                delay(120_000L)
+                delay(saveIntervalMs)
                 if (!isRunning || isStopping) continue
                 runCatching {
-                    sendRconCommand("save-all flush")
+                    sendRconCommand("save-all")
                 }.onFailure { error ->
                     withContext(Dispatchers.Main) {
                         appendLog("[PocketCraft] Auto-save failed: ${error.message ?: "unknown error"}")
@@ -1758,8 +1790,8 @@ class ServerStateHolder(
     private fun saveConfig(config: ServerConfig) {
         val enforcedConfig = config.copy(
             maxPlayers = config.maxPlayers.coerceIn(1, 10),
-            viewDistance = config.viewDistance.coerceIn(2, 32),
-            simulationDistance = config.simulationDistance.coerceIn(2, 32)
+            viewDistance = config.viewDistance.coerceIn(3, 32),
+            simulationDistance = config.simulationDistance.coerceIn(3, 32)
         )
         val props = ServerPropertiesHelper.readProperties(serverDir)
         props["level-name"] = enforcedConfig.worldName
@@ -1771,8 +1803,8 @@ class ServerStateHolder(
         props["online-mode"] = enforcedConfig.onlineMode.toString()
         props["motd"] = enforcedConfig.motd
         props["pvp"] = enforcedConfig.pvp.toString()
-        props["view-distance"] = enforcedConfig.viewDistance.coerceIn(2, 32).toString()
-        props["simulation-distance"] = enforcedConfig.simulationDistance.coerceIn(2, 32).toString()
+        props["view-distance"] = enforcedConfig.viewDistance.coerceIn(3, 32).toString()
+        props["simulation-distance"] = enforcedConfig.simulationDistance.coerceIn(3, 32).toString()
         props["spawn-protection"] = enforcedConfig.spawnProtection.toString()
         props["allow-flight"] = enforcedConfig.allowFlight.toString()
         props["white-list"] = enforcedConfig.whiteList.toString()
@@ -1785,7 +1817,7 @@ class ServerStateHolder(
         props["hardcore"] = enforcedConfig.hardcore.toString()
         props["pocketcraft-max-ram-mb"] = enforcedConfig.maxRamMb.coerceIn(512, 4096).toString()
         props["server-ip"] = "0.0.0.0"
-        props["network-compression-threshold"] = "512"
+        props["network-compression-threshold"] = ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD.toString()
         props["sync-chunk-writes"] = "false"
         props["max-tick-time"] = "60000"
         // RCON — fixed internal password, only accessible on localhost
@@ -1799,11 +1831,11 @@ class ServerStateHolder(
     }
 
     private fun adaptiveViewDistance(): Int {
-        return if (totalRamGb >= 7) 32 else if (totalRamGb >= 6) 20 else if (totalRamGb >= 4) 12 else 8
+        return if (totalRamGb >= 6) 5 else if (totalRamGb >= 4) 5 else 4
     }
 
     private fun adaptiveSimulationDistance(): Int {
-        return if (totalRamGb >= 7) 32 else if (totalRamGb >= 6) 14 else if (totalRamGb >= 4) 10 else 6
+        return if (totalRamGb >= 6) 4 else if (totalRamGb >= 4) 4 else 3
     }
 
     private fun buildServerMotd(displayName: String, description: String): String {
@@ -1888,10 +1920,10 @@ class ServerStateHolder(
         val simulation = props.getProperty("simulation-distance", adaptiveSimulationDistance().toString()).toIntOrNull()
             ?: adaptiveSimulationDistance()
 
-        props["view-distance"] = view.coerceIn(2, 32).toString()
-        props["simulation-distance"] = simulation.coerceIn(2, 32).toString()
+        props["view-distance"] = view.coerceIn(3, 32).toString()
+        props["simulation-distance"] = simulation.coerceIn(3, 32).toString()
         props["sync-chunk-writes"] = "false"
-        props["network-compression-threshold"] = "512"
+        props["network-compression-threshold"] = ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD.toString()
         ServerPropertiesHelper.saveProperties(serverDir, props)
     }
 
@@ -1924,15 +1956,51 @@ class ServerStateHolder(
         // Also include players from usercache.json (includes Bedrock players via Geyser)
         val cachedNames = loadUserCache()
         knownUuids.addAll(cachedNames.keys)
+        val opLookup = readNamedList("ops.json")
+        val opUuids = opLookup.mapNotNull { it.uuid.takeIf(String::isNotBlank) }.toSet()
+        val opNames = opLookup.map { it.name.lowercase(Locale.getDefault()) }.toSet()
 
         return knownUuids.map { uuid ->
+            val resolvedName = cachedNames[uuid] ?: uuid.take(8)
             PlayerInfo(
-                name = cachedNames[uuid] ?: uuid.take(8),
+                name = resolvedName,
                 uuid = uuid,
-                pingMs = 0
+                pingMs = 0,
+                isOp = uuid in opUuids || resolvedName.lowercase(Locale.getDefault()) in opNames
             )
-        }.sortedBy { it.name.lowercase(Locale.getDefault()) }
+        }
+            .groupBy { canonicalPlayerName(it.name) }
+            .values
+            .map { group ->
+                group.maxWithOrNull(
+                    compareBy<PlayerInfo> { it.isOp }
+                        .thenBy { it.uuid.isNotBlank() }
+                        .thenByDescending { it.name.startsWith(".").not() }
+                ) ?: group.first()
+            }
+            .sortedBy { it.name.lowercase(Locale.getDefault()) }
     }
+
+    private fun MutableList<PlayerInfo>.replaceAllMatching(
+        normalizedName: String,
+        uuid: String,
+        transform: (PlayerInfo) -> PlayerInfo
+    ) {
+        for (index in indices) {
+            val player = this[index]
+            val nameMatches = player.name.equals(normalizedName, ignoreCase = true)
+            val uuidMatches = uuid.isNotBlank() && player.uuid == uuid
+            if (nameMatches || uuidMatches) {
+                this[index] = transform(player)
+            }
+        }
+    }
+
+    private fun escapeSelectorName(value: String): String =
+        value.replace("\\", "\\\\").replace("\"", "\\\"")
+
+    private fun canonicalPlayerName(name: String): String =
+        name.trim().trimStart('.', '!', '*').lowercase(Locale.getDefault())
 
     private fun readNamedList(fileName: String): List<PlayerInfo> {
         val file = File(serverDir, fileName)

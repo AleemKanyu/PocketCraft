@@ -117,11 +117,7 @@ class ServerHostService : Service() {
         ServerLauncher(applicationContext).startServer(
             versionId = versionId,
             onOutput = { line ->
-                sendEvent(versionId, EVENT_OUTPUT, line)
-                // Don't update notification until server is ready
-                if (looksLikeServerReady(line)) {
-                    onServerReady()
-                }
+                handleObservedOutputLine(versionId, line)
             },
             onError = { line ->
                 sendEvent(versionId, EVENT_ERROR, line)
@@ -139,6 +135,7 @@ class ServerHostService : Service() {
                 stopInProgress.set(false)
                 relayJob?.cancel()
                 relayJob = null
+                relayManager.stopBedrockBridge()
                 serviceScope.launch(Dispatchers.IO) {
                     runCatching { relayManager.unregister() }
                 }
@@ -205,7 +202,7 @@ class ServerHostService : Service() {
     private fun stopServer() {
         if (!stopInProgress.compareAndSet(false, true)) return
         CoroutineScope(Dispatchers.IO).launch {
-            val inProcessRuntime = serverProcess == null
+            val inProcessRuntime = !ServerLauncher.hasActiveExternalProcess()
             try {
                 if (inProcessRuntime) {
                     // Native in-process JVM has no Process handle; stop it via RCON.
@@ -237,6 +234,7 @@ class ServerHostService : Service() {
                 android.util.Log.e("PocketCraft", "Error during stop: ${e.message}")
             } finally {
                 forceTerminateHostedServer()
+                relayManager.stopBedrockBridge()
                 runCatching { relayManager.unregister() }
                 relayJob?.cancel()
                 relayJob = null
@@ -420,6 +418,9 @@ class ServerHostService : Service() {
                     }
                     addLogLine(line)
                     sendEvent(versionId, EVENT_OUTPUT, line)
+                    if (looksLikeServerReady(line)) {
+                        onServerReady()
+                    }
                 }
             }
         }.apply {
@@ -460,8 +461,7 @@ class ServerHostService : Service() {
                                 .orEmpty()
 
                             if (line.isBlank()) continue
-                            addLogLine(line)
-                            sendEvent(versionId, EVENT_OUTPUT, line)
+                            handleObservedOutputLine(versionId, line)
                         }
                         offset = raf.filePointer
                     }
@@ -496,13 +496,9 @@ class ServerHostService : Service() {
                         Socket().use { socket ->
                             socket.connect(InetSocketAddress("127.0.0.1", port), 750)
                         }
-                        val line = "[PocketCraft] Server port $port is accepting connections."
+                        val line = "[PocketCraft] Server port $port is open. Finalizing startup..."
                         sendEvent(versionId, EVENT_OUTPUT, line)
-                        resolveLanEndpoint(port)?.let { endpoint ->
-                            sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] LAN address: $endpoint")
-                        }
-                        updateNotification(line, force = true)
-                        onServerReady()
+                        updateNotification("Finalizing server startup...", force = true)
                         break
                     } catch (_: Exception) {
                         Thread.sleep(1500)
@@ -535,7 +531,8 @@ class ServerHostService : Service() {
 
     private fun looksLikeServerReady(line: String): Boolean {
         val normalized = line.lowercase()
-        return normalized.contains("done (") && normalized.contains("for help")
+        return normalized.contains("done (") &&
+            normalized.contains("for help, type \"help\"")
     }
 
     private fun stopPortProbe() {
@@ -563,12 +560,18 @@ class ServerHostService : Service() {
         autoRecoverAttempts = 0
         autoRecoverWindowStartMs = 0L
         currentVersionId?.let { persistRuntimeState(applicationContext, it, RUNTIME_STATE_RUNNING) }
+        currentVersionId?.let { versionId ->
+            resolveLanEndpoint(currentServerPort)?.let { endpoint ->
+                sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] LAN address: $endpoint")
+            }
+        }
         currentVersionId?.let { sendEvent(it, EVENT_TUNNEL_CONNECTING, "[PocketCraft] Opening internet relay...") }
 
         relayJob = serviceScope.launch(Dispatchers.IO) {
             var registrationAttempts = 0
             val maxRegistrationAttempts = 5
             relayManager.disconnect()
+            relayManager.startBedrockBridge()
 
             while (isActive) {
                 try {
@@ -578,6 +581,15 @@ class ServerHostService : Service() {
                     android.util.Log.i("ServerHostService", "Relay registration attempt $registrationAttempts/$maxRegistrationAttempts")
 
                     val address = relayManager.register()
+
+                    if (alreadyKnownPort == null) {
+                        android.util.Log.i("ServerHostService", "Opening internet relay...")
+                    }
+                    val poolResult = relayManager.connectTunnelPool(currentServerPort)
+                    if (!poolResult.poolReady) {
+                        throw java.io.IOException("Relay tunnel pool did not become ready")
+                    }
+
                     persistPublicAddress(applicationContext, address.toString())
 
                     registrationAttempts = 0
@@ -591,11 +603,7 @@ class ServerHostService : Service() {
                     }
                     sendBroadcast(intent)
 
-                    if (alreadyKnownPort == null) {
-                        android.util.Log.i("ServerHostService", "Opening internet relay...")
-                    }
-                    val readyAck = relayManager.connectTunnelPool(currentServerPort)
-                    if (!readyAck) {
+                    if (!poolResult.readyAck) {
                         currentVersionId?.let {
                             sendEvent(
                                 it,
@@ -615,6 +623,7 @@ class ServerHostService : Service() {
 
                     // Ensure failed attempts do not keep stale sockets around.
                     relayManager.disconnect()
+                    relayManager.startBedrockBridge()
 
                     if (registrationAttempts >= maxRegistrationAttempts) {
                         android.util.Log.e("ServerHostService", "Max registration attempts reached. Stopping retry loop.")
@@ -632,6 +641,7 @@ class ServerHostService : Service() {
                     delay(5000)
                 }
             }
+            relayManager.stopBedrockBridge()
             android.util.Log.i("ServerHostService", "Relay job ended (isActive=$isActive)")
         }
     }
@@ -699,11 +709,7 @@ class ServerHostService : Service() {
         ServerLauncher(applicationContext).startServer(
             versionId = versionId,
             onOutput = { line ->
-                sendEvent(versionId, EVENT_OUTPUT, line)
-                // Don't update notification until server is ready
-                if (looksLikeServerReady(line)) {
-                    onServerReady()
-                }
+                handleObservedOutputLine(versionId, line)
             },
             onError = { line ->
                 sendEvent(versionId, EVENT_ERROR, line)
@@ -721,6 +727,7 @@ class ServerHostService : Service() {
                 stopInProgress.set(false)
                 relayJob?.cancel()
                 relayJob = null
+                relayManager.stopBedrockBridge()
                 serviceScope.launch(Dispatchers.IO) {
                     runCatching { relayManager.unregister() }
                 }
@@ -764,6 +771,14 @@ class ServerHostService : Service() {
         )
 
         return START_STICKY
+    }
+
+    private fun handleObservedOutputLine(versionId: String, line: String) {
+        addLogLine(line)
+        sendEvent(versionId, EVENT_OUTPUT, line)
+        if (looksLikeServerReady(line)) {
+            onServerReady()
+        }
     }
 
     private fun resolveLanEndpoint(port: Int): String? {

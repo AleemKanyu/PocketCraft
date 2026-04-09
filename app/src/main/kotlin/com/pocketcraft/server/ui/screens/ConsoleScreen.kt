@@ -79,6 +79,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
@@ -104,6 +105,16 @@ import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.service.VersionCatalog
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.Monocraft
+import com.pocketcraft.server.ui.theme.pocketCardShadowColor
+import com.pocketcraft.server.ui.theme.pocketPopupAccentContainerColor
+import com.pocketcraft.server.ui.theme.pocketPopupAccentTintColor
+import com.pocketcraft.server.ui.theme.pocketSheetBorderColor
+import com.pocketcraft.server.ui.theme.pocketWarningAccentColor
+import com.pocketcraft.server.ui.theme.pocketWarningBodyColor
+import com.pocketcraft.server.ui.theme.pocketWarningBorderColor
+import com.pocketcraft.server.ui.theme.pocketWarningIconChipColor
+import com.pocketcraft.server.ui.theme.pocketWarningSurfaceColor
+import com.pocketcraft.server.ui.theme.pocketWarningTitleColor
 import com.pocketcraft.server.util.RamUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -138,6 +149,7 @@ fun ConsoleScreen(
         animationSpec = tween(durationMillis = 700),
         label = "startup_progress"
     )
+    val cardShadowColor = pocketCardShadowColor()
 
     // RAM feature state
     val prefs = remember { AppPreferences(context) }
@@ -238,10 +250,18 @@ fun ConsoleScreen(
         if (stateHolder.status == ServerStatus.ONLINE && !stateHolder.config.whiteList && !stateHolder.openServerRiskAcknowledged) {
             item {
                 androidx.compose.material3.Surface(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(
+                            elevation = 14.dp,
+                            shape = RoundedCornerShape(16.dp),
+                            ambientColor = cardShadowColor,
+                            spotColor = cardShadowColor,
+                            clip = false
+                        ),
                     shape = RoundedCornerShape(16.dp),
-                    color = Color(0xFFF9F3E7),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE7C88B)),
+                    color = pocketWarningSurfaceColor(),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, pocketWarningBorderColor()),
                     shadowElevation = 5.dp
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
@@ -249,19 +269,19 @@ fun ConsoleScreen(
                             Box(
                                 modifier = Modifier
                                     .size(28.dp)
-                                    .background(Color(0xFFFFDFAE), RoundedCornerShape(10.dp)),
+                                    .background(pocketWarningIconChipColor(), RoundedCornerShape(10.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     Icons.Default.Warning,
                                     contentDescription = null,
-                                    tint = Color(0xFFCD8A00),
+                                    tint = pocketWarningAccentColor(),
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
                             Text(
                                 "Open server — anyone can join",
-                                color = Color(0xFF6F4E00),
+                                color = pocketWarningTitleColor(),
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 13.sp
                             )
@@ -269,7 +289,7 @@ fun ConsoleScreen(
                         Spacer(Modifier.height(6.dp))
                         Text(
                             "Whitelist is off, so any player who knows the address can join until you lock it down.",
-                            color = Color(0xFF7C6536),
+                            color = pocketWarningBodyColor(),
                             fontSize = 12.sp,
                             lineHeight = 16.sp
                         )
@@ -277,8 +297,8 @@ fun ConsoleScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = { stateHolder.enableWhitelist() },
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD7B36A)),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF8F5C00))
+                                border = androidx.compose.foundation.BorderStroke(1.dp, pocketWarningBorderColor()),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = pocketWarningAccentColor())
                             ) {
                                 Text("Enable Whitelist", fontSize = 12.sp)
                             }
@@ -382,38 +402,6 @@ fun ConsoleScreen(
                 }
             }
         }
-        item {
-            VersionUpgradeCard(
-                currentVersion = stateHolder.versionLabel,
-                availableVersions = availableVersions,
-                onUpgrade = { onChangeVersion() },
-                serverIsRunning = stateHolder.isNavigationLocked,
-                isVersionDownloaded = isVersionDownloaded
-            )
-        }
-        // RAM Settings Card
-        item {
-            RamSettingsCard(
-                ramMode = ramMode,
-                manualRamMb = manualRamMb,
-                totalRamMb = totalRamMb,
-                serverIsRunning = stateHolder.isNavigationLocked,
-                onRamModeChange = { mode ->
-                    ramMode = mode
-                    prefs.ramMode = mode
-                },
-                onManualRamChange = { mb ->
-                    manualRamMb = mb
-                    prefs.manualRamMb = mb
-                }
-            )
-        }
-        // RAM Usage Card (visible only while server is running)
-        if (stateHolder.status == ServerStatus.ONLINE) {
-            item {
-                RamUsageCard(usedMb = usedRamMb, maxMb = totalRamMb)
-            }
-        }
         if (stateHolder.onlinePlayers.isNotEmpty()) {
             item {
                 Row(
@@ -424,7 +412,7 @@ fun ConsoleScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "PLAYERS ONLINE (${stateHolder.onlinePlayers.size}/${stateHolder.config.maxPlayers})",
+                        text = "PLAYERS JOINED (${stateHolder.onlinePlayers.size}/${stateHolder.config.maxPlayers})",
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 15.sp,
                         letterSpacing = 0.5.sp
@@ -445,6 +433,36 @@ fun ConsoleScreen(
                     stateHolder = stateHolder,
                     onOpenDetails = { onPlayerSelected(player) }
                 )
+            }
+        }
+        item {
+            VersionUpgradeCard(
+                currentVersion = stateHolder.versionLabel,
+                availableVersions = availableVersions,
+                onUpgrade = { onChangeVersion() },
+                serverIsRunning = stateHolder.isNavigationLocked,
+                isVersionDownloaded = isVersionDownloaded
+            )
+        }
+        item {
+            RamSettingsCard(
+                ramMode = ramMode,
+                manualRamMb = manualRamMb,
+                totalRamMb = totalRamMb,
+                serverIsRunning = stateHolder.isNavigationLocked,
+                onRamModeChange = { mode ->
+                    ramMode = mode
+                    prefs.ramMode = mode
+                },
+                onManualRamChange = { mb ->
+                    manualRamMb = mb
+                    prefs.manualRamMb = mb
+                }
+            )
+        }
+        if (stateHolder.status == ServerStatus.ONLINE) {
+            item {
+                RamUsageCard(usedMb = usedRamMb, maxMb = totalRamMb)
             }
         }
         item {
@@ -531,7 +549,7 @@ fun ConsoleScreen(
                 shape = RoundedCornerShape(28.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 10.dp,
-                border = BorderStroke(1.dp, PocketColors.BorderLight)
+                border = BorderStroke(1.dp, pocketSheetBorderColor())
             ) {
                 Column(
                     modifier = Modifier.padding(22.dp),
@@ -613,6 +631,9 @@ fun ConsoleScreen(
 
     if (showBedrockHelpDialog) {
         val bedrockHelpSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val bedrockLanAddress = "${stateHolder.localIp}:19132"
+        val internetJoinAddress = stateHolder.publicAddress?.takeIf { it.isNotBlank() }
+            ?: "Start the server to get your internet join address"
         ModalBottomSheet(
             onDismissRequest = {
                 scope.launch {
@@ -632,27 +653,14 @@ fun ConsoleScreen(
                 shape = RoundedCornerShape(28.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 10.dp,
-                border = BorderStroke(1.dp, PocketColors.BorderLight)
+                border = BorderStroke(1.dp, pocketSheetBorderColor())
             ) {
                 Column(
                     modifier = Modifier.padding(22.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = PocketColors.PrimaryMuted
-                    ) {
-                        Text(
-                            text = "Beta",
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            fontWeight = FontWeight.Bold,
-                            color = PocketColors.PrimaryDark,
-                            fontSize = 11.sp
-                        )
-                    }
-
                     Text(
-                        text = "Cross-platform play",
+                        text = "How players join",
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = Monocraft,
                         fontSize = 22.sp,
@@ -660,7 +668,7 @@ fun ConsoleScreen(
                     )
 
                     Text(
-                        text = "Bedrock is supported for local LAN play while PocketCraft is in beta. Online play will come soon.",
+                        text = "Share the address PocketCraft gives you. Java and Bedrock players can both use the same internet relay address, while Wi-Fi players can use your local IP on the same network.",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 18.sp
@@ -668,19 +676,24 @@ fun ConsoleScreen(
 
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         JoinStepCard(
-                            step = "1",
-                            title = "Start the server",
-                            body = "Wait until PocketCraft shows the server is running."
+                            step = "Java",
+                            title = "Internet join",
+                            body = "Open Multiplayer, tap Add Server, and enter $internetJoinAddress."
                         )
                         JoinStepCard(
-                            step = "2",
-                            title = "Use full LAN IP",
-                            body = "Enter the full LAN IP exactly as shown in PocketCraft, without adding a port."
+                            step = "Java",
+                            title = "Wi-Fi join",
+                            body = "On the same Wi-Fi, Java players can use ${stateHolder.localIp}:${stateHolder.config.port}."
                         )
                         JoinStepCard(
-                            step = "3",
-                            title = "Stay on the same Wi-Fi",
-                            body = "Bedrock players can join from nearby devices on the same network only for now."
+                            step = "Bedrock",
+                            title = "Internet join",
+                            body = "Open Servers, tap Add Server, and enter the same relay address: $internetJoinAddress."
+                        )
+                        JoinStepCard(
+                            step = "Bedrock",
+                            title = "Wi-Fi join",
+                            body = "On the same Wi-Fi, Bedrock players can use $bedrockLanAddress."
                         )
                     }
 
@@ -689,11 +702,11 @@ fun ConsoleScreen(
                         color = PocketColors.PrimaryMuted.copy(alpha = 0.65f)
                     ) {
                         Text(
-                            text = "LAN only for now. The online version is coming soon in beta updates.",
+                            text = "If Bedrock briefly says Pinging in the server list, try joining with the same address once PocketCraft shows the server is online.",
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = PocketColors.PrimaryDark
+                            color = Color.White
                         )
                     }
 
@@ -978,7 +991,7 @@ private fun ServerIdentityCard(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "LAN hosting still works on the same Wi-Fi network.",
+                        text = "Wi-Fi hosting still works on the same local network.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     TextButton(onClick = stateHolder::clearTunnelError) {
@@ -1012,15 +1025,24 @@ private fun ServerIdentityCard(
             }
         }
 
-        val localLanAddress = "${stateHolder.localIp}:${stateHolder.config.port}"
-        val canShareAddresses = publicAddress != null || serverRunning
+    val localWifiAddress = "${stateHolder.localIp}:${stateHolder.config.port}"
+    val canShareAddresses = publicAddress != null || serverRunning
+    val joinCardShadowColor = pocketCardShadowColor()
 
-        if (canShareAddresses) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
+    if (canShareAddresses) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(
+                    elevation = 14.dp,
+                    shape = RoundedCornerShape(14.dp),
+                    ambientColor = joinCardShadowColor,
+                    spotColor = joinCardShadowColor,
+                    clip = false
+                ),
                 shape = RoundedCornerShape(14.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                border = BorderStroke(1.dp, PocketColors.BorderDark)
+                border = BorderStroke(1.dp, pocketSheetBorderColor())
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -1041,23 +1063,24 @@ private fun ServerIdentityCard(
                     )
 
                     AddressValueRow(
-                        label = "LAN",
-                        address = localLanAddress,
+                        label = "Wi-Fi",
+                        address = localWifiAddress,
                         emphasized = false
                     )
 
                     OutlinedButton(
                         onClick = onOpenBedrockHelp,
                         modifier = Modifier.fillMaxWidth(),
-                        border = BorderStroke(1.dp, PocketColors.BorderDark)
+                        border = BorderStroke(1.dp, Color.White)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Info,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(16.dp),
+                            tint = PocketColors.PrimaryLight
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Bedrock Join Guide", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Join Guide", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PocketColors.PrimaryLight)
                     }
 
                     OutlinedButton(
@@ -1065,25 +1088,27 @@ private fun ServerIdentityCard(
                             shareServerAddresses(
                                 context = context,
                                 internetAddress = publicAddress,
-                                lanAddress = localLanAddress.takeIf { serverRunning }
+                                lanAddress = localWifiAddress.takeIf { serverRunning }
                             )
                         },
                         enabled = canShareAddresses,
                         modifier = Modifier.fillMaxWidth(),
-                        border = BorderStroke(1.dp, PocketColors.BorderDark)
+                        border = BorderStroke(1.dp, Color.White)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(16.dp),
+                            tint = PocketColors.PrimaryLight
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Share Join Addresses", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Share Join Addresses", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PocketColors.PrimaryLight)
                     }
                 }
             }
         }
     }
+
 }
 
 @Composable
@@ -1094,12 +1119,12 @@ private fun SeedStepRow(step: String, text: String) {
     ) {
         Surface(
             shape = RoundedCornerShape(999.dp),
-            color = PocketColors.PrimaryMuted
+            color = pocketPopupAccentContainerColor()
         ) {
             Text(
                 text = step,
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                color = PocketColors.PrimaryDark,
+                color = pocketPopupAccentTintColor(),
                 fontWeight = FontWeight.Bold,
                 fontSize = 11.sp
             )
@@ -1118,8 +1143,8 @@ private fun SeedStepRow(step: String, text: String) {
 private fun JoinStepCard(step: String, title: String, body: String) {
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = PocketColors.SurfaceVarLight,
-        border = BorderStroke(1.dp, PocketColors.BorderLight)
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        border = BorderStroke(1.dp, pocketSheetBorderColor())
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -1128,12 +1153,12 @@ private fun JoinStepCard(step: String, title: String, body: String) {
         ) {
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = PocketColors.PrimaryMuted
+                color = pocketPopupAccentContainerColor()
             ) {
                 Text(
                     text = step,
                     modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
-                    color = PocketColors.PrimaryDark,
+                    color = pocketPopupAccentTintColor(),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
@@ -1334,7 +1359,7 @@ private fun shareServerAddresses(
                 appendLine("PocketCraft join addresses")
                 appendLine()
                 appendLine("Internet: ${internetAddress?.takeIf { it.isNotBlank() } ?: "Unavailable right now"}")
-                append("LAN: ${lanAddress?.takeIf { it.isNotBlank() } ?: "Unavailable right now"}")
+                append("Wi-Fi: ${lanAddress?.takeIf { it.isNotBlank() } ?: "Unavailable right now"}")
             }
         )
     }

@@ -104,6 +104,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.pocketcraft.server.MainActivity
+import com.pocketcraft.server.config.RelayServers
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.R
@@ -184,6 +185,9 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
     var setupWorldDescription by rememberSaveable { mutableStateOf("") }
     var setupSeed by rememberSaveable { mutableStateOf("") }
     var setupVersion by rememberSaveable { mutableStateOf("") }
+    var setupRelayHost by rememberSaveable {
+        mutableStateOf(AppPreferences(context).relayHost)
+    }
     var setupShowVersionDialog by remember { mutableStateOf(false) }
     var setupLoadingVersions by remember { mutableStateOf(false) }
     var setupVersions by remember { mutableStateOf(listOf("1.21.1")) }
@@ -304,7 +308,11 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                             2 -> ImportScreen()
                             3 -> FeaturesScreen()
                             4 -> CrossPlayScreen()
-                            5 -> PermissionsScreen(
+                            5 -> RelayRegionOnboardingScreen(
+                                selectedHost = setupRelayHost,
+                                onSelectHost = { setupRelayHost = it }
+                            )
+                            6 -> PermissionsScreen(
                                 backgroundPermissionGranted = backgroundPermissionGranted,
                                 notificationsPermissionGranted = notificationsPermissionGranted,
                                 onAllowBackground = {
@@ -382,7 +390,7 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                         )
                     }
 
-                    val missingPermissionStep = currentStep == 5 && (!backgroundPermissionGranted || !notificationsPermissionGranted)
+                    val missingPermissionStep = currentStep == 6 && (!backgroundPermissionGranted || !notificationsPermissionGranted)
 
                     PrimaryButton(
                         modifier = Modifier.weight(1.25f),
@@ -409,6 +417,8 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                                     return@PrimaryButton
                                 }
                                 scope.launch {
+                                    AppPreferences(context).relayHost = setupRelayHost
+                                    AppPreferencesStore.setRelayHost(context, setupRelayHost)
                                     AppPreferencesStore.setSelectedVersion(context, setupVersion.trim())
                                     AppPreferencesStore.setWorldSeed(context, setupSeed.trim())
                                     AppPreferencesStore.setSeedSetupShown(context, true)
@@ -561,9 +571,65 @@ private fun onboardingSteps(): List<OnboardingStep> {
         OnboardingStep("BRING YOUR WORLD"),
         OnboardingStep("FULL CONTROL"),
         OnboardingStep("CROSS-PLAY READY"),
+        OnboardingStep("PICK REGION"),
         OnboardingStep("PERMISSIONS"),
         OnboardingStep("SETUP")
     )
+}
+
+@Composable
+private fun RelayRegionOnboardingScreen(
+    selectedHost: String,
+    onSelectHost: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Text(
+            text = "Choose your relay region",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = OnboardingTextPrimary,
+            fontFamily = Monocraft
+        )
+        Text(
+            text = "Pick the relay server closest to your players. You can change this later from the dashboard too.",
+            fontSize = 13.sp,
+            color = OnboardingTextSecondary,
+            lineHeight = 18.sp
+        )
+        RelayServers.ALL.forEach { server ->
+            val selected = server.host == selectedHost
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelectHost(server.host) },
+                shape = RoundedCornerShape(22.dp),
+                color = if (selected) PocketColors.PrimaryMuted else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                border = BorderStroke(1.dp, if (selected) PocketColors.Primary else OnboardingBorder)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(text = server.icon, fontSize = 24.sp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(server.region, fontWeight = FontWeight.ExtraBold, color = OnboardingTextPrimary)
+                        Text(server.bestFor, fontSize = 11.sp, color = OnboardingTextSecondary)
+                    }
+                    if (selected) {
+                        Icon(
+                            imageVector = Icons.Filled.CheckCircle,
+                            contentDescription = null,
+                            tint = PocketColors.PrimaryDark
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 private fun isBackgroundPermissionGranted(context: Context): Boolean {

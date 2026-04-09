@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -22,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import com.pocketcraft.server.ui.theme.Monocraft
 import androidx.compose.ui.unit.dp
@@ -39,19 +41,33 @@ fun SplashScreen(
         animationSpec = tween(durationMillis = 260),
         label = "splash_progress"
     )
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val backgroundBrush = if (isDarkTheme) {
+        Brush.verticalGradient(
+            colors = listOf(
+                PocketColors.BgDark,
+                Color(0xFF11211D),
+                Color(0xFF0E1B18)
+            )
+        )
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFFF8FBF7),
+                Color(0xFFF1F7EE),
+                Color(0xFFE6F1DF)
+            )
+        )
+    }
+    val titleColor = PocketColors.Primary
+    val statusColor = if (isDarkTheme) Color(0xFF88C39B) else Color(0xFF6E9E70)
+    val progressColor = if (isDarkTheme) Color(0xFF408A71) else Color(0xFF58CC02)
+    val trackColor = if (isDarkTheme) Color(0xFF16362C) else Color(0xFFDCE7D6)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFFF8FBF7),
-                        Color(0xFFF1F7EE),
-                        Color(0xFFE6F1DF)
-                    )
-                )
-            ),
+            .background(backgroundBrush),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -74,14 +90,14 @@ fun SplashScreen(
                 fontFamily = Monocraft,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 30.sp,
-                color = PocketColors.Primary,
+                color = titleColor,
                 letterSpacing = 0.6.sp
             )
 
             Text(
                 text = status,
                 modifier = Modifier.padding(top = 8.dp),
-                color = Color(0xFF6E9E70),
+                color = statusColor,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -93,8 +109,8 @@ fun SplashScreen(
                     .fillMaxWidth(0.62f)
                     .height(6.dp)
                     .clip(RoundedCornerShape(999.dp)),
-                color = Color(0xFF58CC02),
-                trackColor = Color(0xFFDCE7D6)
+                color = progressColor,
+                trackColor = trackColor
             )
         }
     }

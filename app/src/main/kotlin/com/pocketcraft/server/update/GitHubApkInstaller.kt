@@ -34,12 +34,6 @@ object GitHubApkInstaller {
                 .url(downloadUrl)
                 .header("Accept", "application/octet-stream")
                 .header("User-Agent", "PocketCraft/${BuildConfig.VERSION_NAME}")
-                .apply {
-                    val token = BuildConfig.GITHUB_RELEASES_TOKEN.trim()
-                    if (token.isNotBlank()) {
-                        header("Authorization", "Bearer $token")
-                    }
-                }
                 .build()
 
             client.newCall(request).execute().use { response ->

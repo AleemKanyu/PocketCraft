@@ -35,6 +35,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import com.pocketcraft.server.ui.components.PlayerActionButton
 import com.pocketcraft.server.ui.components.PlayerActionType
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -74,6 +75,8 @@ private data class PlayerLiveSnapshot(
     val hunger: Int? = null
 )
 
+private val DefaultRespawnLocation = PlayerLocation(0.0, 0.0, 0.0, "minecraft:overworld")
+
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun PlayerDetailScreen(
@@ -90,9 +93,8 @@ fun PlayerDetailScreen(
     var banned by remember { mutableStateOf(false) }
     var op by remember { mutableStateOf(false) }
     var currentPos by remember { mutableStateOf<PlayerLocation?>(null) }
-    var respawnPos by remember { mutableStateOf<PlayerLocation?>(null) }
+    var respawnPos by remember { mutableStateOf<PlayerLocation?>(DefaultRespawnLocation) }
     var lastDeathPos by remember { mutableStateOf<PlayerLocation?>(null) }
-    var teleportConfirm by remember { mutableStateOf<PlayerLocation?>(null) }
     var stats by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
     var health by remember { mutableStateOf(20f) }
     var hunger by remember { mutableStateOf(20) }
@@ -103,6 +105,8 @@ fun PlayerDetailScreen(
     var delStats by remember { mutableStateOf(false) }
     var delAdv by remember { mutableStateOf(false) }
     var confirmDeleteData by remember { mutableStateOf(false) }
+
+    val commandTarget = remember(player.name) { playerCommandTarget(player.name) }
     val latestLogLine = stateHolder.logs.lastOrNull()
     val isPlayerOnline = stateHolder.onlinePlayers.any { it.name.equals(player.name, ignoreCase = true) }
 
@@ -165,18 +169,57 @@ fun PlayerDetailScreen(
         snapshot.hunger?.let { hunger = it.coerceIn(0, 20) }
     }
 
+    LaunchedEffect(player.name, latestLogLine, isPlayerOnline, stateHolder.status) {
+        if (!isPlayerOnline || stateHolder.status != ServerStatus.ONLINE) return@LaunchedEffect
+        val latest = latestLogLine.orEmpty().lowercase()
+        val normalizedName = canonicalPlayerName(player.name)
+        val mentionsPlayer = latest.contains(player.name.lowercase()) || latest.contains(normalizedName)
+        val spawnChanged =
+            latest.contains("sleeping in bed") ||
+                latest.contains("set own spawnpoint") ||
+                latest.contains("spawn point set") ||
+                latest.contains("respawn point set")
+        if (!mentionsPlayer || !spawnChanged) return@LaunchedEffect
+
+        delay(500)
+        stateHolder.sendCommand("data get entity $commandTarget SpawnX")
+        delay(120)
+        stateHolder.sendCommand("data get entity $commandTarget SpawnY")
+        delay(120)
+        stateHolder.sendCommand("data get entity $commandTarget SpawnZ")
+        delay(120)
+        stateHolder.sendCommand("data get entity $commandTarget SpawnDimension")
+    }
+
+    LaunchedEffect(player.name, latestLogLine, isPlayerOnline, stateHolder.status) {
+        if (!isPlayerOnline || stateHolder.status != ServerStatus.ONLINE) return@LaunchedEffect
+        val latest = latestLogLine.orEmpty()
+        if (!isPlayerDeathLogFor(latest, player.name)) return@LaunchedEffect
+
+        delay(500)
+        stateHolder.sendCommand("data get entity $commandTarget LastDeathLocation")
+    }
+
     LaunchedEffect(player.name, isPlayerOnline, stateHolder.status) {
         if (!isPlayerOnline || stateHolder.status != ServerStatus.ONLINE) return@LaunchedEffect
         while (true) {
-            stateHolder.sendCommand("data get entity ${player.name} Pos")
-            stateHolder.sendCommand("data get entity ${player.name} Dimension")
-            stateHolder.sendCommand("data get entity ${player.name} Health")
-            stateHolder.sendCommand("data get entity ${player.name} foodLevel")
-            stateHolder.sendCommand("data get entity ${player.name} SpawnX")
-            stateHolder.sendCommand("data get entity ${player.name} SpawnY")
-            stateHolder.sendCommand("data get entity ${player.name} SpawnZ")
-            stateHolder.sendCommand("data get entity ${player.name} SpawnDimension")
-            stateHolder.sendCommand("data get entity ${player.name} LastDeathLocation")
+            stateHolder.sendCommand("data get entity $commandTarget Pos")
+            delay(140)
+            stateHolder.sendCommand("data get entity $commandTarget Dimension")
+            delay(140)
+            stateHolder.sendCommand("data get entity $commandTarget Health")
+            delay(140)
+            stateHolder.sendCommand("data get entity $commandTarget foodLevel")
+            delay(140)
+            stateHolder.sendCommand("data get entity $commandTarget SpawnX")
+            delay(140)
+            stateHolder.sendCommand("data get entity $commandTarget SpawnY")
+            delay(140)
+            stateHolder.sendCommand("data get entity $commandTarget SpawnZ")
+            delay(140)
+            stateHolder.sendCommand("data get entity $commandTarget SpawnDimension")
+            delay(140)
+            stateHolder.sendCommand("data get entity $commandTarget LastDeathLocation")
             delay(8_000)
         }
     }
@@ -217,7 +260,6 @@ fun PlayerDetailScreen(
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(player.name, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
-                        Text(player.uuid.ifBlank { "Unknown UUID" }, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(
                             if (isPlayerOnline) "Online" else "Offline",
                             color = if (isPlayerOnline) PocketColors.Online else PocketColors.Offline,
@@ -243,7 +285,7 @@ fun PlayerDetailScreen(
                                 DropdownMenuItem(text = { Text(mode) }, onClick = {
                                     gamemode = mode
                                     gamemodeExpanded = false
-                                    stateHolder.sendCommand("gamemode $mode ${player.name}")
+                                    stateHolder.sendCommand("gamemode $mode $commandTarget")
                                 })
                             }
                         }
@@ -274,15 +316,16 @@ fun PlayerDetailScreen(
                         PlayerActionButton(
                             label = "Kill",
                             actionType = PlayerActionType.DAMAGE,
-                            onClick = { stateHolder.sendCommand("kill ${player.name}") },
+                            onClick = { stateHolder.sendCommand("kill $commandTarget") },
                             modifier = Modifier.weight(1f)
                         )
                         PlayerActionButton(
                             label = "Heal",
                             actionType = PlayerActionType.HEAL,
                             onClick = {
-                                stateHolder.sendCommand("effect clear ${player.name} instant_health")
-                                stateHolder.sendCommand("data merge entity ${player.name} {Health:20.0f}")
+                                stateHolder.sendCommand("effect clear $commandTarget minecraft:instant_health")
+                                stateHolder.sendCommand("effect give $commandTarget minecraft:instant_health 1 255 true")
+                                health = 20f
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -292,7 +335,9 @@ fun PlayerDetailScreen(
                             label = "Starve",
                             actionType = PlayerActionType.STARVE,
                             onClick = {
-                                stateHolder.sendCommand("data merge entity ${player.name} {foodLevel:0,foodSaturationLevel:0.0f}")
+                                stateHolder.sendCommand("effect clear $commandTarget minecraft:saturation")
+                                stateHolder.sendCommand("effect give $commandTarget minecraft:hunger 8 255 true")
+                                hunger = 0
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -300,8 +345,9 @@ fun PlayerDetailScreen(
                             label = "Feed",
                             actionType = PlayerActionType.FEED,
                             onClick = {
-                                stateHolder.sendCommand("effect clear ${player.name} hunger")
-                                stateHolder.sendCommand("data merge entity ${player.name} {foodLevel:20,foodSaturationLevel:20.0f}")
+                                stateHolder.sendCommand("effect clear $commandTarget minecraft:hunger")
+                                stateHolder.sendCommand("effect give $commandTarget minecraft:saturation 2 255 true")
+                                hunger = 20
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -331,7 +377,11 @@ fun PlayerDetailScreen(
                 activeBadge = "OPED"
             ) {
                 op = it
-                stateHolder.sendCommand(if (it) "op ${player.name}" else "deop ${player.name}")
+                if (it) {
+                    stateHolder.opPlayer(player.name)
+                } else {
+                    stateHolder.removeOp(player.name)
+                }
                 syncModerationFlags()
             }
         }
@@ -341,96 +391,36 @@ fun PlayerDetailScreen(
                 currentPos = currentPos,
                 respawnPos = respawnPos,
                 lastDeathPos = lastDeathPos,
-                onTeleport = { teleportConfirm = it }
+                onTeleport = { loc ->
+                    val cmd = if (loc.dimension == "minecraft:overworld") {
+                        "tp $commandTarget ${loc.x} ${loc.y} ${loc.z}"
+                    } else {
+                        "execute in ${loc.dimension} run tp $commandTarget ${loc.x} ${loc.y} ${loc.z}"
+                    }
+                    stateHolder.sendCommand(cmd)
+                }
             )
         }
 
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Statistics", fontWeight = FontWeight.Bold)
-                    Text("Playtime: ${formatPlaytime(stats["minecraft:custom:minecraft:play_time"] ?: 0L)}")
-                    Text("Kills: ${stats["minecraft:custom:minecraft:player_kills"] ?: 0}")
-                    Text("Deaths: ${stats["minecraft:custom:minecraft:deaths"] ?: 0}")
-                }
-            }
+            PlayerStatisticsSection(stats = stats)
         }
 
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Delete Player Data", fontWeight = FontWeight.Bold)
-                    DeleteCheckbox("Experience points", delXp) { delXp = it }
-                    DeleteCheckbox("Ender Chest", delEnder) { delEnder = it }
-                    DeleteCheckbox("Player data file", delPlayer) { delPlayer = it }
-                    DeleteCheckbox("Statistics file", delStats) { delStats = it }
-                    DeleteCheckbox("Advancements file", delAdv) { delAdv = it }
-                    val anySelected = delXp || delEnder || delPlayer || delStats || delAdv
-                    if (player.uuid.isBlank()) {
-                        Text(
-                            text = "Player data actions unlock after PocketCraft learns this player's UUID from the server.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Button(
-                        onClick = { confirmDeleteData = true },
-                        enabled = anySelected && player.uuid.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Danger)
-                    ) {
-                        Text("Delete player data")
-                    }
-                }
-            }
-        }
-    }
-
-    if (teleportConfirm != null) {
-        val loc = teleportConfirm!!
-        val teleportSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(
-            onDismissRequest = {
-                scope.launch {
-                    teleportSheetState.hide()
-                    teleportConfirm = null
-                }
-            },
-            sheetState = teleportSheetState,
-            dragHandle = null,
-            containerColor = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text("Teleport player to this location?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
-                Text("${loc.formatted()}\n${loc.dimension}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(
-                    onClick = {
-                        val cmd = if (loc.dimension == "minecraft:overworld") {
-                            "tp ${player.name} ${loc.x} ${loc.y} ${loc.z}"
-                        } else {
-                            "execute in ${loc.dimension} run tp ${player.name} ${loc.x} ${loc.y} ${loc.z}"
-                        }
-                        stateHolder.sendCommand(cmd)
-                        scope.launch {
-                            teleportSheetState.hide()
-                            teleportConfirm = null
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Teleport") }
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            teleportSheetState.hide()
-                            teleportConfirm = null
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Cancel") }
-            }
+            PlayerDataDeletionSection(
+                playerUuid = player.uuid,
+                delXp = delXp,
+                delEnder = delEnder,
+                delPlayer = delPlayer,
+                delStats = delStats,
+                delAdv = delAdv,
+                onDelXpChange = { delXp = it },
+                onDelEnderChange = { delEnder = it },
+                onDelPlayerChange = { delPlayer = it },
+                onDelStatsChange = { delStats = it },
+                onDelAdvChange = { delAdv = it },
+                onDelete = { confirmDeleteData = true }
+            )
         }
     }
 
@@ -488,6 +478,13 @@ fun PlayerDetailScreen(
     }
 }
 
+private fun playerCommandTarget(playerName: String): String {
+    val escaped = playerName
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+    return """@a[name="$escaped"]"""
+}
+
 @Composable
 private fun ControlToggleRow(
     label: String,
@@ -530,9 +527,150 @@ private fun ControlToggleRow(
 
 @Composable
 private fun DeleteCheckbox(label: String, checked: Boolean, onChecked: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(checked = checked, onCheckedChange = onChecked)
-        Text(label)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(checked = checked, onCheckedChange = onChecked)
+            Text(label, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+@Composable
+private fun PlayerStatisticsSection(stats: Map<String, Long>) {
+    val playTime = formatPlaytime(stats["minecraft:custom:minecraft:play_time"] ?: 0L)
+    val kills = (stats["minecraft:custom:minecraft:player_kills"] ?: 0L).toString()
+    val deaths = (stats["minecraft:custom:minecraft:deaths"] ?: 0L).toString()
+    val jumps = (stats["minecraft:custom:minecraft:jump"] ?: 0L).toString()
+    val blocksMined = (stats["minecraft:mined:minecraft:stone"] ?: 0L) +
+        (stats["minecraft:mined:minecraft:dirt"] ?: 0L) +
+        (stats["minecraft:mined:minecraft:deepslate"] ?: 0L)
+
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Statistics", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                StatTile(
+                    title = "Play time",
+                    value = playTime,
+                    modifier = Modifier.weight(1f)
+                )
+                StatTile(
+                    title = "Kills",
+                    value = kills,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                StatTile(
+                    title = "Deaths",
+                    value = deaths,
+                    modifier = Modifier.weight(1f)
+                )
+                StatTile(
+                    title = "Jumps",
+                    value = jumps,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            StatTile(
+                title = "Blocks mined",
+                value = blocksMined.toString(),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatTile(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = PocketColors.PrimaryMuted.copy(alpha = 0.45f),
+        border = BorderStroke(1.dp, PocketColors.BorderDark.copy(alpha = 0.45f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = title,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 18.sp,
+                color = PocketColors.PrimaryDark
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlayerDataDeletionSection(
+    playerUuid: String,
+    delXp: Boolean,
+    delEnder: Boolean,
+    delPlayer: Boolean,
+    delStats: Boolean,
+    delAdv: Boolean,
+    onDelXpChange: (Boolean) -> Unit,
+    onDelEnderChange: (Boolean) -> Unit,
+    onDelPlayerChange: (Boolean) -> Unit,
+    onDelStatsChange: (Boolean) -> Unit,
+    onDelAdvChange: (Boolean) -> Unit,
+    onDelete: () -> Unit
+) {
+    val anySelected = delXp || delEnder || delPlayer || delStats || delAdv
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Delete Player Data", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(
+                text = "Pick exactly what you want to clear for this player.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            DeleteCheckbox("Experience points", delXp, onDelXpChange)
+            DeleteCheckbox("Ender Chest", delEnder, onDelEnderChange)
+            DeleteCheckbox("Player data file", delPlayer, onDelPlayerChange)
+            DeleteCheckbox("Statistics file", delStats, onDelStatsChange)
+            DeleteCheckbox("Advancements file", delAdv, onDelAdvChange)
+            if (playerUuid.isBlank()) {
+                Text(
+                    text = "Player data actions unlock after PocketCraft learns this player's UUID from the server.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Button(
+                onClick = onDelete,
+                enabled = anySelected && playerUuid.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Danger),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Delete selected player data")
+            }
+        }
     }
 }
 
@@ -614,29 +752,50 @@ private fun extractPlayerSnapshot(
     currentDimension: String,
     respawnDimension: String
 ): PlayerLiveSnapshot {
+    val normalizedPlayer = canonicalPlayerName(playerName)
     fun matchingLine(keyword: String): String? {
         return logs.lastOrNull { line ->
-            line.contains(keyword, ignoreCase = true) && matchesPlayerEntityLine(line, playerName)
+            line.contains(keyword, ignoreCase = true) && matchesPlayerEntityLine(line, playerName, normalizedPlayer)
         }
     }
 
-    val posLine = matchingLine("Pos")
-    val dimLine = matchingLine("Dimension")
-    val healthLine = matchingLine("Health")
-    val hungerLine = matchingLine("foodLevel")
-    val spawnXLine = matchingLine("SpawnX")
-    val spawnYLine = matchingLine("SpawnY")
-    val spawnZLine = matchingLine("SpawnZ")
-    val spawnDimLine = matchingLine("SpawnDimension")
-    val lastDeathLine = matchingLine("LastDeathLocation")
+    fun latestResponseFor(path: String): String? {
+        val commandPrefix = "> data get entity "
+        val commandSuffix = " $path"
+        val commandIndex = logs.indexOfLast { line ->
+            line.startsWith(commandPrefix) &&
+                line.endsWith(commandSuffix) &&
+                matchesPlayerCommandLine(line, playerName, normalizedPlayer)
+        }
+        if (commandIndex < 0) return null
+
+        for (index in (commandIndex + 1) until logs.size) {
+            val line = logs[index]
+            if (line.startsWith("> ")) break
+            if (line.isBlank()) continue
+            if (line.startsWith("[RCON]")) return line
+            return line
+        }
+        return null
+    }
+
+    val posLine = latestResponseFor("Pos") ?: matchingLine("Pos")
+    val dimLine = latestResponseFor("Dimension") ?: matchingLine("Dimension")
+    val healthLine = latestResponseFor("Health") ?: matchingLine("Health")
+    val hungerLine = latestResponseFor("foodLevel") ?: matchingLine("foodLevel")
+    val spawnXLine = latestResponseFor("SpawnX") ?: matchingLine("SpawnX")
+    val spawnYLine = latestResponseFor("SpawnY") ?: matchingLine("SpawnY")
+    val spawnZLine = latestResponseFor("SpawnZ") ?: matchingLine("SpawnZ")
+    val spawnDimLine = latestResponseFor("SpawnDimension") ?: matchingLine("SpawnDimension")
+    val lastDeathLine = latestResponseFor("LastDeathLocation") ?: matchingLine("LastDeathLocation")
 
     val currentPos = NBTParser.parsePosition(posLine.orEmpty())?.let { (x, y, z) ->
         PlayerLocation(x, y, z, NBTParser.parseDimension(dimLine.orEmpty().ifBlank { currentDimension }))
     }
 
-    val respawnX = NBTParser.parseIntValue(spawnXLine.orEmpty())?.toDouble()
-    val respawnY = NBTParser.parseIntValue(spawnYLine.orEmpty())?.toDouble()
-    val respawnZ = NBTParser.parseIntValue(spawnZLine.orEmpty())?.toDouble()
+    val respawnX = NBTParser.parseDataIntValue(spawnXLine.orEmpty())?.toDouble()
+    val respawnY = NBTParser.parseDataIntValue(spawnYLine.orEmpty())?.toDouble()
+    val respawnZ = NBTParser.parseDataIntValue(spawnZLine.orEmpty())?.toDouble()
     val respawnPos = if (respawnX != null && respawnY != null && respawnZ != null) {
         PlayerLocation(
             x = respawnX,
@@ -645,20 +804,58 @@ private fun extractPlayerSnapshot(
             dimension = NBTParser.parseDimension(spawnDimLine.orEmpty().ifBlank { respawnDimension })
         )
     } else {
-        null
+        DefaultRespawnLocation
     }
 
     return PlayerLiveSnapshot(
         currentPos = currentPos,
         respawnPos = respawnPos,
         lastDeathPos = lastDeathLine?.let(NBTParser::parseLastDeathLocation),
-        health = NBTParser.parseFloatValue(healthLine.orEmpty()),
-        hunger = NBTParser.parseIntValue(hungerLine.orEmpty())
+        health = NBTParser.parseDataFloatValue(healthLine.orEmpty()) ?: NBTParser.parseFloatValue(healthLine.orEmpty()),
+        hunger = NBTParser.parseDataIntValue(hungerLine.orEmpty()) ?: NBTParser.parseIntValue(hungerLine.orEmpty())
     )
 }
 
-private fun matchesPlayerEntityLine(line: String, playerName: String): Boolean {
-    return line.contains(playerName, ignoreCase = true) || line.contains("entity data", ignoreCase = true)
+private fun matchesPlayerCommandLine(line: String, playerName: String, normalizedPlayer: String): Boolean {
+    val lower = line.lowercase()
+    return lower.contains("name=\"${playerName.lowercase()}\"") ||
+        lower.contains("name=\"${normalizedPlayer}\"") ||
+        matchesPlayerEntityLine(line, playerName, normalizedPlayer)
+}
+
+private fun matchesPlayerEntityLine(line: String, playerName: String, normalizedPlayer: String): Boolean {
+    val lower = line.lowercase()
+    val rawName = playerName.lowercase()
+    return lower.contains(rawName) || lower.contains(normalizedPlayer)
+}
+
+private fun canonicalPlayerName(name: String): String =
+    name.trim().trimStart('.', '!', '*').lowercase()
+
+private fun isPlayerDeathLogFor(line: String, playerName: String): Boolean {
+    val lower = line.lowercase()
+    val normalizedName = canonicalPlayerName(playerName)
+    val mentionsPlayer = lower.contains(playerName.lowercase()) || lower.contains(normalizedName)
+    if (!mentionsPlayer) return false
+
+    val deathHints = listOf(
+        " was slain",
+        " was shot",
+        " was pummeled",
+        " was squashed",
+        " was killed",
+        " fell ",
+        " drowned",
+        " burned",
+        " blew up",
+        " hit the ground too hard",
+        " starved to death",
+        " suffocated",
+        " froze to death",
+        " walked into danger",
+        " died"
+    )
+    return deathHints.any { it in lower }
 }
 
 private fun formatPlaytime(ticks: Long): String {

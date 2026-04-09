@@ -5,6 +5,11 @@ import java.util.Properties
 
 object ServerPropertiesHelper {
 
+    const val RELAY_READY_COMPRESSION_THRESHOLD = 256
+    const val DEFAULT_VIEW_DISTANCE = 5
+    const val DEFAULT_SIMULATION_DISTANCE = 4
+    const val RELAY_READY_ENTITY_BROADCAST_PERCENT = 75
+
     fun getServerPropertiesFile(serverDir: File): File {
         return File(serverDir, "server.properties")
     }
@@ -25,16 +30,16 @@ object ServerPropertiesHelper {
             props["pvp"] = "true"
             props["allow-flight"] = "false"
             props["hardcore"] = "false"
-            props["view-distance"] = "8"
-            props["simulation-distance"] = "7"
+            props["view-distance"] = DEFAULT_VIEW_DISTANCE.toString()
+            props["simulation-distance"] = DEFAULT_SIMULATION_DISTANCE.toString()
             props["spawn-monsters"] = "true"
             props["spawn-animals"] = "true"
             props["spawn-npcs"] = "true"
             props["allow-nether"] = "true"
             props["enable-command-block"] = "true"
             props["pocketcraft-max-ram-mb"] = "1024"
-            // Disable compression for LAN to avoid timeout issues
-            props["network-compression-threshold"] = "-1"
+            // Relay traffic needs compression to keep chunk/login bursts stable.
+            props["network-compression-threshold"] = RELAY_READY_COMPRESSION_THRESHOLD.toString()
             props["sync-chunk-writes"] = "false"
             props["enable-status-request"] = "true"
             props["query.port"] = "25565"

@@ -109,9 +109,19 @@ object NBTParser {
         return match.groupValues[1].toIntOrNull()
     }
 
+    fun parseDataIntValue(output: String): Int? {
+        val tail = output.substringAfterLast(':', output).substringAfterLast('=', output).trim()
+        return Regex("""-?\d+""").find(tail)?.value?.toIntOrNull()
+    }
+
     fun parseFloatValue(output: String): Float? {
         val match = Regex("""(-?\d+(?:\.\d+)?)""").find(output) ?: return null
         return match.groupValues[1].toFloatOrNull()
+    }
+
+    fun parseDataFloatValue(output: String): Float? {
+        val tail = output.substringAfterLast(':', output).substringAfterLast('=', output).trim()
+        return Regex("""-?\d+(?:\.\d+)?""").find(tail)?.value?.toFloatOrNull()
     }
 
     fun parseLastDeathLocation(output: String): PlayerLocation? {

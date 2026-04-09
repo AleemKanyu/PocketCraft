@@ -41,6 +41,8 @@ fun ServerScreen(
     onChangeVersion: () -> Unit,
     onVersionSelected: (String) -> Unit,
     onRequestExit: () -> Unit,
+    isDarkTheme: Boolean,
+    onDarkThemeChange: (Boolean) -> Unit,
     homeTopContent: (@Composable () -> Unit)? = null
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -50,9 +52,11 @@ fun ServerScreen(
     var selectedPlayer by remember { mutableStateOf<PlayerInfo?>(null) }
     var showWorldSetupPage by remember { mutableStateOf(false) }
     var showLegalPage by remember { mutableStateOf(false) }
+    var showRelayRegionPage by remember { mutableStateOf(false) }
     var worldSetupCreateMode by remember { mutableStateOf(false) }
     var showSetupLoading by remember { mutableStateOf(false) }
     var setupLoadingProgress by remember { mutableStateOf(0f) }
+    val chromeColor = PocketColors.Primary
 
     fun openWorldSetup(createMode: Boolean) {
         worldSetupCreateMode = createMode
@@ -112,6 +116,10 @@ fun ServerScreen(
                 currentTab = PocketTab.SETTINGS
             }
 
+            showRelayRegionPage -> {
+                showRelayRegionPage = false
+            }
+
             selectedPlayer != null -> {
                 selectedPlayer = null
                 currentTab = PocketTab.HOME
@@ -129,11 +137,16 @@ fun ServerScreen(
         topBar = {
             PocketTopBar(
                 relayHost = stateHolder.relayHost,
+                isDarkTheme = isDarkTheme,
+                onDarkThemeChange = onDarkThemeChange,
                 relayLocked = stateHolder.isNavigationLocked,
                 onRelayHostChange = { host ->
                     scope.launch {
                         showMessage(stateHolder.updateRelayHost(host))
                     }
+                },
+                onOpenRelayRegionPage = {
+                    showRelayRegionPage = true
                 }
             )
         },
@@ -158,12 +171,12 @@ fun ServerScreen(
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = PocketColors.Primary
+        containerColor = chromeColor
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(PocketColors.Primary)
+                .background(chromeColor)
                 .padding(padding)
         ) {
             Surface(
@@ -196,6 +209,16 @@ fun ServerScreen(
                             stateHolder = stateHolder,
                             player = selectedPlayer!!,
                             onBack = { selectedPlayer = null }
+                        )
+
+                        showRelayRegionPage -> RelayRegionScreen(
+                            selectedHost = stateHolder.relayHost,
+                            onBack = { showRelayRegionPage = false },
+                            onSelectHost = { host ->
+                                scope.launch {
+                                    showMessage(stateHolder.updateRelayHost(host))
+                                }
+                            }
                         )
 
                         showLegalPage -> LegalCenterScreen(
