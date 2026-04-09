@@ -1,6 +1,15 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 
+fun parseGitHubRepo(remoteUrl: String?): Pair<String, String>? {
+    if (remoteUrl.isNullOrBlank()) return null
+    val cleaned = remoteUrl.removeSuffix(".git").trim()
+    val https = Regex("https://github\\.com/([^/]+)/([^/]+)$", RegexOption.IGNORE_CASE)
+    val ssh = Regex("git@github\\.com:([^/]+)/([^/]+)$", RegexOption.IGNORE_CASE)
+    val match = https.find(cleaned) ?: ssh.find(cleaned) ?: return null
+    return match.groupValues[1] to match.groupValues[2]
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -26,10 +35,8 @@ val configuredReleaseKeyAlias = localProperties.getProperty("releaseKeyAlias")
     ?: System.getenv("POCKETCRAFT_RELEASE_KEY_ALIAS")
 val configuredReleaseKeyPassword = localProperties.getProperty("releaseKeyPassword")
     ?: System.getenv("POCKETCRAFT_RELEASE_KEY_PASSWORD")
-val configuredGitHubRepoOwner = localProperties.getProperty("githubRepoOwner")
-    ?: System.getenv("POCKETCRAFT_GITHUB_REPO_OWNER")
-val configuredGitHubRepoName = localProperties.getProperty("githubRepoName")
-    ?: System.getenv("POCKETCRAFT_GITHUB_REPO_NAME")
+val configuredGitHubToken = localProperties.getProperty("githubToken")
+    ?: System.getenv("POCKETCRAFT_GITHUB_TOKEN")
 val configuredUpdateManifestUrl = localProperties.getProperty("updateManifestUrl")
     ?: System.getenv("POCKETCRAFT_UPDATE_MANIFEST_URL")
 val configuredPrivacyPolicyUrl = localProperties.getProperty("privacyPolicyUrl")
@@ -43,10 +50,16 @@ val hasConfiguredReleaseSigning =
         !configuredReleaseKeyAlias.isNullOrBlank() &&
         !configuredReleaseKeyPassword.isNullOrBlank()
 
-val githubRepoOwner = configuredGitHubRepoOwner?.trim().takeUnless { it.isNullOrBlank() }
-    ?: "AleemKanyu"
-val githubRepoName = configuredGitHubRepoName?.trim().takeUnless { it.isNullOrBlank() }
-    ?: "PocketCraft"
+val gitRemoteUrl = runCatching {
+    val process = ProcessBuilder("git", "config", "--get", "remote.origin.url")
+        .directory(rootProject.rootDir)
+        .start()
+    process.inputStream.bufferedReader().use { it.readText().trim() }
+}.getOrNull()
+
+val (githubRepoOwner, githubRepoName) = parseGitHubRepo(gitRemoteUrl)
+    ?.let { (owner, repo) -> owner to repo.trimEnd('_') }
+    ?: ("AleemKanyu" to "PocketCraft")
 
 val legalPrivacyPolicyUrl = configuredPrivacyPolicyUrl?.trim().takeUnless { it.isNullOrBlank() }
     ?: "https://pocketcraft.online/privacy"
@@ -56,6 +69,7 @@ val legalTermsOfUseUrl = configuredTermsOfUseUrl?.trim().takeUnless { it.isNullO
 android {
     namespace = "com.pocketcraft.server"
     compileSdk = 34
+    buildToolsVersion = "34.0.0"
 
     defaultConfig {
         applicationId = "com.pocketcraft.server"
@@ -66,6 +80,7 @@ android {
         buildConfigField("String", "RELAY_PUBLIC_DOMAIN", "\"joinmc.link\"")
         buildConfigField("String", "GITHUB_REPO_OWNER", "\"$githubRepoOwner\"")
         buildConfigField("String", "GITHUB_REPO_NAME", "\"$githubRepoName\"")
+        buildConfigField("String", "GITHUB_RELEASES_TOKEN", "\"${configuredGitHubToken.orEmpty()}\"")
         buildConfigField("String", "UPDATE_MANIFEST_URL", "\"${configuredUpdateManifestUrl.orEmpty()}\"")
         buildConfigField("String", "PRIVACY_POLICY_URL", "\"$legalPrivacyPolicyUrl\"")
         buildConfigField("String", "TERMS_OF_USE_URL", "\"$legalTermsOfUseUrl\"")
@@ -87,10 +102,9 @@ android {
             version = "3.22.1"
         }
     }
-    // Keep archive/runtime assets and ad-viewer JS files uncompressed.
-    // AGP 8.8.0 can mis-handle the Ads SDK OMID JS assets during compressReleaseAssets.
+    // Prevent .so compression — compressed .so files cannot be dlopen'd
     androidResources {
-        noCompress += listOf("jar", "jks", "xz", "gz", "js")
+        noCompress += listOf("jar", "jks", "xz", "gz")
     }
 
     sourceSets {
