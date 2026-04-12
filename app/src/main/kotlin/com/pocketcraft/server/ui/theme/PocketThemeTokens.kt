@@ -10,23 +10,30 @@ fun pocketIsDarkTheme(): Boolean = MaterialTheme.colorScheme.background.luminanc
 
 @Composable
 fun pocketCardBorderColor(): Color = if (pocketIsDarkTheme()) {
-    PocketColors.SurfaceVarDark.copy(alpha = 0.72f)
+    PocketColors.Primary.copy(alpha = 0.45f)
 } else {
-    PocketColors.Primary.copy(alpha = 0.14f)
+    PocketColors.Primary.copy(alpha = 0.65f)
+}
+
+@Composable
+fun pocketHighContrastBorderColor(): Color = if (pocketIsDarkTheme()) {
+    Color.White
+} else {
+    Color.Black
 }
 
 @Composable
 fun pocketCardShadowColor(): Color = if (pocketIsDarkTheme()) {
-    PocketColors.SurfaceVarDark.copy(alpha = 0.42f)
+    Color.White.copy(alpha = 0.08f)
 } else {
-    PocketColors.Primary.copy(alpha = 0.12f)
+    Color(0xFF143322)
 }
 
 @Composable
 fun pocketSheetBorderColor(): Color = if (pocketIsDarkTheme()) {
     PocketColors.SurfaceVarDark.copy(alpha = 0.7f)
 } else {
-    PocketColors.BorderLight
+    Color.Black
 }
 
 @Composable

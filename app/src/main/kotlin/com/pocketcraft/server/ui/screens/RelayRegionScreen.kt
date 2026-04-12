@@ -1,5 +1,6 @@
 package com.pocketcraft.server.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,12 +30,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.config.RelayServerConfig
 import com.pocketcraft.server.config.RelayServers
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.pocketCardBorderColor
+import com.pocketcraft.server.ui.theme.pocketCardShadowColor
+import com.pocketcraft.server.ui.components.PocketCraftCard
 
 @Composable
 fun RelayRegionScreen(
@@ -43,6 +49,7 @@ fun RelayRegionScreen(
     onSelectHost: (String) -> Unit
 ) {
     val selected = RelayServers.getByHost(selectedHost)
+    val shadowColor = pocketCardShadowColor()
 
     Column(
         modifier = Modifier
@@ -58,12 +65,32 @@ fun RelayRegionScreen(
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
             }
-            Text("Choose Region", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+            Text(
+                "Choose Region",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
         }
 
-        Card(
+        PocketCraftCard(
+            modifier = Modifier.shadow(
+                elevation = 12.dp,
+                shape = RoundedCornerShape(28.dp),
+                ambientColor = shadowColor,
+                spotColor = shadowColor,
+                clip = false
+            ),
             shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = PocketColors.PrimaryMuted.copy(alpha = 0.52f))
+            colors = CardDefaults.cardColors(
+                containerColor = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f)
+                } else {
+                    PocketColors.PrimaryMuted.copy(alpha = 0.52f)
+                }
+            ),
+            border = BorderStroke(1.dp, pocketCardBorderColor()),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 22.dp),
@@ -75,13 +102,14 @@ fun RelayRegionScreen(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = PocketColors.PrimaryDark
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 Text(
                     text = "Pick the best region for your players",
                     fontSize = 24.sp,
-                    fontWeight = FontWeight.ExtraBold
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "This changes which internet relay PocketCraft uses for both Java and Bedrock players.",
@@ -94,7 +122,11 @@ fun RelayRegionScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(Icons.Default.Public, contentDescription = null, tint = PocketColors.Primary)
-                    Text("Current: ${selected.displayName}", fontWeight = FontWeight.SemiBold, color = PocketColors.PrimaryDark)
+                    Text(
+                        "Current: ${selected.displayName}",
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }
@@ -120,14 +152,24 @@ private fun RelayRegionCard(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    Card(
+    val shadowColor = pocketCardShadowColor()
+    PocketCraftCard(
         modifier = Modifier
             .fillMaxWidth()
+            .shadow(
+                elevation = 10.dp,
+                shape = RoundedCornerShape(28.dp),
+                ambientColor = shadowColor,
+                spotColor = shadowColor,
+                clip = false
+            )
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (selected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
-        )
+        ),
+        border = BorderStroke(2.dp, pocketCardBorderColor()),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -146,7 +188,12 @@ private fun RelayRegionCard(
                     Text(config.icon, fontSize = 24.sp)
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(config.displayName, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                    Text(
+                        config.displayName,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                     Text(config.description, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (selected) {

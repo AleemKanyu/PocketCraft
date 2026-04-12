@@ -224,7 +224,7 @@ class ServerConfigRepository @Inject constructor(
         return ServerConfig(
             worldName = props["level-name"] ?: "world",
             worldSeed = props["level-seed"] ?: "",
-            maxPlayers = (props["max-players"]?.toIntOrNull() ?: 5).coerceIn(1, 10),
+            maxPlayers = (props["max-players"]?.toIntOrNull() ?: 10).coerceIn(1, 20),
             port = 25565,
             difficulty = props["difficulty"] ?: "normal",
             gameMode = props["gamemode"] ?: "survival",
@@ -244,7 +244,10 @@ class ServerConfigRepository @Inject constructor(
             spawnNpcs = props["spawn-npcs"]?.toBoolean() ?: true,
             hardcore = props["hardcore"]?.toBoolean() ?: false,
             maxRamMb = props["pocketcraft-max-ram-mb"]?.toIntOrNull() ?: 1024,
-            enableRcon = props["enable-rcon"]?.toBoolean() ?: true
+            enableRcon = props["enable-rcon"]?.toBoolean() ?: true,
+            joinMessageEnabled = props["pocketcraft-join-message-enabled"]?.toBoolean() ?: false,
+            joinMessageText = props["pocketcraft-join-message-text"] ?: "Welcome to the server! Have fun!",
+            joinMessageUrl = props["pocketcraft-join-message-url"] ?: ""
         )
     }
 
@@ -253,7 +256,7 @@ class ServerConfigRepository @Inject constructor(
             appendLine("#Minecraft server properties (PocketCraft)")
             appendLine("level-name=${config.worldName}")
             appendLine("level-seed=${config.worldSeed}")
-            appendLine("max-players=${config.maxPlayers.coerceIn(1, 10)}")
+            appendLine("max-players=${config.maxPlayers.coerceIn(1, 20)}")
             appendLine("server-port=25565")
             appendLine("difficulty=${config.difficulty}")
             appendLine("gamemode=${config.gameMode}")
@@ -277,6 +280,9 @@ class ServerConfigRepository @Inject constructor(
             appendLine("rcon.port=25575")
             appendLine("rcon.password=pocketcraft-internal-rcon")
             appendLine("broadcast-rcon-to-ops=false")
+            appendLine("pocketcraft-join-message-enabled=${config.joinMessageEnabled}")
+            appendLine("pocketcraft-join-message-text=${config.joinMessageText}")
+            appendLine("pocketcraft-join-message-url=${config.joinMessageUrl}")
         }
         file.parentFile?.mkdirs()
         file.writeText(content)

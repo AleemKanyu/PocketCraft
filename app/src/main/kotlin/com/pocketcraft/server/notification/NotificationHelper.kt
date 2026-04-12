@@ -3,69 +3,87 @@ package com.pocketcraft.server.notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.pocketcraft.server.R
 
 object NotificationHelper {
-    const val CHANNEL_ID = "pocketcraft_server"
+    /**
+     * CHANNEL_ID is a *silent* channel used for the "server is online" push notification that
+     * fires when the app is in the background. We intentionally use a separate silent channel
+     * (IMPORTANCE_LOW, no sound) so the system does NOT play its own audio — in-app audio is
+     * handled separately by SoundManager / MediaPlayer only when the app is on screen.
+     *
+     * On Android O+ the channel sound cannot be changed after first creation, so we pin it to
+     * silent from the start with a distinct ID.
+     */
+    const val CHANNEL_ID = "pocketcraft_server_silent"
     private const val CHANNEL_NAME = "Server Status"
+    private const val NOTIFICATION_ID_ONLINE = 1001
 
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_DEFAULT
+                // LOW = shown in shade, no sound, no heads-up banner
+                NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Notifies when server starts or stops"
-                enableVibration(true)
+                description = "Notifies when the server starts (no sound — in-app audio only)"
+                enableVibration(false)
+                setSound(null, null)   // Explicitly silent
             }
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }
     }
 
+    /**
+     * Called when the server transitions to ONLINE.
+     *
+     * Behaviour:
+     * - App on screen (foreground) → play in-app sound only, no push notification.
+     * - App closed / in background → send exactly one silent push notification, no sound.
+     */
     fun notifyServerOnline(context: Context, version: String) {
+        if (com.pocketcraft.server.MainActivity.isAppInForeground) {
+            // App is visible — in-app sound is triggered by SoundManager directly in ServerStateHolder.
+            // Nothing extra to do here.
+            return
+        }
+
+        // App is not on screen — send a silent push notification so the user knows the server
+        // started (e.g. it was started via Auto-Restart while they were away).
         try {
-            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)  // Fallback - you may want a custom icon
-                .setContentTitle("Server is Online!")
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentTitle("Server is Online! 🎮")
                 .setContentText("Minecraft $version is ready. Players can now connect.")
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setSound(null)          // No system sound — channel is already silent
+                .setVibrate(null)        // No vibration
                 .setAutoCancel(true)
-                .build()
 
-            NotificationManagerCompat.from(context).notify(1001, notification)
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_ONLINE, builder.build())
         } catch (e: Exception) {
-            // Silent failure - notification not critical
+            // Silent failure — notification is informational only
         }
     }
 
-    fun notifyServerOffline(context: Context) {
-        try {
-            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)  // Fallback - you may want a custom icon
-                .setContentTitle("Server Stopped")
-                .setContentText("Your PocketCraft server has stopped.")
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setAutoCancel(true)
-                .build()
-
-            NotificationManagerCompat.from(context).notify(1002, notification)
-        } catch (e: Exception) {
-            // Silent failure - notification not critical
-        }
-    }
-
+    /**
+     * Dismiss the server-online notification (e.g. when the user opens the app).
+     * Server-stopped notifications are intentionally not sent per design requirements.
+     */
     fun dismissServerNotifications(context: Context) {
         try {
-            val manager = NotificationManagerCompat.from(context)
-            manager.cancel(1001)
-            manager.cancel(1002)
+            NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID_ONLINE)
         } catch (e: Exception) {
             // Silent failure
         }
     }
+
+    // notifyServerOffline intentionally removed — users should not receive a notification
+    // when the server stops. The only notification is the silent "server online" one above.
 }

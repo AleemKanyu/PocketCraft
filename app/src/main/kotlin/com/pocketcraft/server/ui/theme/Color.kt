@@ -21,7 +21,7 @@ object PocketColors {
     // Text colors (light mode should be dark text)
     val TextLight = Color(0xFF203119)
     val TextDark = Color(0xFFF5FFFB)
-    val TextMuted = Color(0xFF9CC9B8)
+    val TextMuted = Color(0xFF596E63)
 
     val BorderLight = Color(0xFFE2E8D3)
     val BorderDark = Color(0xFF53917B)

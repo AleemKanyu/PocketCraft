@@ -48,6 +48,7 @@ class RelayManager(private val context: Context) {
     private val socketPool = mutableListOf<Socket>()
     private val connectingSockets = AtomicInteger(0)
     private val poolTopUpScheduled = AtomicBoolean(false)
+    private val consecutiveFailures = AtomicInteger(0)
     private var poolJob = SupervisorJob()
     private var poolScope = CoroutineScope(Dispatchers.IO + poolJob)
     private var tunnelHeartbeatJob: kotlinx.coroutines.Job? = null
@@ -55,6 +56,8 @@ class RelayManager(private val context: Context) {
     private var lastIdleSocketRefreshAtMs = 0L
     @Volatile
     private var activeTunnelLocalPort: Int? = null
+    @Volatile
+    private var resolvedRelayIp: String? = null
 
     data class RelayAddress(val host: String, val port: Int, val isFallback: Boolean = false) {
         override fun toString() = "$host:$port"
@@ -349,10 +352,17 @@ class RelayManager(private val context: Context) {
                 val userId = currentRelaySessionId()
                 val relayHost = prefs.relayHost
 
+                var targetIp = resolvedRelayIp
+                if (targetIp == null) {
+                    targetIp = java.net.InetAddress.getByName(relayHost).hostAddress.also {
+                        resolvedRelayIp = it
+                    }
+                }
+
                 socket = Socket()
                 configureSocket(socket)
                 android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE)
-                socket.connect(java.net.InetSocketAddress(relayHost, PHONE_TUNNEL_PORT), 10_000)
+                socket.connect(java.net.InetSocketAddress(targetIp, PHONE_TUNNEL_PORT), 10_000)
 
                 socket.outputStream.write("$userId\n".toByteArray(Charsets.UTF_8))
                 socket.outputStream.flush()
@@ -364,23 +374,55 @@ class RelayManager(private val context: Context) {
                 releaseReservedSlot()
                 android.util.Log.v("RelayManager", "Socket added to pool. Size: ${socketPool.size}/$POOL_SIZE")
 
-                val firstByte = socket.inputStream.read()
+                // Add a staggered timeout so sockets naturally rotate before the remote LB drops them
+                val baseTimeoutMs = 40_000
+                socket!!.soTimeout = baseTimeoutMs + kotlin.random.Random.nextInt(15_000)
+
+                val connectedAt = System.currentTimeMillis()
+
+                val firstByte = try {
+                    socket!!.inputStream.read()
+                } catch (e: java.net.SocketTimeoutException) {
+                    -2 // Special flag for idle rotation
+                }
+
+                val timeOpenMs = System.currentTimeMillis() - connectedAt
+                if (timeOpenMs > 5000L) {
+                    consecutiveFailures.set(0)
+                }
 
                 synchronized(socketPool) { socketPool.remove(socket!!) }
                 addedToPool = false
 
-                if (firstByte != -1) {
+                if (firstByte == -2) {
+                    android.util.Log.v("RelayManager", "Socket hit local idle timeout, rotating gracefully...")
+                    runCatching { socket!!.close() }
+                    val replenishDelayMs = if (currentPoolSize() <= POOL_REFRESH_FLOOR) {
+                        SOCKET_OPEN_STAGGER_MS
+                    } else {
+                        IDLE_REPLENISH_DELAY_MS
+                    }
+                    schedulePoolTopUp(localPort, delayMs = replenishDelayMs)
+                } else if (firstByte != -1) {
                     android.util.Log.d("RelayManager", "Socket consumed (firstByte=$firstByte), replenishing pool...")
                     schedulePoolTopUp(localPort)
+                    // Reset timeout to 0 so the active player connection doesn't drop
+                    socket!!.soTimeout = 0
                     if (firstByte == 0x02) {
                         bridgeBedrockConnection(socket!!, firstByte)
                     } else {
                         bridgePlayerConnection(socket!!, firstByte, localPort)
                     }
                 } else {
-                    android.util.Log.v("RelayManager", "Socket timed out or closed by relay, replenishing pool...")
-                    socket!!.close()
-                    val replenishDelayMs = if (currentPoolSize() <= POOL_REFRESH_FLOOR) {
+                    android.util.Log.v("RelayManager", "Socket closed by relay or network, replenishing pool...")
+                    runCatching { socket!!.close() }
+                    
+                    val isRapidFailure = timeOpenMs < 5000L
+                    
+                    val replenishDelayMs = if (isRapidFailure) {
+                        val fails = consecutiveFailures.incrementAndGet()
+                        (2000L * (1 shl fails.coerceAtMost(5))).coerceAtMost(60_000L)
+                    } else if (currentPoolSize() <= POOL_REFRESH_FLOOR) {
                         SOCKET_OPEN_STAGGER_MS
                     } else {
                         IDLE_REPLENISH_DELAY_MS
@@ -390,6 +432,7 @@ class RelayManager(private val context: Context) {
 
             } catch (e: Exception) {
                 android.util.Log.e("RelayManager", "Pool socket error: ${e.message}")
+                resolvedRelayIp = null
                 synchronized(socketPool) {
                     socket?.let { socketPool.remove(it) }
                 }
@@ -397,7 +440,9 @@ class RelayManager(private val context: Context) {
                 releaseReservedSlot()
                 socket?.close()
                 if (poolScope.isActive) {
-                    schedulePoolTopUp(localPort, delayMs = 3_000L)
+                    val fails = consecutiveFailures.incrementAndGet()
+                    val backoffMs = (2000L * (1 shl fails.coerceAtMost(5))).coerceAtMost(60_000L)
+                    schedulePoolTopUp(localPort, delayMs = backoffMs)
                 }
             } finally {
                 releaseReservedSlot()
@@ -651,13 +696,14 @@ class RelayManager(private val context: Context) {
         poolScope = CoroutineScope(Dispatchers.IO + poolJob)
         poolTopUpScheduled.set(false)
         lastIdleSocketRefreshAtMs = 0L
+        resolvedRelayIp = null
 
         synchronized(socketPool) {
             socketPool.forEach { try { it.close() } catch (_: Exception) {} }
             socketPool.clear()
         }
         connectingSockets.set(0)
-        assignedPort = null
+        // assignedPort = null // Keep port persistent across restarts
         activeRelaySessionId = null
         android.util.Log.i("RelayManager", "Tunnel disconnected and scope reset.")
     }

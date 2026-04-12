@@ -10,9 +10,16 @@ object SoundManager {
 
     suspend fun playServerStart(context: Context) = withContext(Dispatchers.Default) {
         try {
-            val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-            toneGen.startTone(ToneGenerator.TONE_PROP_ACK, 300)
-            toneGen.release()
+            val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 92)
+            try {
+                playTone(toneGen, ToneGenerator.TONE_CDMA_PIP, 110)
+                Thread.sleep(70)
+                playTone(toneGen, ToneGenerator.TONE_SUP_PIP, 120)
+                Thread.sleep(72)
+                playTone(toneGen, ToneGenerator.TONE_PROP_BEEP2, 160)
+            } finally {
+                toneGen.release()
+            }
         } catch (e: Exception) {
             // Silent fallback if audio not available
         }
@@ -26,5 +33,10 @@ object SoundManager {
         } catch (e: Exception) {
             // Silent fallback
         }
+    }
+
+    private fun playTone(toneGen: ToneGenerator, tone: Int, durationMs: Int) {
+        toneGen.startTone(tone, durationMs)
+        Thread.sleep(durationMs.toLong())
     }
 }

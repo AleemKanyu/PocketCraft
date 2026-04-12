@@ -7,7 +7,7 @@ package com.pocketcraft.server.data.model
 data class ServerConfig(
     val worldName: String = "world",
     val worldSeed: String = "",
-    val maxPlayers: Int = 5,
+    val maxPlayers: Int = 10,
     val port: Int = 25565,
     val difficulty: String = "normal",
     val gameMode: String = "survival",
@@ -52,5 +52,9 @@ data class ServerConfig(
     val autoRestartDelaySecs: Int = 10,
     // Server customization
     val serverDescription: String = "",
-    val serverPhotoUri: String? = null
+    val serverPhotoUri: String? = null,
+    // Join message settings
+    val joinMessageEnabled: Boolean = false,
+    val joinMessageText: String = "Welcome to the server! Have fun!",
+    val joinMessageUrl: String = ""
 )

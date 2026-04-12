@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -59,7 +60,10 @@ import com.pocketcraft.server.service.PluginManager
 import com.pocketcraft.server.ui.components.duoTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.pocketCardShadowColor
+import com.pocketcraft.server.ui.theme.pocketHighContrastBorderColor
 import kotlinx.coroutines.launch
+import com.pocketcraft.server.ui.components.PocketCraftCard
 
 private enum class DownloadedContentTab(
     val label: String,
@@ -88,6 +92,8 @@ fun DownloadedPluginsScreen(
     onBack: () -> Unit,
     onMessage: (String) -> Unit
 ) {
+    val cardShadowColor = pocketCardShadowColor()
+    val cardBorderColor = pocketHighContrastBorderColor()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -201,10 +207,19 @@ fun DownloadedPluginsScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Card(
+                PocketCraftCard(
+                    modifier = Modifier
+                        .padding(20.dp)
+                        .shadow(
+                            elevation = 12.dp,
+                            shape = RoundedCornerShape(20.dp),
+                            ambientColor = cardShadowColor,
+                            spotColor = cardShadowColor,
+                            clip = false
+                        ),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.padding(20.dp)
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, cardBorderColor),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(24.dp),
@@ -236,6 +251,8 @@ fun DownloadedPluginsScreen(
                     DownloadedItemRow(
                         plugin = item,
                         tab = currentTab(),
+                        borderColor = cardBorderColor,
+                        shadowColor = cardShadowColor,
                         onToggle = {
                             val success = PluginManager.toggleContent(
                                 context = context,
@@ -410,12 +427,22 @@ fun DownloadedPluginsScreen(
 private fun DownloadedItemRow(
     plugin: Plugin,
     tab: DownloadedContentTab,
+    borderColor: Color,
+    shadowColor: Color,
     onToggle: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(
+    PocketCraftCard(
+        modifier = Modifier.shadow(
+            elevation = 10.dp,
+            shape = RoundedCornerShape(18.dp),
+            ambientColor = shadowColor,
+            spotColor = shadowColor,
+            clip = false
+        ),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, borderColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Row(
             modifier = Modifier

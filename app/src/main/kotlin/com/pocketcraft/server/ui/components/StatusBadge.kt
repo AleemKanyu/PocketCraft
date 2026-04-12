@@ -35,7 +35,7 @@ fun StatusBadge(
         val statusColor = when (status) {
             ServerStatus.ONLINE -> PocketColors.Online
             ServerStatus.STARTING -> PocketColors.Starting
-            ServerStatus.OFFLINE -> PocketColors.TextMuted
+            ServerStatus.OFFLINE -> MaterialTheme.colorScheme.onSurfaceVariant
         }
 
         Box(

@@ -102,7 +102,7 @@ fun WorldSetupScreen(
         mutableStateOf(stateHolder.config.viewDistance.coerceIn(3, 32).toFloat())
     }
     var maxPlayersValue by remember(stateHolder.config.maxPlayers) {
-        mutableStateOf(stateHolder.config.maxPlayers.coerceIn(1, 10).toFloat())
+        mutableStateOf(stateHolder.config.maxPlayers.coerceIn(1, 20).toFloat())
     }
 
     var selectedVersion by remember(stateHolder.versionLabel) { mutableStateOf(stateHolder.versionLabel) }
@@ -427,8 +427,8 @@ fun WorldSetupScreen(
                     Slider(
                         value = maxPlayersValue,
                         onValueChange = { maxPlayersValue = it },
-                        valueRange = 1f..10f,
-                        steps = 8
+                        valueRange = 1f..20f,
+                        steps = 18
                     )
                 }
 

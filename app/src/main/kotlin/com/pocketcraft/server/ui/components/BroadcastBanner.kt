@@ -66,28 +66,28 @@ fun BroadcastBanner(
     }
     val bannerColor = when (message.type) {
         "critical" -> if (isDarkTheme) Color(0xFF2F1A22) else Color(0xFFFFE1E7)
-        "warning" -> if (isDarkTheme) Color(0xFF21362D) else Color(0xFFFFE8CC)
-        else -> if (isDarkTheme) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.44f) else PocketColors.Primary.copy(alpha = 0.1f)
+        "warning" -> if (isDarkTheme) Color(0xFF3B2214) else Color(0xFFFFE8CC)
+        else -> if (isDarkTheme) Color(0xFF342017) else Color(0xFFFFE7D4)
     }
     val bannerBorder = when (message.type) {
         "critical" -> if (isDarkTheme) PocketColors.ConsoleError.copy(alpha = 0.42f) else Color(0xFFFFB3C1)
-        "warning" -> if (isDarkTheme) Color(0xFF4C7B66) else Color(0xFFEA580C).copy(alpha = 0.4f)
-        else -> if (isDarkTheme) PocketColors.SurfaceVarDark.copy(alpha = 0.55f) else PocketColors.Primary.copy(alpha = 0.22f)
+        "warning" -> if (isDarkTheme) Color(0xFFE6853B).copy(alpha = 0.55f) else Color(0xFFEA580C).copy(alpha = 0.4f)
+        else -> if (isDarkTheme) Color(0xFFE69A5E).copy(alpha = 0.48f) else Color(0xFFEA7A35).copy(alpha = 0.32f)
     }
     val headingColor = when (message.type) {
         "critical" -> if (isDarkTheme) PocketColors.TextDark else Color(0xFF7F1D1D)
-        "warning" -> if (isDarkTheme) PocketColors.TextDark else Color(0xFF78350F)
-        else -> if (isDarkTheme) PocketColors.TextDark else PocketColors.PrimaryDark
+        "warning" -> if (isDarkTheme) Color(0xFFFFD6B0) else Color(0xFF78350F)
+        else -> if (isDarkTheme) Color(0xFFFFD9BF) else Color(0xFF9A4F1A)
     }
     val bodyColor = when (message.type) {
         "critical" -> if (isDarkTheme) PocketColors.TextDark.copy(alpha = 0.84f) else Color(0xFF991B1B)
-        "warning" -> if (isDarkTheme) PocketColors.TextDark.copy(alpha = 0.82f) else Color(0xFF92400E)
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+        "warning" -> if (isDarkTheme) Color(0xFFFFE7D6).copy(alpha = 0.88f) else Color(0xFF92400E)
+        else -> if (isDarkTheme) Color(0xFFFFE9DA).copy(alpha = 0.84f) else Color(0xFF9A4F1A)
     }
     val chipColor = when (message.type) {
         "critical" -> if (isDarkTheme) PocketColors.ConsoleError.copy(alpha = 0.18f) else Color(0xFFFFD5DB)
-        "warning" -> if (isDarkTheme) Color(0xFF2F4F42) else Color(0xFFFEDBA8)
-        else -> if (isDarkTheme) PocketColors.SurfaceVarDark.copy(alpha = 0.35f) else PocketColors.Primary.copy(alpha = 0.14f)
+        "warning" -> if (isDarkTheme) Color(0xFF5A331A) else Color(0xFFFEDBA8)
+        else -> if (isDarkTheme) Color(0xFF5B311D) else Color(0xFFFFD9BF)
     }
     val icon = if (message.type == "info") Icons.Default.Info else Icons.Default.Warning
     var showDetails by remember { mutableStateOf(false) }

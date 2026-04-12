@@ -12,7 +12,7 @@ import com.pocketcraft.server.R
 
 object RemoteConfigManager {
     private val _showDiscordButton = MutableStateFlow(true)
-    private val _showInstagramButton = MutableStateFlow(true)
+    private val _showInstagramButton = MutableStateFlow(false)
     
     val showDiscordButton: Flow<Boolean> = _showDiscordButton.asStateFlow()
     val showInstagramButton: Flow<Boolean> = _showInstagramButton.asStateFlow()
@@ -36,7 +36,7 @@ object RemoteConfigManager {
             remoteConfig.setDefaultsAsync(
                 mapOf(
                     "show_discord_button" to true,
-                    "show_instagram_button" to true
+                    "show_instagram_button" to false
                 )
             ).await()
             

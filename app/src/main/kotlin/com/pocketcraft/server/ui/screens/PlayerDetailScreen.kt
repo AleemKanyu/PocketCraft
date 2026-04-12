@@ -13,12 +13,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -55,27 +58,36 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.pocketcraft.server.data.model.PlayerInfo
+import android.annotation.SuppressLint
+import android.webkit.ConsoleMessage
+import android.webkit.WebChromeClient
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.viewinterop.AndroidView
+import org.json.JSONArray
+import org.json.JSONObject
 import com.pocketcraft.server.service.NBTParser
 import com.pocketcraft.server.service.PlayerDataManager
 import com.pocketcraft.server.service.PlayerLocation
+import com.pocketcraft.server.service.PlayerLiveSnapshot
+import com.pocketcraft.server.service.InventoryItem
 import com.pocketcraft.server.ui.components.DuoToggle
 import com.pocketcraft.server.ui.components.HealthBar
 import com.pocketcraft.server.ui.components.FlatEmojiIcon
+import com.pocketcraft.server.ui.components.InventoryPreview
 import com.pocketcraft.server.ui.theme.PocketColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.pocketcraft.server.ui.components.PocketCraftCard
 
-private data class PlayerLiveSnapshot(
-    val currentPos: PlayerLocation? = null,
-    val respawnPos: PlayerLocation? = null,
-    val lastDeathPos: PlayerLocation? = null,
-    val health: Float? = null,
-    val hunger: Int? = null
-)
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 
-private val DefaultRespawnLocation = PlayerLocation(0.0, 0.0, 0.0, "minecraft:overworld")
+// Sentinel removed — respawn is null until the server confirms real SpawnX/Y/Z values.
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -87,17 +99,21 @@ fun PlayerDetailScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
 
+    var refreshTrigger by remember { mutableStateOf(0) }
+    var isRefreshing by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
     var gamemode by remember { mutableStateOf("survival") }
     var gamemodeExpanded by remember { mutableStateOf(false) }
     var whitelisted by remember { mutableStateOf(false) }
     var banned by remember { mutableStateOf(false) }
     var op by remember { mutableStateOf(false) }
     var currentPos by remember { mutableStateOf<PlayerLocation?>(null) }
-    var respawnPos by remember { mutableStateOf<PlayerLocation?>(DefaultRespawnLocation) }
+    var respawnPos by remember { mutableStateOf<PlayerLocation?>(null) }
     var lastDeathPos by remember { mutableStateOf<PlayerLocation?>(null) }
     var stats by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
-    var health by remember { mutableStateOf(20f) }
-    var hunger by remember { mutableStateOf(20) }
+    var health by remember { mutableStateOf<Float?>(null) }
+    var hunger by remember { mutableStateOf<Int?>(null) }
+    var worldSpawnPos by remember { mutableStateOf<PlayerLocation?>(null) }
 
     var delXp by remember { mutableStateOf(false) }
     var delEnder by remember { mutableStateOf(false) }
@@ -141,32 +157,100 @@ fun PlayerDetailScreen(
     }
 
     LaunchedEffect(player.uuid, stateHolder.versionLabel) {
-        stats = if (player.uuid.isNotBlank()) {
-            withContext(Dispatchers.IO) {
+        if (player.uuid.isNotBlank()) {
+            val offlineSnapshot = withContext(Dispatchers.IO) {
+                val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.versionLabel, player.uuid)
+                NBTParser.parsePlayerData(datFile)
+            }
+            
+            val worldSpawn = withContext(Dispatchers.IO) {
+                val levelFile = PlayerDataManager.getLevelDataFile(context, stateHolder.versionLabel)
+                NBTParser.parseLevelData(levelFile)
+            }
+            
+            offlineSnapshot?.let {
+                currentPos = it.currentPos
+                respawnPos = it.respawnPos ?: worldSpawn
+                health = it.health ?: 20f
+                hunger = it.hunger ?: 20
+            } ?: run {
+                respawnPos = worldSpawn
+            }
+            worldSpawnPos = worldSpawn
+
+            stats = withContext(Dispatchers.IO) {
                 PlayerDataManager.parseStats(
                     PlayerDataManager.getStatsFile(context, stateHolder.versionLabel, player.uuid)
                 )
             }
         } else {
-            emptyMap()
+            stats = emptyMap()
         }
     }
 
-    LaunchedEffect(player.name, latestLogLine) {
-        val snapshot = withContext(Dispatchers.Default) {
-            extractPlayerSnapshot(
-                logs = stateHolder.logs.toList(),
-                playerName = player.name,
-                currentDimension = currentPos?.dimension ?: "minecraft:overworld",
-                respawnDimension = respawnPos?.dimension ?: "minecraft:overworld"
-            )
-        }
+    // Polling loop for live data
+    LaunchedEffect(player.name, isPlayerOnline, stateHolder.status, refreshTrigger) {
+        if (!isPlayerOnline || stateHolder.status != ServerStatus.ONLINE) return@LaunchedEffect
+        while (isActive) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val rconCommands = listOf(
+                        "data get entity $commandTarget Health",
+                        "data get entity $commandTarget foodLevel",
+                        "data get entity $commandTarget Pos",
+                        "data get entity $commandTarget Dimension",
+                        "data get entity $commandTarget SpawnSet",
+                        "data get entity $commandTarget SpawnX",
+                        "data get entity $commandTarget SpawnY",
+                        "data get entity $commandTarget SpawnZ",
+                        "data get entity $commandTarget SpawnDimension",
+                        "data get entity $commandTarget LastDeathLocation"
+                    )
+                    val rconResponses = stateHolder.sendRconCommands(rconCommands)
 
-        snapshot.currentPos?.let { currentPos = it }
-        snapshot.respawnPos?.let { respawnPos = it }
-        snapshot.lastDeathPos?.let { lastDeathPos = it }
-        snapshot.health?.let { health = it.coerceIn(0f, 20f) }
-        snapshot.hunger?.let { hunger = it.coerceIn(0, 20) }
+                    val healthLine = rconResponses[0]
+                    val foodLine = rconResponses[1]
+                    val posLine = rconResponses[2]
+                    val dimLine = rconResponses[3]
+                    val spawnSetLine = rconResponses[4]
+                    val spawnXLine = rconResponses[5]
+                    val spawnYLine = rconResponses[6]
+                    val spawnZLine = rconResponses[7]
+                    val spawnDimLine = rconResponses[8]
+                    val lastDeathLine = rconResponses[9]
+
+                    val newHealth = NBTParser.parseDataFloatValue(healthLine) ?: NBTParser.parseFloatValue(healthLine)
+                    val newHunger = NBTParser.parseDataIntValue(foodLine) ?: NBTParser.parseIntValue(foodLine)
+
+                    val parsedPos = NBTParser.parsePosition(posLine)
+                    val newCurrentPos = if (parsedPos != null) {
+                        PlayerLocation(parsedPos.first, parsedPos.second, parsedPos.third, NBTParser.parseDimension(dimLine))
+                    } else null
+
+                    val spawnSet = NBTParser.parseDataIntValue(spawnSetLine) ?: 0
+                    val respawnX = NBTParser.parseDataIntValue(spawnXLine)?.toDouble()
+                    val respawnY = NBTParser.parseDataIntValue(spawnYLine)?.toDouble()
+                    val respawnZ = NBTParser.parseDataIntValue(spawnZLine)?.toDouble()
+
+                    val newRespawnPos = if (respawnX != null && respawnY != null && respawnZ != null) {
+                        PlayerLocation(respawnX, respawnY, respawnZ, NBTParser.parseDimension(spawnDimLine))
+                    } else null
+
+                    val newDeathPos = NBTParser.parseLastDeathLocation(lastDeathLine)
+
+                    withContext(Dispatchers.Main) {
+                        newHealth?.let { health = it.coerceIn(0f, 20f) }
+                        newHunger?.let { hunger = it.coerceIn(0, 20) }
+                        newCurrentPos?.let { currentPos = it }
+                        respawnPos = newRespawnPos ?: worldSpawnPos
+                        newDeathPos?.let { lastDeathPos = it }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("INV", "RCON Error: ${e.message}")
+                }
+            }
+            delay(8_000)
+        }
     }
 
     LaunchedEffect(player.name, latestLogLine, isPlayerOnline, stateHolder.status) {
@@ -179,72 +263,66 @@ fun PlayerDetailScreen(
                 latest.contains("set own spawnpoint") ||
                 latest.contains("spawn point set") ||
                 latest.contains("respawn point set")
-        if (!mentionsPlayer || !spawnChanged) return@LaunchedEffect
+        
+        if (!mentionsPlayer || (!spawnChanged && !isPlayerDeathLogFor(latest, player.name))) return@LaunchedEffect
 
-        delay(500)
-        stateHolder.sendCommand("data get entity $commandTarget SpawnX")
-        delay(120)
-        stateHolder.sendCommand("data get entity $commandTarget SpawnY")
-        delay(120)
-        stateHolder.sendCommand("data get entity $commandTarget SpawnZ")
-        delay(120)
-        stateHolder.sendCommand("data get entity $commandTarget SpawnDimension")
-    }
-
-    LaunchedEffect(player.name, latestLogLine, isPlayerOnline, stateHolder.status) {
-        if (!isPlayerOnline || stateHolder.status != ServerStatus.ONLINE) return@LaunchedEffect
-        val latest = latestLogLine.orEmpty()
-        if (!isPlayerDeathLogFor(latest, player.name)) return@LaunchedEffect
-
-        delay(500)
-        stateHolder.sendCommand("data get entity $commandTarget LastDeathLocation")
-    }
-
-    LaunchedEffect(player.name, isPlayerOnline, stateHolder.status) {
-        if (!isPlayerOnline || stateHolder.status != ServerStatus.ONLINE) return@LaunchedEffect
-        while (true) {
-            stateHolder.sendCommand("data get entity $commandTarget Pos")
-            delay(140)
-            stateHolder.sendCommand("data get entity $commandTarget Dimension")
-            delay(140)
-            stateHolder.sendCommand("data get entity $commandTarget Health")
-            delay(140)
-            stateHolder.sendCommand("data get entity $commandTarget foodLevel")
-            delay(140)
-            stateHolder.sendCommand("data get entity $commandTarget SpawnX")
-            delay(140)
-            stateHolder.sendCommand("data get entity $commandTarget SpawnY")
-            delay(140)
-            stateHolder.sendCommand("data get entity $commandTarget SpawnZ")
-            delay(140)
-            stateHolder.sendCommand("data get entity $commandTarget SpawnDimension")
-            delay(140)
-            stateHolder.sendCommand("data get entity $commandTarget LastDeathLocation")
-            delay(8_000)
-        }
-    }
-
-    val healthPercent = (health / 20f).coerceIn(0f, 1f)
-    val hungerPercent = (hunger / 20f).coerceIn(0f, 1f)
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+        withContext(Dispatchers.IO) {
+            try {
+                if (spawnChanged) {
+                    val spawnSetLine = stateHolder.sendRconCommand("data get entity $commandTarget SpawnSet")
+                    val spawnXLine = stateHolder.sendRconCommand("data get entity $commandTarget SpawnX")
+                    val spawnYLine = stateHolder.sendRconCommand("data get entity $commandTarget SpawnY")
+                    val spawnZLine = stateHolder.sendRconCommand("data get entity $commandTarget SpawnZ")
+                    val spawnDimLine = stateHolder.sendRconCommand("data get entity $commandTarget SpawnDimension")
+                    
+                    val spawnSet = NBTParser.parseDataIntValue(spawnSetLine) ?: 0
+                    val respawnX = NBTParser.parseDataIntValue(spawnXLine)?.toDouble()
+                    val respawnY = NBTParser.parseDataIntValue(spawnYLine)?.toDouble()
+                    val respawnZ = NBTParser.parseDataIntValue(spawnZLine)?.toDouble()
+                    
+                    val newRespawnPos = if (respawnX != null && respawnY != null && respawnZ != null) {
+                        PlayerLocation(respawnX, respawnY, respawnZ, NBTParser.parseDimension(spawnDimLine))
+                    } else null
+                    
+                    withContext(Dispatchers.Main) { respawnPos = newRespawnPos ?: worldSpawnPos }
                 }
-                Text("Player Details", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            }
+                
+                if (isPlayerDeathLogFor(latest, player.name)) {
+                    val lastDeathLine = stateHolder.sendRconCommand("data get entity $commandTarget LastDeathLocation")
+                    val newDeathPos = NBTParser.parseLastDeathLocation(lastDeathLine)
+                    withContext(Dispatchers.Main) { newDeathPos?.let { lastDeathPos = it } }
+                }
+            } catch (e: Exception) {}
         }
+    }
+
+    val healthPercent = ((health ?: 0f) / 20f).coerceIn(0f, 1f)
+    val hungerPercent = ((hunger ?: 0) / 20f).coerceIn(0f, 1f)
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                        }
+                        Text("Player Details", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    }
+                    IconButton(onClick = { refreshTrigger++ }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    }
+                }
+            }
 
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            PocketCraftCard {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -285,7 +363,7 @@ fun PlayerDetailScreen(
                                 DropdownMenuItem(text = { Text(mode) }, onClick = {
                                     gamemode = mode
                                     gamemodeExpanded = false
-                                    stateHolder.sendCommand("gamemode $mode $commandTarget")
+                                    stateHolder.changePlayerGamemode(player, mode)
                                 })
                             }
                         }
@@ -295,37 +373,55 @@ fun PlayerDetailScreen(
         }
 
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            PocketCraftCard {
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Health and Hunger", fontWeight = FontWeight.Bold)
                     HealthBar(
                         label = "Health",
                         icon = "❤",
                         value = healthPercent,
-                        valueLabel = "${"%.1f".format(health)}/20",
+                        valueLabel = if (health != null) "${"%.1f".format(health)}/20" else "—",
                         barColor = PocketColors.Danger
                     )
                     HealthBar(
                         label = "Hunger",
                         icon = "🍖",
                         value = hungerPercent,
-                        valueLabel = "$hunger/20",
+                        valueLabel = if (hunger != null) "$hunger/20" else "—",
                         barColor = Color(0xFFE09F3E)
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         PlayerActionButton(
                             label = "Kill",
                             actionType = PlayerActionType.DAMAGE,
-                            onClick = { stateHolder.sendCommand("kill $commandTarget") },
+                            onClick = {
+                                if (isPlayerOnline) {
+                                    stateHolder.sendCommand("kill $commandTarget")
+                                } else {
+                                    scope.launch(Dispatchers.IO) {
+                                        val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.versionLabel, player.uuid)
+                                        NBTParser.updatePlayerData(datFile, mapOf("Health" to 0f))
+                                        refreshTrigger++
+                                    }
+                                }
+                            },
                             modifier = Modifier.weight(1f)
                         )
                         PlayerActionButton(
                             label = "Heal",
                             actionType = PlayerActionType.HEAL,
                             onClick = {
-                                stateHolder.sendCommand("effect clear $commandTarget minecraft:instant_health")
-                                stateHolder.sendCommand("effect give $commandTarget minecraft:instant_health 1 255 true")
-                                health = 20f
+                                if (isPlayerOnline) {
+                                    stateHolder.sendCommand("effect clear $commandTarget minecraft:instant_health")
+                                    stateHolder.sendCommand("effect give $commandTarget minecraft:instant_health 1 255 true")
+                                    health = 20f
+                                } else {
+                                    scope.launch(Dispatchers.IO) {
+                                        val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.versionLabel, player.uuid)
+                                        NBTParser.updatePlayerData(datFile, mapOf("Health" to 20f))
+                                        refreshTrigger++
+                                    }
+                                }
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -335,9 +431,17 @@ fun PlayerDetailScreen(
                             label = "Starve",
                             actionType = PlayerActionType.STARVE,
                             onClick = {
-                                stateHolder.sendCommand("effect clear $commandTarget minecraft:saturation")
-                                stateHolder.sendCommand("effect give $commandTarget minecraft:hunger 8 255 true")
-                                hunger = 0
+                                if (isPlayerOnline) {
+                                    stateHolder.sendCommand("effect clear $commandTarget minecraft:saturation")
+                                    stateHolder.sendCommand("effect give $commandTarget minecraft:hunger 8 255 true")
+                                    hunger = 0
+                                } else {
+                                    scope.launch(Dispatchers.IO) {
+                                        val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.versionLabel, player.uuid)
+                                        NBTParser.updatePlayerData(datFile, mapOf("foodLevel" to 0))
+                                        refreshTrigger++
+                                    }
+                                }
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -345,9 +449,17 @@ fun PlayerDetailScreen(
                             label = "Feed",
                             actionType = PlayerActionType.FEED,
                             onClick = {
-                                stateHolder.sendCommand("effect clear $commandTarget minecraft:hunger")
-                                stateHolder.sendCommand("effect give $commandTarget minecraft:saturation 2 255 true")
-                                hunger = 20
+                                if (isPlayerOnline) {
+                                    stateHolder.sendCommand("effect clear $commandTarget minecraft:hunger")
+                                    stateHolder.sendCommand("effect give $commandTarget minecraft:saturation 2 255 true")
+                                    hunger = 20
+                                } else {
+                                    scope.launch(Dispatchers.IO) {
+                                        val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.versionLabel, player.uuid)
+                                        NBTParser.updatePlayerData(datFile, mapOf("foodLevel" to 20))
+                                        refreshTrigger++
+                                    }
+                                }
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -391,13 +503,16 @@ fun PlayerDetailScreen(
                 currentPos = currentPos,
                 respawnPos = respawnPos,
                 lastDeathPos = lastDeathPos,
-                onTeleport = { loc ->
+                onTeleport = { loc, title ->
                     val cmd = if (loc.dimension == "minecraft:overworld") {
                         "tp $commandTarget ${loc.x} ${loc.y} ${loc.z}"
                     } else {
                         "execute in ${loc.dimension} run tp $commandTarget ${loc.x} ${loc.y} ${loc.z}"
                     }
                     stateHolder.sendCommand(cmd)
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Teleported to $title")
+                    }
                 }
             )
         }
@@ -422,6 +537,12 @@ fun PlayerDetailScreen(
                 onDelete = { confirmDeleteData = true }
             )
         }
+    }
+
+    SnackbarHost(
+        hostState = snackbarHostState,
+        modifier = Modifier.align(Alignment.BottomCenter)
+    )
     }
 
     if (confirmDeleteData) {
@@ -482,7 +603,7 @@ private fun playerCommandTarget(playerName: String): String {
     val escaped = playerName
         .replace("\\", "\\\\")
         .replace("\"", "\\\"")
-    return """@a[name="$escaped"]"""
+    return """@a[name="$escaped",limit=1]"""
 }
 
 @Composable
@@ -492,7 +613,7 @@ private fun ControlToggleRow(
     activeBadge: String? = null,
     onChanged: (Boolean) -> Unit
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+    PocketCraftCard {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -546,14 +667,23 @@ private fun DeleteCheckbox(label: String, checked: Boolean, onChecked: (Boolean)
 @Composable
 private fun PlayerStatisticsSection(stats: Map<String, Long>) {
     val playTime = formatPlaytime(stats["minecraft:custom:minecraft:play_time"] ?: 0L)
-    val kills = (stats["minecraft:custom:minecraft:player_kills"] ?: 0L).toString()
+    val distance = formatDistance(
+        (stats["minecraft:custom:minecraft:walk_one_cm"] ?: 0L) +
+        (stats["minecraft:custom:minecraft:sprint_one_cm"] ?: 0L) +
+        (stats["minecraft:custom:minecraft:crouch_one_cm"] ?: 0L) +
+        (stats["minecraft:custom:minecraft:swim_one_cm"] ?: 0L)
+    )
+    val playerKills = (stats["minecraft:custom:minecraft:player_kills"] ?: 0L).toString()
+    val mobKills = (stats["minecraft:custom:minecraft:mob_kills"] ?: 0L).toString()
     val deaths = (stats["minecraft:custom:minecraft:deaths"] ?: 0L).toString()
     val jumps = (stats["minecraft:custom:minecraft:jump"] ?: 0L).toString()
+    val timeSinceDeath = formatPlaytime(stats["minecraft:custom:minecraft:time_since_death"] ?: 0L)
+    val damageDealt = (stats["minecraft:custom:minecraft:damage_dealt"] ?: 0L).toString()
     val blocksMined = (stats["minecraft:mined:minecraft:stone"] ?: 0L) +
         (stats["minecraft:mined:minecraft:dirt"] ?: 0L) +
         (stats["minecraft:mined:minecraft:deepslate"] ?: 0L)
 
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+    PocketCraftCard {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -566,8 +696,20 @@ private fun PlayerStatisticsSection(stats: Map<String, Long>) {
                     modifier = Modifier.weight(1f)
                 )
                 StatTile(
-                    title = "Kills",
-                    value = kills,
+                    title = "Distance",
+                    value = distance,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                StatTile(
+                    title = "Player Kills",
+                    value = playerKills,
+                    modifier = Modifier.weight(1f)
+                )
+                StatTile(
+                    title = "Mob Kills",
+                    value = mobKills,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -580,6 +722,18 @@ private fun PlayerStatisticsSection(stats: Map<String, Long>) {
                 StatTile(
                     title = "Jumps",
                     value = jumps,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                StatTile(
+                    title = "Time since Death",
+                    value = timeSinceDeath,
+                    modifier = Modifier.weight(1f)
+                )
+                StatTile(
+                    title = "Damage Dealt",
+                    value = damageDealt,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -623,6 +777,14 @@ private fun StatTile(
     }
 }
 
+private fun formatDistance(cm: Long): String {
+    val m = cm / 100.0
+    return when {
+        m >= 1000.0 -> String.format("%.2f km", m / 1000.0)
+        else -> String.format("%.1f m", m)
+    }
+}
+
 @Composable
 private fun PlayerDataDeletionSection(
     playerUuid: String,
@@ -639,7 +801,7 @@ private fun PlayerDataDeletionSection(
     onDelete: () -> Unit
 ) {
     val anySelected = delXp || delEnder || delPlayer || delStats || delAdv
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+    PocketCraftCard {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -679,27 +841,24 @@ private fun PlayerInformationSection(
     currentPos: PlayerLocation?,
     respawnPos: PlayerLocation?,
     lastDeathPos: PlayerLocation?,
-    onTeleport: (PlayerLocation) -> Unit
+    onTeleport: (PlayerLocation, String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Information", fontWeight = FontWeight.Bold)
-        CollapsibleLocationSection("📍", "Current position", currentPos, onTeleport)
-        CollapsibleLocationSection("🛏", "Respawn location", respawnPos, onTeleport)
-        CollapsibleLocationSection("💀", "Last death location", lastDeathPos, onTeleport)
+        LocationSectionCard("📍", "Current position", currentPos, onTeleport)
+        LocationSectionCard("🛏", "Respawn location", respawnPos, onTeleport)
+        LocationSectionCard("💀", "Last death location", lastDeathPos, onTeleport)
     }
 }
 
 @Composable
-private fun CollapsibleLocationSection(
+private fun LocationSectionCard(
     icon: String,
     title: String,
     location: PlayerLocation?,
-    onTeleport: (PlayerLocation) -> Unit
+    onTeleport: (PlayerLocation, String) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(title == "Current position") }
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    PocketCraftCard(
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.fillMaxWidth()
@@ -708,38 +867,36 @@ private fun CollapsibleLocationSection(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { expanded = !expanded }
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     FlatEmojiIcon(icon, modifier = Modifier.size(18.dp), tint = PocketColors.PrimaryDark)
-                    Text(title)
+                    Text(title, fontWeight = FontWeight.SemiBold)
                 }
-                Icon(
-                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = PocketColors.Primary
-                )
             }
 
-            if (expanded) {
-                HorizontalDivider()
-                Column(modifier = Modifier.padding(12.dp)) {
-                    if (location != null) {
-                        Text(location.formatted(), fontSize = 13.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            FlatEmojiIcon(location.dimensionIcon(), modifier = Modifier.size(14.dp), tint = PocketColors.PrimaryDark)
-                            Text(location.dimensionDisplay(), fontSize = 12.sp)
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedButton(onClick = { onTeleport(location) }) {
-                            Text("Teleport")
-                        }
-                    } else {
-                        Text("Not set", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            HorizontalDivider()
+            Column(modifier = Modifier.padding(12.dp)) {
+                if (location != null) {
+                    Text(location.formatted(), fontSize = 13.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        FlatEmojiIcon(location.dimensionIcon(), modifier = Modifier.size(14.dp), tint = PocketColors.PrimaryDark)
+                        Text(location.dimensionDisplay(), fontSize = 12.sp)
                     }
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = { onTeleport(location, title) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Teleport")
+                    }
+                } else {
+                    Text("Not set / Location not available yet.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -787,16 +944,19 @@ private fun extractPlayerSnapshot(
     val spawnYLine = latestResponseFor("SpawnY") ?: matchingLine("SpawnY")
     val spawnZLine = latestResponseFor("SpawnZ") ?: matchingLine("SpawnZ")
     val spawnDimLine = latestResponseFor("SpawnDimension") ?: matchingLine("SpawnDimension")
+    val spawnSetLine = latestResponseFor("SpawnSet") ?: matchingLine("SpawnSet")
     val lastDeathLine = latestResponseFor("LastDeathLocation") ?: matchingLine("LastDeathLocation")
 
     val currentPos = NBTParser.parsePosition(posLine.orEmpty())?.let { (x, y, z) ->
         PlayerLocation(x, y, z, NBTParser.parseDimension(dimLine.orEmpty().ifBlank { currentDimension }))
     }
 
+    val spawnSet = NBTParser.parseDataIntValue(spawnSetLine.orEmpty()) ?: 0
     val respawnX = NBTParser.parseDataIntValue(spawnXLine.orEmpty())?.toDouble()
     val respawnY = NBTParser.parseDataIntValue(spawnYLine.orEmpty())?.toDouble()
     val respawnZ = NBTParser.parseDataIntValue(spawnZLine.orEmpty())?.toDouble()
-    val respawnPos = if (respawnX != null && respawnY != null && respawnZ != null) {
+    // Only populate if all three axes were confirmed by the server AND SpawnSet is 1 (custom spawn) — otherwise it's world spawn
+    val respawnPos = if (spawnSet == 1 && respawnX != null && respawnY != null && respawnZ != null) {
         PlayerLocation(
             x = respawnX,
             y = respawnY,
@@ -804,7 +964,7 @@ private fun extractPlayerSnapshot(
             dimension = NBTParser.parseDimension(spawnDimLine.orEmpty().ifBlank { respawnDimension })
         )
     } else {
-        DefaultRespawnLocation
+        null
     }
 
     return PlayerLiveSnapshot(
@@ -869,3 +1029,5 @@ private fun formatPlaytime(ticks: Long): String {
         else -> "<1m"
     }
 }
+
+

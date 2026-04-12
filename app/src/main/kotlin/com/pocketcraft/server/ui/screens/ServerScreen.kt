@@ -52,7 +52,6 @@ fun ServerScreen(
     var selectedPlayer by remember { mutableStateOf<PlayerInfo?>(null) }
     var showWorldSetupPage by remember { mutableStateOf(false) }
     var showLegalPage by remember { mutableStateOf(false) }
-    var showRelayRegionPage by remember { mutableStateOf(false) }
     var worldSetupCreateMode by remember { mutableStateOf(false) }
     var showSetupLoading by remember { mutableStateOf(false) }
     var setupLoadingProgress by remember { mutableStateOf(0f) }
@@ -116,10 +115,6 @@ fun ServerScreen(
                 currentTab = PocketTab.SETTINGS
             }
 
-            showRelayRegionPage -> {
-                showRelayRegionPage = false
-            }
-
             selectedPlayer != null -> {
                 selectedPlayer = null
                 currentTab = PocketTab.HOME
@@ -144,9 +139,6 @@ fun ServerScreen(
                     scope.launch {
                         showMessage(stateHolder.updateRelayHost(host))
                     }
-                },
-                onOpenRelayRegionPage = {
-                    showRelayRegionPage = true
                 }
             )
         },
@@ -209,16 +201,6 @@ fun ServerScreen(
                             stateHolder = stateHolder,
                             player = selectedPlayer!!,
                             onBack = { selectedPlayer = null }
-                        )
-
-                        showRelayRegionPage -> RelayRegionScreen(
-                            selectedHost = stateHolder.relayHost,
-                            onBack = { showRelayRegionPage = false },
-                            onSelectHost = { host ->
-                                scope.launch {
-                                    showMessage(stateHolder.updateRelayHost(host))
-                                }
-                            }
                         )
 
                         showLegalPage -> LegalCenterScreen(

@@ -15,6 +15,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -76,6 +77,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -91,6 +93,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -114,46 +117,139 @@ import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.Monocraft
 import com.pocketcraft.server.ui.theme.PocketCraftTheme
+import com.pocketcraft.server.ui.theme.pocketIsDarkTheme
 import com.pocketcraft.server.ui.util.playAppHaptic
+import com.pocketcraft.server.ui.util.ThemePreferenceStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlin.math.roundToInt
 
-private val OnboardingPurple = PocketColors.Primary
-private val OnboardingPurpleDark = PocketColors.PrimaryDark
-private val OnboardingPurpleMuted = PocketColors.PrimaryMuted
-private val OnboardingGreen = Color(0xFF3DDC84)
-private val OnboardingGold = Color(0xFFFFB142)
-private val OnboardingSurface = PocketColors.SurfaceLight
-private val OnboardingSurfaceSoft = PocketColors.SurfaceVarLight
-private val OnboardingBorder = PocketColors.BorderLight
-private val OnboardingTextPrimary = PocketColors.TextLight
-private val OnboardingTextSecondary = PocketColors.TextMuted
-private val OnboardingTextDark = PocketColors.TextLight
-private val OnboardingTextMuted = PocketColors.TextMuted
+private val OnboardingGreenLight = Color(0xFF3DDC84)
+private val OnboardingGoldLight = Color(0xFFFFB142)
+
+@Composable
+private fun onboardingAccentPurple(): Color = PocketColors.Primary
+
+@Composable
+private fun onboardingAccentPurpleDark(): Color = if (pocketIsDarkTheme()) PocketColors.TextDark else PocketColors.PrimaryDark
+
+@Composable
+private fun onboardingAccentPurpleMuted(): Color = if (pocketIsDarkTheme()) {
+    PocketColors.SurfaceVarDark.copy(alpha = 0.78f)
+} else {
+    PocketColors.PrimaryMuted
+}
+
+@Composable
+private fun onboardingAccentGreen(): Color = if (pocketIsDarkTheme()) Color(0xFF54D68C) else OnboardingGreenLight
+
+@Composable
+private fun onboardingAccentGold(): Color = if (pocketIsDarkTheme()) Color(0xFFFFC76B) else OnboardingGoldLight
+
+@Composable
+private fun onboardingSurfaceColor(): Color = MaterialTheme.colorScheme.surface
+
+@Composable
+private fun onboardingSurfaceSoftColor(): Color = if (pocketIsDarkTheme()) {
+    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f)
+} else {
+    PocketColors.SurfaceVarLight
+}
+
+@Composable
+private fun onboardingBorderColor(): Color = if (pocketIsDarkTheme()) {
+    PocketColors.BorderDark.copy(alpha = 0.82f)
+} else {
+    PocketColors.BorderLight
+}
+
+@Composable
+private fun onboardingTextPrimary(): Color = MaterialTheme.colorScheme.onSurface
+
+@Composable
+private fun onboardingTextSecondary(): Color = MaterialTheme.colorScheme.onSurfaceVariant
+
+@Composable
+private fun onboardingTextDark(): Color = MaterialTheme.colorScheme.onSurface
+
+@Composable
+private fun onboardingTextMuted(): Color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.88f)
+
+@Composable
+private fun onboardingBackgroundBrush(): Brush = if (pocketIsDarkTheme()) {
+    Brush.verticalGradient(
+        colors = listOf(
+            PocketColors.BgDark,
+            Color(0xFF10211C),
+            Color(0xFF0B1714)
+        )
+    )
+} else {
+    Brush.verticalGradient(
+        colors = listOf(
+            Color(0xFFFFFFFF),
+            Color(0xFFEAF8E7),
+            Color(0xFFDFF3D8)
+        )
+    )
+}
+
+@Composable
+private fun onboardingPhoneOuterBrush(): Brush = if (pocketIsDarkTheme()) {
+    Brush.verticalGradient(
+        listOf(
+            Color(0xFF1E352D),
+            Color(0xFF182A24)
+        )
+    )
+} else {
+    Brush.verticalGradient(
+        listOf(
+            Color.White,
+            Color(0xFFF7FAF2)
+        )
+    )
+}
+
+@Composable
+private fun onboardingPhoneInnerBrush(): Brush = if (pocketIsDarkTheme()) {
+    Brush.verticalGradient(
+        listOf(
+            onboardingSurfaceSoftColor(),
+            Color(0xFF243E35)
+        )
+    )
+} else {
+    Brush.verticalGradient(
+        listOf(
+            PocketColors.SurfaceVarLight,
+            Color(0xFFEDF6E1)
+        )
+    )
+}
 
 class OnboardingActivity : ComponentActivity() {
     private val preferences by lazy { AppPreferences(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val onboardingBg = AndroidColor.parseColor("#DFF3D8")
-        window.navigationBarColor = onboardingBg
-        window.statusBarColor = AndroidColor.parseColor("#F5FAF1")
         WindowCompat.setDecorFitsSystemWindows(window, true)
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            isAppearanceLightStatusBars = true
-            isAppearanceLightNavigationBars = true
-        }
+        val initialThemePreference = ThemePreferenceStore.load(this)
 
         setContent {
-            PocketCraftTheme {
-                OnboardingScreen(
-                    onComplete = { completeOnboarding() }
-                )
+            val darkTheme = initialThemePreference.resolve(systemDark = isSystemInDarkTheme())
+            PocketCraftTheme(darkTheme = darkTheme) {
+                SideEffect {
+                    window.statusBarColor = if (darkTheme) PocketColors.BgDark.toArgb() else AndroidColor.parseColor("#F5FAF1")
+                    window.navigationBarColor = if (darkTheme) PocketColors.SurfaceDark.toArgb() else AndroidColor.parseColor("#DFF3D8")
+                    WindowInsetsControllerCompat(window, window.decorView).apply {
+                        isAppearanceLightStatusBars = !darkTheme
+                        isAppearanceLightNavigationBars = !darkTheme
+                    }
+                }
+                OnboardingScreen(onComplete = { completeOnboarding() })
             }
         }
     }
@@ -251,15 +347,7 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFFFFFFFF),
-                        Color(0xFFEAF8E7),
-                        Color(0xFFDFF3D8)
-                    )
-                )
-            )
+            .background(brush = onboardingBackgroundBrush())
     ) {
         Column(
             modifier = Modifier
@@ -368,7 +456,7 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                     text = steps[currentStep].footer,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
-                    color = OnboardingTextMuted,
+                    color = onboardingTextMuted(),
                     fontSize = 12.sp,
                     fontFamily = Monocraft,
                     fontWeight = FontWeight.Bold,
@@ -449,7 +537,7 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                     shape = RoundedCornerShape(28.dp),
                     color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 10.dp,
-                    border = BorderStroke(1.dp, PocketColors.BorderLight)
+                    border = BorderStroke(1.dp, onboardingBorderColor())
                 ) {
                     Column(
                         modifier = Modifier.padding(20.dp),
@@ -478,13 +566,13 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                                     text = "Choose Minecraft Version",
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 18.sp,
-                                    color = OnboardingTextPrimary,
+                                    color = onboardingTextPrimary(),
                                     fontFamily = Monocraft
                                 )
                                 Text(
                                     text = "Pick the version you want PocketCraft to download right after setup.",
                                     fontSize = 11.sp,
-                                    color = OnboardingTextSecondary,
+                                    color = onboardingTextSecondary(),
                                     lineHeight = 15.sp
                                 )
                             }
@@ -512,10 +600,10 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                                             if (setupFormError.isNotBlank()) setupFormError = ""
                                         },
                                         shape = RoundedCornerShape(16.dp),
-                                        color = if (selected) PocketColors.PrimaryMuted else MaterialTheme.colorScheme.surfaceVariant,
+                                        color = if (selected) onboardingAccentPurpleMuted() else MaterialTheme.colorScheme.surfaceVariant,
                                         border = BorderStroke(
                                             1.dp,
-                                            if (selected) PocketColors.Primary else PocketColors.BorderLight
+                                            if (selected) onboardingAccentPurple() else onboardingBorderColor()
                                         )
                                     ) {
                                         Text(
@@ -535,13 +623,13 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                             Surface(
                                 color = PocketColors.PrimaryMuted.copy(alpha = 0.5f),
                                 shape = RoundedCornerShape(12.dp),
-                                border = BorderStroke(1.dp, PocketColors.Primary.copy(alpha = 0.45f)),
+                                border = BorderStroke(1.dp, onboardingAccentPurple().copy(alpha = 0.45f)),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
                                     text = "Selected: Minecraft $setupVersion",
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    color = PocketColors.PrimaryDark,
+                                    color = onboardingAccentPurpleDark(),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp
                                 )
@@ -590,13 +678,13 @@ private fun RelayRegionOnboardingScreen(
             text = "Choose your relay region",
             fontSize = 24.sp,
             fontWeight = FontWeight.ExtraBold,
-            color = OnboardingTextPrimary,
+            color = onboardingTextPrimary(),
             fontFamily = Monocraft
         )
         Text(
             text = "Pick the relay server closest to your players. You can change this later from the dashboard too.",
             fontSize = 13.sp,
-            color = OnboardingTextSecondary,
+            color = onboardingTextSecondary(),
             lineHeight = 18.sp
         )
         RelayServers.ALL.forEach { server ->
@@ -606,8 +694,8 @@ private fun RelayRegionOnboardingScreen(
                     .fillMaxWidth()
                     .clickable { onSelectHost(server.host) },
                 shape = RoundedCornerShape(22.dp),
-                color = if (selected) PocketColors.PrimaryMuted else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                border = BorderStroke(1.dp, if (selected) PocketColors.Primary else OnboardingBorder)
+                color = if (selected) onboardingAccentPurpleMuted() else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                border = BorderStroke(1.dp, if (selected) onboardingAccentPurple() else onboardingBorderColor())
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
@@ -616,14 +704,14 @@ private fun RelayRegionOnboardingScreen(
                 ) {
                     Text(text = server.icon, fontSize = 24.sp)
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(server.region, fontWeight = FontWeight.ExtraBold, color = OnboardingTextPrimary)
-                        Text(server.bestFor, fontSize = 11.sp, color = OnboardingTextSecondary)
+                        Text(server.region, fontWeight = FontWeight.ExtraBold, color = onboardingTextPrimary())
+                        Text(server.bestFor, fontSize = 11.sp, color = onboardingTextSecondary())
                     }
                     if (selected) {
                         Icon(
                             imageVector = Icons.Filled.CheckCircle,
                             contentDescription = null,
-                            tint = PocketColors.PrimaryDark
+                            tint = onboardingAccentPurpleDark()
                         )
                     }
                 }
@@ -659,24 +747,24 @@ private fun TopHeader(progress: Float, step: Int, total: Int) {
                     fontSize = 23.sp,
                     fontWeight = FontWeight.Black,
                     fontFamily = Monocraft,
-                    color = OnboardingTextDark,
+                    color = onboardingTextDark(),
                     letterSpacing = 0.1.sp
                 )
                 Text(
                     text = "Your phone becomes the server",
                     fontSize = 12.sp,
-                    color = OnboardingTextMuted
+                    color = onboardingTextMuted()
                 )
             }
 
             Surface(
-                color = OnboardingPurpleMuted,
+                color = onboardingAccentPurpleMuted(),
                 shape = RoundedCornerShape(999.dp)
             ) {
                 Text(
                     text = "Beta",
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    color = OnboardingPurpleDark,
+                    color = onboardingAccentPurpleDark(),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -684,11 +772,15 @@ private fun TopHeader(progress: Float, step: Int, total: Int) {
         }
 
         Surface(
-            color = Color.White.copy(alpha = 0.72f),
+            color = if (pocketIsDarkTheme()) MaterialTheme.colorScheme.surface.copy(alpha = 0.82f) else Color.White.copy(alpha = 0.72f),
             shape = RoundedCornerShape(999.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, Color.White.copy(alpha = 0.9f), RoundedCornerShape(999.dp))
+                .border(
+                    1.dp,
+                    if (pocketIsDarkTheme()) onboardingBorderColor().copy(alpha = 0.9f) else Color.White.copy(alpha = 0.9f),
+                    RoundedCornerShape(999.dp)
+                )
         ) {
             Box(modifier = Modifier.padding(6.dp)) {
                 Box(
@@ -698,7 +790,7 @@ private fun TopHeader(progress: Float, step: Int, total: Int) {
                         .clip(RoundedCornerShape(999.dp))
                         .background(
                             brush = Brush.horizontalGradient(
-                                listOf(PocketColors.PrimaryDark, PocketColors.Primary)
+                                listOf(onboardingAccentPurpleDark(), onboardingAccentPurple())
                             )
                         )
                 )
@@ -708,7 +800,7 @@ private fun TopHeader(progress: Float, step: Int, total: Int) {
         Text(
             text = "$step / $total",
             fontSize = 11.sp,
-            color = OnboardingTextMuted,
+            color = onboardingTextMuted(),
             fontWeight = FontWeight.SemiBold
         )
     }
@@ -725,15 +817,8 @@ private fun OnboardingPhoneFrame(
             .fillMaxWidth()
             .shadow(26.dp, RoundedCornerShape(34.dp), clip = false)
             .clip(RoundedCornerShape(34.dp))
-            .background(
-                brush = Brush.verticalGradient(
-                    listOf(
-                        Color.White,
-                        Color(0xFFF7FAF2)
-                    )
-                )
-            )
-            .border(1.5.dp, OnboardingBorder.copy(alpha = 0.8f), RoundedCornerShape(34.dp))
+            .background(brush = onboardingPhoneOuterBrush())
+            .border(1.5.dp, onboardingBorderColor().copy(alpha = 0.8f), RoundedCornerShape(34.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -743,8 +828,8 @@ private fun OnboardingPhoneFrame(
                 .padding(horizontal = 70.dp)
                 .height(22.dp)
                 .clip(RoundedCornerShape(0.dp, 0.dp, 12.dp, 12.dp))
-                .background(Color(0xFFF6F8F1))
-                .border(1.dp, OnboardingBorder.copy(alpha = 0.85f), RoundedCornerShape(0.dp, 0.dp, 12.dp, 12.dp))
+                .background(if (pocketIsDarkTheme()) MaterialTheme.colorScheme.surface.copy(alpha = 0.92f) else Color(0xFFF6F8F1))
+                .border(1.dp, onboardingBorderColor().copy(alpha = 0.85f), RoundedCornerShape(0.dp, 0.dp, 12.dp, 12.dp))
         )
 
         Column(
@@ -752,15 +837,8 @@ private fun OnboardingPhoneFrame(
                 .fillMaxWidth()
                 .height(474.dp)
                 .clip(RoundedCornerShape(26.dp))
-                .background(
-                    brush = Brush.verticalGradient(
-                        listOf(
-                            PocketColors.SurfaceVarLight,
-                            Color(0xFFEDF6E1)
-                        )
-                    )
-                )
-                .border(1.dp, PocketColors.BorderLight.copy(alpha = 0.8f), RoundedCornerShape(26.dp))
+                .background(brush = onboardingPhoneInnerBrush())
+                .border(1.dp, onboardingBorderColor().copy(alpha = 0.8f), RoundedCornerShape(26.dp))
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
@@ -791,7 +869,7 @@ private fun StepDots(currentStep: Int, totalSteps: Int) {
                     .height(6.dp)
                     .width(if (index == currentStep) 18.dp else 6.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(if (index == currentStep) OnboardingPurple else OnboardingBorder)
+                    .background(if (index == currentStep) onboardingAccentPurple() else onboardingBorderColor())
             )
         }
     }
@@ -805,18 +883,18 @@ private fun WelcomeScreen() {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         HaloIconBox(
-            accent = OnboardingGreen,
+            accent = onboardingAccentGreen(),
             drawableRes = R.drawable.ic_launcher_foreground_square
         )
 
         Surface(
-            color = OnboardingPurple.copy(alpha = 0.12f),
+            color = onboardingAccentPurple().copy(alpha = 0.12f),
             shape = RoundedCornerShape(999.dp)
         ) {
             Text(
                 text = "Beta",
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                color = OnboardingPurple,
+                color = onboardingAccentPurple(),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -826,7 +904,7 @@ private fun WelcomeScreen() {
             text = "Your phone is now a Minecraft server",
             fontSize = 21.sp,
             lineHeight = 24.sp,
-            color = OnboardingTextPrimary,
+            color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
             fontFamily = Monocraft,
             textAlign = TextAlign.Center
@@ -836,7 +914,7 @@ private fun WelcomeScreen() {
             text = "Host Java Edition servers for free. No PC required. Share with friends anywhere in the world.",
             fontSize = 13.sp,
             lineHeight = 19.sp,
-            color = OnboardingTextSecondary,
+            color = onboardingTextSecondary(),
             textAlign = TextAlign.Center,
             maxLines = 3
         )
@@ -846,7 +924,7 @@ private fun WelcomeScreen() {
         )
 
         ScreenCard(
-            accent = OnboardingGreen,
+            accent = onboardingAccentGreen(),
             title = "Fast start",
             subtitle = "PocketCraft keeps setup short, then guides you to the real server tools."
         )
@@ -863,7 +941,7 @@ private fun HowItWorksScreen() {
         Text(
             text = "How it works",
             fontSize = 21.sp,
-            color = OnboardingTextPrimary,
+            color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
             fontFamily = Monocraft
         )
@@ -871,19 +949,19 @@ private fun HowItWorksScreen() {
         FlowDiagram()
 
         DetailCard(
-            accent = OnboardingPurple,
+            accent = onboardingAccentPurple(),
             icon = Icons.Filled.Dns,
             title = "1. Start your server",
             body = "Paper runs locally on your phone and uses the memory you already have."
         )
         DetailCard(
-            accent = OnboardingGold,
+            accent = onboardingAccentGold(),
             icon = Icons.Filled.Public,
             title = "2. Share your address",
             body = "PocketCraft gives you a unique relay address that friends can connect to."
         )
         DetailCard(
-            accent = OnboardingGreen,
+            accent = onboardingAccentGreen(),
             icon = Icons.Filled.Group,
             title = "3. Friends join instantly",
             body = "Java Edition players connect straight through the relay with minimal friction."
@@ -899,14 +977,14 @@ private fun ImportScreen() {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         HaloIconBox(
-            accent = OnboardingGold,
+            accent = onboardingAccentGold(),
             icon = Icons.Filled.Upload
         )
 
         Text(
             text = "Moving from Aternos or Minehut?",
             fontSize = 20.sp,
-            color = OnboardingTextPrimary,
+            color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
             fontFamily = Monocraft,
             textAlign = TextAlign.Center
@@ -916,13 +994,13 @@ private fun ImportScreen() {
             text = "Bring your world, plugins, and config with you. No starting over.",
             fontSize = 13.sp,
             lineHeight = 19.sp,
-            color = OnboardingTextSecondary,
+            color = onboardingTextSecondary(),
             textAlign = TextAlign.Center,
             maxLines = 3
         )
 
         FeatureListCard(
-            accent = OnboardingGold,
+            accent = onboardingAccentGold(),
             entries = listOf(
                 "Upload world zip" to "Export from Aternos, drop the archive in PocketCraft, and keep going.",
                 "Keep your plugins" to "Reuse the same .jar files. Your plugin stack moves with you.",
@@ -940,14 +1018,14 @@ private fun FeaturesScreen() {
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         HaloIconBox(
-            accent = OnboardingGreen,
+            accent = onboardingAccentGreen(),
             icon = Icons.Filled.Extension
         )
 
         Text(
             text = "Full control, right in your pocket",
             fontSize = 20.sp,
-            color = OnboardingTextPrimary,
+            color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
             fontFamily = Monocraft,
             textAlign = TextAlign.Center
@@ -957,19 +1035,19 @@ private fun FeaturesScreen() {
             text = "Not a stripped-down app. This is the real server toolkit.",
             fontSize = 13.sp,
             lineHeight = 18.sp,
-            color = OnboardingTextSecondary,
+            color = onboardingTextSecondary(),
             textAlign = TextAlign.Center,
             maxLines = 2
         )
 
         Surface(
-            color = OnboardingGreen.copy(alpha = 0.12f),
+            color = onboardingAccentGreen().copy(alpha = 0.12f),
             shape = RoundedCornerShape(999.dp)
         ) {
             Text(
                 text = "Everything you need in one place",
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                color = PocketColors.PrimaryDark,
+                color = onboardingAccentPurpleDark(),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = Monocraft
@@ -995,14 +1073,14 @@ private fun CrossPlayScreen() {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         HaloIconBox(
-            accent = OnboardingGreen,
+            accent = onboardingAccentGreen(),
             icon = Icons.Filled.Public
         )
 
         Text(
             text = "Cross-play is supported",
             fontSize = 20.sp,
-            color = OnboardingTextPrimary,
+            color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
             fontFamily = Monocraft,
             textAlign = TextAlign.Center
@@ -1012,34 +1090,34 @@ private fun CrossPlayScreen() {
             text = "PocketCraft supports Java and Bedrock cross-play when the bridge is enabled in your server setup.",
             fontSize = 13.sp,
             lineHeight = 18.sp,
-            color = OnboardingTextSecondary,
+            color = onboardingTextSecondary(),
             textAlign = TextAlign.Center,
             maxLines = 3
         )
 
         DetailCard(
-            accent = OnboardingGreen,
+            accent = onboardingAccentGreen(),
             icon = Icons.Filled.PhoneAndroid,
             title = "Java + Bedrock",
             body = "Friends on PC and mobile can join the same world together through the relay."
         )
 
         DetailCard(
-            accent = OnboardingPurple,
+            accent = onboardingAccentPurple(),
             icon = Icons.Filled.Extension,
             title = "No extra app for players",
             body = "Share your server address and players can connect from their own edition right away."
         )
 
         Surface(
-            color = OnboardingGold.copy(alpha = 0.12f),
+            color = onboardingAccentGold().copy(alpha = 0.12f),
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
                 text = "⚠️ Beta Feature - Play at Your Own Discretion\n\nCross-play is still in beta development. Bugs and stability issues may occur as this feature is not yet officially supported. Use at your own risk.",
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                color = OnboardingTextPrimary,
+                color = onboardingTextPrimary(),
                 fontSize = 11.sp,
                 lineHeight = 16.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -1094,7 +1172,7 @@ private fun PermissionsScreen(
         Text(
             text = "Two quick things",
             fontSize = 21.sp,
-            color = OnboardingTextPrimary,
+            color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
             fontFamily = Monocraft,
             textAlign = TextAlign.Center
@@ -1104,13 +1182,13 @@ private fun PermissionsScreen(
             text = "These keep your server running without interruption.",
             fontSize = 13.sp,
             lineHeight = 19.sp,
-            color = OnboardingTextSecondary,
+            color = onboardingTextSecondary(),
             textAlign = TextAlign.Center,
             maxLines = 2
         )
 
         PermissionCard(
-            accent = OnboardingGreen,
+            accent = onboardingAccentGreen(),
             icon = Icons.Filled.Shield,
             title = "Background battery access",
             body = "Prevents Android from stopping your server after a few minutes of inactivity."
@@ -1124,16 +1202,16 @@ private fun PermissionsScreen(
                 onClick = onAllowBackground,
                 shape = RoundedCornerShape(14.dp),
                 color = when {
-                    backgroundPermissionGranted -> OnboardingGreen.copy(alpha = 0.16f)
+                    backgroundPermissionGranted -> onboardingAccentGreen().copy(alpha = 0.16f)
                     shouldWarnBackground() -> Color(0xFFFFECEA)
-                    else -> Color.White
+                    else -> onboardingSurfaceColor()
                 },
                 border = BorderStroke(
                     1.dp,
                     when {
-                        backgroundPermissionGranted -> OnboardingGreen.copy(alpha = 0.35f)
+                        backgroundPermissionGranted -> onboardingAccentGreen().copy(alpha = 0.35f)
                         shouldWarnBackground() -> Color(0xFFE85A5A)
-                        else -> OnboardingGreen.copy(alpha = 0.35f)
+                        else -> onboardingAccentGreen().copy(alpha = 0.35f)
                     }
                 ),
                 modifier = Modifier.fillMaxWidth()
@@ -1141,7 +1219,7 @@ private fun PermissionsScreen(
                 Text(
                     text = if (backgroundPermissionGranted) "Background access granted" else "Allow background access",
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    color = if (shouldWarnBackground()) Color(0xFFB42318) else OnboardingTextPrimary,
+                    color = if (shouldWarnBackground()) Color(0xFFB42318) else onboardingTextPrimary(),
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                     maxLines = 2
@@ -1150,7 +1228,7 @@ private fun PermissionsScreen(
         }
 
         PermissionCard(
-            accent = OnboardingPurple,
+            accent = onboardingAccentPurple(),
             icon = Icons.Filled.Notifications,
             title = "Notifications",
             body = "Shows server status and player count while the server is running."
@@ -1164,16 +1242,16 @@ private fun PermissionsScreen(
                 onClick = onAllowNotifications,
                 shape = RoundedCornerShape(14.dp),
                 color = when {
-                    notificationsPermissionGranted -> OnboardingGreen.copy(alpha = 0.16f)
+                    notificationsPermissionGranted -> onboardingAccentGreen().copy(alpha = 0.16f)
                     shouldWarnNotifications() -> Color(0xFFFFECEA)
-                    else -> Color.White
+                    else -> onboardingSurfaceColor()
                 },
                 border = BorderStroke(
                     1.dp,
                     when {
-                        notificationsPermissionGranted -> OnboardingGreen.copy(alpha = 0.35f)
+                        notificationsPermissionGranted -> onboardingAccentGreen().copy(alpha = 0.35f)
                         shouldWarnNotifications() -> Color(0xFFE85A5A)
-                        else -> OnboardingGreen.copy(alpha = 0.35f)
+                        else -> onboardingAccentGreen().copy(alpha = 0.35f)
                     }
                 ),
                 modifier = Modifier.fillMaxWidth()
@@ -1181,7 +1259,7 @@ private fun PermissionsScreen(
                 Text(
                     text = if (notificationsPermissionGranted) "Notification permission granted" else "Allow notifications",
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    color = if (shouldWarnNotifications()) Color(0xFFB42318) else OnboardingTextPrimary,
+                    color = if (shouldWarnNotifications()) Color(0xFFB42318) else onboardingTextPrimary(),
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                     maxLines = 2
@@ -1237,7 +1315,7 @@ private fun OnboardingSetupScreen(
         Text(
             text = "Final setup",
             fontSize = 20.sp,
-            color = OnboardingTextPrimary,
+            color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
             fontFamily = Monocraft
         )
@@ -1251,7 +1329,7 @@ private fun OnboardingSetupScreen(
                 Icon(
                     imageVector = Icons.Filled.Dns,
                     contentDescription = null,
-                    tint = PocketColors.PrimaryDark
+                    tint = onboardingAccentPurpleDark()
                 )
             },
             shape = duoTextFieldShape(),
@@ -1267,7 +1345,7 @@ private fun OnboardingSetupScreen(
                 Icon(
                     imageVector = Icons.Filled.Storage,
                     contentDescription = null,
-                    tint = PocketColors.PrimaryDark
+                    tint = onboardingAccentPurpleDark()
                 )
             },
             shape = duoTextFieldShape(),
@@ -1293,7 +1371,7 @@ private fun OnboardingSetupScreen(
                     Icon(
                         imageVector = Icons.Filled.Dns,
                         contentDescription = null,
-                        tint = PocketColors.PrimaryDark
+                        tint = onboardingAccentPurpleDark()
                     )
                 },
                 colors = OutlinedTextFieldDefaults.colors(
@@ -1302,9 +1380,9 @@ private fun OnboardingSetupScreen(
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
-                    disabledBorderColor = if (showVersionError) Color(0xFFDB3A34) else PocketColors.BorderLight,
+                    disabledBorderColor = if (showVersionError) Color(0xFFDB3A34) else onboardingBorderColor(),
                     disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    disabledTrailingIconColor = PocketColors.PrimaryDark
+                    disabledTrailingIconColor = onboardingAccentPurpleDark()
                 ),
                 shape = duoTextFieldShape(),
                 modifier = Modifier.fillMaxWidth()
@@ -1337,7 +1415,7 @@ private fun OnboardingSetupScreen(
                 Icon(
                     imageVector = Icons.Filled.Forest,
                     contentDescription = null,
-                    tint = PocketColors.PrimaryDark
+                    tint = onboardingAccentPurpleDark()
                 )
             },
             shape = duoTextFieldShape(),
@@ -1346,7 +1424,7 @@ private fun OnboardingSetupScreen(
         )
 
         Surface(
-            color = OnboardingGreen.copy(alpha = 0.12f),
+            color = onboardingAccentGreen().copy(alpha = 0.12f),
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -1358,12 +1436,12 @@ private fun OnboardingSetupScreen(
                 Icon(
                     imageVector = Icons.Filled.CheckCircle,
                     contentDescription = null,
-                    tint = OnboardingGreen,
+                    tint = onboardingAccentGreen(),
                     modifier = Modifier.size(18.dp)
                 )
                 Text(
                     text = "You can restore world backups later in Settings whenever you are ready.",
-                    color = OnboardingTextPrimary,
+                    color = onboardingTextPrimary(),
                     fontSize = 12.sp,
                     lineHeight = 17.sp,
                     fontWeight = FontWeight.Bold,
@@ -1389,10 +1467,10 @@ private fun FloatingToolArt(modifier: Modifier, mirrored: Boolean = false, secon
             .padding(top = (bob * 10).dp)
     ) {
         Surface(
-            color = Color.White.copy(alpha = 0.74f),
+            color = if (pocketIsDarkTheme()) MaterialTheme.colorScheme.surface.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.74f),
             shape = RoundedCornerShape(24.dp),
             shadowElevation = 8.dp,
-            border = BorderStroke(1.dp, OnboardingBorder.copy(alpha = 0.4f))
+            border = BorderStroke(1.dp, onboardingBorderColor().copy(alpha = 0.4f))
         ) {
             Image(
                 painter = painterResource(id = tool),
@@ -1426,11 +1504,11 @@ private fun FlowNode(label: String, emoji: String? = null, icon: ImageVector? = 
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         Surface(
-            color = OnboardingSurfaceSoft,
+            color = onboardingSurfaceSoftColor(),
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier
                 .size(46.dp)
-                .border(1.dp, OnboardingBorder, RoundedCornerShape(14.dp))
+                .border(1.dp, onboardingBorderColor(), RoundedCornerShape(14.dp))
         ) {
             Box(contentAlignment = Alignment.Center) {
                 if (emoji != null) {
@@ -1439,14 +1517,14 @@ private fun FlowNode(label: String, emoji: String? = null, icon: ImageVector? = 
                     Icon(
                         painter = painterResource(id = iconRes),
                         contentDescription = null,
-                        tint = PocketColors.PrimaryDark,
+                        tint = onboardingAccentPurpleDark(),
                         modifier = Modifier.size(22.dp)
                     )
                 } else if (icon != null) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = PocketColors.PrimaryDark,
+                        tint = onboardingAccentPurpleDark(),
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -1455,7 +1533,7 @@ private fun FlowNode(label: String, emoji: String? = null, icon: ImageVector? = 
         Text(
             text = label,
             textAlign = TextAlign.Center,
-            color = OnboardingTextSecondary,
+            color = onboardingTextSecondary(),
             fontSize = 9.sp,
             lineHeight = 11.sp
         )
@@ -1467,7 +1545,7 @@ private fun FlowArrow() {
     Icon(
         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
         contentDescription = null,
-        tint = PocketColors.PrimaryDark,
+        tint = onboardingAccentPurpleDark(),
         modifier = Modifier
             .padding(horizontal = 6.dp)
             .size(16.dp)
@@ -1480,7 +1558,7 @@ private fun HaloIconBox(accent: Color, icon: ImageVector) {
         modifier = Modifier
             .size(76.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(OnboardingSurfaceSoft)
+            .background(onboardingSurfaceSoftColor())
             .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(24.dp)),
         contentAlignment = Alignment.Center
     ) {
@@ -1502,7 +1580,7 @@ private fun HaloIconBox(accent: Color, drawableRes: Int) {
         modifier = Modifier
             .size(76.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(OnboardingSurfaceSoft)
+            .background(onboardingSurfaceSoftColor())
             .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(24.dp)),
         contentAlignment = Alignment.Center
     ) {
@@ -1528,7 +1606,7 @@ private fun FeaturePillRow(items: List<String>) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         items.forEach { label ->
             Surface(
-                color = OnboardingSurfaceSoft,
+                color = onboardingSurfaceSoftColor(),
                 shape = RoundedCornerShape(999.dp),
                 modifier = Modifier.weight(1f)
             ) {
@@ -1536,7 +1614,7 @@ private fun FeaturePillRow(items: List<String>) {
                     text = label,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                     textAlign = TextAlign.Center,
-                    color = OnboardingTextPrimary,
+                    color = onboardingTextPrimary(),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -1548,10 +1626,10 @@ private fun FeaturePillRow(items: List<String>) {
 @Composable
 private fun ScreenCard(accent: Color, title: String, subtitle: String) {
     Surface(
-        color = Color.White,
+        color = onboardingSurfaceColor(),
         shape = RoundedCornerShape(18.dp),
         shadowElevation = 2.dp,
-        border = BorderStroke(1.5.dp, OnboardingGreen.copy(alpha = 0.35f)),
+        border = BorderStroke(1.5.dp, onboardingAccentGreen().copy(alpha = 0.35f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -1560,8 +1638,8 @@ private fun ScreenCard(accent: Color, title: String, subtitle: String) {
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text(text = title, color = OnboardingTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-            Text(text = subtitle, color = OnboardingTextSecondary, fontSize = 12.sp, lineHeight = 17.sp, maxLines = 3)
+            Text(text = title, color = onboardingTextPrimary(), fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+            Text(text = subtitle, color = onboardingTextSecondary(), fontSize = 12.sp, lineHeight = 17.sp, maxLines = 3)
             Box(
                 modifier = Modifier
                     .height(4.dp)
@@ -1576,10 +1654,10 @@ private fun ScreenCard(accent: Color, title: String, subtitle: String) {
 @Composable
 private fun DetailCard(accent: Color, title: String, body: String, icon: ImageVector? = null) {
     Surface(
-        color = Color.White,
+        color = onboardingSurfaceColor(),
         shape = RoundedCornerShape(16.dp),
         shadowElevation = 2.dp,
-        border = BorderStroke(1.dp, OnboardingGreen.copy(alpha = 0.28f)),
+        border = BorderStroke(1.dp, onboardingAccentGreen().copy(alpha = 0.28f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -1606,8 +1684,8 @@ private fun DetailCard(accent: Color, title: String, body: String, icon: ImageVe
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(text = title, color = OnboardingTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-                Text(text = body, color = OnboardingTextSecondary, fontSize = 11.sp, lineHeight = 16.sp, maxLines = 3)
+                Text(text = title, color = onboardingTextPrimary(), fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+                Text(text = body, color = onboardingTextSecondary(), fontSize = 11.sp, lineHeight = 16.sp, maxLines = 3)
             }
         }
     }
@@ -1616,10 +1694,10 @@ private fun DetailCard(accent: Color, title: String, body: String, icon: ImageVe
 @Composable
 private fun FeatureListCard(accent: Color, entries: List<Pair<String, String>>) {
     Surface(
-        color = Color.White,
+        color = onboardingSurfaceColor(),
         shape = RoundedCornerShape(18.dp),
         shadowElevation = 2.dp,
-        border = BorderStroke(1.dp, OnboardingGreen.copy(alpha = 0.3f)),
+        border = BorderStroke(1.dp, onboardingAccentGreen().copy(alpha = 0.3f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -1635,9 +1713,9 @@ private fun FeatureListCard(accent: Color, entries: List<Pair<String, String>>) 
                                 .clip(CircleShape)
                                 .background(accent)
                         )
-                        Text(text = title, color = OnboardingTextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(text = title, color = onboardingTextPrimary(), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
-                    Text(text = body, color = OnboardingTextSecondary, fontSize = 11.sp, lineHeight = 16.sp)
+                    Text(text = body, color = onboardingTextSecondary(), fontSize = 11.sp, lineHeight = 16.sp)
                 }
             }
         }
@@ -1651,10 +1729,10 @@ private fun FeatureGrid(items: List<FeatureItem>) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 rowItems.forEach { item ->
                     Surface(
-                        color = Color.White,
+                        color = onboardingSurfaceColor(),
                         shape = RoundedCornerShape(18.dp),
                         shadowElevation = 4.dp,
-                        border = BorderStroke(1.5.dp, OnboardingGreen.copy(alpha = 0.35f)),
+                        border = BorderStroke(1.5.dp, onboardingAccentGreen().copy(alpha = 0.35f)),
                         modifier = Modifier.weight(1f)
                     ) {
                         Column(
@@ -1665,26 +1743,26 @@ private fun FeatureGrid(items: List<FeatureItem>) {
                                 modifier = Modifier
                                     .size(30.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(OnboardingGreen.copy(alpha = 0.16f)),
+                                    .background(onboardingAccentGreen().copy(alpha = 0.16f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = item.icon,
                                     contentDescription = null,
-                                    tint = Color(0xFF2E7D32),
+                                    tint = onboardingAccentGreen(),
                                     modifier = Modifier.size(17.dp)
                                 )
                             }
 
                             Text(
                                 text = item.title,
-                                color = OnboardingTextPrimary,
+                                color = onboardingTextPrimary(),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.ExtraBold
                             )
                             Text(
                                 text = item.body,
-                                color = OnboardingTextSecondary,
+                                color = onboardingTextSecondary(),
                                 fontSize = 10.sp,
                                 lineHeight = 14.sp
                             )
@@ -1702,10 +1780,10 @@ private fun FeatureGrid(items: List<FeatureItem>) {
 @Composable
 private fun PermissionCard(accent: Color, icon: ImageVector, title: String, body: String) {
     Surface(
-        color = Color.White,
+        color = onboardingSurfaceColor(),
         shape = RoundedCornerShape(16.dp),
         shadowElevation = 2.dp,
-        border = BorderStroke(1.dp, OnboardingGreen.copy(alpha = 0.28f)),
+        border = BorderStroke(1.dp, onboardingAccentGreen().copy(alpha = 0.28f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -1723,8 +1801,8 @@ private fun PermissionCard(accent: Color, icon: ImageVector, title: String, body
                 Icon(imageVector = icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(text = title, color = OnboardingTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-                Text(text = body, color = OnboardingTextSecondary, fontSize = 11.sp, lineHeight = 16.sp, maxLines = 3)
+                Text(text = title, color = onboardingTextPrimary(), fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+                Text(text = body, color = onboardingTextSecondary(), fontSize = 11.sp, lineHeight = 16.sp, maxLines = 3)
             }
         }
     }
@@ -1733,16 +1811,16 @@ private fun PermissionCard(accent: Color, icon: ImageVector, title: String, body
 @Composable
 private fun StatsRow() {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        StatCard(modifier = Modifier.weight(1f), value = "Free", label = "to host", accent = OnboardingPurple)
-        StatCard(modifier = Modifier.weight(1f), value = "24/7", label = "while app runs", accent = OnboardingGreen)
-        StatCard(modifier = Modifier.weight(1f), value = "Sync", label = "backup ready", accent = OnboardingGold)
+        StatCard(modifier = Modifier.weight(1f), value = "Free", label = "to host", accent = onboardingAccentPurple())
+        StatCard(modifier = Modifier.weight(1f), value = "24/7", label = "while app runs", accent = onboardingAccentGreen())
+        StatCard(modifier = Modifier.weight(1f), value = "Sync", label = "backup ready", accent = onboardingAccentGold())
     }
 }
 
 @Composable
 private fun StatCard(modifier: Modifier = Modifier, value: String, label: String, accent: Color) {
     Surface(
-        color = PocketColors.PrimaryMuted,
+        color = onboardingAccentPurpleMuted(),
         shape = RoundedCornerShape(14.dp),
         modifier = modifier
     ) {
@@ -1752,7 +1830,7 @@ private fun StatCard(modifier: Modifier = Modifier, value: String, label: String
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(text = value, color = accent, fontSize = 18.sp, fontWeight = FontWeight.Black)
-            Text(text = label, color = OnboardingTextSecondary, fontSize = 10.sp, textAlign = TextAlign.Center, lineHeight = 12.sp, maxLines = 2)
+            Text(text = label, color = onboardingTextSecondary(), fontSize = 10.sp, textAlign = TextAlign.Center, lineHeight = 12.sp, maxLines = 2)
         }
     }
 }
@@ -1765,7 +1843,13 @@ private fun PrimaryButton(modifier: Modifier = Modifier, text: String, enabled: 
                 .matchParentSize()
                 .padding(top = 6.dp)
                 .clip(RoundedCornerShape(18.dp))
-                .background(if (enabled) Color(0xFF57B900) else Color(0xFFB7C6A5))
+                .background(
+                    if (enabled) {
+                        if (pocketIsDarkTheme()) Color(0xFF3E8A0A) else Color(0xFF57B900)
+                    } else {
+                        if (pocketIsDarkTheme()) Color(0xFF4C5E4F) else Color(0xFFB7C6A5)
+                    }
+                )
         )
         Button(
             onClick = onClick,
@@ -1773,12 +1857,19 @@ private fun PrimaryButton(modifier: Modifier = Modifier, text: String, enabled: 
             modifier = Modifier.matchParentSize(),
             shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (enabled) PocketColors.Primary else Color(0xFFC9D5BC),
+                containerColor = if (enabled) PocketColors.Primary else if (pocketIsDarkTheme()) Color(0xFF5C6E5F) else Color(0xFFC9D5BC),
                 contentColor = Color.White,
-                disabledContainerColor = Color(0xFFC9D5BC),
+                disabledContainerColor = if (pocketIsDarkTheme()) Color(0xFF5C6E5F) else Color(0xFFC9D5BC),
                 disabledContentColor = Color.White
             ),
-            border = BorderStroke(2.dp, if (enabled) Color(0xFF57B900) else Color(0xFFB7C6A5))
+            border = BorderStroke(
+                2.dp,
+                if (enabled) {
+                    if (pocketIsDarkTheme()) Color(0xFF3E8A0A) else Color(0xFF57B900)
+                } else {
+                    if (pocketIsDarkTheme()) Color(0xFF4C5E4F) else Color(0xFFB7C6A5)
+                }
+            )
         ) {
             Text(text = text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
         }
@@ -1793,17 +1884,17 @@ private fun OutlineButton(modifier: Modifier = Modifier, text: String, onClick: 
                 .matchParentSize()
                 .padding(top = 5.dp)
                 .clip(RoundedCornerShape(18.dp))
-                .background(Color(0xFFD8DDD1))
+                .background(if (pocketIsDarkTheme()) Color(0xFF1B2B26) else Color(0xFFD8DDD1))
         )
         Surface(
             onClick = onClick,
             shape = RoundedCornerShape(18.dp),
-            color = Color(0xFFF8FAF5),
+            color = if (pocketIsDarkTheme()) onboardingSurfaceColor() else Color(0xFFF8FAF5),
             modifier = Modifier.matchParentSize(),
-            border = BorderStroke(1.5.dp, OnboardingBorder)
+            border = BorderStroke(1.5.dp, onboardingBorderColor())
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Text(text = text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = OnboardingTextDark)
+                Text(text = text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = onboardingTextDark())
             }
         }
     }
@@ -1814,12 +1905,12 @@ private fun SkipButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
-        color = Color.White,
+        color = onboardingSurfaceColor(),
         modifier = modifier.height(56.dp),
-        border = BorderStroke(1.dp, OnboardingBorder)
+        border = BorderStroke(1.dp, onboardingBorderColor())
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(text = "Skip", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = OnboardingTextMuted)
+            Text(text = "Skip", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = onboardingTextMuted())
         }
     }
 }

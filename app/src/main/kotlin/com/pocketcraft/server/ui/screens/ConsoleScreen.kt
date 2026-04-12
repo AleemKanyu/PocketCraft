@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -88,6 +89,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.ui.components.FlatEmojiIcon
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import coil.compose.AsyncImage
 import com.pocketcraft.server.data.model.PlayerInfo
 import com.pocketcraft.server.data.preferences.AppPreferences
@@ -106,6 +109,7 @@ import com.pocketcraft.server.service.VersionCatalog
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.Monocraft
 import com.pocketcraft.server.ui.theme.pocketCardShadowColor
+import com.pocketcraft.server.ui.theme.pocketHighContrastBorderColor
 import com.pocketcraft.server.ui.theme.pocketPopupAccentContainerColor
 import com.pocketcraft.server.ui.theme.pocketPopupAccentTintColor
 import com.pocketcraft.server.ui.theme.pocketSheetBorderColor
@@ -249,11 +253,11 @@ fun ConsoleScreen(
         }
         if (stateHolder.status == ServerStatus.ONLINE && !stateHolder.config.whiteList && !stateHolder.openServerRiskAcknowledged) {
             item {
-                androidx.compose.material3.Surface(
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
                         .shadow(
-                            elevation = 14.dp,
+                            elevation = 8.dp,
                             shape = RoundedCornerShape(16.dp),
                             ambientColor = cardShadowColor,
                             spotColor = cardShadowColor,
@@ -262,7 +266,7 @@ fun ConsoleScreen(
                     shape = RoundedCornerShape(16.dp),
                     color = pocketWarningSurfaceColor(),
                     border = androidx.compose.foundation.BorderStroke(1.dp, pocketWarningBorderColor()),
-                    shadowElevation = 5.dp
+                    shadowElevation = 4.dp
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -305,13 +309,14 @@ fun ConsoleScreen(
                             TextButton(
                                 onClick = { stateHolder.acknowledgeOpenServerRisk() }
                             ) {
-                                Text("I understand the risks", fontSize = 12.sp, color = PocketColors.TextMuted)
+                                Text("I understand the risks", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
                 }
             }
         }
+
         item {
             if (stateHolder.status == ServerStatus.ONLINE) {
                 Row(
@@ -806,9 +811,9 @@ private fun ServerIdentityCard(
                         Box(
                             modifier = Modifier
                                 .size(76.dp)
-                                .clip(RoundedCornerShape(22.dp))
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(22.dp))
                                 .background(PocketColors.PrimaryMuted)
-                                .border(2.dp, PocketColors.Primary.copy(alpha = 0.26f), RoundedCornerShape(22.dp)),
+                                .border(2.dp, PocketColors.Primary.copy(alpha = 0.26f), androidx.compose.foundation.shape.RoundedCornerShape(22.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             if (stateHolder.serverPhotoUrl.isNotBlank()) {
@@ -826,7 +831,13 @@ private fun ServerIdentityCard(
                                     contentScale = ContentScale.Crop
                                 )
                             } else {
-                                PocketWorldIcon(modifier = Modifier.size(34.dp))
+                                androidx.compose.foundation.Image(
+                                    painter = androidx.compose.ui.res.painterResource(com.pocketcraft.server.R.drawable.ic_launcher_foreground_square),
+                                    contentDescription = "Server icon",
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                                )
                             }
                         }
 
@@ -988,14 +999,14 @@ private fun ServerIdentityCard(
                     )
                     Text(
                         text = stateHolder.tunnelError.orEmpty(),
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = Color.White
                     )
                     Text(
                         text = "Wi-Fi hosting still works on the same local network.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Color.White.copy(alpha = 0.88f)
                     )
                     TextButton(onClick = stateHolder::clearTunnelError) {
-                        Text("OK")
+                        Text("OK", color = Color.White)
                     }
                 }
             }
@@ -1028,6 +1039,7 @@ private fun ServerIdentityCard(
     val localWifiAddress = "${stateHolder.localIp}:${stateHolder.config.port}"
     val canShareAddresses = publicAddress != null || serverRunning
     val joinCardShadowColor = pocketCardShadowColor()
+    val joinCardBorderColor = pocketHighContrastBorderColor()
 
     if (canShareAddresses) {
         Surface(
@@ -1041,8 +1053,8 @@ private fun ServerIdentityCard(
                     clip = false
                 ),
                 shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                border = BorderStroke(1.dp, pocketSheetBorderColor())
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.5.dp, joinCardBorderColor)
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -1071,16 +1083,20 @@ private fun ServerIdentityCard(
                     OutlinedButton(
                         onClick = onOpenBedrockHelp,
                         modifier = Modifier.fillMaxWidth(),
-                        border = BorderStroke(1.dp, Color.White)
+                        shape = RoundedCornerShape(999.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+                        ),
+                        border = BorderStroke(1.5.dp, joinCardBorderColor)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Info,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
-                            tint = PocketColors.PrimaryLight
+                            tint = PocketColors.Primary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Join Guide", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PocketColors.PrimaryLight)
+                        Text("Bedrock Join Guide", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PocketColors.Primary)
                     }
 
                     OutlinedButton(
@@ -1093,16 +1109,20 @@ private fun ServerIdentityCard(
                         },
                         enabled = canShareAddresses,
                         modifier = Modifier.fillMaxWidth(),
-                        border = BorderStroke(1.dp, Color.White)
+                        shape = RoundedCornerShape(999.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+                        ),
+                        border = BorderStroke(1.5.dp, joinCardBorderColor)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
-                            tint = PocketColors.PrimaryLight
+                            tint = PocketColors.Primary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Share Join Addresses", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PocketColors.PrimaryLight)
+                        Text("Share Join Addresses", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PocketColors.Primary)
                     }
                 }
             }

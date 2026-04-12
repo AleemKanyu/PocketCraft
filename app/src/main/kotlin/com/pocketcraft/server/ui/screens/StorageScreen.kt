@@ -188,7 +188,7 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                 Text(
                     "Server backups are saved to Downloads/PocketCraft Server Backups",
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
             Spacer(modifier = Modifier.height(4.dp))
@@ -210,7 +210,8 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
             }
             Text(
                 text = currentDir.relativeTo(root).path.ifBlank { "/" },
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.weight(1f))
             IconButton(onClick = { uploadLauncher.launch("*/*") }) {

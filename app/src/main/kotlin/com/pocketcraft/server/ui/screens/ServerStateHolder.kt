@@ -28,6 +28,7 @@ import com.pocketcraft.server.service.ServerPropertiesHelper
 import com.pocketcraft.server.server.ServerHostService
 import com.pocketcraft.server.server.ServerAddressResolver
 import com.pocketcraft.server.sound.SoundManager
+import com.pocketcraft.server.service.PlayerDataManager
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
@@ -43,6 +44,8 @@ import java.util.Locale
 import java.util.Properties
 import java.util.TimeZone
 import java.util.UUID
+import java.nio.ByteBuffer
+import java.util.zip.GZIPInputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
@@ -53,7 +56,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -91,6 +94,7 @@ class ServerStateHolder(
     private var startupProgressJob: Job? = null
     private var stopWatchdogJob: Job? = null
     private var periodicWorldSaveJob: Job? = null
+    private var periodicLocationJob: Job? = null
     private var pendingRestart = false
     private var hasAnnouncedServerOnline = false
     private val namedListLock = Any()
@@ -188,6 +192,7 @@ class ServerStateHolder(
                     isStopping = false
                     isStarting = false
                     isRunning = false
+                    stopPeriodicLocationPolling()
                     tps = 0f
                     publicAddress = null
                     tunnelConnecting = false
@@ -199,6 +204,7 @@ class ServerStateHolder(
                     stopWatchdogJob = null
                     if (shouldRestart) {
                         appendLog("[PocketCraft] Starting server again...")
+                        delay(1500)
                         startServer()
                     }
                 }
@@ -277,6 +283,7 @@ class ServerStateHolder(
                         stopWatchdogJob = null
                         if (shouldRestart) {
                             appendLog("[PocketCraft] Starting server again...")
+                            delay(1500)
                             startServer()
                         }
                     }
@@ -441,6 +448,7 @@ class ServerStateHolder(
         FirebaseAnalyticsManager.logServerStopped(versionId, durationSeconds)
         requestWorldSave(reason = "before stop")
         stopPeriodicWorldSave()
+        stopPeriodicLocationPolling()
         startStopWatchdog()
         runCatching {
             ServerHostService.stop(appContext)
@@ -465,6 +473,7 @@ class ServerStateHolder(
         appendLog("[PocketCraft] Restart requested...")
         requestWorldSave(reason = "before restart")
         stopPeriodicWorldSave()
+        stopPeriodicLocationPolling()
         startStopWatchdog()
         runCatching {
             ServerHostService.stop(appContext)
@@ -532,9 +541,42 @@ class ServerStateHolder(
 
         ConsoleParser.parseJoin(cleanLine)?.let { (name, uuid) ->
             upsertOnlinePlayer(name = name, uuid = uuid)
+            
+            // Send branded welcome message
+            if (config.joinMessageEnabled) {
+                scope.launch {
+                    delay(1500) // Ensure player is fully connected before sending message
+                    
+                    val shortName = serverName.take(12)
+                    
+                    val firstLine = """{"text":"\n[","color":"gray"},{"text":"$shortName","color":"green","bold":true},{"text":"] ","color":"gray"},{"text":"${config.joinMessageText}","color":"white"}"""
+                    val spacerLine = """{"text":"\n \n","color":"white"}"""
+                    var urlSection = ""
+                    
+                    if (config.joinMessageUrl.isNotBlank()) {
+                        val displayUrl = config.joinMessageUrl.removePrefix("https://").removePrefix("http://")
+                        urlSection = """,{"text":"\n[","color":"gray"},{"text":"$shortName","color":"green","bold":true},{"text":"] ","color":"gray"},{"text":"» ","color":"gray"},{"text":"$displayUrl","color":"aqua","underlined":true,"clickEvent":{"action":"open_url","value":"${config.joinMessageUrl}"}}"""
+                    }
+
+                    val tellrawArg = """[$firstLine$urlSection$spacerLine]"""
+                    val escapedName = escapeSelectorName(name)
+                    sendCommand("tellraw @a[name=\"$escapedName\"] $tellrawArg")
+                }
+            }
         }
         ConsoleParser.parseLeave(cleanLine)?.let { name ->
             onlinePlayers.removeAll { it.name.equals(name, ignoreCase = true) }
+        }
+
+        // Detect player death to store last dead location instantly
+        if (isAnyPlayerDeathLog(cleanLine)) {
+            val victim = extractDeathVictim(cleanLine)
+            if (victim != null) {
+                scope.launch(Dispatchers.IO) {
+                    delay(250) // Minimal delay for server to update NBT
+                    sendRconCommand("""data get entity @a[name="${escapeSelectorName(victim)}",limit=1] LastDeathLocation""")
+                }
+            }
         }
 
         if (ConsoleParser.isDone(cleanLine) ||
@@ -544,14 +586,20 @@ class ServerStateHolder(
             isStarting = false
             isRunning = true
             startPeriodicWorldSave()
+            startPeriodicLocationPolling()
             startupProgressPercent = 100
             startupStatusMessage = "Server ready!"
             if (tps <= 0f) tps = 20f
             if (startedAtMillis == null) startedAtMillis = System.currentTimeMillis()
             if (!hasAnnouncedServerOnline) {
                 hasAnnouncedServerOnline = true
-                scope.launch {
-                    SoundManager.playServerStart(appContext)
+                // In-app sound — only when the app is actually on screen (foreground).
+                // If app is in background, SoundManager cannot play meaningfully and the
+                // NotificationHelper will send a silent push notification instead.
+                if (com.pocketcraft.server.MainActivity.isAppInForeground) {
+                    scope.launch {
+                        SoundManager.playServerStart(appContext)
+                    }
                 }
                 NotificationHelper.notifyServerOnline(appContext, versionId)
             }
@@ -598,7 +646,7 @@ class ServerStateHolder(
     }
 
     // Lightweight Source RCON client (RFC-compliant packet framing)
-    private fun sendRconCommand(command: String): String {
+    fun sendRconCommand(command: String): String {
         val password = "pocketcraft-internal-rcon"
         val port = 25575
         return Socket().use { socket ->
@@ -639,6 +687,59 @@ class ServerStateHolder(
             sendPacket(2, 2, command)
             val (_, _, response) = readPacket()
             response.ifBlank { "[OK]" }
+        }
+    }
+
+    fun sendRconCommands(commands: List<String>): List<String> {
+        val password = "pocketcraft-internal-rcon"
+        val port = 25575
+        val results = mutableListOf<String>()
+        return try {
+            Socket().use { socket ->
+                socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 3000)
+                socket.soTimeout = 5000
+                val out = java.io.DataOutputStream(socket.getOutputStream().buffered())
+                val inp = java.io.DataInputStream(socket.getInputStream().buffered())
+
+                fun sendPacket(id: Int, type: Int, payload: String) {
+                    val payloadBytes = payload.toByteArray(Charsets.UTF_8)
+                    val length = 4 + 4 + payloadBytes.size + 2
+                    out.writeIntLE(length)
+                    out.writeIntLE(id)
+                    out.writeIntLE(type)
+                    out.write(payloadBytes)
+                    out.write(0)
+                    out.write(0)
+                    out.flush()
+                }
+
+                fun readPacket(): Triple<Int, Int, String> {
+                    val length = inp.readIntLE()
+                    val id = inp.readIntLE()
+                    val type = inp.readIntLE()
+                    val payloadLen = (length - 10).coerceAtLeast(0)
+                    val payload = if (payloadLen > 0) ByteArray(payloadLen).also { inp.readFully(it) } else ByteArray(0)
+                    inp.read()
+                    inp.read()
+                    return Triple(id, type, payload.toString(Charsets.UTF_8))
+                }
+
+                // Auth
+                sendPacket(1, 3, password)
+                val (authId, _, _) = readPacket()
+                if (authId == -1) {
+                    return List(commands.size) { "[RCON] Authentication failed." }
+                }
+
+                for ((i, command) in commands.withIndex()) {
+                    sendPacket(2 + i, 2, command)
+                    val (_, _, response) = readPacket()
+                    results.add(response.ifBlank { "[OK]" })
+                }
+                results
+            }
+        } catch (e: Exception) {
+            List(commands.size) { "[RCON] Connection failed: ${e.message}" }
         }
     }
 
@@ -714,8 +815,10 @@ class ServerStateHolder(
         isRunning = state.isRunning
         if (state.isRunning) {
             startPeriodicWorldSave()
+            startPeriodicLocationPolling()
         } else if (!state.isStarting) {
             stopPeriodicWorldSave()
+            stopPeriodicLocationPolling()
         }
         if (isStarting && startupStartedAtMillis == null) {
             startupStartedAtMillis = System.currentTimeMillis()
@@ -794,13 +897,17 @@ class ServerStateHolder(
         if (normalizedName.isBlank()) return
 
         sendCommand("ban $normalizedName")
+        
+        val resolvedUuid = onlinePlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid
+            ?: knownPlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid.orEmpty()
+
         scope.launch(Dispatchers.IO) {
             val error = runCatching {
                 mutateNamedList("banned-players.json") { list ->
                     if (list.none { it.name.equals(normalizedName, ignoreCase = true) }) {
                         list + NamedPlayerRecord(
                             name = normalizedName,
-                            uuid = onlinePlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid.orEmpty(),
+                            uuid = resolvedUuid,
                             extra = JSONObject().apply {
                                 put("created", isoNow())
                                 put("source", "PocketCraft")
@@ -830,13 +937,17 @@ class ServerStateHolder(
         if (normalizedName.isBlank()) return
 
         sendCommand("op $normalizedName")
+
+        val resolvedUuid = onlinePlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid
+            ?: knownPlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid.orEmpty()
+
         scope.launch(Dispatchers.IO) {
             val error = runCatching {
                 mutateNamedList("ops.json") { list ->
                     if (list.none { it.name.equals(normalizedName, ignoreCase = true) }) {
                         list + NamedPlayerRecord(
                             name = normalizedName,
-                            uuid = onlinePlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid.orEmpty(),
+                            uuid = resolvedUuid,
                             extra = JSONObject().apply {
                                 put("level", 4)
                                 put("bypassesPlayerLimit", false)
@@ -1033,7 +1144,7 @@ class ServerStateHolder(
     suspend fun saveSettings(next: ServerConfig): String = withContext(Dispatchers.IO) {
         val enforced = next.copy(
             port = singleServerPort,
-            maxPlayers = next.maxPlayers.coerceIn(1, 10),
+            maxPlayers = next.maxPlayers.coerceIn(1, 20),
             viewDistance = next.viewDistance.coerceIn(3, 32),
             simulationDistance = next.simulationDistance.coerceIn(3, 32)
         )
@@ -1284,6 +1395,8 @@ class ServerStateHolder(
             return@withContext "Stop the server before creating a backup."
         }
         try {
+            val activeWorld = sanitizeWorldName(config.worldName.ifBlank { "world" })
+            syncActiveWorldContentIntoProfile(activeWorld)
             val worldFolders = worldDirectoryCandidates(config.worldName).filter(File::exists)
             if (worldFolders.isEmpty()) {
                 return@withContext "No world folders found to back up."
@@ -1302,7 +1415,6 @@ class ServerStateHolder(
                 append(SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date()))
                 append(".zip")
             }
-            val activeWorld = sanitizeWorldName(config.worldName.ifBlank { "world" })
             val backupFile = File(backupsDirForWorld(activeWorld), backupName)
             val entries = collectBackupEntries()
             val fileEntries = entries.filterNot { it.isDirectory }
@@ -1418,6 +1530,10 @@ class ServerStateHolder(
                     }
                 }
             }
+
+            val restoredConfig = loadConfig()
+            val restoredWorld = sanitizeWorldName(restoredConfig.worldName.ifBlank { "world" })
+            syncProfileIntoActiveWorldContent(restoredWorld)
 
             withContext(Dispatchers.Main) {
                 restoreProgressPercent = 100
@@ -1586,6 +1702,7 @@ class ServerStateHolder(
 
     fun dispose() {
         stopPeriodicWorldSave()
+        stopPeriodicLocationPolling()
         stopStartupProgressTracking(reset = false)
         stopWatchdogJob?.cancel()
         stopWatchdogJob = null
@@ -1610,6 +1727,7 @@ class ServerStateHolder(
                     isStarting = false
                     isRunning = false
                     stopPeriodicWorldSave()
+                    stopPeriodicLocationPolling()
                     tps = 0f
                     publicAddress = null
                     tunnelConnecting = false
@@ -1763,7 +1881,7 @@ class ServerStateHolder(
         var loaded = ServerConfig(
             worldName = props.getProperty("level-name", "world"),
             worldSeed = props.getProperty("level-seed", ""),
-            maxPlayers = (props.getProperty("max-players", "5").toIntOrNull() ?: 5).coerceIn(1, 10),
+            maxPlayers = (props.getProperty("max-players", adaptiveMaxPlayers().toString()).toIntOrNull() ?: adaptiveMaxPlayers()).coerceIn(1, 20),
             port = singleServerPort,
             difficulty = props.getProperty("difficulty", "normal"),
             gameMode = props.getProperty("gamemode", "survival"),
@@ -1789,7 +1907,7 @@ class ServerStateHolder(
 
     private fun saveConfig(config: ServerConfig) {
         val enforcedConfig = config.copy(
-            maxPlayers = config.maxPlayers.coerceIn(1, 10),
+            maxPlayers = config.maxPlayers.coerceIn(1, 20),
             viewDistance = config.viewDistance.coerceIn(3, 32),
             simulationDistance = config.simulationDistance.coerceIn(3, 32)
         )
@@ -1830,13 +1948,19 @@ class ServerStateHolder(
         ServerPropertiesHelper.saveProperties(serverDir, props)
     }
 
-    private fun adaptiveViewDistance(): Int {
-        return if (totalRamGb >= 6) 5 else if (totalRamGb >= 4) 5 else 4
+    private fun adaptiveViewDistance(): Int = when {
+        totalRamGb >= 6 -> 32
+        totalRamGb >= 4 -> 12
+        else            -> 10
     }
 
-    private fun adaptiveSimulationDistance(): Int {
-        return if (totalRamGb >= 6) 4 else if (totalRamGb >= 4) 4 else 3
+    private fun adaptiveSimulationDistance(): Int = when {
+        totalRamGb >= 6 -> 16
+        totalRamGb >= 4 -> 10
+        else            -> 8
     }
+
+    private fun adaptiveMaxPlayers(): Int = if (totalRamGb >= 6) 20 else 10
 
     private fun buildServerMotd(displayName: String, description: String): String {
         val cleanName = displayName.trim()
@@ -1861,13 +1985,14 @@ class ServerStateHolder(
         val target = File(serverDir, "server-icon.png")
         val cleaned = photoUrl.trim()
         if (cleaned.isBlank()) {
-            if (target.exists()) target.delete()
+            // No custom photo — write the app icon as the default.
+            writeAppIconAsServerIcon(target)
             return
         }
 
         val uri = Uri.parse(cleaned)
         val bitmap = openBitmap(uri) ?: run {
-            if (target.exists()) target.delete()
+            writeAppIconAsServerIcon(target)
             return
         }
 
@@ -1875,7 +2000,7 @@ class ServerStateHolder(
         val x = ((bitmap.width - squareSize) / 2).coerceAtLeast(0)
         val y = ((bitmap.height - squareSize) / 2).coerceAtLeast(0)
         val squareBitmap = Bitmap.createBitmap(bitmap, x, y, squareSize, squareSize)
-        val scaledBitmap = Bitmap.createScaledBitmap(squareBitmap, 64, 64, false)
+        val scaledBitmap = Bitmap.createScaledBitmap(squareBitmap, 64, 64, true)
 
         target.outputStream().use { output ->
             scaledBitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
@@ -1884,6 +2009,162 @@ class ServerStateHolder(
         if (squareBitmap != bitmap) squareBitmap.recycle()
         if (scaledBitmap != squareBitmap) scaledBitmap.recycle()
         bitmap.recycle()
+    }
+
+    private fun writeAppIconAsServerIcon(target: File) {
+        // Always overwrite so a fresh icon is in place even on first run.
+        runCatching {
+            val drawable = ContextCompat.getDrawable(appContext, com.pocketcraft.server.R.mipmap.ic_launcher)
+                ?: return@runCatching
+            val bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+            drawable.setBounds(0, 0, 64, 64)
+            drawable.draw(canvas)
+            target.outputStream().use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            bitmap.recycle()
+        }
+    }
+
+    /** Reads the actual world seed from level.dat (NBT) after the world has been generated. */
+    fun readActualWorldSeed(): Long? {
+        val worldName = sanitizeWorldName(config.worldName.ifBlank { "world" })
+        val levelDat = File(serverDir, "$worldName/level.dat")
+        if (!levelDat.exists()) return null
+        return runCatching {
+            GZIPInputStream(levelDat.inputStream()).use { gzip ->
+                val bytes = gzip.readBytes()
+                parseRandomSeedFromNbt(bytes)
+            }
+        }.getOrNull()
+    }
+
+    private fun parseRandomSeedFromNbt(bytes: ByteArray): Long? {
+        val marker = "RandomSeed".toByteArray(Charsets.UTF_8)
+        for (i in 0 until bytes.size - marker.size - 8) {
+            if (bytes.sliceArray(i until i + marker.size).contentEquals(marker)) {
+                val offset = i + marker.size
+                return ByteBuffer.wrap(bytes, offset, 8).long
+            }
+        }
+        return null
+    }
+
+    /**
+     * Writes optimization settings to bukkit.yml and paper-world-defaults.yml.
+     * preset: "none", "lite", "balanced", "performance"
+     */
+    fun applyOptimizationPreset(preset: String) {
+        scope.launch(Dispatchers.IO) {
+            val bukkitFile = File(serverDir, "bukkit.yml")
+            val paperWorldFile = File(serverDir, "config/paper-world-defaults.yml")
+            paperWorldFile.parentFile?.mkdirs()
+
+            when (preset) {
+                "lite" -> {
+                    writeBukkitSpawnLimits(bukkitFile, monsters = 50, animals = 12, waterAnimals = 5, waterAmbient = 15, ambient = 10)
+                    writePaperWorldOptimization(paperWorldFile, entityActivation = true, eigenRedstone = true, crammingLimit = 16)
+                }
+                "balanced" -> {
+                    writeBukkitSpawnLimits(bukkitFile, monsters = 35, animals = 10, waterAnimals = 5, waterAmbient = 10, ambient = 5)
+                    writePaperWorldOptimization(paperWorldFile, entityActivation = true, eigenRedstone = true, crammingLimit = 8)
+                }
+                "performance" -> {
+                    writeBukkitSpawnLimits(bukkitFile, monsters = 20, animals = 8, waterAnimals = 3, waterAmbient = 5, ambient = 3)
+                    writePaperWorldOptimization(paperWorldFile, entityActivation = true, eigenRedstone = true, crammingLimit = 6)
+                }
+                else -> {
+                    // "none" — restore vanilla defaults
+                    writeBukkitSpawnLimits(bukkitFile, monsters = 70, animals = 15, waterAnimals = 5, waterAmbient = 20, ambient = 15)
+                    writePaperWorldOptimization(paperWorldFile, entityActivation = false, eigenRedstone = false, crammingLimit = 24)
+                }
+            }
+            // Persist preset choice
+            val props = ServerPropertiesHelper.readProperties(serverDir)
+            props["pocketcraft-optimization-preset"] = preset
+            ServerPropertiesHelper.saveProperties(serverDir, props)
+        }
+    }
+
+    fun readOptimizationPreset(): String {
+        val defaultPreset = when {
+            totalRamGb <= 3 -> "performance"
+            totalRamGb <= 5 -> "lite"
+            else -> "none"
+        }
+        return ServerPropertiesHelper.readProperties(serverDir)
+            .getProperty("pocketcraft-optimization-preset", defaultPreset)
+    }
+
+    private fun writeBukkitSpawnLimits(
+        bukkitFile: File,
+        monsters: Int,
+        animals: Int,
+        waterAnimals: Int,
+        waterAmbient: Int,
+        ambient: Int
+    ) {
+        val original = runCatching { bukkitFile.readText() }.getOrDefault("")
+        var updated = original
+        updated = ensureBukkitValue(updated, "spawn-limits", "monsters", monsters.toString())
+        updated = ensureBukkitValue(updated, "spawn-limits", "animals", animals.toString())
+        updated = ensureBukkitValue(updated, "spawn-limits", "water-animals", waterAnimals.toString())
+        updated = ensureBukkitValue(updated, "spawn-limits", "water-ambient", waterAmbient.toString())
+        updated = ensureBukkitValue(updated, "spawn-limits", "ambient", ambient.toString())
+        if (updated != original) bukkitFile.writeText(updated)
+    }
+
+    private fun writePaperWorldOptimization(
+        paperWorldFile: File,
+        entityActivation: Boolean,
+        eigenRedstone: Boolean,
+        crammingLimit: Int
+    ) {
+        val original = runCatching { paperWorldFile.readText() }.getOrDefault("")
+        var updated = original
+        updated = ensurePaperWorldValue(updated, "entity-activation-range", "enabled", entityActivation.toString())
+        updated = ensurePaperWorldValue(updated, "misc", "use-faster-eigencraft-redstone", eigenRedstone.toString())
+        // max-entity-cramming lives in server.properties
+        val props = ServerPropertiesHelper.readProperties(serverDir)
+        props["max-entity-cramming"] = crammingLimit.toString()
+        ServerPropertiesHelper.saveProperties(serverDir, props)
+        if (updated != original) paperWorldFile.writeText(updated)
+    }
+
+    private fun ensureBukkitValue(content: String, section: String, key: String, value: String): String {
+        val lines = content.ifBlank { "" }.split('\n').toMutableList()
+        if (lines.size == 1 && lines[0].isBlank()) lines.clear()
+        // Find or create section (stricter top-level check)
+        var sectionIdx = lines.indexOfFirst { it.trimEnd() == "$section:" }
+        if (sectionIdx < 0) { lines.add("$section:"); sectionIdx = lines.lastIndex }
+        // Find or update key within section
+        val keyLine = "  $key:"
+        val keyIdx = (sectionIdx + 1 until lines.size).firstOrNull { i ->
+            lines[i].trimStart().startsWith("$key:") && lines[i].startsWith("  ")
+        }
+        if (keyIdx != null) {
+            lines[keyIdx] = "  $key: $value"
+        } else {
+            lines.add(sectionIdx + 1, "  $key: $value")
+        }
+        return lines.joinToString("\n").trimEnd() + "\n"
+    }
+
+    private fun ensurePaperWorldValue(content: String, section: String, key: String, value: String): String {
+        val lines = content.ifBlank { "" }.split('\n').toMutableList()
+        if (lines.size == 1 && lines[0].isBlank()) lines.clear()
+        var sectionIdx = lines.indexOfFirst { it.trimEnd() == "$section:" }
+        if (sectionIdx < 0) { lines.add("$section:"); sectionIdx = lines.lastIndex }
+        val keyIdx = (sectionIdx + 1 until lines.size).firstOrNull { i ->
+            lines[i].trimStart().startsWith("$key:") && lines[i].startsWith("  ")
+        }
+        if (keyIdx != null) {
+            lines[keyIdx] = "  $key: $value"
+        } else {
+            lines.add(sectionIdx + 1, "  $key: $value")
+        }
+        return lines.joinToString("\n").trimEnd() + "\n"
     }
 
     private fun openBitmap(uri: Uri): Bitmap? {
@@ -2185,6 +2466,8 @@ class ServerStateHolder(
             base.mkdirs()
         }
         pluginProfileDir(worldName).mkdirs()
+        modsProfileDir(worldName).mkdirs()
+        resourcePacksProfileDir(worldName).mkdirs()
     }
 
     private fun generateUniqueWorldName(requestedName: String, existingNames: List<String>): String {
@@ -2272,25 +2555,60 @@ class ServerStateHolder(
 
     private fun cloneWorldPluginProfile(fromWorld: String, toWorld: String) {
         if (fromWorld.equals(toWorld, ignoreCase = true)) return
-        val activePluginsDir = File(serverDir, "plugins").also { it.mkdirs() }
-        val fromProfile = pluginProfileDir(fromWorld).also { it.mkdirs() }
-        val toProfile = pluginProfileDir(toWorld).also { it.mkdirs() }
-        copyDirectoryContents(activePluginsDir, fromProfile, clearTarget = true)
-        copyDirectoryContents(fromProfile, toProfile, clearTarget = true)
+        syncActiveWorldContentIntoProfile(fromWorld)
+        copyDirectoryContents(
+            pluginProfileDir(fromWorld).also { it.mkdirs() },
+            pluginProfileDir(toWorld).also { it.mkdirs() },
+            clearTarget = true,
+            excludedTopLevelNames = setOf("mods", "resourcepacks")
+        )
+        copyDirectoryContents(modsProfileDir(fromWorld).also { it.mkdirs() }, modsProfileDir(toWorld).also { it.mkdirs() }, clearTarget = true)
+        copyDirectoryContents(resourcePacksProfileDir(fromWorld).also { it.mkdirs() }, resourcePacksProfileDir(toWorld).also { it.mkdirs() }, clearTarget = true)
     }
 
     private fun syncWorldPluginProfiles(fromWorld: String, toWorld: String) {
         if (fromWorld.equals(toWorld, ignoreCase = true)) return
-
-        val activePluginsDir = File(serverDir, "plugins").also { it.mkdirs() }
-        val fromProfile = pluginProfileDir(fromWorld).also { it.mkdirs() }
-        val toProfile = pluginProfileDir(toWorld).also { it.mkdirs() }
-
-        copyDirectoryContents(activePluginsDir, fromProfile, clearTarget = true)
-        copyDirectoryContents(toProfile, activePluginsDir, clearTarget = true)
+        syncActiveWorldContentIntoProfile(fromWorld)
+        syncProfileIntoActiveWorldContent(toWorld)
     }
 
-    private fun copyDirectoryContents(source: File, target: File, clearTarget: Boolean) {
+    private fun activePluginsDir(): File = File(serverDir, "plugins").also { it.mkdirs() }
+
+    private fun activeModsDir(): File = File(serverDir, "mods").also { it.mkdirs() }
+
+    private fun activeResourcePacksDir(): File = File(serverDir, "resourcepacks").also { it.mkdirs() }
+
+    private fun modsProfileDir(worldName: String): File {
+        return File(pluginProfileDir(worldName), "mods")
+    }
+
+    private fun resourcePacksProfileDir(worldName: String): File {
+        return File(pluginProfileDir(worldName), "resourcepacks")
+    }
+
+    private fun syncActiveWorldContentIntoProfile(worldName: String) {
+        copyDirectoryContents(activePluginsDir(), pluginProfileDir(worldName).also { it.mkdirs() }, clearTarget = true)
+        copyDirectoryContents(activeModsDir(), modsProfileDir(worldName).also { it.mkdirs() }, clearTarget = true)
+        copyDirectoryContents(activeResourcePacksDir(), resourcePacksProfileDir(worldName).also { it.mkdirs() }, clearTarget = true)
+    }
+
+    private fun syncProfileIntoActiveWorldContent(worldName: String) {
+        copyDirectoryContents(
+            pluginProfileDir(worldName).also { it.mkdirs() },
+            activePluginsDir(),
+            clearTarget = true,
+            excludedTopLevelNames = setOf("mods", "resourcepacks")
+        )
+        copyDirectoryContents(modsProfileDir(worldName).also { it.mkdirs() }, activeModsDir(), clearTarget = true)
+        copyDirectoryContents(resourcePacksProfileDir(worldName).also { it.mkdirs() }, activeResourcePacksDir(), clearTarget = true)
+    }
+
+    private fun copyDirectoryContents(
+        source: File,
+        target: File,
+        clearTarget: Boolean,
+        excludedTopLevelNames: Set<String> = emptySet()
+    ) {
         if (!target.exists()) target.mkdirs()
         if (clearTarget) {
             target.listFiles().orEmpty().forEach { it.deleteRecursively() }
@@ -2299,6 +2617,10 @@ class ServerStateHolder(
 
         source.walkTopDown()
             .filter { it != source }
+            .filter { src ->
+                val relative = src.relativeTo(source)
+                relative.path.substringBefore(File.separator, "").lowercase(Locale.getDefault()) !in excludedTopLevelNames
+            }
             .forEach { src ->
                 val relative = src.relativeTo(source)
                 val dest = File(target, relative.path)
@@ -2428,4 +2750,79 @@ class ServerStateHolder(
         val uuid: String = UUID.randomUUID().toString(),
         val extra: JSONObject = JSONObject()
     )
+
+    private fun isAnyPlayerDeathLog(line: String): Boolean {
+        val lower = line.lowercase()
+        val deathHints = listOf(
+            " was slain", " was shot", " was pummeled", " was squashed", " was killed",
+            " fell ", " drowned", " burned", " blew up", " hit the ground too hard",
+            " starved to death", " suffocated", " froze to death", " walked into danger", " died"
+        )
+        return deathHints.any { it in lower }
+    }
+
+    private fun extractDeathVictim(line: String): String? {
+        val lower = line.lowercase()
+        // Most death messages start with the player name.
+        // We can check against onlinePlayers names.
+        return onlinePlayers.firstOrNull { 
+            lower.startsWith(it.name.lowercase()) 
+        }?.name
+    }
+
+    fun changePlayerGamemode(player: PlayerInfo, mode: String) {
+        val isOnline = onlinePlayers.any { it.name.equals(player.name, ignoreCase = true) }
+        if (isOnline) {
+            sendCommand("gamemode $mode ${player.name}")
+        } else {
+            // Offline - try to edit .dat file
+            scope.launch(Dispatchers.IO) {
+                val uuid = player.uuid
+                if (uuid.isBlank()) {
+                    withContext(Dispatchers.Main) {
+                        appendLog("[PocketCraft] Cannot change offline gamemode: UUID unknown for ${player.name}")
+                    }
+                    return@launch
+                }
+                val modeInt = when(mode.lowercase()) {
+                    "survival" -> 0
+                    "creative" -> 1
+                    "adventure" -> 2
+                    "spectator" -> 3
+                    else -> 0
+                }
+                val success = PlayerDataManager.updateOfflineGamemode(appContext, versionId, uuid, modeInt)
+                withContext(Dispatchers.Main) {
+                    if (success) {
+                        appendLog("[PocketCraft] Changed offline gamemode for ${player.name} to $mode")
+                        refreshAll()
+                    } else {
+                        appendLog("[PocketCraft] Failed to change offline gamemode for ${player.name}")
+                    }
+                }
+            }
+        }
+    }
+
+    private fun startPeriodicLocationPolling() {
+        periodicLocationJob?.cancel()
+        periodicLocationJob = scope.launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(60_000)
+                if (!isRunning || isStopping) continue
+                onlinePlayers.toList().forEach { player ->
+                    val target = """@a[name="${escapeSelectorName(player.name)}",limit=1]"""
+                    sendRconCommand("data get entity $target Pos")
+                    delay(200)
+                    sendRconCommand("data get entity $target Dimension")
+                    delay(200)
+                }
+            }
+        }
+    }
+
+    private fun stopPeriodicLocationPolling() {
+        periodicLocationJob?.cancel()
+        periodicLocationJob = null
+    }
 }

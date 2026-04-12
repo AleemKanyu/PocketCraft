@@ -282,23 +282,25 @@ fun WorldsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val isDark = com.pocketcraft.server.ui.theme.pocketIsDarkTheme()
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Import guide",
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 14.sp
+                            fontSize = 14.sp,
+                            color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
                             text = "Tap to see how world and dimension imports work.",
                             fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (isDark) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = if (isDark) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -808,6 +810,7 @@ private fun DimensionUploadRow(
     serverOffline: Boolean,
     onUpload: () -> Unit
 ) {
+    val isDark = com.pocketcraft.server.ui.theme.pocketIsDarkTheme()
     GameCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -823,8 +826,8 @@ private fun DimensionUploadRow(
                 FlatEmojiIcon(icon, modifier = Modifier.size(20.dp), tint = PocketColors.PrimaryDark)
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(title, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface)
+                Text(subtitle, fontSize = 12.sp, color = if (isDark) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (isImporting) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
@@ -833,6 +836,7 @@ private fun DimensionUploadRow(
                     onClick = onUpload,
                     enabled = serverOffline,
                     shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Primary, contentColor = Color.White),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                 ) {
                     Text("UPLOAD", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)

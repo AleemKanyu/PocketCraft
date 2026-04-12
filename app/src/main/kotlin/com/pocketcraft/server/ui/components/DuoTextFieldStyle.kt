@@ -19,7 +19,7 @@ fun duoTextFieldColors(): TextFieldColors {
     val hintColor = if (isDarkTheme) {
         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
     } else {
-        PocketColors.TextMuted
+        MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     return TextFieldDefaults.colors(
@@ -51,7 +51,7 @@ fun duoOutlinedTextFieldColors(): TextFieldColors {
     val hintColor = if (isDarkTheme) {
         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
     } else {
-        PocketColors.TextMuted
+        MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     return OutlinedTextFieldDefaults.colors(

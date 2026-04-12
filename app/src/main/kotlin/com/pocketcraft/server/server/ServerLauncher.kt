@@ -429,6 +429,11 @@ class ServerLauncher(private val context: Context) {
             props["sync-chunk-writes"] = "false"
             changed = true
         }
+        // Always allow flight — prevents kick while spawn chunks are loading on join.
+        if (props.getProperty("allow-flight") != "true") {
+            props["allow-flight"] = "true"
+            changed = true
+        }
 
         if (changed) {
             ServerPropertiesHelper.saveProperties(serverDir, props)
@@ -449,18 +454,16 @@ class ServerLauncher(private val context: Context) {
 
         var updated = original
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "auto-config-send-distance", "true")
-        // The previous relay profile throttled chunk loading too aggressively, which left
-        // Bedrock players with slow terrain pop-in. Let Paper use its own defaults again.
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-generates", "0")
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", "0")
         updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-generate-rate", "-1.0")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-load-rate", "100")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-send-rate", "75")
-        updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "2")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-load-rate", "100.0")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-send-rate", "100.0")
+        updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "4")
 
         if (updated != original) {
             paperGlobal.writeText(updated)
-            onOutput("[PocketCraft] Paper relay tuning applied: client send distance + faster chunk send/load defaults")
+            onOutput("[PocketCraft] Paper relay tuning applied: client send distance + 4G network optimized chunk send/load limits")
         }
     }
 
@@ -492,115 +495,20 @@ class ServerLauncher(private val context: Context) {
         val original = runCatching { paperWorldDefaults.readText() }.getOrDefault("")
 
         var updated = original
-        // Unload chunks promptly so clients do not keep a long trail of previously sent chunks.
-        updated = ensureYamlPathValue(updated, listOf("chunks"), "delay-chunk-unloads-by", "0s")
+        // Maintain a small buffer so brief movement doesn't instantly cause chunk shedding.
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "delay-chunk-unloads-by", "10s")
+        // Keep spawn chunks loaded so the first player to join sees terrain immediately.
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded", "true")
+        // Ensure spawn radius is pre-generated (vanilla default 10, lower = faster first start)
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded-range", "4")
 
         if (updated != original) {
             paperWorldDefaults.writeText(updated)
-            onOutput("[PocketCraft] Paper world defaults updated for immediate chunk unloads.")
+            onOutput("[PocketCraft] Paper world defaults updated to buffer chunk unloads for 10s.")
         }
     }
 
-    private fun applyAdaptiveDistances(
-        serverDir: File,
-        totalRamMb: Int,
-        onOutput: (String) -> Unit
-    ) {
-        val props = ServerPropertiesHelper.readProperties(serverDir)
-        val worldName = props.getProperty("level-name", "world")
-        val isNewWorld = !worldDirExists(serverDir, worldName)
 
-        // For new worlds, use lower initial distances to speed up generation
-        val viewDistance = if (isNewWorld) {
-            resolveAdaptiveViewDistanceNew(totalRamMb)
-        } else {
-            resolveAdaptiveViewDistance(totalRamMb)
-        }
-
-        val simulationDistance = if (isNewWorld) {
-            resolveAdaptiveSimulationDistanceNew(totalRamMb)
-        } else {
-            resolveAdaptiveSimulationDistance(totalRamMb)
-        }
-
-        props["view-distance"] = viewDistance.toString()
-        props["simulation-distance"] = simulationDistance.toString()
-        ServerPropertiesHelper.saveProperties(serverDir, props)
-
-        val worldType = if (isNewWorld) "new world" else "existing world"
-        onOutput(
-            "[PocketCraft] Adaptive distance profile applied for ${totalRamMb}MB RAM ($worldType): view=$viewDistance, simulation=$simulationDistance"
-        )
-    }
-
-    private fun worldDirExists(serverDir: File, worldName: String): Boolean {
-        val candidates = listOf(
-            File(serverDir, worldName),
-            File(serverDir, "${worldName}_nether"),
-            File(serverDir, "${worldName}_the_end")
-        )
-        return candidates.any { it.isDirectory && File(it, "level.dat").exists() }
-    }
-
-    private fun resolveAdaptiveViewDistanceNew(totalRamMb: Int): Int {
-        // Lower initial view distance for new world generation
-        return when {
-            totalRamMb >= 7168 -> 5
-            totalRamMb >= 6144 -> 5
-            totalRamMb >= 4096 -> 5
-            totalRamMb >= 3072 -> 5
-            else -> 4
-        }
-    }
-
-    private fun resolveAdaptiveSimulationDistanceNew(totalRamMb: Int): Int {
-        // Lower initial simulation distance for new world generation
-        return when {
-            totalRamMb >= 7168 -> 4
-            totalRamMb >= 6144 -> 4
-            totalRamMb >= 4096 -> 4
-            totalRamMb >= 3072 -> 3
-            else -> 3
-        }
-    }
-
-    private fun resolveAdaptiveViewDistance(totalRamMb: Int): Int {
-        return when {
-            totalRamMb >= 7168 -> 5
-            totalRamMb >= 6144 -> 5
-            totalRamMb >= 4096 -> 5
-            totalRamMb >= 3072 -> 4
-            else -> 4
-        }
-    }
-
-    private fun resolveAdaptiveSimulationDistance(totalRamMb: Int): Int {
-        return when {
-            totalRamMb >= 7168 -> 4
-            totalRamMb >= 6144 -> 4
-            totalRamMb >= 4096 -> 4
-            totalRamMb >= 3072 -> 3
-            else -> 3
-        }
-    }
-
-    private fun resolveRelayReadyViewDistance(totalRamMb: Int): Int {
-        return when {
-            totalRamMb >= 6144 -> 5
-            totalRamMb >= 4096 -> 5
-            totalRamMb >= 3072 -> 4
-            else -> 4
-        }
-    }
-
-    private fun resolveRelayReadySimulationDistance(totalRamMb: Int): Int {
-        return when {
-            totalRamMb >= 6144 -> 4
-            totalRamMb >= 4096 -> 4
-            totalRamMb >= 3072 -> 3
-            else -> 3
-        }
-    }
 
     private fun ensureYamlSectionValue(
         original: String,

@@ -23,6 +23,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -99,7 +101,7 @@ fun SettingsScreen(
     val crashDiagnosticsConsentGranted by AppPreferencesStore.isCrashDiagnosticsConsentFlow(context).collectAsState(initial = false)
     val adsConsentGranted by AppPreferencesStore.isAdsConsentFlow(context).collectAsState(initial = false)
     var config by remember(stateHolder.config) {
-        mutableStateOf(stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, 10)))
+        mutableStateOf(stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, 20)))
     }
     var forceGamemode by remember { mutableStateOf(false) }
     var broadcastConsoleToOps by remember { mutableStateOf(false) }
@@ -114,6 +116,9 @@ fun SettingsScreen(
     var checkingForUpdate by remember { mutableStateOf(false) }
     var downloadingUpdate by remember { mutableStateOf(false) }
     var updateDownloadProgress by remember { mutableIntStateOf(0) }
+    // World seed — read from level.dat when the world exists, otherwise editable
+    var actualWorldSeed by remember { mutableStateOf<Long?>(null) }
+    var optimizationPreset by remember { mutableStateOf("none") }
     val totalRamMb = remember { RamUtils.getTotalRamMb(context) }
     val recommendedViewDistance = remember(totalRamMb) {
         if (totalRamMb >= 7168) 32 else if (totalRamMb >= 6144) 20 else if (totalRamMb >= 4096) 12 else 8
@@ -142,6 +147,8 @@ fun SettingsScreen(
             scanInstalledVersions(context)
         }
         selectedDeleteVersions = emptySet()
+        actualWorldSeed = withContext(Dispatchers.IO) { stateHolder.readActualWorldSeed() }
+        optimizationPreset = withContext(Dispatchers.IO) { stateHolder.readOptimizationPreset() }
     }
 
     LaunchedEffect(
@@ -173,6 +180,11 @@ fun SettingsScreen(
         stateHolder.writeServerProperty("generate-structures", config.generateStructures.toString())
         stateHolder.writeServerProperty("broadcast-console-to-ops", broadcastConsoleToOps.toString())
         stateHolder.writeServerProperty("hide-online-players", hideOnlinePlayers.toString())
+        
+        stateHolder.writeServerProperty("pocketcraft-join-message-enabled", config.joinMessageEnabled.toString())
+        stateHolder.writeServerProperty("pocketcraft-join-message-text", config.joinMessageText)
+        stateHolder.writeServerProperty("pocketcraft-join-message-url", config.joinMessageUrl)
+        
         stateHolder.saveSettings(config) // Save silently without showing toast
     }
 
@@ -283,6 +295,80 @@ fun SettingsScreen(
                 checked = config.whiteList,
                 onToggle = { config = config.copy(whiteList = it) }
             )
+        }
+
+        item { SettingsSection("OPTIMIZATION") }
+        item {
+            GameCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FlatEmojiIcon("⚡", modifier = Modifier.size(18.dp), tint = PocketColors.PrimaryDark)
+                        Text("Optimization Preset", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                    }
+                    Text(
+                        text = "Improves server performance by reducing the number of monsters and animals. Automatically selected based on your device's RAM.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    val presets = listOf(
+                        "none" to "Vanilla Minecraft (For 6GB+ RAM)",
+                        "lite" to "Lite Optimization (For 4GB RAM)",
+                        "performance" to "Max Optimization (For 2GB RAM)"
+                    )
+                    presets.forEach { (key, label) ->
+                        val selected = optimizationPreset == key
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (selected) PocketColors.PrimaryMuted.copy(alpha = 0.5f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                    androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
+                                )
+                                .border(
+                                    if (selected) 2.dp else 1.dp,
+                                    if (selected) PocketColors.Primary.copy(alpha = 0.7f)
+                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                                    androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
+                                )
+                                .clickable {
+                                    playHaptic()
+                                    optimizationPreset = key
+                                    scope.launch(Dispatchers.IO) {
+                                        stateHolder.applyOptimizationPreset(key)
+                                    }
+                                }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = label,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 13.sp,
+                                color = if (selected) PocketColors.PrimaryDark else MaterialTheme.colorScheme.onSurface
+                            )
+                            if (selected) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .background(PocketColors.Primary, androidx.compose.foundation.shape.CircleShape)
+                                )
+                            }
+                        }
+                    }
+                    // Info descriptor
+                    Text(
+                        text = when (optimizationPreset) {
+                            "lite" -> "Slightly reduces the number of extra monsters to improve game speed."
+                            "performance" -> "Greatly reduces the number of monsters to prevent heavy lagging on older phones."
+                            else -> "Standard Minecraft behavior. Mobs spawn normally."
+                        },
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
 
         item { SettingsSection("NETWORKING") }
@@ -569,6 +655,39 @@ fun SettingsScreen(
         }
 
         item {
+            SettingsSection("WELCOME MESSAGE")
+        }
+        item {
+            SettingsToggleRow(
+                icon = "💬",
+                label = "Enable Welcome Message",
+                description = "Send a customized branded message to players when they join.",
+                checked = config.joinMessageEnabled,
+                onToggle = { config = config.copy(joinMessageEnabled = it) }
+            )
+        }
+        item {
+            if (config.joinMessageEnabled) {
+                SettingsInputRow(
+                    label = "Message Text",
+                    description = "The main welcome text displayed to the player.",
+                    value = config.joinMessageText,
+                    onValueChange = { config = config.copy(joinMessageText = it) }
+                )
+            }
+        }
+        item {
+            if (config.joinMessageEnabled) {
+                SettingsInputRow(
+                    label = "Link URL (Optional)",
+                    description = "A clickable link for your Discord or Website.",
+                    value = config.joinMessageUrl,
+                    onValueChange = { config = config.copy(joinMessageUrl = it) }
+                )
+            }
+        }
+
+        item {
             SettingsSection("EXTRA SERVER OPTIONS")
         }
         item {
@@ -576,13 +695,13 @@ fun SettingsScreen(
                 label = "Max Players",
                 description = "Maximum simultaneous players",
                 min = 1,
-                max = 10,
+                max = 20,
                 value = config.maxPlayers,
                 onValueChange = { config = config.copy(maxPlayers = it) }
             )
         }
         item {
-            if (config.maxPlayers > 8) {
+            if (config.maxPlayers > 15) {
                 Text(
                     text = "Higher player counts can increase device heat and battery usage.",
                     style = MaterialTheme.typography.labelSmall,
@@ -593,12 +712,107 @@ fun SettingsScreen(
             }
         }
         item {
-            SettingsInputRow(
-                label = "Seed",
-                description = "server.properties: level-seed",
-                value = config.worldSeed,
-                onValueChange = { config = config.copy(worldSeed = it) }
-            )
+            val seedIsFromWorld = actualWorldSeed != null
+            val seedDisplay = actualWorldSeed?.toString() ?: config.worldSeed.ifBlank { "(random)" }
+            var seedCopied by remember { mutableStateOf(false) }
+            if (seedIsFromWorld) {
+                // World already generated — show read-only seed with copy + share buttons
+                GameCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Title row with emoji
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            FlatEmojiIcon("🌱", modifier = Modifier.size(18.dp), tint = PocketColors.PrimaryDark)
+                            Text(
+                                "World Seed",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 15.sp
+                            )
+                        }
+                        Text(
+                            text = "This is the actual seed your world was generated with. Copy it to share with friends.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        // Seed value display
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    PocketColors.PrimaryMuted.copy(alpha = 0.35f),
+                                    androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                                )
+                                .border(
+                                    1.dp,
+                                    PocketColors.Primary.copy(alpha = 0.4f),
+                                    androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                                )
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                        ) {
+                            Text(
+                                text = seedDisplay,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 20.sp,
+                                color = PocketColors.PrimaryDark,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                        // Copy + Share row
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            DuoButton(
+                                text = if (seedCopied) "✓ COPIED!" else "COPY SEED",
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    playHaptic()
+                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                        as android.content.ClipboardManager
+                                    clipboard.setPrimaryClip(
+                                        android.content.ClipData.newPlainText("World Seed", seedDisplay)
+                                    )
+                                    scope.launch {
+                                        seedCopied = true
+                                        delay(2000)
+                                        seedCopied = false
+                                    }
+                                }
+                            )
+                            androidx.compose.material3.OutlinedButton(
+                                onClick = {
+                                    playHaptic()
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, "Minecraft World Seed: $seedDisplay")
+                                        putExtra(Intent.EXTRA_SUBJECT, "PocketCraft World Seed")
+                                    }
+                                    context.startActivity(Intent.createChooser(shareIntent, "Share Seed"))
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    Icons.Default.Share,
+                                    contentDescription = "Share seed",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text("Share")
+                            }
+                        }
+                    }
+                }
+            } else {
+                SettingsInputRow(
+                    label = "🌱 Seed",
+                    description = "Set before first start. Leave blank for random.",
+                    value = config.worldSeed,
+                    onValueChange = { config = config.copy(worldSeed = it) }
+                )
+            }
         }
         item {
             SettingsDropdownRow(
@@ -640,7 +854,7 @@ fun SettingsScreen(
                 onToggle = { hideOnlinePlayers = it }
             )
         }
-        item { SettingsSection("FEEDBACK & COMMUNITY") }
+        item { SettingsSection("FEEDBACK \u0026 COMMUNITY") }
         item {
             GameCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

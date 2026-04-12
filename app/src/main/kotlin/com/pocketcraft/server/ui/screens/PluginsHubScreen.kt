@@ -86,6 +86,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.pocketcraft.server.ui.components.PocketCraftCard
 
 private enum class ContentTab(
     val label: String,
@@ -338,7 +339,7 @@ fun PluginsHubScreen(
             when {
                 isDiscoverLoading -> {
                     item {
-                        Card(
+                        PocketCraftCard(
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
                         ) {
@@ -363,7 +364,7 @@ fun PluginsHubScreen(
                 }
                 errorMessage != null -> {
                     item {
-                        Card(
+                        PocketCraftCard(
                             shape = RoundedCornerShape(16.dp),
                             border = BorderStroke(1.dp, PocketColors.Offline),
                             colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
@@ -669,7 +670,7 @@ private fun SectionHeader(
 
 @Composable
 private fun EmptyDownloadedCard(tab: ContentTab) {
-    Card(
+    PocketCraftCard(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
     ) {
@@ -689,7 +690,7 @@ private fun EmptyDownloadedCard(tab: ContentTab) {
 
 @Composable
 private fun EmptyOnlineCard(tab: ContentTab) {
-    Card(
+    PocketCraftCard(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
     ) {
@@ -716,7 +717,7 @@ private fun ContentRow(
     onDelete: () -> Unit,
     onShowDetails: () -> Unit
 ) {
-    Card(
+    PocketCraftCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onShowDetails),
@@ -810,7 +811,7 @@ private fun RemoteContentRow(
     onShowDetails: () -> Unit,
     onInstall: () -> Unit
 ) {
-    Card(
+    PocketCraftCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onShowDetails),
@@ -1005,7 +1006,7 @@ private fun ContentDetailDialog(
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
-        Card(
+        PocketCraftCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 4.dp),
@@ -1240,7 +1241,7 @@ private fun pluginsHubMutedTextColor(): Color = if (pluginsHubIsDarkTheme()) {
 private fun pluginsHubHintColor(): Color = if (pluginsHubIsDarkTheme()) {
     Color(0xFFA7D4C3)
 } else {
-    PocketColors.TextMuted
+    MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 @Composable

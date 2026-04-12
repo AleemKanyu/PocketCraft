@@ -20,6 +20,7 @@ import com.pocketcraft.server.RelayManager
 import com.pocketcraft.server.server.ServerLauncher
 import com.pocketcraft.server.service.ConsoleParser
 import com.pocketcraft.server.service.ServerFileManager
+import com.pocketcraft.server.service.ServerVersionMigrator
 import java.io.File
 import java.io.OutputStream
 import java.io.RandomAccessFile
@@ -114,6 +115,27 @@ class ServerHostService : Service() {
         startPortProbe(versionId, serverPort)
         acquireWakeLock()
 
+        // Migration: Check if world needs to be moved from a previous version directory
+        val previousVersion = getPersistedActiveVersion(applicationContext)
+        if (previousVersion.isNotBlank() && previousVersion != versionId) {
+            val prevServerDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(applicationContext, previousVersion)
+            val prevPropsFile = java.io.File(prevServerDir, "server.properties")
+            val prevWorldName = runCatching {
+                if (prevPropsFile.exists()) {
+                    prevPropsFile.inputStream().use { input ->
+                        java.util.Properties().apply { load(input) }
+                    }.getProperty("level-name", "world")
+                } else "world"
+            }.getOrDefault("world")
+
+            com.pocketcraft.server.service.ServerVersionMigrator.migrateActiveWorldIfNeeded(
+                context = applicationContext,
+                fromVersionId = previousVersion,
+                toVersionId = versionId,
+                worldName = prevWorldName.ifBlank { "world" }
+            )
+        }
+
         ServerLauncher(applicationContext).startServer(
             versionId = versionId,
             onOutput = { line ->
@@ -136,9 +158,6 @@ class ServerHostService : Service() {
                 relayJob?.cancel()
                 relayJob = null
                 relayManager.stopBedrockBridge()
-                serviceScope.launch(Dispatchers.IO) {
-                    runCatching { relayManager.unregister() }
-                }
                 tunnelStarted.set(false)
                 stopLogcatBridge()
                 stopServerLogTail()
@@ -235,7 +254,7 @@ class ServerHostService : Service() {
             } finally {
                 forceTerminateHostedServer()
                 relayManager.stopBedrockBridge()
-                runCatching { relayManager.unregister() }
+                // Do not unregister() here to keep the port assigned
                 relayJob?.cancel()
                 relayJob = null
                 tunnelStarted.set(false)
@@ -674,7 +693,7 @@ class ServerHostService : Service() {
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PocketCraft:ServerWakeLock").apply {
             setReferenceCounted(false)
-            acquire(4 * 60 * 60 * 1000L) // 4 hours max
+            acquire(Long.MAX_VALUE)
         }
         android.util.Log.i("ServerHostService", "WakeLock acquired.")
     }
@@ -728,9 +747,6 @@ class ServerHostService : Service() {
                 relayJob?.cancel()
                 relayJob = null
                 relayManager.stopBedrockBridge()
-                serviceScope.launch(Dispatchers.IO) {
-                    runCatching { relayManager.unregister() }
-                }
                 tunnelStarted.set(false)
                 stopLogcatBridge()
                 stopServerLogTail()

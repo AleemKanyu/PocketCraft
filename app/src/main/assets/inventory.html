@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: transparent; width: 100%; overflow-x: hidden; }
+
+/* Hide alt text if image fails to load */
+img {
+  color: transparent;
+  text-indent: -10000px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.outer {
+  display: flex;
+  justify-content: center;
+  padding: 8px 4px;
+}
+.inv-panel {
+  background: #c6c6c6;
+  border-top: 3px solid #ffffff;
+  border-left: 3px solid #ffffff;
+  border-right: 3px solid #555555;
+  border-bottom: 3px solid #555555;
+  padding: 8px;
+  display: inline-flex;
+  gap: 4px;
+  transform-origin: top center;
+}
+
+.left-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 2px;
+}
+.armor-col { display: flex; flex-direction: column; gap: 2px; }
+
+.right-col { display: flex; flex-direction: column; gap: 0; }
+.main-grid {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 2px;
+}
+.hotbar-grid {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 2px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 3px solid #555555;
+}
+
+.slot {
+  width: 36px;
+  height: 36px;
+  background: #8b8b8b;
+  border-top: 2px solid #555555;
+  border-left: 2px solid #555555;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: default;
+  flex-shrink: 0;
+}
+.slot.held {
+  background: #a0a0a0;
+  border-top: 2px solid #ffffff;
+  border-left: 2px solid #ffffff;
+  border-right: 2px solid #555555;
+  border-bottom: 2px solid #555555;
+}
+.slot img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+.slot .cnt {
+  position: absolute;
+  bottom: 1px;
+  right: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #ffffff;
+  text-shadow: 1px 1px 0 #3f3f3f, -1px -1px 0 #3f3f3f;
+  line-height: 1;
+  font-family: 'Courier New', monospace;
+  pointer-events: none;
+}
+
+.tooltip-box {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  background: #100010;
+  border: 1px solid #2d0052;
+  color: #ffffff;
+  font-size: 11px;
+  padding: 3px 7px;
+  white-space: nowrap;
+  z-index: 99;
+  font-family: 'Courier New', monospace;
+  pointer-events: none;
+}
+.slot:hover .tooltip-box { display: block; }
+</style>
+</head>
+<body>
+<div class="outer">
+  <div class="inv-panel" id="panel">
+
+    <div class="left-col">
+      <div class="armor-col" id="armor-col"></div>
+      <div class="slot" id="slot-40"><div class="tooltip-box">Offhand</div></div>
+    </div>
+
+    <div class="right-col">
+      <div class="main-grid" id="main-grid"></div>
+      <div class="hotbar-grid" id="hotbar-grid"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+var ITEM_URL = 'https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/1.21/items/';
+
+function slotEl(slotData, heldSlot) {
+  var div = document.createElement('div');
+  div.className = 'slot' + (slotData && slotData.slot === heldSlot ? ' held' : '');
+  if (slotData && slotData.id) {
+    var id = slotData.id.replace(/^minecraft:/, '');
+    var img = document.createElement('img');
+    img.src = ITEM_URL + id + '.png';
+    img.alt = id;
+    img.onerror = function() {
+      if (this.src.indexOf('stone.png') === -1) {
+        console.warn("Failed to load icon for " + id + ", falling back to stone");
+        this.src = ITEM_URL + 'stone.png';
+      } else {
+        this.style.display = 'none';
+      }
+    };
+    div.appendChild(img);
+    if (slotData.count > 1) {
+      var cnt = document.createElement('span');
+      cnt.className = 'cnt';
+      cnt.textContent = slotData.count;
+      div.appendChild(cnt);
+    }
+    var tt = document.createElement('div');
+    tt.className = 'tooltip-box';
+    tt.textContent = slotData.displayName || id.replace(/_/g,' ');
+    div.appendChild(tt);
+  }
+  return div;
+}
+
+function renderInventory(jsonStr) {
+  console.log("Rendering inventory data: " + jsonStr);
+  if (!jsonStr) {
+    console.warn("Received null/empty inventory string");
+    return;
+  }
+  var data = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+  if (!data || !data.slots) {
+    console.error("Invalid data format received", data);
+    return;
+  }
+  console.log("Parsed " + data.slots.length + " slots");
+  var map = {};
+  data.slots.forEach(function(s) { if (s && s.slot !== undefined) map[s.slot] = s; });
+  var held = data.heldSlot !== undefined ? data.heldSlot : -1;
+
+  var armorCol = document.getElementById('armor-col');
+  armorCol.innerHTML = '';
+  // Java Armor slots: 103 (Helmet), 102 (Chestplate), 101 (Leggings), 100 (Boots)
+  [103, 102, 101, 100].forEach(function(i) {
+    armorCol.appendChild(slotEl(map[i], -1));
+  });
+
+  var mainGrid = document.getElementById('main-grid');
+  mainGrid.innerHTML = '';
+  for (var i = 9; i <= 35; i++) {
+    mainGrid.appendChild(slotEl(map[i], held));
+  }
+
+  var hotbar = document.getElementById('hotbar-grid');
+  hotbar.innerHTML = '';
+  for (var i = 0; i <= 8; i++) {
+    hotbar.appendChild(slotEl(map[i], held));
+  }
+
+  var offhand = document.getElementById('slot-40');
+  offhand.innerHTML = '';
+  // Java Offhand: -106 or 40
+  var s = map[-106] || map[40];
+  if (s && s.id) {
+    var id = s.id.replace(/^minecraft:/, '');
+    var img = document.createElement('img');
+    img.src = ITEM_URL + id + '.png';
+    img.alt = id;
+    img.onerror = function() {
+      if (this.src.indexOf('stone.png') === -1) {
+        this.src = ITEM_URL + 'stone.png';
+      } else {
+        this.style.display = 'none';
+      }
+    };
+    offhand.appendChild(img);
+    var tt = document.createElement('div');
+    tt.className = 'tooltip-box';
+    tt.textContent = s.displayName || id.replace(/_/g,' ');
+    offhand.appendChild(tt);
+  } else {
+    var tt = document.createElement('div');
+    tt.className = 'tooltip-box';
+    tt.textContent = 'Offhand';
+    offhand.appendChild(tt);
+  }
+
+  scaleToFit();
+}
+
+function scaleToFit() {
+  var panel = document.getElementById('panel');
+  var available = document.documentElement.clientWidth - 16;
+  var natural = panel.scrollWidth;
+  if (natural > available) {
+    var scale = available / natural;
+    panel.style.transform = 'scale(' + scale + ')';
+  } else {
+    panel.style.transform = 'scale(1)';
+  }
+}
+
+window.addEventListener('resize', scaleToFit);
+scaleToFit();
+</script>
+</body>
+</html>

@@ -92,7 +92,6 @@ fun PocketTopBar(
     onRelayHostChange: (String) -> Unit,
     isDarkTheme: Boolean,
     onDarkThemeChange: (Boolean) -> Unit,
-    onOpenRelayRegionPage: () -> Unit = {},
     relayLocked: Boolean = false
 ) {
     var relayMenuExpanded by remember { mutableStateOf(false) }
@@ -157,7 +156,7 @@ fun PocketTopBar(
 
                 Box {
                     IconButton(
-                        onClick = { if (!relayLocked) onOpenRelayRegionPage() },
+                        onClick = { if (!relayLocked) relayMenuExpanded = true },
                         enabled = !relayLocked,
                         modifier = Modifier
                             .padding(end = 8.dp)
