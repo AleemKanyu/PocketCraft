@@ -94,7 +94,7 @@ fun PocketCraftApp(
 ) {
     var screen by remember { mutableStateOf(Screen.SERVER) }
     var transitionTarget by remember { mutableStateOf<Screen?>(null) }
-    var versionId by remember { mutableStateOf("1.21.1") }
+    var versionId by remember { mutableStateOf("1.21.6") }
     var downloadedVersions by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showVersionPickerDialog by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }

@@ -229,7 +229,7 @@ object AppPreferencesStore {
 
     fun getSelectedVersionFlow(context: Context): Flow<String> =
         context.appPreferencesDataStore.data.map { prefs ->
-            prefs[AppPreferencesKeys.SELECTED_VERSION] ?: "1.21.1"
+            prefs[AppPreferencesKeys.SELECTED_VERSION] ?: "1.21.6"
         }
 
     suspend fun setSelectedVersion(context: Context, version: String) {

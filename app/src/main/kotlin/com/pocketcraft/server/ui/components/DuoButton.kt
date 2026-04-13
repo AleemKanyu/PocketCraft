@@ -1,6 +1,12 @@
 package com.pocketcraft.server.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,6 +20,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -41,7 +50,8 @@ fun DuoButton(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     enabled: Boolean = true,
-    variant: DuoButtonVariant = DuoButtonVariant.Primary
+    variant: DuoButtonVariant = DuoButtonVariant.Primary,
+    isLoading: Boolean = false
 ) {
     val background = when (variant) {
         DuoButtonVariant.Primary -> PocketColors.PrimaryLight
@@ -60,6 +70,17 @@ fun DuoButton(
     )
     val alpha = if (enabled) 1f else 0.55f
     val shape = RoundedCornerShape(18.dp)
+
+    val infiniteTransition = rememberInfiniteTransition(label = "loading_rotation")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rotation"
+    )
 
     Box(
         modifier = modifier
@@ -83,7 +104,7 @@ fun DuoButton(
                 .background(background.copy(alpha = alpha))
                 .border(2.dp, shadow.copy(alpha = alpha), shape)
                 .clickable(
-                    enabled = enabled,
+                    enabled = enabled && !isLoading,
                     interactionSource = interactionSource,
                     indication = null,
                     onClick = onClick
@@ -96,15 +117,18 @@ fun DuoButton(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (icon != null) {
+                if (icon != null || isLoading) {
+                    val iconToShow = icon ?: Icons.Default.Refresh
                     Icon(
-                        imageVector = icon,
+                        imageVector = iconToShow,
                         contentDescription = null,
                         tint = contentColor,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier
+                            .size(24.dp)
+                            .then(
+                                if (isLoading) Modifier.rotate(rotation) else Modifier
+                            )
                     )
-                }
-                if (icon != null) {
                     androidx.compose.foundation.layout.Spacer(Modifier.size(10.dp))
                 }
                 Text(

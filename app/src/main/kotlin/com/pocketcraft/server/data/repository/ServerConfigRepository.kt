@@ -11,6 +11,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import com.pocketcraft.server.setup.JreExtractor
+import com.pocketcraft.server.data.preferences.AppPreferencesStore
+import com.pocketcraft.server.service.ServerFileManager
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,12 +27,16 @@ import javax.inject.Singleton
 class ServerConfigRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val serverDir: File get() = context.filesDir
-    private val serversDir: File get() = File(serverDir, "servers")
+    private val serverDir: File 
+        get() {
+            val versionId = runBlocking { AppPreferencesStore.getSelectedVersionFlow(context).first() }
+            return ServerFileManager.getServerDir(context, versionId)
+        }
+    private val serversDir: File get() = File(context.filesDir, "servers")
     private val activeServerFile: File get() = File(serverDir, ".active_server")
     private val propertiesFile: File get() = File(serverDir, "server.properties")
     private val spigotFile: File get() = File(serverDir, "spigot.yml")
-    private val setupMarkerFile: File get() = File(serverDir, ".setup_done")
+    private val setupMarkerFile: File get() = File(context.filesDir, ".setup_done")
 
     suspend fun loadConfig(): ServerConfig = withContext(Dispatchers.IO) {
         val activeServer = getActiveServerName()

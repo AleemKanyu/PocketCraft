@@ -76,7 +76,7 @@ android {
         minSdk = 25
         targetSdk = 34
         versionCode = 2
-        versionName = "0.1.0-Beta"
+        versionName = "0.1.0-Beta+1"
         buildConfigField("String", "RELAY_PUBLIC_DOMAIN", "\"joinmc.link\"")
         buildConfigField("String", "GITHUB_REPO_OWNER", "\"$githubRepoOwner\"")
         buildConfigField("String", "GITHUB_REPO_NAME", "\"$githubRepoName\"")

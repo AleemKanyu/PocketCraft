@@ -34,7 +34,7 @@ fun StatusBadge(
         // Pulsing status indicator dot (top-right corner)
         val statusColor = when (status) {
             ServerStatus.ONLINE -> PocketColors.Online
-            ServerStatus.STARTING -> PocketColors.Starting
+            ServerStatus.STARTING, ServerStatus.RESTARTING -> PocketColors.Starting
             ServerStatus.OFFLINE -> MaterialTheme.colorScheme.onSurfaceVariant
         }
 
@@ -65,8 +65,8 @@ fun StatusBadge(
                 .padding(end = 34.dp, top = 8.dp),
             shape = RoundedCornerShape(10.dp),
             color = when (status) {
-                                ServerStatus.ONLINE -> PocketColors.PrimaryMuted
-                ServerStatus.STARTING -> PocketColors.Starting.copy(alpha = 0.18f)
+                ServerStatus.ONLINE -> PocketColors.PrimaryMuted
+                ServerStatus.STARTING, ServerStatus.RESTARTING -> PocketColors.Starting.copy(alpha = 0.18f)
                 ServerStatus.OFFLINE -> PocketColors.Offline.copy(alpha = 0.14f)
             }
         ) {
@@ -75,7 +75,7 @@ fun StatusBadge(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                 color = when (status) {
                     ServerStatus.ONLINE -> PocketColors.PrimaryDark
-                    ServerStatus.STARTING -> PocketColors.Starting
+                    ServerStatus.STARTING, ServerStatus.RESTARTING -> PocketColors.Starting
                     ServerStatus.OFFLINE -> PocketColors.Offline
                 },
                 fontWeight = FontWeight.ExtraBold,

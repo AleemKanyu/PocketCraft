@@ -51,6 +51,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -86,8 +87,8 @@ fun WorldSetupScreen(
     val activeWorld = stateHolder.config.worldName.ifBlank { "world" }
 
     var worldNameInput by remember(createMode) { mutableStateOf("") }
-    var serverName by remember(stateHolder.serverName, activeWorld) {
-        mutableStateOf(stateHolder.serverName.ifBlank { activeWorld })
+    var serverName by remember(stateHolder.serverName, activeWorld, createMode) {
+        mutableStateOf(if (createMode) "" else stateHolder.serverName.ifBlank { activeWorld })
     }
     var serverDescription by remember(stateHolder.serverDescription) {
         mutableStateOf(stateHolder.serverDescription)
@@ -118,6 +119,9 @@ fun WorldSetupScreen(
     var mainWorldZipName by remember { mutableStateOf("") }
     var netherZipName by remember { mutableStateOf("") }
     var endZipName by remember { mutableStateOf("") }
+
+    var importProgress by remember { mutableStateOf(0f) }
+    var isImporting by remember { mutableStateOf(false) }
 
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -172,11 +176,7 @@ fun WorldSetupScreen(
 
         var targetWorld = activeWorld
         if (createMode) {
-            val requestedWorld = worldNameInput.trim()
-            if (requestedWorld.isBlank()) {
-                onMessage("World name is required.")
-                return
-            }
+            val requestedWorld = trimmedServerName.ifBlank { "world" }
             val createMsg = stateHolder.createWorld(requestedWorld)
             val createdWorld = parseCreatedWorldName(createMsg)
             if (createdWorld == null) {
@@ -192,12 +192,15 @@ fun WorldSetupScreen(
         }
 
         if (mainWorldZipUri != null) {
+            isImporting = true
             val importResult = WorldImporter.importWorld(
                 context = context,
                 zipUri = mainWorldZipUri!!,
                 serverVersion = versionId,
-                folderName = targetWorld
+                folderName = targetWorld,
+                onProgress = { importProgress = it }
             )
+            isImporting = false
             if (importResult.isFailure) {
                 onMessage("Main world import failed: ${importResult.exceptionOrNull()?.message ?: "unknown error"}")
                 return
@@ -205,12 +208,15 @@ fun WorldSetupScreen(
         }
 
         if (netherZipUri != null) {
+            isImporting = true
             val importResult = WorldImporter.importWorld(
                 context = context,
                 zipUri = netherZipUri!!,
                 serverVersion = versionId,
-                folderName = "${targetWorld}_nether"
+                folderName = "${targetWorld}_nether",
+                onProgress = { importProgress = it }
             )
+            isImporting = false
             if (importResult.isFailure) {
                 onMessage("Nether import failed: ${importResult.exceptionOrNull()?.message ?: "unknown error"}")
                 return
@@ -218,12 +224,15 @@ fun WorldSetupScreen(
         }
 
         if (endZipUri != null) {
+            isImporting = true
             val importResult = WorldImporter.importWorld(
                 context = context,
                 zipUri = endZipUri!!,
                 serverVersion = versionId,
-                folderName = "${targetWorld}_the_end"
+                folderName = "${targetWorld}_the_end",
+                onProgress = { importProgress = it }
             )
+            isImporting = false
             if (importResult.isFailure) {
                 onMessage("End import failed: ${importResult.exceptionOrNull()?.message ?: "unknown error"}")
                 return
@@ -271,11 +280,7 @@ fun WorldSetupScreen(
         onComplete()
     }
 
-    val canFinish = if (createMode) {
-        serverName.isNotBlank() && selectedVersion.isNotBlank() && worldNameInput.isNotBlank()
-    } else {
-        serverName.isNotBlank() && selectedVersion.isNotBlank()
-    }
+    val canFinish = serverName.isNotBlank() && selectedVersion.isNotBlank()
 
     Column(
         modifier = Modifier
@@ -352,18 +357,6 @@ fun WorldSetupScreen(
                     .padding(6.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                if (createMode) {
-                    OutlinedTextField(
-                        value = worldNameInput,
-                        onValueChange = { worldNameInput = it },
-                        singleLine = true,
-                        label = { Text("World name (required)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = duoTextFieldShape(),
-                        colors = duoOutlinedTextFieldColors()
-                    )
-                }
-
                 OutlinedTextField(
                     value = serverName,
                     onValueChange = { serverName = it },
@@ -372,6 +365,12 @@ fun WorldSetupScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = duoTextFieldShape(),
                     colors = duoOutlinedTextFieldColors()
+                )
+
+                ServerDescriptionField(
+                    description = serverDescription,
+                    onDescriptionChange = { serverDescription = it },
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 val hasSelectedVersion = selectedVersion.isNotBlank()
@@ -434,13 +433,40 @@ fun WorldSetupScreen(
 
                 SurfaceInfoText()
 
+                if (isImporting) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { importProgress },
+                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                            color = PocketColors.Primary,
+                            trackColor = PocketColors.PrimaryMuted
+                        )
+                        Text(
+                            text = "Importing world data... ${(importProgress * 100).roundToInt()}%",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PocketColors.PrimaryDark
+                        )
+                    }
+                }
+
+                val uploadButtonColors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                )
+
                 OutlinedButton(
                     onClick = {
                         pendingImportSlot = WorldImportSlot.MAIN
                         importLauncher.launch("application/zip")
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp)
+                    shape = RoundedCornerShape(14.dp),
+                    colors = uploadButtonColors,
+                    enabled = !isImporting
                 ) {
                     Icon(Icons.Filled.UploadFile, contentDescription = null)
                     Spacer(Modifier.padding(horizontal = 4.dp))
@@ -453,7 +479,9 @@ fun WorldSetupScreen(
                         importLauncher.launch("application/zip")
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp)
+                    shape = RoundedCornerShape(14.dp),
+                    colors = uploadButtonColors,
+                    enabled = !isImporting
                 ) {
                     Icon(Icons.Filled.UploadFile, contentDescription = null)
                     Spacer(Modifier.padding(horizontal = 4.dp))
@@ -466,18 +494,14 @@ fun WorldSetupScreen(
                         importLauncher.launch("application/zip")
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp)
+                    shape = RoundedCornerShape(14.dp),
+                    colors = uploadButtonColors,
+                    enabled = !isImporting
                 ) {
                     Icon(Icons.Filled.UploadFile, contentDescription = null)
                     Spacer(Modifier.padding(horizontal = 4.dp))
                     Text(if (endZipName.isBlank()) "Upload The End ZIP (${activeWorld}_the_end)" else "End ZIP: $endZipName")
                 }
-
-                ServerDescriptionField(
-                    description = serverDescription,
-                    onDescriptionChange = { serverDescription = it },
-                    modifier = Modifier.fillMaxWidth()
-                )
 
                 ServerPhotoUpload(
                     photoUri = serverPhotoUri,
@@ -628,7 +652,8 @@ private fun SurfaceInfoText() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(PocketColors.PrimaryMuted.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
+            .border(1.dp, PocketColors.Primary.copy(alpha = 0.2f), RoundedCornerShape(14.dp))
             .padding(12.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -641,13 +666,13 @@ private fun SurfaceInfoText() {
             Text(
                 text = "If your backup is from Aternos, upload all 3 dimensions: Main World, Nether, and The End.",
                 fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurface,
                 lineHeight = 15.sp
             )
             Text(
                 text = "Accepted upload format: .zip only.",
                 fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurface,
                 lineHeight = 15.sp,
                 fontWeight = FontWeight.SemiBold
             )
@@ -660,7 +685,7 @@ private fun SurfaceInfoText() {
             Text(
                 text = "If your backup is from another site, usually upload only Main World.",
                 fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurface,
                 lineHeight = 15.sp
             )
         }

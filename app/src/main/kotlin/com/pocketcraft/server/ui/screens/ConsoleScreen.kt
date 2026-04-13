@@ -318,7 +318,7 @@ fun ConsoleScreen(
         }
 
         item {
-            if (stateHolder.status == ServerStatus.ONLINE) {
+            if (stateHolder.status == ServerStatus.ONLINE || stateHolder.isRestarting) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -341,14 +341,15 @@ fun ConsoleScreen(
                                 Toast.makeText(context, "Error during restart: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
                         },
-                        enabled = !stateHolder.isStopping,
+                        enabled = !stateHolder.isRestarting,
+                        isLoading = stateHolder.isRestarting,
                         variant = DuoButtonVariant.Primary,
                         modifier = Modifier.weight(1f)
                     )
                 }
             } else {
                 DuoButton(
-                    text = if (stateHolder.status == ServerStatus.STARTING) "STARTING..." else "START SERVER",
+                    text = if (stateHolder.isRestartingCycle) "RESTARTING..." else if (stateHolder.status == ServerStatus.STARTING) "STARTING..." else "START SERVER",
                     onClick = {
                         try {
                             if (isVersionDownloaded) {
@@ -361,7 +362,8 @@ fun ConsoleScreen(
                             Toast.makeText(context, "Error starting server: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    enabled = stateHolder.status != ServerStatus.STARTING && !stateHolder.isStopping,
+                    enabled = stateHolder.status != ServerStatus.STARTING && !stateHolder.isRestarting && !stateHolder.isStopping,
+                    isLoading = stateHolder.status == ServerStatus.STARTING || stateHolder.isRestarting,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -1037,7 +1039,7 @@ private fun ServerIdentityCard(
         }
 
     val localWifiAddress = "${stateHolder.localIp}:${stateHolder.config.port}"
-    val canShareAddresses = publicAddress != null || serverRunning
+    val canShareAddresses = stateHolder.status == ServerStatus.ONLINE || stateHolder.isRestarting
     val joinCardShadowColor = pocketCardShadowColor()
     val joinCardBorderColor = pocketHighContrastBorderColor()
 
