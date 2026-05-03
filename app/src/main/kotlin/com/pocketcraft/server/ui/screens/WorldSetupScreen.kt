@@ -58,9 +58,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.WorldImporter
+import com.pocketcraft.server.data.model.ServerType
+import com.pocketcraft.server.server.ServerJarManager
+import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
-import com.pocketcraft.server.service.VersionCatalog
 import com.pocketcraft.server.ui.components.DuoButton
+import com.pocketcraft.server.ui.components.DuoToggle
 import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.components.ServerDescriptionField
 import com.pocketcraft.server.ui.components.ServerPhotoUpload
@@ -68,7 +71,9 @@ import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private enum class WorldImportSlot { MAIN, NETHER, END }
 
@@ -98,18 +103,18 @@ fun WorldSetupScreen(
     }
     var photoChanged by remember(stateHolder.serverPhotoUrl) { mutableStateOf(false) }
     var worldSeed by remember(stateHolder.config.worldSeed) { mutableStateOf(stateHolder.config.worldSeed) }
-
-    var renderDistanceValue by remember(stateHolder.config.viewDistance) {
-        mutableStateOf(stateHolder.config.viewDistance.coerceIn(3, 32).toFloat())
+    var maxPlayersValue by remember(stateHolder.config.maxPlayers) { mutableStateOf(stateHolder.config.maxPlayers.toFloat()) }
+    var onlineMode by remember(stateHolder.config.worldName) { mutableStateOf(stateHolder.readServerProperty("online-mode")?.toBoolean() ?: true) }
+    var selectedVersion by remember(stateHolder.config.gameVersion) {
+        mutableStateOf(if (createMode) "" else stateHolder.config.gameVersion)
     }
-    var maxPlayersValue by remember(stateHolder.config.maxPlayers) {
-        mutableStateOf(stateHolder.config.maxPlayers.coerceIn(1, 20).toFloat())
+    var selectedServerType by remember(stateHolder.config.serverType) {
+        mutableStateOf(stateHolder.config.serverType)
     }
-
-    var selectedVersion by remember(stateHolder.versionLabel) { mutableStateOf(stateHolder.versionLabel) }
+    var selectedCustomJarPath by remember(stateHolder.config.customJarPath) {
+        mutableStateOf(stateHolder.config.customJarPath)
+    }
     var showVersionDialog by remember { mutableStateOf(false) }
-    var loadingVersions by remember { mutableStateOf(false) }
-    var availableVersions by remember { mutableStateOf(listOf(stateHolder.versionLabel)) }
     val versionFieldInteractionSource = remember { MutableInteractionSource() }
 
     var pendingImportSlot by remember { mutableStateOf(WorldImportSlot.MAIN) }
@@ -122,6 +127,8 @@ fun WorldSetupScreen(
 
     var importProgress by remember { mutableStateOf(0f) }
     var isImporting by remember { mutableStateOf(false) }
+    var versionDownloadProgress by remember { mutableStateOf(0) }
+    var isDownloadingVersion by remember { mutableStateOf(false) }
 
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -145,14 +152,6 @@ fun WorldSetupScreen(
         }
     }
 
-    LaunchedEffect(showVersionDialog) {
-        if (!showVersionDialog) return@LaunchedEffect
-        loadingVersions = true
-        val fetched = runCatching { VersionCatalog.fetchStableVersions() }.getOrDefault(emptyList())
-        availableVersions = (if (fetched.isNotEmpty()) fetched else listOf(stateHolder.versionLabel)).distinct()
-        loadingVersions = false
-    }
-
     LaunchedEffect(versionFieldInteractionSource) {
         versionFieldInteractionSource.interactions.collect { interaction ->
             if (interaction is PressInteraction.Release) {
@@ -169,8 +168,12 @@ fun WorldSetupScreen(
             onMessage("Server name is required.")
             return
         }
-        if (versionId.isBlank()) {
+        if (selectedServerType.supportsVersionSelect && versionId.isBlank()) {
             onMessage("Game version is required.")
+            return
+        }
+        if (!selectedServerType.supportsVersionSelect && selectedCustomJarPath.isNullOrBlank()) {
+            onMessage("Select a custom server JAR.")
             return
         }
 
@@ -183,7 +186,7 @@ fun WorldSetupScreen(
                 onMessage(createMsg)
                 return
             }
-            val switchMsg = stateHolder.setActiveWorld(createdWorld)
+            val switchMsg = stateHolder.setActiveWorld(createdWorld, syncPluginProfiles = false)
             if (!switchMsg.startsWith("Active world switched")) {
                 onMessage(switchMsg)
                 return
@@ -196,7 +199,8 @@ fun WorldSetupScreen(
             val importResult = WorldImporter.importWorld(
                 context = context,
                 zipUri = mainWorldZipUri!!,
-                serverVersion = versionId,
+                serverType = selectedServerType,
+                serverVersionId = stateHolder.versionLabel,
                 folderName = targetWorld,
                 onProgress = { importProgress = it }
             )
@@ -212,8 +216,9 @@ fun WorldSetupScreen(
             val importResult = WorldImporter.importWorld(
                 context = context,
                 zipUri = netherZipUri!!,
-                serverVersion = versionId,
-                folderName = "${targetWorld}_nether",
+                serverType = selectedServerType,
+                serverVersionId = stateHolder.versionLabel,
+                folderName = targetWorld, // WorldImporter handles internal mapping to DIM-1 if needed
                 onProgress = { importProgress = it }
             )
             isImporting = false
@@ -228,8 +233,9 @@ fun WorldSetupScreen(
             val importResult = WorldImporter.importWorld(
                 context = context,
                 zipUri = endZipUri!!,
-                serverVersion = versionId,
-                folderName = "${targetWorld}_the_end",
+                serverType = selectedServerType,
+                serverVersionId = stateHolder.versionLabel,
+                folderName = targetWorld, // WorldImporter handles internal mapping to DIM1 if needed
                 onProgress = { importProgress = it }
             )
             isImporting = false
@@ -243,10 +249,45 @@ fun WorldSetupScreen(
         val updatedConfig = stateHolder.config.copy(
             worldName = targetWorld,
             worldSeed = trimmedSeed,
+            gameVersion = versionId,
+            serverType = selectedServerType,
+            customJarPath = selectedCustomJarPath,
             maxPlayers = maxPlayersValue.roundToInt(),
-            viewDistance = renderDistanceValue.roundToInt()
+            viewDistance = 6
         )
         stateHolder.saveSettings(updatedConfig)
+        stateHolder.writeServerProperty("online-mode", onlineMode.toString())
+
+        if (updatedConfig.serverType.supportsVersionSelect) {
+            isDownloadingVersion = true
+            versionDownloadProgress = 0
+            val downloadResult = runCatching {
+                withContext(Dispatchers.IO) {
+                    val targetJar = ServerFileManager.getServerJarFile(
+                        context = context,
+                        gameVersion = versionId,
+                        serverType = updatedConfig.serverType
+                    )
+                    ServerJarManager.resolveJar(
+                        serverType = updatedConfig.serverType,
+                        gameVersion = versionId,
+                        customJarPath = null,
+                        targetFile = targetJar,
+                        onProgress = { percent ->
+                            scope.launch {
+                                versionDownloadProgress = percent.coerceIn(0, 100)
+                            }
+                        }
+                    ).collect { }
+                }
+            }
+            isDownloadingVersion = false
+            if (downloadResult.isFailure) {
+                val error = downloadResult.exceptionOrNull()
+                onMessage("Version download failed: ${error?.message ?: "unknown error"}")
+                return
+            }
+        }
 
         val existingPhoto = stateHolder.serverPhotoUrl.trim()
         val photoUrlToSave = when {
@@ -272,7 +313,7 @@ fun WorldSetupScreen(
         AppPreferencesStore.setInitialWorldSetupShown(context, true)
         stateHolder.markActiveWorldSetupCompleted()
 
-        if (versionId != stateHolder.versionLabel) {
+        if (selectedServerType.supportsVersionSelect && versionId != stateHolder.config.gameVersion) {
             onVersionSelected(versionId)
         }
 
@@ -280,7 +321,12 @@ fun WorldSetupScreen(
         onComplete()
     }
 
-    val canFinish = serverName.isNotBlank() && selectedVersion.isNotBlank()
+    val hasValidRuntimeSelection = if (selectedServerType.supportsVersionSelect) {
+        selectedVersion.isNotBlank()
+    } else {
+        !selectedCustomJarPath.isNullOrBlank()
+    }
+    val canFinish = serverName.isNotBlank() && hasValidRuntimeSelection && !isDownloadingVersion
 
     Column(
         modifier = Modifier
@@ -375,7 +421,11 @@ fun WorldSetupScreen(
 
                 val hasSelectedVersion = selectedVersion.isNotBlank()
                 OutlinedTextField(
-                    value = if (hasSelectedVersion) selectedVersion else "Select game version",
+                    value = if (selectedServerType.supportsVersionSelect) {
+                        if (hasSelectedVersion) "${selectedServerType.displayName} $selectedVersion" else "Select server type + version"
+                    } else {
+                        "${selectedServerType.displayName} (Custom JAR)"
+                    },
                     onValueChange = {},
                     singleLine = true,
                     readOnly = true,
@@ -411,15 +461,6 @@ fun WorldSetupScreen(
                     colors = duoOutlinedTextFieldColors()
                 )
 
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Render distance: ${renderDistanceValue.roundToInt()}", fontWeight = FontWeight.SemiBold)
-                    Slider(
-                        value = renderDistanceValue,
-                        onValueChange = { renderDistanceValue = it },
-                        valueRange = 3f..32f,
-                        steps = 28
-                    )
-                }
 
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Max players: ${maxPlayersValue.roundToInt()}", fontWeight = FontWeight.SemiBold)
@@ -429,6 +470,20 @@ fun WorldSetupScreen(
                         valueRange = 1f..20f,
                         steps = 18
                     )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Offline Mode (Unauthenticated)", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("Allow non-premium players to join", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    DuoToggle(checked = !onlineMode, onCheckedChange = { onlineMode = !it })
                 }
 
                 SurfaceInfoText()
@@ -447,6 +502,30 @@ fun WorldSetupScreen(
                         )
                         Text(
                             text = "Importing world data... ${(importProgress * 100).roundToInt()}%",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PocketColors.PrimaryDark
+                        )
+                    }
+                }
+
+                if (isDownloadingVersion) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { (versionDownloadProgress / 100f).coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = PocketColors.Primary,
+                            trackColor = PocketColors.PrimaryMuted
+                        )
+                        Text(
+                            text = "Downloading selected server version... $versionDownloadProgress%",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = PocketColors.PrimaryDark
@@ -542,107 +621,30 @@ fun WorldSetupScreen(
             containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                shape = RoundedCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 10.dp,
-                border = androidx.compose.foundation.BorderStroke(1.dp, PocketColors.BorderLight)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .background(PocketColors.PrimaryMuted, RoundedCornerShape(12.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Filled.Dns, contentDescription = null, tint = PocketColors.PrimaryDark)
-                        }
-                        Column {
-                            Text("Choose Minecraft Version", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
-                            Text(
-                                "Tap a version to use it for this server.",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+            ServerTypeVersionBottomSheet(
+                onDismissRequest = {
+                    scope.launch {
+                        versionSheetState.hide()
+                        showVersionDialog = false
                     }
-
-                    if (loadingVersions) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                            CircularProgressIndicator()
+                },
+                onConfirm = { type, version, customJar ->
+                    scope.launch {
+                        selectedServerType = type
+                        selectedCustomJarPath = customJar
+                        if (type.supportsVersionSelect) {
+                            selectedVersion = version ?: selectedVersion
+                        } else {
+                            selectedVersion = stateHolder.config.gameVersion.ifBlank { selectedVersion }
                         }
-                    } else {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 320.dp)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            availableVersions.forEach { version ->
-                                val selected = version == selectedVersion
-                                Surface(
-                                    onClick = {
-                                        scope.launch {
-                                            selectedVersion = version
-                                            versionSheetState.hide()
-                                            showVersionDialog = false
-                                        }
-                                    },
-                                    shape = RoundedCornerShape(18.dp),
-                                    color = if (selected) PocketColors.PrimaryMuted else MaterialTheme.colorScheme.surfaceVariant,
-                                    border = androidx.compose.foundation.BorderStroke(
-                                        1.dp,
-                                        if (selected) PocketColors.Primary else PocketColors.BorderLight
-                                    )
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            version,
-                                            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                            color = if (selected) PocketColors.PrimaryDark else MaterialTheme.colorScheme.onSurface
-                                        )
-                                        if (selected) {
-                                            Text(
-                                                "Selected",
-                                                color = PocketColors.PrimaryDark,
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        versionSheetState.hide()
+                        showVersionDialog = false
                     }
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(
-                            onClick = {
-                                scope.launch {
-                                    versionSheetState.hide()
-                                    showVersionDialog = false
-                                }
-                            }
-                        ) {
-                            Text("Done")
-                        }
-                    }
-                }
-            }
+                },
+                currentServerType = selectedServerType,
+                currentGameVersion = selectedVersion,
+                currentCustomJarPath = selectedCustomJarPath
+            )
         }
     }
 }

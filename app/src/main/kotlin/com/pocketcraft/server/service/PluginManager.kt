@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Cache
 import okhttp3.CacheControl
@@ -22,8 +23,12 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import android.util.Log
 
 object PluginManager {
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private const val MODRINTH_BASE_URL = "https://api.modrinth.com/v2"
     private const val HANGAR_BASE_URL = "https://hangar.papermc.io/api/v1"
@@ -32,8 +37,9 @@ object PluginManager {
     private const val HTTP_CACHE_BYTES = 12L * 1024L * 1024L
     private const val MODRINTH_PROVIDER = "modrinth"
     private const val HANGAR_PROVIDER = "hangar"
-    private val builtInBridgeProjectIds = setOf("geyser", "floodgate", "viaversion")
-    private val builtInBridgeKeywords = setOf("geyser", "floodgate", "viaversion")
+    private val builtInBridgeProjectIds = setOf("geyser", "floodgate", "viaversion", "chunky")
+    private val builtInBridgeKeywords = setOf("geyser", "floodgate", "viaversion", "chunky")
+    private val incompatiblePluginTokens = listOf("fastleafdecay")
     private val paperCompatibleLoaders = setOf("paper", "spigot", "purpur", "bukkit", "folia")
     private val modLoaderLabels = linkedMapOf(
         "fabric" to "Fabric",
@@ -119,6 +125,45 @@ object PluginManager {
     fun getPluginsDir(context: Context, versionId: String): File =
         File(context.filesDir, "servers/$versionId/plugins").also { it.mkdirs() }
 
+    private fun isIncompatiblePluginName(name: String): Boolean {
+        val normalized = name.lowercase(Locale.US)
+            .replace("-", "")
+            .replace("_", "")
+            .replace(" ", "")
+        return incompatiblePluginTokens.any { normalized.contains(it) }
+    }
+
+    fun removeIncompatiblePlugins(context: Context, versionId: String) {
+        val pluginsDir = getPluginsDir(context, versionId)
+        val removed = pluginsDir.listFiles()
+            ?.filter { it.isFile && isIncompatiblePluginName(it.name) }
+            ?.onEach { it.delete() }
+            .orEmpty()
+        if (removed.isNotEmpty()) {
+            Log.w("PluginManager", "Removed incompatible plugins: ${removed.joinToString { it.name }}")
+        }
+    }
+
+    fun getGeyserConfigFile(context: Context, versionId: String): File {
+        val pluginsDir = getPluginsDir(context, versionId)
+        return listOf(
+            File(pluginsDir, "Geyser-Spigot/config.yml"),
+            File(pluginsDir, "Geyser-Spigot/geyser.yml"),
+            File(pluginsDir, "geyser/config.yml"),
+            File(pluginsDir, "geyser.yml")
+        ).firstOrNull { it.exists() } ?: File(pluginsDir, "Geyser-Spigot/config.yml")
+    }
+
+    fun getFloodgateConfigFile(context: Context, versionId: String): File {
+        val pluginsDir = getPluginsDir(context, versionId)
+        return listOf(
+            File(pluginsDir, "Floodgate/config.yml"),
+            File(pluginsDir, "Floodgate/floodgate.yml"),
+            File(pluginsDir, "floodgate/config.yml"),
+            File(pluginsDir, "floodgate/floodgate.yml")
+        ).firstOrNull { it.exists() } ?: File(pluginsDir, "Floodgate/config.yml")
+    }
+
     fun getModsDir(context: Context, versionId: String): File =
         File(context.filesDir, "servers/$versionId/mods").also { it.mkdirs() }
 
@@ -162,6 +207,7 @@ object PluginManager {
         versionId: String,
         onProgress: (String) -> Unit = {}
     ): Result<Unit> = withContext(Dispatchers.IO) {
+        removeIncompatiblePlugins(context, versionId)
         val geyser = RemoteCatalogItem(
             source = MODRINTH_PROVIDER,
             projectId = "geyser",
@@ -252,30 +298,205 @@ object PluginManager {
         Result.success(Unit)
     }
 
+    suspend fun ensureChunkyPlugin(
+        context: Context,
+        versionId: String,
+        onProgress: (String) -> Unit = {}
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val chunky = RemoteCatalogItem(
+            source = MODRINTH_PROVIDER,
+            projectId = "chunky",
+            title = "Chunky",
+            slug = "chunky",
+            iconUrl = null,
+            description = "Chunk pre-generator",
+            downloads = 0L
+        )
+        installManagedPluginIfMissing(context, versionId, chunky, onProgress)
+    }
+
     fun enforceBedrockBridgeLocalConfig(context: Context, versionId: String) {
-        val geyserConfigFile = File(getPluginsDir(context, versionId), "Geyser-Spigot/config.yml")
+        val pluginsDir = getPluginsDir(context, versionId)
+        val floodgateKeyPath = when {
+            File(pluginsDir, "Floodgate/key.pem").exists() -> "../Floodgate/key.pem"
+            File(pluginsDir, "floodgate/key.pem").exists() -> "../floodgate/key.pem"
+            else -> "../floodgate/key.pem"
+        }
+        val geyserConfigFile = getGeyserConfigFile(context, versionId)
         geyserConfigFile.parentFile?.mkdirs()
+        if (geyserConfigFile.exists()) {
+            val original = runCatching { geyserConfigFile.readText() }.getOrDefault("")
+            var updated = original
+            updated = ensureYamlSectionValue(updated, "bedrock", "address", "0.0.0.0")
+            updated = ensureYamlSectionValue(updated, "bedrock", "port", "19132")
+            updated = ensureYamlSectionValue(updated, "bedrock", "clone-remote-port", "false")
+            updated = ensureYamlSectionValue(updated, "bedrock", "motd1", "PocketCraft Server")
+            updated = ensureYamlSectionValue(updated, "bedrock", "motd2", "Tap to join")
+            updated = ensureTopLevelYamlValue(updated, "ping-passthrough-interval", "1")
+            updated = ensureTopLevelYamlValue(updated, "async-motd", "false")
+            updated = ensureTopLevelYamlValue(updated, "cache-chunks", "true")
+            updated = ensureTopLevelYamlValue(updated, "max-auto-connect-attempts", "5")
+            updated = ensureTopLevelYamlValue(updated, "show-cooldown", "disabled")
+            updated = ensureTopLevelYamlValue(updated, "forward-hostname", "false")
+            updated = ensureYamlSectionValue(updated, "remote", "address", "127.0.0.1")
+            updated = ensureYamlSectionValue(updated, "remote", "port", "25565")
+            updated = ensureYamlSectionValue(updated, "remote", "auth-type", "floodgate")
+            updated = ensureTopLevelYamlValue(updated, "floodgate-key-file", floodgateKeyPath)
+            updated = ensureTopLevelYamlValue(updated, "passthrough-motd", "false")
+            updated = ensureTopLevelYamlValue(updated, "passthrough-player-counts", "false")
 
-        if (!geyserConfigFile.exists()) {
-            return
+            if (updated != original) {
+                geyserConfigFile.writeText(updated)
+            }
         }
 
-        val original = runCatching { geyserConfigFile.readText() }.getOrDefault("")
-        var updated = original
-        updated = ensureYamlSectionValue(updated, "bedrock", "address", "0.0.0.0")
-        updated = ensureYamlSectionValue(updated, "bedrock", "port", "19132")
-        updated = ensureYamlSectionValue(updated, "bedrock", "clone-remote-port", "false")
-        updated = ensureYamlSectionValue(updated, "bedrock", "motd1", "PocketCraft Server")
-        updated = ensureYamlSectionValue(updated, "bedrock", "motd2", "Tap to join")
-        updated = ensureYamlSectionValue(updated, "remote", "address", "127.0.0.1")
-        updated = ensureYamlSectionValue(updated, "remote", "port", "25565")
-        updated = ensureYamlSectionValue(updated, "remote", "auth-type", "floodgate")
-        updated = ensureTopLevelYamlValue(updated, "passthrough-motd", "false")
-        updated = ensureTopLevelYamlValue(updated, "passthrough-player-counts", "false")
+        val floodgateConfigFile = getFloodgateConfigFile(context, versionId)
+        floodgateConfigFile.parentFile?.mkdirs()
+        if (!floodgateConfigFile.exists()) {
+            floodgateConfigFile.writeText("""
+                username-prefix: "."
+                player-link:
+                  enabled: true
+                  use-global-linking: false
+                  link-code-timeout: 60
+                send-floodgate-data: true
+            """.trimIndent())
+        }
 
+        val floodgateOriginal = runCatching { floodgateConfigFile.readText() }.getOrDefault("")
+        var floodgateUpdated = floodgateOriginal
+        floodgateUpdated = ensureTopLevelYamlValue(floodgateUpdated, "username-prefix", "\".\"")
+        floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "enabled", "true")
+        floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "allowed", "true")
+        floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "type", "floodgate")
+        floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "use-global-linking", "false")
+        floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "link-code-timeout", "60")
+        floodgateUpdated = ensureTopLevelYamlValue(floodgateUpdated, "send-floodgate-data", "true")
+
+        if (floodgateUpdated != floodgateOriginal) {
+            floodgateConfigFile.writeText(floodgateUpdated)
+        }
+    }
+
+    /**
+     * Preserves the Floodgate encryption key (key.pem) across server resets.
+     * If the key file is deleted or regenerated, all existing player links are
+     * invalidated — causing Bedrock player data resets even with player-link enabled.
+     * The backup is stored outside the server world folder so it survives world resets.
+     */
+    fun preserveFloodgateKey(context: Context, versionId: String) {
+        val serverDir = File(context.filesDir, "servers/$versionId")
+        val floodgateDirs = listOf(
+            File(serverDir, "plugins/Floodgate"),
+            File(serverDir, "plugins/floodgate")
+        )
+        val keyFile = floodgateDirs.map { File(it, "key.pem") }.firstOrNull { it.exists() }
+        val defaultKeyFile = File(floodgateDirs.first(), "key.pem")
+        val backupFile = File(serverDir, "floodgate_key_backup.pem")
+
+        if (keyFile != null && !backupFile.exists()) {
+            // First time — back it up
+            runCatching {
+                keyFile.copyTo(backupFile, overwrite = false)
+                android.util.Log.d("Floodgate", "Backed up Floodgate key to ${backupFile.path}")
+            }
+        } else if (keyFile == null && backupFile.exists()) {
+            // Key was deleted — restore it
+            runCatching {
+                defaultKeyFile.parentFile?.mkdirs()
+                backupFile.copyTo(defaultKeyFile, overwrite = true)
+                android.util.Log.d("Floodgate", "Restored Floodgate key from backup")
+            }
+        } else if (keyFile != null && backupFile.exists()) {
+            // Both exist — keep backup in sync with current key
+            runCatching {
+                keyFile.copyTo(backupFile, overwrite = true)
+            }
+        }
+    }
+
+    fun readFloodgateConfigValue(context: Context, versionId: String, key: String): String? {
+        val file = getFloodgateConfigFile(context, versionId)
+        if (!file.exists()) return null
+        val lines = runCatching { file.readLines() }.getOrDefault(emptyList())
+        val line = lines.firstOrNull { it.trimStart().startsWith("$key:") }
+            ?: return null
+        return line.substringAfter(':').trim().stripYamlQuotes().ifBlank { null }
+    }
+
+    fun readFloodgateSectionValue(
+        context: Context,
+        versionId: String,
+        section: String,
+        key: String
+    ): String? {
+        val file = getFloodgateConfigFile(context, versionId)
+        if (!file.exists()) return null
+        val lines = runCatching { file.readLines() }.getOrDefault(emptyList())
+
+        val sectionStart = lines.indexOfFirst { it.trim() == "$section:" }
+        if (sectionStart == -1) return null
+
+        var sectionEnd = lines.size
+        for (index in (sectionStart + 1) until lines.size) {
+            val line = lines[index]
+            val trimmed = line.trim()
+            if (trimmed.isBlank() || trimmed.startsWith("#")) continue
+            if (!line.startsWith(" ") && !line.startsWith("\t")) {
+                sectionEnd = index
+                break
+            }
+        }
+
+        val match = ((sectionStart + 1) until sectionEnd).firstOrNull { index ->
+            lines[index].trimStart().startsWith("$key:")
+        } ?: return null
+        return lines[match].substringAfter(':').trim().stripYamlQuotes().ifBlank { null }
+    }
+
+    fun setFloodgateConfigValue(context: Context, versionId: String, key: String, value: String) {
+        val file = getFloodgateConfigFile(context, versionId)
+        file.parentFile?.mkdirs()
+        if (!file.exists()) return
+        val lines = file.readLines().toMutableList()
+        val idx = lines.indexOfFirst { it.trimStart().startsWith("$key:") }
+        val formatted = formatYamlScalar(value)
+        if (idx != -1) {
+            lines[idx] = "$key: $formatted"
+        } else {
+            if (lines.isNotEmpty() && lines.last().isNotBlank()) lines += ""
+            lines += "$key: $formatted"
+        }
+        file.writeText(lines.joinToString("\n").trimEnd() + "\n")
+    }
+
+    fun setFloodgateSectionValue(
+        context: Context,
+        versionId: String,
+        section: String,
+        key: String,
+        value: String
+    ) {
+        val file = getFloodgateConfigFile(context, versionId)
+        file.parentFile?.mkdirs()
+        if (!file.exists()) return
+        val original = file.readText()
+        val updated = ensureYamlSectionValue(original, section, key, value)
         if (updated != original) {
-            geyserConfigFile.writeText(updated)
+            file.writeText(updated)
         }
+    }
+
+    fun isFloodgateUsernamePrefixShown(context: Context, versionId: String): Boolean {
+        return readFloodgateConfigValue(context, versionId, "username-prefix")
+            ?.let { it != "\"\"" && it != "" }
+            ?: false
+    }
+
+    fun isFloodgatePlayerLinkEnabled(context: Context, versionId: String): Boolean {
+        return readFloodgateSectionValue(context, versionId, "player-link", "enabled")
+            ?.let { it.equals("true", ignoreCase = true) }
+            ?: true
     }
 
     private fun ensureTopLevelYamlValue(
@@ -298,6 +519,17 @@ object PluginManager {
             lines += "$key: $value"
         }
         return lines.joinToString("\n").trimEnd() + "\n"
+    }
+
+    private fun formatYamlScalar(value: String): String {
+        val trimmed = value.trim()
+        return when {
+            trimmed.isEmpty() -> "\"\""
+            trimmed.any { it.isWhitespace() } -> "\"$trimmed\""
+            trimmed == "true" || trimmed == "false" -> trimmed
+            trimmed.all { it.isLetterOrDigit() || it == '_' || it == '-' || it == '.' } -> trimmed
+            else -> "\"$trimmed\""
+        }
     }
 
     private fun ensureYamlSectionValue(
@@ -349,10 +581,24 @@ object PluginManager {
         return lines.joinToString("\n").trimEnd() + "\n"
     }
 
+    private fun String.stripYamlQuotes(): String {
+        return trim().removePrefix("\"").removeSuffix("\"").removePrefix("'").removeSuffix("'")
+    }
+
     fun isBedrockBridgeEnabled(context: Context, versionId: String): Boolean {
         val hasGeyser = isManagedPluginEnabled(context, versionId, "geyser")
         val hasFloodgate = isManagedPluginEnabled(context, versionId, "floodgate")
         return hasGeyser && hasFloodgate
+    }
+
+    fun supportsMods(versionId: String): Boolean {
+        val normalizedVersion = versionId.lowercase()
+        return normalizedVersion.contains("fabric") || normalizedVersion.contains("forge") || normalizedVersion.contains("neoforge") || normalizedVersion.contains("quilt")
+    }
+
+    fun supportsFabricMods(versionId: String): Boolean {
+        val normalizedVersion = versionId.lowercase()
+        return normalizedVersion.contains("fabric") || normalizedVersion.contains("quilt")
     }
 
     fun listMods(context: Context, versionId: String): List<Plugin> {
@@ -461,6 +707,7 @@ object PluginManager {
         uri: Uri,
         versionId: String,
         type: ContentType,
+        runtimeKey: String = versionId,
         onProgress: (Int) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
@@ -496,7 +743,7 @@ object PluginManager {
                 }
             }
 
-            validateInstalledFile(destFile, type)?.let { error ->
+            validateInstalledFile(destFile, type, runtimeKey)?.let { error ->
                 destFile.delete()
                 return@withContext Result.failure(Exception(error))
             }
@@ -513,6 +760,7 @@ object PluginManager {
         versionId: String,
         type: ContentType,
         fileNameHint: String? = null,
+        runtimeKey: String = versionId,
         onProgress: (Int) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
@@ -561,7 +809,7 @@ object PluginManager {
                     }
                 }
 
-                validateInstalledFile(destFile, type)?.let { error ->
+                validateInstalledFile(destFile, type, runtimeKey)?.let { error ->
                     destFile.delete()
                     return@withContext Result.failure(Exception(error))
                 }
@@ -578,6 +826,7 @@ object PluginManager {
         item: RemoteCatalogItem,
         versionId: String,
         type: ContentType,
+        runtimeKey: String = versionId,
         onProgress: (Int) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         if (!item.canInstall) {
@@ -585,7 +834,7 @@ object PluginManager {
         }
 
         val candidate = when (item.source) {
-            MODRINTH_PROVIDER -> resolveModrinthDownload(context, item, type, versionId)
+            MODRINTH_PROVIDER -> resolveModrinthDownload(context, item, type, versionId, runtimeKey)
             HANGAR_PROVIDER -> resolveHangarDownload(context, item, versionId)
             else -> null
         } ?: return@withContext Result.failure(Exception("Could not find a compatible download for ${item.title}."))
@@ -596,6 +845,7 @@ object PluginManager {
             versionId = versionId,
             type = type,
             fileNameHint = candidate.fileName,
+            runtimeKey = runtimeKey,
             onProgress = onProgress
         )
     }
@@ -605,69 +855,90 @@ object PluginManager {
         type: ContentType,
         query: String,
         minecraftVersion: String,
+        runtimeKey: String,
         limit: Int = 16
     ): Result<List<RemoteCatalogItem>> = withContext(Dispatchers.IO) {
         val normalizedQuery = query.trim()
         val cacheKey = listOf(type.name, minecraftVersion, normalizedQuery.lowercase(Locale.US), limit).joinToString("|")
-
-        getCachedCatalog(cacheKey)?.let { cached ->
+        val cached = getCachedCatalog(context, cacheKey)
+        
+        if (cached != null) {
+            // Background refresh
+            scope.launch {
+                runCatching {
+                    val freshResults = performCatalogSearch(context, type, normalizedQuery, minecraftVersion, runtimeKey, limit)
+                    putCachedCatalog(context, cacheKey, freshResults)
+                }
+            }
             return@withContext Result.success(cached)
         }
 
         runCatching {
-            coroutineScope {
-                when (type) {
-                    ContentType.PLUGINS -> {
-                        val perProviderLimit = (limit / 2).coerceAtLeast(6)
-                        val modrinth = async {
-                            runCatching {
-                                searchModrinthCatalog(
-                                    context = context,
-                                    type = type,
-                                    query = normalizedQuery,
-                                    minecraftVersion = minecraftVersion,
-                                    limit = perProviderLimit
-                                )
-                            }.getOrDefault(emptyList())
-                        }
-                        val hangar = async {
-                            runCatching {
-                                searchHangarPlugins(
-                                    context = context,
-                                    query = normalizedQuery,
-                                    minecraftVersion = minecraftVersion,
-                                    limit = perProviderLimit
-                                )
-                            }.getOrDefault(emptyList())
-                        }
-                        mergeCatalogResults(
-                            items = modrinth.await() + hangar.await(),
-                            limit = limit,
-                            blankQuery = normalizedQuery.isBlank()
-                        )
-                    }
-                    ContentType.MODS,
-                    ContentType.RESOURCE_PACKS -> mergeCatalogResults(
-                        items = searchModrinthCatalog(
+            performCatalogSearch(context, type, normalizedQuery, minecraftVersion, runtimeKey, limit)
+        }.map { results ->
+            putCachedCatalog(context, cacheKey, results)
+            results
+        }
+    }
+
+    private suspend fun performCatalogSearch(
+        context: Context,
+        type: ContentType,
+        normalizedQuery: String,
+        minecraftVersion: String,
+        runtimeKey: String,
+        limit: Int
+    ): List<RemoteCatalogItem> = coroutineScope {
+        val results = when (type) {
+            ContentType.PLUGINS -> {
+                val perProviderLimit = (limit / 2).coerceAtLeast(6)
+                val modrinth = async {
+                    runCatching {
+                        searchModrinthCatalog(
                             context = context,
                             type = type,
                             query = normalizedQuery,
                             minecraftVersion = minecraftVersion,
-                            limit = limit
-                        ),
-                        limit = limit,
-                        blankQuery = normalizedQuery.isBlank()
-                    )
+                            runtimeKey = runtimeKey,
+                            limit = perProviderLimit
+                        )
+                    }.getOrDefault(emptyList())
                 }
+                val hangar = async {
+                    runCatching {
+                        searchHangarPlugins(
+                            context = context,
+                            query = normalizedQuery,
+                            minecraftVersion = minecraftVersion,
+                            limit = perProviderLimit
+                        )
+                    }.getOrDefault(emptyList())
+                }
+                mergeCatalogResults(
+                    items = modrinth.await() + hangar.await(),
+                    limit = limit,
+                    blankQuery = normalizedQuery.isBlank()
+                )
             }
-        }.map { results ->
-            val filtered = if (type == ContentType.PLUGINS) {
-                results.filterNot(::isManagedBridgeCatalogItem)
-            } else {
-                results
-            }
-            putCachedCatalog(cacheKey, filtered)
-            filtered
+            ContentType.MODS,
+            ContentType.RESOURCE_PACKS -> mergeCatalogResults(
+                items = searchModrinthCatalog(
+                    context = context,
+                    type = type,
+                    query = normalizedQuery,
+                    minecraftVersion = minecraftVersion,
+                    runtimeKey = runtimeKey,
+                    limit = limit
+                ),
+                limit = limit,
+                blankQuery = normalizedQuery.isBlank()
+            )
+        }
+        
+        if (type == ContentType.PLUGINS) {
+            results.filterNot(::isManagedBridgeCatalogItem)
+        } else {
+            results
         }
     }
 
@@ -708,6 +979,7 @@ object PluginManager {
         type: ContentType,
         query: String,
         minecraftVersion: String,
+        runtimeKey: String,
         limit: Int
     ): List<RemoteCatalogItem> {
         throttleProvider(MODRINTH_PROVIDER, minimumGapMs = 250L)
@@ -757,19 +1029,24 @@ object PluginManager {
                         jsonArrayStrings(item.optJSONArray("categories")) +
                             jsonArrayStrings(item.optJSONArray("display_categories"))
                         ).map { it.lowercase(Locale.US) }
+                    val compatibleLoaders = compatibleModLoadersForRuntime(runtimeKey)
+                    val matchedLoaders = categories.filter { it in modLoaderLabels.keys }
 
                     val serverSide = item.optString("server_side").lowercase(Locale.US)
                     val isSupportedMod = serverSide != "unsupported"
                     val modSupportMessage = when (type) {
                         ContentType.MODS -> {
-                            if (!isSupportedMod) {
-                                null
+                            if (!supportsMods(runtimeKey)) {
+                                "Switch this server to Fabric, Quilt, Forge, or NeoForge to install mods."
                             } else {
-                                val loaderLabel = categories.firstNotNullOfOrNull { modLoaderLabels[it] }
-                                if (loaderLabel != null) {
-                                    "$loaderLabel server-side mod. PocketCraft will only show server-side results here, but Paper support still depends on the mod itself."
+                                val loaderLabel = matchedLoaders.firstNotNullOfOrNull { modLoaderLabels[it] }
+                                if (loaderLabel != null && compatibleLoaders.isNotEmpty() && matchedLoaders.none { it in compatibleLoaders }) {
+                                    val requiredLoaders = matchedLoaders.mapNotNull { modLoaderLabels[it] }.distinct().joinToString(" / ")
+                                    "Requires $requiredLoaders. Current runtime is ${runtimeLabel(minecraftVersion)}."
+                                } else if (loaderLabel != null) {
+                                    "$loaderLabel server-side mod."
                                 } else {
-                                    "Server-side mod. PocketCraft will only show server-side results here, but Paper support still depends on the mod itself."
+                                    "Server-side mod."
                                 }
                             }
                         }
@@ -790,7 +1067,14 @@ object PluginManager {
                             description = item.optString("description").ifBlank { "No description provided." },
                             downloads = item.optLong("downloads"),
                             author = item.optString("author").takeIf { it.isNotBlank() },
-                            canInstall = type != ContentType.MODS,
+                            canInstall = when (type) {
+                                ContentType.MODS -> {
+                                    isSupportedMod &&
+                                        supportsMods(runtimeKey) &&
+                                        (matchedLoaders.isEmpty() || matchedLoaders.any { it in compatibleLoaders })
+                                }
+                                else -> true
+                            },
                             supportMessage = modSupportMessage,
                             isSupported = if (type == ContentType.MODS) isSupportedMod else true
                         )
@@ -865,23 +1149,23 @@ object PluginManager {
         context: Context,
         item: RemoteCatalogItem,
         type: ContentType,
-        minecraftVersion: String
+        minecraftVersion: String,
+        runtimeKey: String
     ): DownloadCandidate? {
-        if (type == ContentType.MODS) return null
-
         throttleProvider(MODRINTH_PROVIDER, minimumGapMs = 250L)
 
         val loaders = when (type) {
             ContentType.PLUGINS -> JSONArray(paperCompatibleLoaders.toList()).toString()
             ContentType.RESOURCE_PACKS -> "[\"minecraft\"]"
-            ContentType.MODS -> "[]"
+            ContentType.MODS -> JSONArray(compatibleModLoadersForRuntime(runtimeKey)).toString()
         }
+        if (type == ContentType.MODS && !supportsMods(runtimeKey)) return null
         val gameVersions = JSONArray(listOf(minecraftVersion)).toString()
         val url = buildString {
             append("$MODRINTH_BASE_URL/project/${item.projectId}/version")
             append("?game_versions=${URLEncoder.encode(gameVersions, "UTF-8")}")
             append("&include_changelog=false")
-            if (type != ContentType.MODS) {
+            if (loaders != "[]") {
                 append("&loaders=${URLEncoder.encode(loaders, "UTF-8")}")
             }
         }
@@ -1083,7 +1367,7 @@ object PluginManager {
         return metadata.kind.label
     }
 
-    private fun validateInstalledFile(file: File, type: ContentType): String? {
+    private fun validateInstalledFile(file: File, type: ContentType, runtimeKey: String = ""): String? {
         return when (type) {
             ContentType.PLUGINS -> {
                 val metadata = readArchiveMetadata(file)
@@ -1096,13 +1380,26 @@ object PluginManager {
                 }
             }
             ContentType.MODS -> {
+                if (!supportsMods(runtimeKey)) {
+                    return "This server does not support mods. Switch to Fabric, Quilt, Forge, or NeoForge first."
+                }
                 val metadata = readArchiveMetadata(file)
+                val compatibleLoaders = compatibleModLoadersForRuntime(runtimeKey)
                 when (metadata.kind) {
                     ArchiveKind.PLUGIN -> "This file is a plugin. Install it from the Plugins tab instead."
-                    ArchiveKind.FABRIC_MOD -> "This server currently runs Paper, so Fabric mods will not load here yet."
-                    ArchiveKind.FORGE_MOD -> "This server currently runs Paper, so Forge mods will not load here yet."
-                    ArchiveKind.NEOFORGE_MOD -> "This server currently runs Paper, so NeoForge mods will not load here yet."
-                    ArchiveKind.UNKNOWN -> "This server currently runs Paper, so standalone mod jars are blocked to avoid broken installs."
+                    ArchiveKind.FABRIC_MOD -> {
+                        if ("fabric" in compatibleLoaders) null
+                        else "This is a Fabric mod but the current server runtime is ${runtimeLabel(runtimeKey)}."
+                    }
+                    ArchiveKind.FORGE_MOD -> {
+                        if ("forge" in compatibleLoaders) null
+                        else "This is a Forge mod but the current server runtime is ${runtimeLabel(runtimeKey)}."
+                    }
+                    ArchiveKind.NEOFORGE_MOD -> {
+                        if ("neoforge" in compatibleLoaders) null
+                        else "This is a NeoForge mod but the current server runtime is ${runtimeLabel(runtimeKey)}."
+                    }
+                    ArchiveKind.UNKNOWN -> null // Allow unknown jars in mods folder for mod loaders
                 }
             }
             ContentType.RESOURCE_PACKS -> null
@@ -1190,6 +1487,28 @@ object PluginManager {
     private fun supportsRequestedVersion(versions: List<String>, minecraftVersion: String): Boolean {
         if (versions.isEmpty()) return true
         return versions.any { isCompatibleVersionFamily(it, minecraftVersion) }
+    }
+
+    private fun compatibleModLoadersForRuntime(versionId: String): List<String> {
+        val normalizedVersion = versionId.lowercase(Locale.US)
+        return when {
+            normalizedVersion.contains("neoforge") -> listOf("neoforge")
+            normalizedVersion.contains("forge") -> listOf("forge")
+            normalizedVersion.contains("quilt") -> listOf("quilt", "fabric")
+            normalizedVersion.contains("fabric") -> listOf("fabric")
+            else -> emptyList()
+        }
+    }
+
+    private fun runtimeLabel(versionId: String): String {
+        val normalizedVersion = versionId.lowercase(Locale.US)
+        return when {
+            normalizedVersion.contains("neoforge") -> "NeoForge"
+            normalizedVersion.contains("forge") -> "Forge"
+            normalizedVersion.contains("quilt") -> "Quilt"
+            normalizedVersion.contains("fabric") -> "Fabric"
+            else -> "Vanilla/Paper"
+        }
     }
 
     private fun isCompatibleVersionFamily(candidateVersion: String, requestedVersion: String): Boolean {
@@ -1378,25 +1697,13 @@ object PluginManager {
         }
     }
 
-    private fun getCachedCatalog(cacheKey: String): List<RemoteCatalogItem>? {
-        synchronized(catalogCache) {
-            val cached = catalogCache[cacheKey] ?: return null
-            if (!cached.isFresh()) {
-                catalogCache.remove(cacheKey)
-                return null
-            }
-            return cached.items
-        }
+    private fun getCachedCatalog(context: Context, cacheKey: String): List<RemoteCatalogItem>? {
+        val typeToken = object : com.google.gson.reflect.TypeToken<VersionCacheManager.CacheEntry<List<RemoteCatalogItem>>>() {}
+        return VersionCacheManager.get(context, "catalog_$cacheKey", typeToken)
     }
 
-    private fun putCachedCatalog(cacheKey: String, items: List<RemoteCatalogItem>) {
-        synchronized(catalogCache) {
-            catalogCache[cacheKey] = CachedCatalogResult(items)
-            while (catalogCache.size > 24) {
-                val oldest = catalogCache.entries.firstOrNull()?.key ?: break
-                catalogCache.remove(oldest)
-            }
-        }
+    private fun putCachedCatalog(context: Context, cacheKey: String, items: List<RemoteCatalogItem>) {
+        VersionCacheManager.put(context, "catalog_$cacheKey", items, TimeUnit.HOURS.toMillis(6))
     }
 
     private suspend fun throttleProvider(provider: String, minimumGapMs: Long) {

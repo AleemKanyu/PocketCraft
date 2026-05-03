@@ -3,6 +3,12 @@ package com.pocketcraft.server.service
 import com.pocketcraft.server.data.model.ConsoleMessage
 import com.pocketcraft.server.data.model.LogLevel
 
+data class ChunkyProgress(
+    val current: Long,
+    val total: Long,
+    val percent: Float
+)
+
 /**
  * Parses raw stdout lines from the PaperMC server into structured [ConsoleMessage] objects
  * and extracts semantic events (player join/leave, TPS, server ready, etc.).
@@ -11,6 +17,12 @@ object ConsoleParser {
 
     // e.g. "[17:30:01 INFO]: Done (5.123s)! For help, type "help""
     private val DONE_REGEX = Regex("""Done \([\d.]+s\)! For help, type""")
+
+    // e.g. "[17:30:00 INFO]: Preparing start region for dimension minecraft:overworld"
+    private val PREPARING_START_REGION_REGEX = Regex("""Preparing start region for dimension""")
+
+    // e.g. "[17:35:10 INFO]: [Chunky] Task world:overworld [0 0] [3500/10000] [35.00%] [50.5 cps] [ETA 00:02:15]"
+    private val CHUNKY_PROGRESS_REGEX = Regex("""\[Chunky\] Task \S+ \[(\d+)/(\d+)\] \[([\d.]+)%\]""")
 
     // e.g. "[17:30:05 INFO]: UUID of player Steve is 123e4567-..."
     // Floodgate/Geyser names may be prefixed (for example ".Steve"), so do not
@@ -77,6 +89,19 @@ object ConsoleParser {
     /** Returns player name if a player left. */
     fun parseLeave(line: String): String? =
         LEAVE_REGEX.find(line)?.groupValues?.get(1)
+
+    fun isPreparingStartRegion(line: String): Boolean = PREPARING_START_REGION_REGEX.containsMatchIn(line)
+
+    fun parseChunkyProgress(line: String): ChunkyProgress? {
+        CHUNKY_PROGRESS_REGEX.find(line)?.let { match ->
+            return ChunkyProgress(
+                current = match.groupValues[1].toLong(),
+                total = match.groupValues[2].toLong(),
+                percent = match.groupValues[3].toFloat()
+            )
+        }
+        return null
+    }
 
     /** Returns the cleaned console text, stripping ANSI color codes. */
     fun stripAnsi(text: String): String =

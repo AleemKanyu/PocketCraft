@@ -34,6 +34,10 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -92,7 +96,8 @@ private enum class ContentTab(
     val label: String,
     val type: PluginManager.ContentType
 ) {
-    MODS("Mods", PluginManager.ContentType.PLUGINS),
+    PLUGINS("Plugins", PluginManager.ContentType.PLUGINS),
+    MODS("Mods", PluginManager.ContentType.MODS),
     PACKS("Resource Packs", PluginManager.ContentType.RESOURCE_PACKS)
 }
 
@@ -118,6 +123,7 @@ fun PluginsHubScreen(
     var isDiscoverLoading by remember { mutableStateOf(false) }
     var discoveredItems by remember { mutableStateOf<List<PluginManager.RemoteCatalogItem>>(emptyList()) }
     var downloadedItems by remember(stateHolder.versionLabel, selectedTab) { mutableStateOf<List<Plugin>>(emptyList()) }
+    var downloadedSectionExpanded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var catalogRetryToken by remember { mutableIntStateOf(0) }
     var detailCard by remember { mutableStateOf<ContentDetailCard?>(null) }
@@ -128,6 +134,13 @@ fun PluginsHubScreen(
     val resourcePackIcons = remember { mutableStateMapOf<String, File?>() }
 
     fun currentTab(): ContentTab = ContentTab.entries[selectedTab]
+
+    val isModsTab = currentTab().type == PluginManager.ContentType.MODS
+    val runtimeKey = remember(stateHolder.config.serverType, stateHolder.config.gameVersion) {
+        "${stateHolder.config.serverType.name.lowercase(Locale.US)}-${stateHolder.config.gameVersion}"
+    }
+    val supportsMods = remember(runtimeKey) { PluginManager.supportsMods(runtimeKey) }
+    val showModsWarning = isModsTab && !supportsMods
 
     suspend fun loadDownloadedItems(): List<Plugin> = withContext(Dispatchers.IO) {
         PluginManager.ensureContentDirs(context, stateHolder.versionLabel)
@@ -154,6 +167,7 @@ fun PluginsHubScreen(
                 uri = uri,
                 versionId = stateHolder.versionLabel,
                 type = currentTab().type,
+                runtimeKey = runtimeKey,
                 onProgress = { uploadProgress = it.coerceIn(0, 100) }
             )
             isUploading = false
@@ -194,7 +208,8 @@ fun PluginsHubScreen(
             context = context,
             type = currentTab().type,
             query = query,
-            minecraftVersion = stateHolder.versionLabel,
+            minecraftVersion = stateHolder.config.gameVersion,
+            runtimeKey = runtimeKey,
             limit = 50
         )
 
@@ -267,6 +282,32 @@ fun PluginsHubScreen(
                 )
             }
 
+            if (showModsWarning) {
+                item {
+                    PocketCraftCard(
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, PocketColors.Warning),
+                        colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Mod loader required for mods",
+                                fontWeight = FontWeight.ExtraBold,
+                                color = PocketColors.Warning
+                            )
+                            Text(
+                                text = "This server version is not using a supported mod loader. Switch this server to Fabric, Quilt, Forge, or NeoForge to install mods.",
+                                color = pluginsHubMutedTextColor(),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+
             if (isUploading || isDownloading) {
                 item {
                     Text(
@@ -287,7 +328,10 @@ fun PluginsHubScreen(
                     subtitle = "Manage what is already stored for this server version.",
                     actionLabel = "Add",
                     actionEnabled = true,
-                    onAction = { showAddDialog = true }
+                    onAction = { showAddDialog = true },
+                    isExpanded = downloadedSectionExpanded,
+                    onToggleExpand = { downloadedSectionExpanded = !downloadedSectionExpanded },
+                    itemCount = downloadedItems.size
                 )
             }
 
@@ -295,7 +339,27 @@ fun PluginsHubScreen(
                 item {
                     EmptyDownloadedCard(currentTab())
                 }
-            } else {
+            } else if (!downloadedSectionExpanded) {
+                item {
+                    PocketCraftCard(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = "Tap arrow to expand",
+                                color = pluginsHubMutedTextColor(),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            } else if (downloadedItems.isNotEmpty() && downloadedSectionExpanded) {
                 items(downloadedItems, key = { it.fileName }) { item ->
                     ContentRow(
                         item = item,
@@ -418,6 +482,7 @@ fun PluginsHubScreen(
                                         item = remote,
                                         versionId = stateHolder.versionLabel,
                                         type = currentTab().type,
+                                        runtimeKey = runtimeKey,
                                         onProgress = { downloadProgress = it.coerceIn(0, 100) }
                                     )
                                     isDownloading = false
@@ -570,6 +635,7 @@ fun PluginsHubScreen(
                                     versionId = stateHolder.versionLabel,
                                     type = currentTab().type,
                                     fileNameHint = null,
+                                    runtimeKey = runtimeKey,
                                     onProgress = { downloadProgress = it.coerceIn(0, 100) }
                                 )
                                 isDownloading = false
@@ -622,7 +688,10 @@ private fun SectionHeader(
     subtitle: String,
     actionLabel: String? = null,
     actionEnabled: Boolean = true,
-    onAction: (() -> Unit)? = null
+    onAction: (() -> Unit)? = null,
+    isExpanded: Boolean = true,
+    onToggleExpand: (() -> Unit)? = null,
+    itemCount: Int = 0
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -633,11 +702,21 @@ private fun SectionHeader(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.ExtraBold
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                if (itemCount > 0) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "($itemCount)",
+                        fontSize = 12.sp,
+                        color = pluginsHubMutedTextColor()
+                    )
+                }
+            }
             Text(
                 text = subtitle,
                 fontSize = 12.sp,
@@ -645,24 +724,40 @@ private fun SectionHeader(
             )
         }
 
-        if (!actionLabel.isNullOrBlank() && onAction != null) {
-            OutlinedButton(
-                onClick = onAction,
-                enabled = actionEnabled,
-                border = BorderStroke(1.dp, pluginsHubBorderColor()),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = if (pluginsHubIsDarkTheme()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary
-                )
-            ) {
-                if (actionLabel == "Add") {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (onToggleExpand != null) {
+                Box(
+                    modifier = Modifier
+                        .clickable(onClick = onToggleExpand)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                        .padding(8.dp)
+                ) {
                     Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp)
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "Collapse" else "Expand",
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
                 }
-                Text(actionLabel)
+            }
+            if (!actionLabel.isNullOrBlank() && onAction != null) {
+                OutlinedButton(
+                    onClick = onAction,
+                    enabled = actionEnabled,
+                    border = BorderStroke(1.dp, pluginsHubBorderColor()),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = if (pluginsHubIsDarkTheme()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    if (actionLabel == "Add") {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+                    Text(actionLabel)
+                }
             }
         }
     }

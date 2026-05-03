@@ -40,6 +40,8 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
@@ -65,10 +67,15 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -76,12 +83,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.collect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -94,6 +105,8 @@ import androidx.compose.ui.res.painterResource
 import coil.compose.AsyncImage
 import com.pocketcraft.server.data.model.PlayerInfo
 import com.pocketcraft.server.data.preferences.AppPreferences
+import com.pocketcraft.server.data.preferences.AppPreferencesStore
+import com.pocketcraft.server.server.ServerHostService
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.DuoButtonVariant
@@ -107,6 +120,7 @@ import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.service.VersionCatalog
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.pocketIsDarkTheme
 import com.pocketcraft.server.ui.theme.Monocraft
 import com.pocketcraft.server.ui.theme.pocketCardShadowColor
 import com.pocketcraft.server.ui.theme.pocketHighContrastBorderColor
@@ -140,20 +154,29 @@ fun ConsoleScreen(
     val scope = rememberCoroutineScope()
     var command by remember { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
     var worldSeed by remember { mutableStateOf("") }
     var showSeedDialog by remember { mutableStateOf(false) }
     var showBedrockHelpDialog by remember { mutableStateOf(false) }
     var seedSetupShown by remember { mutableStateOf(false) }
+    var firstBootWarningSessionDismissed by remember { mutableStateOf(false) }
     var showDownloadRequiredDialog by remember { mutableStateOf(false) }
-    val isVersionDownloaded = remember(stateHolder.versionLabel) {
-        ServerFileManager.isServerJarReady(context, stateHolder.versionLabel)
-    }
+    val isVersionDownloaded =
+        ServerFileManager.isServerJarReady(context, stateHolder.config.gameVersion, stateHolder.config.serverType)
     val animatedStartupProgress by animateFloatAsState(
         targetValue = (stateHolder.startupProgressPercent / 100f).coerceIn(0f, 1f),
         animationSpec = tween(durationMillis = 700),
         label = "startup_progress"
     )
     val cardShadowColor = pocketCardShadowColor()
+    val firstServerStartWarningDismissed by AppPreferencesStore.isFirstServerStartWarningDismissedFlow(context).collectAsState(initial = false)
+    val serverReady by ServerHostService.serverReadyState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(stateHolder.status) {
+        if (stateHolder.status == ServerStatus.ONLINE && !firstServerStartWarningDismissed) {
+            AppPreferencesStore.setFirstServerStartWarningDismissed(context, true)
+        }
+    }
 
     // RAM feature state
     val prefs = remember { AppPreferences(context) }
@@ -200,6 +223,10 @@ fun ConsoleScreen(
         }
     }
 
+    // F3G tip removed
+
+    // F3G tip removed
+
     LaunchedEffect(Unit) {
         try {
             val versions = VersionCatalog.fetchStableVersions()
@@ -234,6 +261,8 @@ fun ConsoleScreen(
         }
     }
 
+    // Chunk loading snackbar removed as per request
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -244,12 +273,110 @@ fun ConsoleScreen(
         item {
             ServerIdentityCard(
                 stateHolder = stateHolder,
+                serverReady = serverReady,
                 onChangeVersion = onChangeVersion,
                 onOpenServerDetails = onOpenServerDetails,
                 onAddWorld = onAddWorld,
                 onOpenBedrockHelp = { showBedrockHelpDialog = true },
                 topContentBetweenServerAndAddress = topContentBelowServerCard
             )
+        }
+        if (stateHolder.status == ServerStatus.STARTING && !stateHolder.firstBootComplete && !firstBootWarningSessionDismissed) {
+            item(key = "first_boot_warning") {
+                val dismissState = rememberSwipeToDismissBoxState(
+                    confirmValueChange = {
+                        if (it == SwipeToDismissBoxValue.StartToEnd || it == SwipeToDismissBoxValue.EndToStart) {
+                            firstBootWarningSessionDismissed = true
+                            scope.launch {
+                                AppPreferencesStore.setFirstBootComplete(context, true)
+                            }
+                            true
+                        } else false
+                    }
+                )
+
+                SwipeToDismissBox(
+                    state = dismissState,
+                    backgroundContent = { Box(Modifier.fillMaxSize()) }
+                ) {
+                    val isDark = pocketIsDarkTheme()
+                    val bannerColor = if (isDark) Color(0xFF3B2214) else Color(0xFFFFE8CC)
+                    val bannerBorder = if (isDark) Color(0xFFE6853B).copy(alpha = 0.55f) else Color(0xFFEA580C).copy(alpha = 0.4f)
+                    val headingColor = if (isDark) Color(0xFFFFD6B0) else Color(0xFF78350F)
+                    val bodyColor = if (isDark) Color(0xFFFFE7D6).copy(alpha = 0.88f) else Color(0xFF92400E)
+                    val accent = PocketColors.ConsoleWarn
+                    
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(
+                                elevation = 8.dp,
+                                shape = RoundedCornerShape(16.dp),
+                                ambientColor = cardShadowColor,
+                                spotColor = cardShadowColor,
+                                clip = false
+                            ),
+                        shape = RoundedCornerShape(16.dp),
+                        color = bannerColor,
+                        border = androidx.compose.foundation.BorderStroke(1.5.dp, bannerBorder),
+                        shadowElevation = 4.dp
+                    ) {
+                        Box {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.Top,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = accent,
+                                    modifier = Modifier
+                                        .padding(top = 2.dp)
+                                        .size(20.dp)
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "First Start Takes Longer",
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                        color = headingColor,
+                                        fontSize = 13.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "The first time to start server takes some time to load as it generates the world and downloads files.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = bodyColor,
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(24.dp))
+                            }
+                            
+                            IconButton(
+                                onClick = {
+                                    firstBootWarningSessionDismissed = true
+                                    scope.launch {
+                                        AppPreferencesStore.setFirstBootComplete(context, true)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(4.dp)
+                                    .size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Dismiss",
+                                    tint = headingColor.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
         if (stateHolder.status == ServerStatus.ONLINE && !stateHolder.config.whiteList && !stateHolder.openServerRiskAcknowledged) {
             item {
@@ -335,6 +462,10 @@ fun ConsoleScreen(
                         text = if (stateHolder.isRestarting) "RESTARTING..." else "RESTART",
                         onClick = {
                             try {
+                                if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
+                                    Toast.makeText(context, "No internet connection. Please check your network.", Toast.LENGTH_LONG).show()
+                                    return@DuoButton
+                                }
                                 stateHolder.restartServer()
                             } catch (e: Exception) {
                                 android.util.Log.e("ConsoleScreen", "Restart error", e)
@@ -352,6 +483,10 @@ fun ConsoleScreen(
                     text = if (stateHolder.isRestartingCycle) "RESTARTING..." else if (stateHolder.status == ServerStatus.STARTING) "STARTING..." else "START SERVER",
                     onClick = {
                         try {
+                            if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
+                                Toast.makeText(context, "No internet connection. Please check your network.", Toast.LENGTH_LONG).show()
+                                return@DuoButton
+                            }
                             if (isVersionDownloaded) {
                                 stateHolder.startServer()
                             } else {
@@ -444,13 +579,15 @@ fun ConsoleScreen(
         }
         item {
             VersionUpgradeCard(
-                currentVersion = stateHolder.versionLabel,
+                serverTypeName = stateHolder.config.serverType.displayName,
+                currentVersion = stateHolder.config.gameVersion,
                 availableVersions = availableVersions,
                 onUpgrade = { onChangeVersion() },
                 serverIsRunning = stateHolder.isNavigationLocked,
                 isVersionDownloaded = isVersionDownloaded
             )
         }
+        // F3G tip removed UI block
         item {
             RamSettingsCard(
                 ramMode = ramMode,
@@ -537,6 +674,15 @@ fun ConsoleScreen(
                 }
             }
         }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp)
+        )
     }
 
     // World Seed Dialog
@@ -748,6 +894,7 @@ fun ConsoleScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 private fun ServerIdentityCard(
     stateHolder: ServerStateHolder,
+    serverReady: Boolean,
     onChangeVersion: () -> Unit,
     onOpenServerDetails: () -> Unit,
     onAddWorld: () -> Unit,
@@ -759,24 +906,9 @@ private fun ServerIdentityCard(
     val serverRunning = stateHolder.status == ServerStatus.ONLINE
     val canChangeWorld = stateHolder.status == ServerStatus.OFFLINE
     var showWorldSheet by remember { mutableStateOf(false) }
-    val activeWorld = if (stateHolder.worlds.isNotEmpty()) {
-        stateHolder.worlds.firstOrNull { it.isActive } ?: stateHolder.worlds.firstOrNull()
-    } else {
-        null
-    }
-
-    val worldItems = if (stateHolder.worlds.isNotEmpty()) {
-        stateHolder.worlds
-    } else {
-        listOf(
-            WorldEntry(
-                name = stateHolder.config.worldName.ifBlank { "world" },
-                sizeMb = stateHolder.worldSizeMb,
-                isActive = true,
-                photoUrl = stateHolder.serverPhotoUrl
-            )
-        )
-    }
+    var showDeleteWorldDialog by remember { mutableStateOf<WorldEntry?>(null) }
+    val activeWorld = stateHolder.worlds.firstOrNull { it.isActive } ?: stateHolder.worlds.firstOrNull()
+    val worldItems = stateHolder.worlds
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Box(modifier = Modifier.fillMaxWidth()) {
@@ -897,8 +1029,8 @@ private fun ServerIdentityCard(
                             tint = PocketColors.PrimaryDark
                         )
                         Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                                text = if (canChangeWorld) "One tap to swap your world or edit details" else "Stop the server to switch worlds",
+                                Text(
+                                    text = if (canChangeWorld) "One tap to swap your world or edit details" else "Stop the server to switch worlds",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
                             fontWeight = FontWeight.SemiBold
@@ -952,18 +1084,43 @@ private fun ServerIdentityCard(
                             .heightIn(max = 360.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(worldItems) { world ->
-                            WorldSelectorCard(
-                                world = world,
-                                enabled = canChangeWorld && !world.isActive,
-                                onClick = {
-                                    scope.launch {
-                                        val msg = stateHolder.setActiveWorld(world.name)
-                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                        showWorldSheet = false
-                                    }
+                        if (worldItems.isEmpty()) {
+                            item {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "No saved worlds yet",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Create a world to see it listed here.",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                            )
+                            }
+                        } else {
+                            items(worldItems) { world ->
+                                WorldSelectorCard(
+                                    world = world,
+                                    canDelete = canChangeWorld || !world.isActive,
+                                    enabled = canChangeWorld && !world.isActive,
+                                    onClick = {
+                                        scope.launch {
+                                            val msg = stateHolder.setActiveWorld(world.name)
+                                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    onRequestDelete = { showDeleteWorldDialog = world }
+                                )
+                            }
                         }
 
                         item {
@@ -980,80 +1137,87 @@ private fun ServerIdentityCard(
             }
         }
 
-        topContentBetweenServerAndAddress?.invoke()
-
-        val publicAddress = stateHolder.publicAddress?.takeIf { it.isNotBlank() }
-
-        if (stateHolder.tunnelError != null && publicAddress == null) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = Color(0xFF1A0000)
+        showDeleteWorldDialog?.let { world ->
+            val deleteWorldSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            ModalBottomSheet(
+                onDismissRequest = {
+                    scope.launch {
+                        deleteWorldSheetState.hide()
+                        showDeleteWorldDialog = null
+                    }
+                },
+                sheetState = deleteWorldSheetState,
+                dragHandle = null,
+                containerColor = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    Text("Delete World?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                     Text(
-                        text = "Warning: Internet relay unavailable",
-                        fontWeight = FontWeight.Bold,
-                        color = PocketColors.Danger
+                        if (world.isActive) {
+                            "Delete ${world.name}? PocketCraft will switch to another saved world first."
+                        } else {
+                            "Delete ${world.name}? This removes the world from storage."
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text(
-                        text = stateHolder.tunnelError.orEmpty(),
-                        color = Color.White
-                    )
-                    Text(
-                        text = "Wi-Fi hosting still works on the same local network.",
-                        color = Color.White.copy(alpha = 0.88f)
-                    )
-                    TextButton(onClick = stateHolder::clearTunnelError) {
-                        Text("OK", color = Color.White)
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                val msg = stateHolder.deleteWorld(world.name)
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                deleteWorldSheetState.hide()
+                                showDeleteWorldDialog = null
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("DELETE", color = PocketColors.Offline, fontWeight = FontWeight.Bold)
+                    }
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                deleteWorldSheetState.hide()
+                                showDeleteWorldDialog = null
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("CANCEL")
                     }
                 }
             }
         }
 
-        if (stateHolder.tunnelConnecting) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = Color(0xFF1A1200)
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    androidx.compose.material3.CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp
-                    )
-                    Text(
-                        text = "Opening internet relay...",
-                        color = PocketColors.Starting,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
+        topContentBetweenServerAndAddress?.invoke()
+
+        val publicAddress = stateHolder.publicAddress?.takeIf { it.isNotBlank() }
+        val internetRelayAddress = when {
+            publicAddress != null -> publicAddress
+            stateHolder.tunnelConnecting -> "Opening internet relay..."
+            else -> "Waiting for live internet relay address..."
         }
 
-    val localWifiAddress = "${stateHolder.localIp}:${stateHolder.config.port}"
-    val canShareAddresses = stateHolder.status == ServerStatus.ONLINE || stateHolder.isRestarting
-    val joinCardShadowColor = pocketCardShadowColor()
-    val joinCardBorderColor = pocketHighContrastBorderColor()
+        val localWifiAddress = "${stateHolder.localIp}:${stateHolder.config.port}"
+        val canShareAddresses = stateHolder.serverJoinable &&
+            (stateHolder.publicAddress != null || stateHolder.tunnelConnecting)
+        val joinCardShadowColor = pocketCardShadowColor()
+        val joinCardBorderColor = pocketHighContrastBorderColor()
 
-    if (canShareAddresses) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .shadow(
-                    elevation = 14.dp,
-                    shape = RoundedCornerShape(14.dp),
-                    ambientColor = joinCardShadowColor,
-                    spotColor = joinCardShadowColor,
-                    clip = false
-                ),
+        if (canShareAddresses) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(
+                        elevation = 14.dp,
+                        shape = RoundedCornerShape(14.dp),
+                        ambientColor = joinCardShadowColor,
+                        spotColor = joinCardShadowColor,
+                        clip = false
+                    ),
                 shape = RoundedCornerShape(14.dp),
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.5.dp, joinCardBorderColor)
@@ -1062,17 +1226,73 @@ private fun ServerIdentityCard(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "Join Addresses",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = PocketColors.Primary,
-                        letterSpacing = 0.8.sp
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Join Addresses",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = PocketColors.Primary,
+                            letterSpacing = 0.8.sp
+                        )
+
+                        if (stateHolder.tunnelConnecting && publicAddress == null) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.padding(start = 8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(10.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Text(
+                                        "Relay Connecting",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        } else if (publicAddress != null) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = PocketColors.Online.copy(alpha = 0.15f),
+                                modifier = Modifier.padding(start = 8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .background(PocketColors.Online, CircleShape)
+                                    )
+                                    Text(
+                                        "Relay Ready",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PocketColors.Online
+                                    )
+                                }
+                            }
+                        }
+                    }
 
                     AddressValueRow(
-                        label = "Java / Internet",
-                        address = publicAddress ?: "Unavailable right now",
+                        label = "Java / Internet relay",
+                        address = internetRelayAddress,
                         emphasized = publicAddress != null
                     )
 
@@ -1205,69 +1425,105 @@ private fun JoinStepCard(step: String, title: String, body: String) {
 @Composable
 private fun WorldSelectorCard(
     world: WorldEntry,
+    canDelete: Boolean,
     enabled: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onRequestDelete: () -> Unit
 ) {
-    GameCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(98.dp)
-            .clickable(enabled = enabled, onClick = onClick)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { target ->
+            if (target == SwipeToDismissBoxValue.EndToStart && canDelete) {
+                onRequestDelete()
+            }
+            false
+        }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = false,
+        enableDismissFromEndToStart = canDelete,
+        backgroundContent = {
             Box(
                 modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(PocketColors.PrimaryMuted)
-                    .border(2.dp, PocketColors.Primary, RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .height(98.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(PocketColors.Offline.copy(alpha = 0.14f))
+                    .padding(horizontal = 22.dp),
+                contentAlignment = Alignment.CenterEnd
             ) {
-                if (world.photoUrl.isNotBlank()) {
-                    AsyncImage(
-                        model = world.photoUrl,
-                        contentDescription = "${world.name} icon",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                        PocketWorldIcon(modifier = Modifier.size(24.dp))
-                }
-            }
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(world.name, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, maxLines = 1)
-                Text(
-                    text = if (world.isActive) "Active world" else "${world.sizeMb} MB",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
-            }
-
-            if (world.isActive) {
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = PocketColors.Primary.copy(alpha = 0.16f)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    Text("Delete", color = PocketColors.Offline, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Icon(Icons.Default.Delete, contentDescription = null, tint = PocketColors.Offline)
+                }
+            }
+        }
+    ) {
+        GameCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(98.dp)
+                .clickable(enabled = enabled, onClick = onClick)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(PocketColors.PrimaryMuted)
+                        .border(2.dp, PocketColors.Primary, RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (world.photoUrl.isNotBlank()) {
+                        AsyncImage(
+                            model = world.photoUrl,
+                            contentDescription = "${world.name} icon",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        PocketWorldIcon(modifier = Modifier.size(24.dp))
+                    }
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(world.name, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, maxLines = 1)
                     Text(
-                        text = "ACTIVE",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = PocketColors.Primary
+                        text = if (world.isActive) "Active world" else "${world.sizeMb} MB",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
                     )
                 }
-            } else {
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = null,
-                    tint = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
-                )
+
+                if (world.isActive) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = PocketColors.Primary.copy(alpha = 0.16f)
+                    ) {
+                        Text(
+                            text = "ACTIVE",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = PocketColors.Primary
+                        )
+                    }
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
+                    )
+                }
             }
         }
     }

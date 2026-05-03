@@ -14,10 +14,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 private val Context.appPreferencesDataStore: DataStore<Preferences> by preferencesDataStore(name = "app_prefs")
+const val RELAY_SECRET = "e7f5fbdda85c265419e519454f8d54643930116b89a1b58dcb2b86f91889d3d3"
 
 object AppPreferencesKeys {
     val SETUP_COMPLETE = booleanPreferencesKey("setup_complete")
     val SELECTED_VERSION = stringPreferencesKey("selected_version")
+    val SELECTED_SERVER_TYPE = stringPreferencesKey("selected_server_type")
+    val SELECTED_WORLD = stringPreferencesKey("selected_world")
     val WORLD_SEED = stringPreferencesKey("world_seed")
     val SEED_SETUP_SHOWN = booleanPreferencesKey("seed_setup_shown")
     val DARK_MODE_OVERRIDE = stringPreferencesKey("dark_mode_override") // "SYSTEM", "LIGHT", "DARK"
@@ -35,14 +38,56 @@ object AppPreferencesKeys {
     val APP_LAUNCH_COUNT = intPreferencesKey("app_launch_count")
     val ANALYTICS_CONSENT = booleanPreferencesKey("analytics_consent")
     val CRASH_DIAGNOSTICS_CONSENT = booleanPreferencesKey("crash_diagnostics_consent")
-    val ADS_CONSENT = booleanPreferencesKey("ads_consent")
     val LEGAL_VERSION_ACCEPTED = stringPreferencesKey("legal_version_accepted")
     val DISCORD_POPUP_SHOWN_ON_FIRST_LAUNCH = booleanPreferencesKey("discord_popup_shown_on_first_launch")
     val INSTAGRAM_POPUP_SHOWN = booleanPreferencesKey("instagram_popup_shown")
+    val SHOW_RC_VERSIONS = booleanPreferencesKey("show_rc_versions")
+    val FAST_START_ENABLED = booleanPreferencesKey("fast_start_enabled")
+    val FIRST_SERVER_START_WARNING_DISMISSED = booleanPreferencesKey("first_server_start_warning_dismissed")
+    val FLIGHT_MODE_ENABLED = booleanPreferencesKey("flight_mode_enabled")
+    val FIRST_BOOT_COMPLETE = booleanPreferencesKey("first_boot_complete")
 }
 
-class AppPreferences(private val context: Context) {
-    private val prefs: SharedPreferences = context.getSharedPreferences("app_relay_prefs", Context.MODE_PRIVATE)
+class AppPreferences(context: Context) {
+    private val appContext = context.applicationContext
+
+    private val prefs: SharedPreferences
+        get() = getPrefs(appContext)
+
+    private val relayPrefs: SharedPreferences
+        get() = getRelayPrefs(appContext)
+
+    companion object {
+        @Volatile
+        private var prefsInstance: SharedPreferences? = null
+        @Volatile
+        private var relayPrefsInstance: SharedPreferences? = null
+
+        @Synchronized
+        fun init(context: Context) {
+            val appContext = context.applicationContext
+            if (prefsInstance == null) {
+                prefsInstance = appContext.getSharedPreferences("app_relay_prefs", Context.MODE_PRIVATE)
+            }
+            if (relayPrefsInstance == null) {
+                relayPrefsInstance = appContext.getSharedPreferences("app_relay_session_prefs", Context.MODE_PRIVATE)
+            }
+        }
+
+        private fun getPrefs(context: Context): SharedPreferences {
+            if (prefsInstance == null || relayPrefsInstance == null) {
+                init(context)
+            }
+            return prefsInstance!!
+        }
+
+        private fun getRelayPrefs(context: Context): SharedPreferences {
+            if (prefsInstance == null || relayPrefsInstance == null) {
+                init(context)
+            }
+            return relayPrefsInstance!!
+        }
+    }
 
     val userId: String
         get() {
@@ -62,9 +107,32 @@ class AppPreferences(private val context: Context) {
         get() = prefs.getInt("manual_ram_mb", 1024)
         set(value) = prefs.edit().putInt("manual_ram_mb", value).apply()
 
+    var autoRestart: Boolean
+        get() = prefs.getBoolean("auto_restart", false)
+        set(value) = prefs.edit().putBoolean("auto_restart", value).apply()
+
     var selectedWorldPath: String?
         get() = prefs.getString("selected_world_path", null)
         set(value) = prefs.edit().putString("selected_world_path", value).apply()
+
+    var fcmToken: String?
+        get() = prefs.getString("fcm_token", null)
+        set(value) = prefs.edit().putString("fcm_token", value).apply()
+
+    var relayPort: Int?
+        get() {
+            if (!relayPrefs.contains("relay_port")) return null
+            return relayPrefs.getInt("relay_port", -1).takeIf { it > 0 }
+        }
+        set(value) {
+            relayPrefs.edit().apply {
+                if (value == null || value <= 0) {
+                    remove("relay_port")
+                } else {
+                    putInt("relay_port", value)
+                }
+            }.apply()
+        }
 
     var relayHost: String
         get() = prefs.getString("relay_host", null)
@@ -129,6 +197,24 @@ class AppPreferences(private val context: Context) {
             .remove("pending_feedback_prompt_body")
             .remove("pending_feedback_prompt_cta")
             .apply()
+    }
+
+    fun clearUserId() {
+        prefs.edit().remove("user_id").apply()
+    }
+
+    fun clearFcmToken() {
+        prefs.edit().remove("fcm_token").apply()
+    }
+
+    fun clearRelayPort() {
+        relayPrefs.edit().remove("relay_port").apply()
+    }
+
+    fun clearAccountIdentityData() {
+        clearUserId()
+        clearFcmToken()
+        clearRelayPort()
     }
 
     fun recordAppLaunch(): Int {
@@ -227,14 +313,48 @@ object AppPreferencesStore {
         }
     }
 
-    fun getSelectedVersionFlow(context: Context): Flow<String> =
+    fun getSelectedVersionFlow(context: Context): Flow<String?> =
         context.appPreferencesDataStore.data.map { prefs ->
-            prefs[AppPreferencesKeys.SELECTED_VERSION] ?: "1.21.6"
+            prefs[AppPreferencesKeys.SELECTED_VERSION]
+        }
+
+    fun getServerVersionFlow(context: Context): Flow<String?> =
+        getSelectedVersionFlow(context)
+
+    fun getStoredSelectedVersionFlow(context: Context): Flow<String?> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.SELECTED_VERSION]
         }
 
     suspend fun setSelectedVersion(context: Context, version: String) {
         context.appPreferencesDataStore.edit { prefs ->
             prefs[AppPreferencesKeys.SELECTED_VERSION] = version
+        }
+    }
+
+    suspend fun setServerVersion(context: Context, version: String) {
+        setSelectedVersion(context, version)
+    }
+
+    fun getSelectedServerTypeFlow(context: Context): Flow<String> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.SELECTED_SERVER_TYPE] ?: "PAPER"
+        }
+
+    suspend fun setSelectedServerType(context: Context, serverType: String) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.SELECTED_SERVER_TYPE] = serverType
+        }
+    }
+
+    fun getSelectedWorldFlow(context: Context): Flow<String> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.SELECTED_WORLD] ?: "default"
+        }
+
+    suspend fun setSelectedWorld(context: Context, worldName: String) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.SELECTED_WORLD] = worldName
         }
     }
 
@@ -341,10 +461,6 @@ object AppPreferencesStore {
         }
     }
 
-    fun isAdsConsentFlow(context: Context): Flow<Boolean> =
-        context.appPreferencesDataStore.data.map { prefs ->
-            prefs[AppPreferencesKeys.ADS_CONSENT] ?: false
-        }
 
     fun isCrashDiagnosticsConsentFlow(context: Context): Flow<Boolean> =
         context.appPreferencesDataStore.data.map { prefs ->
@@ -357,11 +473,6 @@ object AppPreferencesStore {
         }
     }
 
-    suspend fun setAdsConsent(context: Context, granted: Boolean) {
-        context.appPreferencesDataStore.edit { prefs ->
-            prefs[AppPreferencesKeys.ADS_CONSENT] = granted
-        }
-    }
 
     fun getLegalVersionAcceptedFlow(context: Context): Flow<String?> =
         context.appPreferencesDataStore.data.map { prefs ->
@@ -372,5 +483,64 @@ object AppPreferencesStore {
         context.appPreferencesDataStore.edit { prefs ->
             prefs[AppPreferencesKeys.LEGAL_VERSION_ACCEPTED] = version
         }
+    }
+
+    fun showRcVersionsFlow(context: Context): Flow<Boolean> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.SHOW_RC_VERSIONS] ?: false
+        }
+
+    suspend fun setShowRcVersions(context: Context, enabled: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.SHOW_RC_VERSIONS] = enabled
+        }
+    }
+
+    fun isFastStartEnabledFlow(context: Context): Flow<Boolean> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.FAST_START_ENABLED] ?: true
+        }
+
+    suspend fun setFastStartEnabled(context: Context, enabled: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.FAST_START_ENABLED] = enabled
+        }
+    }
+
+    fun isFirstServerStartWarningDismissedFlow(context: Context): Flow<Boolean> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.FIRST_SERVER_START_WARNING_DISMISSED] ?: false
+        }
+
+    suspend fun setFirstServerStartWarningDismissed(context: Context, dismissed: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.FIRST_SERVER_START_WARNING_DISMISSED] = dismissed
+        }
+    }
+
+    fun isFlightModeEnabledFlow(context: Context): Flow<Boolean> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.FLIGHT_MODE_ENABLED] ?: true
+        }
+
+    suspend fun setFlightModeEnabled(context: Context, enabled: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.FLIGHT_MODE_ENABLED] = enabled
+        }
+    }
+
+    fun isFirstBootCompleteFlow(context: Context): Flow<Boolean> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.FIRST_BOOT_COMPLETE] ?: false
+        }
+
+    suspend fun setFirstBootComplete(context: Context, complete: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.FIRST_BOOT_COMPLETE] = complete
+        }
+    }
+
+    suspend fun clearAll(context: Context) {
+        context.appPreferencesDataStore.edit { it.clear() }
     }
 }

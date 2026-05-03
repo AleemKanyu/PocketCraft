@@ -15,9 +15,15 @@ import androidx.compose.ui.unit.dp
 import com.pocketcraft.server.ui.theme.pocketCardBorderColor
 import com.pocketcraft.server.ui.theme.pocketCardShadowColor
 
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.graphics.Color
+
 @Composable
 fun GameCard(
     modifier: Modifier = Modifier,
+    containerColor: Color = MaterialTheme.colorScheme.surface,
+    contentPadding: PaddingValues = PaddingValues(18.dp),
+    elevation: androidx.compose.ui.unit.Dp = 12.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val shape = RoundedCornerShape(24.dp)
@@ -25,7 +31,7 @@ fun GameCard(
 
     Card(
         modifier = modifier.shadow(
-            elevation = 12.dp,
+            elevation = elevation,
             shape = shape,
             ambientColor = shadowColor,
             spotColor = shadowColor,
@@ -33,11 +39,11 @@ fun GameCard(
         ),
         shape = shape,
         border = BorderStroke(1.dp, pocketCardBorderColor()),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier.padding(contentPadding),
             content = content
         )
     }

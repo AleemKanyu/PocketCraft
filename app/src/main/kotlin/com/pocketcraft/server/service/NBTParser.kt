@@ -229,9 +229,11 @@ object NBTParser {
 
     /**
      * Modifies player data file while offline.
+     * Returns true if the update was successful.
      */
-    fun updatePlayerData(datFile: File, updates: Map<String, Any>) {
-        if (!datFile.exists()) return
+    fun updatePlayerData(datFile: File, updates: Map<String, Any>): Boolean {
+        if (!datFile.exists()) return false
+        var success = false
         try {
             val bytes = GZIPInputStream(FileInputStream(datFile)).use { it.readBytes() }
             val mutableBytes = bytes.copyOf()
@@ -240,7 +242,7 @@ object NBTParser {
             updates.forEach { (name, value) ->
                 when (value) {
                     is Float -> {
-                        val idx = indexOfTag(mutableBytes, name, 5) // Type 5 is Float
+                        val idx = indexOfTag(mutableBytes, name, 5)
                         if (idx != -1) {
                             val start = idx + 1 + 2 + name.length
                             if (start + 4 <= mutableBytes.size) {
@@ -254,7 +256,7 @@ object NBTParser {
                         }
                     }
                     is Int -> {
-                        val idx = indexOfTag(mutableBytes, name, 3) // Type 3 is Int
+                        val idx = indexOfTag(mutableBytes, name, 3)
                         if (idx != -1) {
                             val start = idx + 1 + 2 + name.length
                             if (start + 4 <= mutableBytes.size) {
@@ -271,10 +273,12 @@ object NBTParser {
             
             if (modified) {
                 GZIPOutputStream(FileOutputStream(datFile)).use { it.write(mutableBytes) }
+                success = true
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        return success
     }
 
     /**

@@ -81,10 +81,10 @@ class VersionRepository @Inject constructor(
     // ---------- JAR management ----------
 
     fun getServerJarPath(versionId: String): File =
-        ServerFileManager.getServerJarFile(context, versionId)
+        ServerFileManager.getServerJarFile(context, versionId, com.pocketcraft.server.data.model.ServerType.PAPER)
 
     fun isServerJarDownloaded(versionId: String): Boolean =
-        ServerFileManager.isServerJarReady(context, versionId)
+        ServerFileManager.isServerJarReady(context, versionId, com.pocketcraft.server.data.model.ServerType.PAPER)
 
     fun getDownloadedSizeBytes(versionId: String): Long =
         getServerJarPath(versionId).let { if (it.exists()) it.length() else 0L }
@@ -129,7 +129,7 @@ class VersionRepository @Inject constructor(
                     onProgress(scaled)
                 }
                 // Rename to final name
-                val finalFile = ServerFileManager.getServerJarFile(context, version.id)
+                val finalFile = ServerFileManager.getServerJarFile(context, version.id, com.pocketcraft.server.data.model.ServerType.PAPER)
                 if (finalFile.exists()) finalFile.delete()
                 targetFile.renameTo(finalFile)
             } catch (e: Exception) {

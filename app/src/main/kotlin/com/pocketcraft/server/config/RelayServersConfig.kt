@@ -10,7 +10,8 @@ data class RelayServerConfig(
     val region: String,
     val icon: String,
     val description: String,
-    val bestFor: String = ""
+    val bestFor: String = "",
+    val fallbackIp: String? = null
 )
 
 object RelayServers {
@@ -20,7 +21,8 @@ object RelayServers {
         region = "Global",
         icon = "🌐",
         description = "Global CDN with worldwide coverage",
-        bestFor = "Players worldwide, default option"
+        bestFor = "Players worldwide, default option",
+        fallbackIp = "16.171.154.34"
     )
 
     val MUMBAI = RelayServerConfig(

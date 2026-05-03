@@ -1,5 +1,7 @@
 package com.pocketcraft.server.ui.onboarding
 
+import com.pocketcraft.server.BuildConfig
+
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -70,11 +72,18 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -110,8 +119,10 @@ import com.pocketcraft.server.MainActivity
 import com.pocketcraft.server.config.RelayServers
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
+import com.pocketcraft.server.data.model.ServerType
+import com.pocketcraft.server.data.repository.ServerConfigRepository
 import com.pocketcraft.server.R
-import com.pocketcraft.server.service.VersionCatalog
+import com.pocketcraft.server.ui.screens.ServerTypeVersionBottomSheet
 import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
@@ -120,10 +131,9 @@ import com.pocketcraft.server.ui.theme.PocketCraftTheme
 import com.pocketcraft.server.ui.theme.pocketIsDarkTheme
 import com.pocketcraft.server.ui.util.playAppHaptic
 import com.pocketcraft.server.ui.util.ThemePreferenceStore
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import kotlin.math.roundToInt
 
 private val OnboardingGreenLight = Color(0xFF3DDC84)
@@ -230,6 +240,7 @@ private fun onboardingPhoneInnerBrush(): Brush = if (pocketIsDarkTheme()) {
     )
 }
 
+@AndroidEntryPoint
 class OnboardingActivity : ComponentActivity() {
     private val preferences by lazy { AppPreferences(this) }
 
@@ -268,6 +279,7 @@ class OnboardingActivity : ComponentActivity() {
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun OnboardingScreen(onComplete: () -> Unit) {
     val context = LocalContext.current
@@ -277,16 +289,17 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
     val appFeedbackEnabled by AppPreferencesStore.isSoundEnabledFlow(context).collectAsState(initial = true)
     var currentStep by rememberSaveable { mutableIntStateOf(0) }
     val steps = remember { onboardingSteps() }
+    var privacyAccepted by rememberSaveable { mutableStateOf(false) }
     var setupServerName by rememberSaveable { mutableStateOf("PocketCraft Server") }
     var setupWorldDescription by rememberSaveable { mutableStateOf("") }
     var setupSeed by rememberSaveable { mutableStateOf("") }
     var setupVersion by rememberSaveable { mutableStateOf("") }
+    var setupServerType by rememberSaveable { mutableStateOf(ServerType.PAPER) }
+    var setupCustomJarPath by rememberSaveable { mutableStateOf<String?>(null) }
     var setupRelayHost by rememberSaveable {
         mutableStateOf(AppPreferences(context).relayHost)
     }
     var setupShowVersionDialog by remember { mutableStateOf(false) }
-    var setupLoadingVersions by remember { mutableStateOf(false) }
-    var setupVersions by remember { mutableStateOf(listOf("1.21.1")) }
     var setupFormError by rememberSaveable { mutableStateOf("") }
     var versionSelectionError by rememberSaveable { mutableStateOf(false) }
     var versionShakeTick by rememberSaveable { mutableIntStateOf(0) }
@@ -318,14 +331,6 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
         setupSeed = AppPreferencesStore.getWorldSeedFlow(context).first()
         backgroundPermissionGranted = isBackgroundPermissionGranted(context)
         notificationsPermissionGranted = isNotificationPermissionGranted(context)
-    }
-
-    LaunchedEffect(setupShowVersionDialog) {
-        if (!setupShowVersionDialog) return@LaunchedEffect
-        setupLoadingVersions = true
-        val fetched = runCatching { VersionCatalog.fetchStableVersions() }.getOrDefault(emptyList())
-        setupVersions = if (fetched.isNotEmpty()) fetched else listOf(setupVersion.ifBlank { "1.21.1" })
-        setupLoadingVersions = false
     }
 
     fun playHaptic(doublePulse: Boolean = false) {
@@ -391,7 +396,13 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                         label = "onboarding-page"
                     ) { animatedPage ->
                         when (animatedPage) {
-                            0 -> WelcomeScreen()
+                            0 -> WelcomeScreen(
+                                privacyAccepted = privacyAccepted,
+                                onPrivacyChange = { privacyAccepted = it },
+                                onOpenPrivacy = {
+                                    openExternalUrl(context, BuildConfig.PRIVACY_POLICY_URL)
+                                }
+                            )
                             1 -> HowItWorksScreen()
                             2 -> ImportScreen()
                             3 -> FeaturesScreen()
@@ -432,6 +443,7 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                                     setupWorldDescription = it
                                     if (setupFormError.isNotBlank()) setupFormError = ""
                                 },
+                                selectedServerType = setupServerType,
                                 selectedVersion = setupVersion,
                                 onVersionClick = {
                                     setupShowVersionDialog = true
@@ -483,7 +495,7 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                     PrimaryButton(
                         modifier = Modifier.weight(1.25f),
                         text = if (currentStep == steps.lastIndex) "Finish setup" else "Next",
-                        enabled = true,
+                        enabled = if (currentStep == 0) privacyAccepted else true,
                         onClick = {
                             if (missingPermissionStep) {
                                 permissionStepError = "Allow both background and notification permissions to continue."
@@ -505,13 +517,27 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                                     return@PrimaryButton
                                 }
                                 scope.launch {
+                                    val selectedVersion = setupVersion.trim()
                                     AppPreferences(context).relayHost = setupRelayHost
                                     AppPreferencesStore.setRelayHost(context, setupRelayHost)
-                                    AppPreferencesStore.setSelectedVersion(context, setupVersion.trim())
+                                    AppPreferencesStore.setSelectedServerType(context, setupServerType.name)
+                                    AppPreferencesStore.setServerVersion(context, selectedVersion)
                                     AppPreferencesStore.setWorldSeed(context, setupSeed.trim())
                                     AppPreferencesStore.setSeedSetupShown(context, true)
                                     AppPreferencesStore.setInitialWorldSetupShown(context, true)
-                                    AppPreferencesStore.setPendingAutoDownloadVersion(context, setupVersion.trim())
+                                    AppPreferencesStore.setPendingAutoDownloadVersion(context, selectedVersion)
+
+                                    runCatching {
+                                        val repo = ServerConfigRepository(context.applicationContext)
+                                        val current = repo.loadConfig()
+                                        repo.saveConfig(
+                                            current.copy(
+                                                gameVersion = selectedVersion,
+                                                serverType = setupServerType,
+                                                customJarPath = setupCustomJarPath
+                                            )
+                                        )
+                                    }
                                     preferences.openWorldSetupNextLaunch = false
                                     onComplete()
                                 }
@@ -526,123 +552,45 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
         }
 
         if (setupShowVersionDialog) {
-            Dialog(
-                onDismissRequest = { setupShowVersionDialog = false },
-                properties = DialogProperties(usePlatformDefaultWidth = false)
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth(0.92f)
-                        .padding(16.dp),
-                    shape = RoundedCornerShape(28.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 10.dp,
-                    border = BorderStroke(1.dp, onboardingBorderColor())
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .background(PocketColors.PrimaryMuted, RoundedCornerShape(12.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Dns,
-                                    contentDescription = null,
-                                    tint = PocketColors.PrimaryDark,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Column {
-                                Text(
-                                    text = "Choose Minecraft Version",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 18.sp,
-                                    color = onboardingTextPrimary(),
-                                    fontFamily = Monocraft
-                                )
-                                Text(
-                                    text = "Pick the version you want PocketCraft to download right after setup.",
-                                    fontSize = 11.sp,
-                                    color = onboardingTextSecondary(),
-                                    lineHeight = 15.sp
-                                )
-                            }
-                        }
-
-                        if (setupLoadingVersions) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                                CircularProgressIndicator()
-                            }
-                        } else {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(280.dp)
-                                    .verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                setupVersions.distinct().forEach { version ->
-                                    val selected = version == setupVersion
-                                    Surface(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        onClick = {
-                                            setupVersion = version
-                                            setupShowVersionDialog = false
-                                            if (setupFormError.isNotBlank()) setupFormError = ""
-                                        },
-                                        shape = RoundedCornerShape(16.dp),
-                                        color = if (selected) onboardingAccentPurpleMuted() else MaterialTheme.colorScheme.surfaceVariant,
-                                        border = BorderStroke(
-                                            1.dp,
-                                            if (selected) onboardingAccentPurple() else onboardingBorderColor()
-                                        )
-                                    ) {
-                                        Text(
-                                            text = version,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                                            color = if (selected) PocketColors.PrimaryDark else MaterialTheme.colorScheme.onSurface,
-                                            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        if (setupVersion.isNotBlank()) {
-                            Surface(
-                                color = PocketColors.PrimaryMuted.copy(alpha = 0.5f),
-                                shape = RoundedCornerShape(12.dp),
-                                border = BorderStroke(1.dp, onboardingAccentPurple().copy(alpha = 0.45f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = "Selected: Minecraft $setupVersion",
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    color = onboardingAccentPurpleDark(),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp
-                                )
-                            }
-                        }
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            TextButton(onClick = { setupShowVersionDialog = false }) {
-                                Text("Done")
-                            }
-                        }
+            val versionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            ModalBottomSheet(
+                onDismissRequest = {
+                    scope.launch {
+                        versionSheetState.hide()
+                        setupShowVersionDialog = false
                     }
-                }
+                },
+                sheetState = versionSheetState,
+                dragHandle = null,
+                containerColor = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+            ) {
+                ServerTypeVersionBottomSheet(
+                    onDismissRequest = {
+                        scope.launch {
+                            versionSheetState.hide()
+                            setupShowVersionDialog = false
+                        }
+                    },
+                    onConfirm = { type, version, customJar ->
+                        scope.launch {
+                            setupServerType = type
+                            setupCustomJarPath = customJar
+                            setupVersion = if (type.supportsVersionSelect) {
+                                version ?: setupVersion
+                            } else {
+                                setupVersion.ifBlank { "custom" }
+                            }
+                            if (setupFormError.isNotBlank()) setupFormError = ""
+                            versionSelectionError = false
+                            versionSheetState.hide()
+                            setupShowVersionDialog = false
+                        }
+                    },
+                    currentServerType = setupServerType,
+                    currentGameVersion = setupVersion,
+                    currentCustomJarPath = setupCustomJarPath
+                )
             }
         }
     }
@@ -876,7 +824,11 @@ private fun StepDots(currentStep: Int, totalSteps: Int) {
 }
 
 @Composable
-private fun WelcomeScreen() {
+private fun WelcomeScreen(
+    privacyAccepted: Boolean,
+    onPrivacyChange: (Boolean) -> Unit,
+    onOpenPrivacy: () -> Unit
+) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -922,6 +874,35 @@ private fun WelcomeScreen() {
         FeaturePillRow(
             items = listOf("Free to host", "No PC", "Invite friends")
         )
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp)
+                .clickable { onPrivacyChange(!privacyAccepted) }
+        ) {
+            Checkbox(
+                checked = privacyAccepted,
+                onCheckedChange = onPrivacyChange,
+                colors = CheckboxDefaults.colors(
+                    checkedColor = PocketColors.Primary,
+                    uncheckedColor = onboardingBorderColor()
+                )
+            )
+            Text(
+                text = buildAnnotatedString {
+                    append("I agree to the ")
+                    withStyle(style = SpanStyle(color = PocketColors.Primary, fontWeight = FontWeight.Bold)) {
+                        append("Privacy Policy")
+                    }
+                },
+                fontSize = 11.sp,
+                color = onboardingTextSecondary(),
+                modifier = Modifier.clickable { onOpenPrivacy() }
+            )
+        }
 
         ScreenCard(
             accent = onboardingAccentGreen(),
@@ -1292,6 +1273,7 @@ private fun OnboardingSetupScreen(
     onServerNameChange: (String) -> Unit,
     worldDescription: String,
     onWorldDescriptionChange: (String) -> Unit,
+    selectedServerType: ServerType,
     selectedVersion: String,
     onVersionClick: () -> Unit,
     worldSeed: String,
@@ -1361,7 +1343,11 @@ private fun OnboardingSetupScreen(
         ) {
             val hasSelectedVersion = selectedVersion.isNotBlank()
             OutlinedTextField(
-                value = if (hasSelectedVersion) selectedVersion else "Select game version",
+                value = if (selectedServerType.supportsVersionSelect) {
+                    if (hasSelectedVersion) "${selectedServerType.displayName} $selectedVersion" else "Select server type + version"
+                } else {
+                    "${selectedServerType.displayName} (Custom JAR)"
+                },
                 onValueChange = {},
                 singleLine = true,
                 readOnly = true,
@@ -1913,4 +1899,15 @@ private fun SkipButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
             Text(text = "Skip", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = onboardingTextMuted())
         }
     }
+}
+
+private fun openExternalUrl(context: android.content.Context, url: String): Boolean {
+    if (url.isBlank()) return false
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    return runCatching {
+        context.startActivity(intent)
+        true
+    }.getOrDefault(false)
 }

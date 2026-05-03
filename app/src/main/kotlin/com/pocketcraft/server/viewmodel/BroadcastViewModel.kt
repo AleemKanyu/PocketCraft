@@ -29,7 +29,7 @@ class BroadcastViewModel @Inject constructor(
     }.getOrDefault(0)
 
     val broadcasts: StateFlow<List<BroadcastMessage>> =
-        BroadcastManager.getBroadcastsFlow(versionCode)
+        BroadcastManager.getBroadcastsFlow(context, versionCode)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val dismissed = MutableStateFlow<Set<String>>(emptySet())

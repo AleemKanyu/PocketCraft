@@ -3,6 +3,8 @@ package com.pocketcraft.server.ui.screens
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -56,7 +58,6 @@ fun BackupsScreen(
     stateHolder: ServerStateHolder,
     onMessage: (String) -> Unit
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var restoreTarget by remember { mutableStateOf<BackupEntry?>(null) }
     var deleteTarget by remember { mutableStateOf<BackupEntry?>(null) }
@@ -75,6 +76,15 @@ fun BackupsScreen(
         animationSpec = tween(durationMillis = 500),
         label = "restore_progress"
     )
+    val backupImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val message = stateHolder.importBackup(uri)
+            onMessage(message)
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -96,11 +106,6 @@ fun BackupsScreen(
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
-    val animatedDownloadProgress by animateFloatAsState(
-        targetValue = (stateHolder.downloadBackupProgressPercent / 100f).coerceIn(0f, 1f),
-        animationSpec = tween(durationMillis = 500),
-        label = "download_backup_progress"
-    )
                         LinearProgressIndicator(
                             progress = { animatedBackupProgress },
                             modifier = Modifier
@@ -118,7 +123,7 @@ fun BackupsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "Backups are saved to Downloads/PocketCraft Server Backups",
+                            text = "Backups are saved to Downloads/PocketCraftWorldBackups/<world>",
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
@@ -206,6 +211,16 @@ fun BackupsScreen(
                     }
                 },
                 enabled = !stateHolder.isBackingUp && !stateHolder.isRestoringBackup,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        item {
+            DuoButton(
+                text = "UPLOAD BACKUP ZIP",
+                icon = Icons.Filled.CloudUpload,
+                onClick = { backupImportLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed")) },
+                enabled = !stateHolder.isBackingUp && !stateHolder.isRestoringBackup && !stateHolder.isDownloadingBackup,
                 modifier = Modifier.fillMaxWidth()
             )
         }

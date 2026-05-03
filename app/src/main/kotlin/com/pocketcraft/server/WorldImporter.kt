@@ -3,6 +3,7 @@ package com.pocketcraft.server
 import android.content.Context
 import android.net.Uri
 import com.pocketcraft.server.service.PlayerDataManager
+import com.pocketcraft.server.service.ServerFileManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -13,7 +14,8 @@ object WorldImporter {
     suspend fun importWorld(
         context: Context,
         zipUri: Uri,
-        serverVersion: String,
+        serverType: com.pocketcraft.server.data.model.ServerType,
+        serverVersionId: String,
         folderName: String = "world",
         onProgress: (Float) -> Unit = {}
     ): Result<Unit> =
@@ -27,7 +29,7 @@ object WorldImporter {
                     }
                 } ?: throw Exception("Could not open source file")
 
-                val serverDir = File(context.filesDir, "servers/$serverVersion")
+                val serverDir = ServerFileManager.getServerDir(context, serverVersionId)
                 val worldDir = File(serverDir, folderName)
 
                 // Step 2: Delete existing world
@@ -45,7 +47,24 @@ object WorldImporter {
                     val entries = zip.entries()
                     while (entries.hasMoreElements()) {
                         val entry = entries.nextElement()
-                        val entryFile = File(worldDir, entry.name)
+                        val rawName = entry.name
+                        val normalizedName = rawName
+                            .replace('\\', '/')
+                            .removePrefix("/")
+                            .removePrefix("./")
+                            .trim()
+                        if (normalizedName.isBlank()) {
+                            processed++
+                            onProgress(processed / totalEntries)
+                            continue
+                        }
+                        if (normalizedName.startsWith("__MACOSX/") || normalizedName.endsWith(".DS_Store")) {
+                            processed++
+                            onProgress(processed / totalEntries)
+                            continue
+                        }
+
+                        val entryFile = File(worldDir, normalizedName)
 
                         // Prevent zip slip attack
                         if (!entryFile.canonicalPath.startsWith(worldDir.canonicalPath)) {
@@ -72,7 +91,7 @@ object WorldImporter {
 
                 // Step 4: Fix nested structure and migrate server files
                 android.util.Log.d("WorldImporter", "Starting fixWorldStructureAndMigrate for $folderName")
-                fixWorldStructureAndMigrate(serverDir, worldDir, folderName)
+                fixWorldStructureAndMigrate(serverDir, worldDir, serverType, folderName)
 
                 // Step 5: Fix player data UUIDs (Online -> Offline conversion)
                 android.util.Log.d("WorldImporter", "Starting fixOfflineUuids for $folderName")
@@ -87,12 +106,109 @@ object WorldImporter {
             }
         }
 
-    private fun fixWorldStructureAndMigrate(serverDir: File, root: File, folderName: String) {
-        android.util.Log.d("WorldImporter", "Scanning root: ${root.absolutePath}")
+    fun normalizeRestoredServerBackup(serverDir: File, serverType: com.pocketcraft.server.data.model.ServerType) {
+        val targetRoot = File(serverDir, "world")
+        val propsFile = File(serverDir, "server.properties")
+        val importedBaseWorldName = runCatching {
+            java.util.Properties().apply {
+                if (propsFile.exists()) {
+                    propsFile.inputStream().use { load(it) }
+                }
+            }.getProperty("level-name")
+        }.getOrNull()?.trim().orEmpty().ifBlank { null }
+
+        val targetWorld = "world"
+        moveRootLevelWorldContentIntoTarget(serverDir, targetRoot)
+
+        serverDir.listFiles()
+            .orEmpty()
+            .filter { it.isDirectory }
+            .forEach { file ->
+                val mappedName = mapImportedDimensionName(
+                    sourceName = file.name,
+                    importedBaseWorldName = importedBaseWorldName ?: "world",
+                    targetBaseWorldName = targetWorld,
+                    serverType = serverType
+                )
+
+                when {
+                    mappedName == targetWorld && file.absolutePath != targetRoot.absolutePath -> {
+                        android.util.Log.i("WorldImporter", "Remapping restored world ${file.name} -> ${targetRoot.name}")
+                        mergeDirectoryContents(file, targetRoot)
+                        if (file.exists() && file.absolutePath != targetRoot.absolutePath) {
+                            file.deleteRecursively()
+                        }
+                    }
+                    mappedName != file.name -> {
+                        val isDim = mappedName == "DIM-1" || mappedName == "DIM1"
+                        val isVanillaStyle = serverType == com.pocketcraft.server.data.model.ServerType.FABRIC ||
+                                serverType == com.pocketcraft.server.data.model.ServerType.MODPACK
+
+                        val target = if (isDim && isVanillaStyle) {
+                            File(targetRoot, mappedName)
+                        } else {
+                            File(serverDir, mappedName)
+                        }
+
+                        android.util.Log.i("WorldImporter", "Remapping restored dimension ${file.name} -> ${target.absolutePath}")
+                        if (target.exists()) target.deleteRecursively()
+                        target.parentFile?.mkdirs()
+                        if (!file.renameTo(target)) {
+                            file.copyRecursively(target, overwrite = true)
+                            file.deleteRecursively()
+                        }
+                    }
+                }
+            }
+
+        if (!File(targetRoot, "level.dat").exists()) {
+            val nestedLevelDat = serverDir.walkTopDown()
+                .maxDepth(6)
+                .firstOrNull { it.isFile && it.name == "level.dat" && !it.absolutePath.startsWith(targetRoot.absolutePath) }
+            val nestedRoot = nestedLevelDat?.parentFile
+            if (nestedRoot != null && nestedRoot.absolutePath != targetRoot.absolutePath) {
+                android.util.Log.i("WorldImporter", "Normalizing nested restored world ${nestedRoot.absolutePath} -> ${targetRoot.absolutePath}")
+                mergeDirectoryContents(nestedRoot, targetRoot)
+
+                val parent = nestedRoot.parentFile
+                if (parent != null && parent.absolutePath != serverDir.absolutePath && parent.absolutePath != targetRoot.absolutePath) {
+                    parent.listFiles()
+                        .orEmpty()
+                        .filter { it.isDirectory && it != nestedRoot }
+                        .forEach { sibling ->
+                            if (File(sibling, "level.dat").exists() || File(sibling, "region").isDirectory) {
+                                val mappedName = mapImportedDimensionName(
+                                    sourceName = sibling.name,
+                                    importedBaseWorldName = importedBaseWorldName ?: nestedRoot.name,
+                                    targetBaseWorldName = targetWorld,
+                                    serverType = serverType
+                                )
+                                val target = File(serverDir, mappedName)
+                                if (target.exists()) target.deleteRecursively()
+                                if (!sibling.renameTo(target)) {
+                                    sibling.copyRecursively(target, overwrite = true)
+                                    sibling.deleteRecursively()
+                                }
+                            }
+                        }
+                }
+
+                if (nestedRoot.exists() && nestedRoot.absolutePath != targetRoot.absolutePath) {
+                    nestedRoot.deleteRecursively()
+                }
+            }
+        }
+
+        fixWorldStructureAndMigrate(serverDir, targetRoot, serverType, targetWorld)
+        ensureRestoredServerProperties(serverDir, targetWorld)
+    }
+
+    private fun fixWorldStructureAndMigrate(serverDir: File, root: File, serverType: com.pocketcraft.server.data.model.ServerType, folderName: String) {
+        android.util.Log.i("WorldImporter", "Fixing world structure in ${root.absolutePath} for $folderName")
         
         // 1. Detect if this is a full server backup (contains server.properties)
-        // We look for server.properties anywhere in the extracted files
         val internalProps = root.walkTopDown().maxDepth(4).find { it.name == "server.properties" }
+        var importedBaseWorldName: String? = null
         if (internalProps != null) {
             val baseDir = internalProps.parentFile ?: root
             android.util.Log.i("WorldImporter", "Detected full server backup at ${baseDir.absolutePath}. Migrating everything...")
@@ -101,28 +217,30 @@ object WorldImporter {
                 runCatching { internalProps.inputStream().use { load(it) } }
             }
             val internalWorldName = props.getProperty("level-name", "world")
+            importedBaseWorldName = internalWorldName
             
-            // Move ALL files and directories from baseDir up to serverDir
-            // EXCEPT for the world folder which we handle specially
             baseDir.listFiles()?.forEach { file ->
-                val target = if (file.name == internalWorldName || file.name == "world" || file.name == folderName) {
-                    root // This is the main world, move its CONTENTS into root
+                val mappedName = mapImportedDimensionName(file.name, internalWorldName, folderName, serverType)
+                val isVanillaStyle = serverType == com.pocketcraft.server.data.model.ServerType.FABRIC ||
+                        serverType == com.pocketcraft.server.data.model.ServerType.MODPACK
+
+                val target = if (mappedName == folderName) {
+                    root 
+                } else if (isVanillaStyle && mappedName.startsWith("DIM")) {
+                    File(root, mappedName)
                 } else {
-                    File(serverDir, file.name)
+                    File(serverDir, mappedName)
                 }
                 
-                if (target.absolutePath == root.absolutePath && file.isDirectory) {
-                    // Flatten world contents into root
+                if (target.absolutePath == root.absolutePath && file.isDirectory && file.absolutePath != root.absolutePath) {
                     android.util.Log.i("WorldImporter", "Merging world folder ${file.name} into ${root.name}")
                     file.listFiles()?.forEach { sub ->
                         val subTarget = File(root, sub.name)
                         if (sub.isDirectory) {
                             if (subTarget.exists() && subTarget.isDirectory) {
-                                // Merge sub-directories (e.g. stats, playerdata)
                                 sub.listFiles()?.forEach { grandChild ->
                                     val finalTarget = File(subTarget, grandChild.name)
                                     if (finalTarget.exists()) {
-                                        // If both exist, keep the larger one (more stats/data)
                                         if (grandChild.length() > finalTarget.length()) {
                                             finalTarget.delete()
                                             grandChild.renameTo(finalTarget)
@@ -135,12 +253,10 @@ object WorldImporter {
                                 }
                                 sub.deleteRecursively()
                             } else {
-                                // Target doesn't exist or is a file, just move/replace
                                 if (subTarget.exists()) subTarget.deleteRecursively()
                                 sub.renameTo(subTarget)
                             }
                         } else {
-                            // It's a file
                             if (subTarget.exists()) {
                                 if (sub.length() > subTarget.length()) {
                                     subTarget.delete()
@@ -155,24 +271,28 @@ object WorldImporter {
                     }
                     file.deleteRecursively()
                 } else if (target.absolutePath != file.absolutePath) {
-                    // Move other files/dirs up to server root
                     android.util.Log.d("WorldImporter", "Migrating server file/dir: ${file.name} -> ${target.absolutePath}")
+                    val pocketcraftProps = mutableListOf<String>()
+                    if (target.name == "server.properties" && target.exists()) {
+                        runCatching {
+                            target.readLines().forEach { 
+                                if (it.startsWith("pocketcraft-")) pocketcraftProps.add(it)
+                            }
+                        }
+                    }
                     if (target.exists()) target.deleteRecursively()
                     if (!file.renameTo(target)) {
                         file.copyTo(target, overwrite = true)
                         file.deleteRecursively()
                     }
-                    
-                    // Special case: if we just migrated server.properties, ensure it points to our new world name
                     if (file.name == "server.properties") {
                         runCatching {
-                            val lines = target.readLines().toMutableList()
+                            var lines = target.readLines().toMutableList()
+                            lines.removeAll { it.startsWith("pocketcraft-") }
                             val levelIdx = lines.indexOfFirst { it.startsWith("level-name=") }
-                            if (levelIdx != -1) {
-                                lines[levelIdx] = "level-name=$folderName"
-                            } else {
-                                lines.add("level-name=$folderName")
-                            }
+                            if (levelIdx != -1) lines[levelIdx] = "level-name=$folderName"
+                            else lines.add("level-name=$folderName")
+                            lines.addAll(pocketcraftProps)
                             target.writeText(lines.joinToString("\n"))
                         }
                     }
@@ -180,15 +300,12 @@ object WorldImporter {
             }
         }
 
-        // 2. Fallback: Find level.dat to flatten nested world if not already handled
-        // Search again because Step 1 might have moved things around
         val levelDat = root.walkTopDown().maxDepth(6).find { it.name == "level.dat" }
         android.util.Log.d("WorldImporter", "Post-migration level.dat search found: ${levelDat?.absolutePath}")
         
         if (levelDat == null) return
         var realRoot = levelDat.parentFile ?: return
 
-        // 2. Ensure server.properties in root matches our new world name if not already updated
         val propsFile = File(serverDir, "server.properties")
         if (propsFile.exists()) {
             val lines = propsFile.readLines().toMutableList()
@@ -201,45 +318,248 @@ object WorldImporter {
             }
         }
 
-        // 3. Flatten the world folder if it's nested (e.g. world/world/level.dat)
         if (realRoot.absolutePath != root.absolutePath) {
             android.util.Log.i("WorldImporter", "Detected nested world root at ${realRoot.absolutePath}. Flattening to ${root.absolutePath}")
-            
-            // Move ALL children of the real root to the designated folder root
             realRoot.listFiles()?.forEach { file ->
                 val target = File(root, file.name)
                 if (target.exists()) target.deleteRecursively()
                 if (!file.renameTo(target)) {
-                    file.copyTo(target, overwrite = true)
+                    file.copyRecursively(target, overwrite = true)
                     file.deleteRecursively()
                 }
             }
             
-            // 3. Check for dimension siblings (Aternos often has world, world_nether, world_the_end together)
-            // If we found the world root nested, its siblings might be the dimensions
             val parent = realRoot.parentFile
             if (parent != null && parent.absolutePath != serverDir.absolutePath && parent.absolutePath != root.absolutePath) {
                 parent.listFiles()?.forEach { sibling ->
                     if (sibling.isDirectory && sibling != realRoot) {
                         if (File(sibling, "level.dat").exists() || File(sibling, "region").isDirectory) {
-                            val target = File(serverDir, sibling.name)
-                            if (!target.exists()) {
-                                android.util.Log.i("WorldImporter", "Migrating dimension sibling: ${sibling.name}")
-                                sibling.renameTo(target)
+                            val mappedName = mapImportedDimensionName(
+                                sourceName = sibling.name,
+                                importedBaseWorldName = importedBaseWorldName ?: root.name,
+                                targetBaseWorldName = folderName,
+                                serverType = serverType
+                            )
+                            val isVanillaStyle = serverType == com.pocketcraft.server.data.model.ServerType.FABRIC ||
+                                    serverType == com.pocketcraft.server.data.model.ServerType.MODPACK
+
+                            val target = if (isVanillaStyle && mappedName.startsWith("DIM")) {
+                                File(root, mappedName)
+                            } else {
+                                File(serverDir, mappedName)
+                            }
+
+                            android.util.Log.i("WorldImporter", "Relocating dimension sibling: ${sibling.name} -> ${target.name}")
+                            if (target.exists()) target.deleteRecursively()
+                            if (!sibling.renameTo(target)) {
+                                sibling.copyRecursively(target, overwrite = true)
+                                sibling.deleteRecursively()
                             }
                         }
                     }
                 }
             }
 
-            // Cleanup the now-empty nested folders
             realRoot.delete()
-            // Try to delete intermediate empty folders up to the root
             var current = realRoot.parentFile
             while (current != null && current.absolutePath != root.absolutePath && current.listFiles()?.isEmpty() == true) {
                 val toDelete = current
                 current = current.parentFile
                 toDelete.delete()
+            }
+        }
+
+        migrateDimensionsToTargetStructure(serverDir, root, serverType, folderName)
+    }
+
+    private fun migrateDimensionsToTargetStructure(
+        serverDir: File,
+        worldDir: File,
+        serverType: com.pocketcraft.server.data.model.ServerType,
+        targetBaseWorldName: String
+    ) {
+        val isVanillaStyle = serverType == com.pocketcraft.server.data.model.ServerType.FABRIC ||
+                serverType == com.pocketcraft.server.data.model.ServerType.MODPACK
+
+        val dimensionCandidates = worldDir.listFiles()?.filter { it.isDirectory } ?: return
+        dimensionCandidates.forEach { candidate ->
+            val mappedName = mapImportedDimensionName(
+                sourceName = candidate.name,
+                importedBaseWorldName = targetBaseWorldName,
+                targetBaseWorldName = targetBaseWorldName,
+                serverType = serverType
+            )
+
+            if (mappedName != candidate.name) {
+                val target = if (isVanillaStyle && mappedName.startsWith("DIM")) {
+                    File(worldDir, mappedName)
+                } else {
+                    File(serverDir, mappedName)
+                }
+
+                if (target.absolutePath != candidate.absolutePath) {
+                    android.util.Log.i("WorldImporter", "Migrating dimension child: ${candidate.name} -> ${target.name}")
+                    if (target.exists()) target.deleteRecursively()
+                    if (!candidate.renameTo(target)) {
+                        candidate.copyRecursively(target, overwrite = true)
+                        candidate.deleteRecursively()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun mapImportedDimensionName(
+        sourceName: String,
+        importedBaseWorldName: String,
+        targetBaseWorldName: String,
+        serverType: com.pocketcraft.server.data.model.ServerType
+    ): String {
+        val cleanSource = sourceName.trim()
+        val lowerSource = cleanSource.lowercase()
+        
+        val isVanillaStyle = serverType == com.pocketcraft.server.data.model.ServerType.FABRIC ||
+                serverType == com.pocketcraft.server.data.model.ServerType.MODPACK
+
+        // Match Overworld
+        if (cleanSource.equals(importedBaseWorldName, ignoreCase = true) || lowerSource == "world") {
+            return targetBaseWorldName
+        }
+        
+        // Match Nether
+        if (
+            lowerSource == "dim-1" ||
+            lowerSource == "nether" ||
+            lowerSource == "world_nether" ||
+            lowerSource == "${importedBaseWorldName.lowercase()}_nether"
+        ) {
+            return if (isVanillaStyle) "DIM-1" else "${targetBaseWorldName}_nether"
+        }
+        
+        // Match The End
+        if (
+            lowerSource == "dim1" ||
+            lowerSource == "the_end" ||
+            lowerSource == "end" ||
+            lowerSource == "world_the_end" ||
+            lowerSource == "${importedBaseWorldName.lowercase()}_the_end"
+        ) {
+            return if (isVanillaStyle) "DIM1" else "${targetBaseWorldName}_the_end"
+        }
+        
+        return cleanSource
+    }
+
+    private fun mergeDirectoryContents(source: File, target: File) {
+        if (!target.exists()) target.mkdirs()
+        source.listFiles()?.forEach { child ->
+            val destination = File(target, child.name)
+            when {
+                child.isDirectory && destination.isDirectory -> {
+                    mergeDirectoryContents(child, destination)
+                    child.deleteRecursively()
+                }
+                child.isDirectory -> {
+                    if (destination.exists()) destination.deleteRecursively()
+                    if (!child.renameTo(destination)) {
+                        child.copyRecursively(destination, overwrite = true)
+                        child.deleteRecursively()
+                    }
+                }
+                else -> {
+                    if (destination.exists()) destination.delete()
+                    if (!child.renameTo(destination)) {
+                        child.copyTo(destination, overwrite = true)
+                        child.delete()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun ensureRestoredServerProperties(serverDir: File, targetWorldName: String) {
+        val propsFile = File(serverDir, "server.properties")
+        runCatching {
+            val lines = if (propsFile.exists()) {
+                propsFile.readLines().toMutableList()
+            } else {
+                mutableListOf()
+            }
+            val index = lines.indexOfFirst { it.startsWith("level-name=") }
+            if (index >= 0) {
+                lines[index] = "level-name=$targetWorldName"
+            } else {
+                lines.add("level-name=$targetWorldName")
+            }
+            propsFile.writeText(lines.joinToString("\n"))
+        }
+    }
+
+    private fun moveRootLevelWorldContentIntoTarget(serverDir: File, targetRoot: File) {
+        val worldFileNames = setOf(
+            "advancements",
+            "data",
+            "datapacks",
+            "DIM-1",
+            "DIM1",
+            "entities",
+            "icon.png",
+            "level.dat",
+            "level.dat_old",
+            "playerdata",
+            "poi",
+            "region",
+            "session.lock",
+            "stats",
+            "uid.dat"
+        )
+        val reservedRootNames = setOf(
+            targetRoot.name,
+            "${targetRoot.name}_nether",
+            "${targetRoot.name}_the_end",
+            "plugins",
+            "mods",
+            "resourcepacks",
+            "config",
+            "libraries",
+            "logs",
+            "cache",
+            "crash-reports",
+            "world_plugin_profiles",
+            "server_photos"
+        )
+
+        val rootItems = serverDir.listFiles().orEmpty()
+        val hasRootWorldPayload = rootItems.any { item ->
+            item.name in worldFileNames && item.name !in reservedRootNames
+        }
+        if (!hasRootWorldPayload) return
+
+        android.util.Log.i("WorldImporter", "Moving root-level restored world content into ${targetRoot.name}")
+        rootItems.forEach { item ->
+            if (item.name !in worldFileNames) return@forEach
+            if (item.name in reservedRootNames) return@forEach
+            if (item.absolutePath == targetRoot.absolutePath) return@forEach
+            val destination = File(targetRoot, item.name)
+            when {
+                item.isDirectory && destination.isDirectory -> {
+                    mergeDirectoryContents(item, destination)
+                    item.deleteRecursively()
+                }
+                item.isDirectory -> {
+                    if (destination.exists()) destination.deleteRecursively()
+                    if (!item.renameTo(destination)) {
+                        item.copyRecursively(destination, overwrite = true)
+                        item.deleteRecursively()
+                    }
+                }
+                else -> {
+                    if (destination.exists()) destination.delete()
+                    if (!item.renameTo(destination)) {
+                        item.copyTo(destination, overwrite = true)
+                        item.delete()
+                    }
+                }
             }
         }
     }

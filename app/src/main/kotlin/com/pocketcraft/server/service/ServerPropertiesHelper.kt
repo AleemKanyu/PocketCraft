@@ -7,8 +7,10 @@ object ServerPropertiesHelper {
 
     const val RELAY_READY_COMPRESSION_THRESHOLD = 256
     const val DEFAULT_VIEW_DISTANCE = 5
-    const val DEFAULT_SIMULATION_DISTANCE = 4
+    const val DEFAULT_SIMULATION_DISTANCE = 3
     const val RELAY_READY_ENTITY_BROADCAST_PERCENT = 75
+    const val POCKETCRAFT_JOIN_MESSAGE_TEXT = "Hosted on PocketCraft! Enjoy and join our Discord using the link already defined in the code."
+    const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/NGPzXFYp"
 
     fun getServerPropertiesFile(serverDir: File): File {
         return File(serverDir, "server.properties")
@@ -17,6 +19,7 @@ object ServerPropertiesHelper {
     fun readProperties(serverDir: File): Properties {
         val props = Properties()
         val file = getServerPropertiesFile(serverDir)
+        var needsPersist = false
         if (file.exists()) {
             file.inputStream().use { props.load(it) }
         } else {
@@ -41,9 +44,29 @@ object ServerPropertiesHelper {
             // Relay traffic needs compression to keep chunk/login bursts stable.
             props["network-compression-threshold"] = RELAY_READY_COMPRESSION_THRESHOLD.toString()
             props["sync-chunk-writes"] = "false"
+            props["max-tick-time"] = "60000"
             props["enable-status-request"] = "true"
             props["query.port"] = "25565"
             props["prevent-proxy-connections"] = "false"
+            props["pocketcraft-join-message-enabled"] = "true"
+            props["pocketcraft-join-message-text"] = POCKETCRAFT_JOIN_MESSAGE_TEXT
+            props["pocketcraft-join-message-url"] = POCKETCRAFT_JOIN_MESSAGE_URL
+            needsPersist = true
+        }
+        if (props.getProperty("pocketcraft-join-message-enabled") != "true") {
+            props["pocketcraft-join-message-enabled"] = "true"
+            needsPersist = true
+        }
+        if (props.getProperty("pocketcraft-join-message-text") != POCKETCRAFT_JOIN_MESSAGE_TEXT) {
+            props["pocketcraft-join-message-text"] = POCKETCRAFT_JOIN_MESSAGE_TEXT
+            needsPersist = true
+        }
+        if (props.getProperty("pocketcraft-join-message-url") != POCKETCRAFT_JOIN_MESSAGE_URL) {
+            props["pocketcraft-join-message-url"] = POCKETCRAFT_JOIN_MESSAGE_URL
+            needsPersist = true
+        }
+        if (needsPersist) {
+            saveProperties(serverDir, props)
         }
         return props
     }

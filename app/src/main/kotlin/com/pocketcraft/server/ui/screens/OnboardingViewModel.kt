@@ -2,13 +2,15 @@ package com.pocketcraft.server.ui.screens
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import com.pocketcraft.server.PocketCraftApp
 import com.pocketcraft.server.data.preferences.AppPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -24,17 +26,22 @@ class OnboardingViewModel @Inject constructor(
     }
     
     private fun checkOnboardingStatus() {
-        viewModelScope.launch {
+        PocketCraftApp.applicationScope.launch {
             val prefs = AppPreferences(context)
-            _onboardingCompleted.value = prefs.onboardingCompleted
+            val completed = prefs.onboardingCompleted
+            withContext(Dispatchers.Main.immediate) {
+                _onboardingCompleted.value = completed
+            }
         }
     }
     
     fun completeOnboarding() {
-        viewModelScope.launch {
+        PocketCraftApp.applicationScope.launch {
             val prefs = AppPreferences(context)
             prefs.onboardingCompleted = true
-            _onboardingCompleted.value = true
+            withContext(Dispatchers.Main.immediate) {
+                _onboardingCompleted.value = true
+            }
         }
     }
 }

@@ -9,4 +9,6 @@ data class PlayerInfo(
     val pingMs: Int = 0,
     val ip: String = "",
     val isOp: Boolean = false
-)
+) {
+    val isBedrock: Boolean get() = name.startsWith(".")
+}

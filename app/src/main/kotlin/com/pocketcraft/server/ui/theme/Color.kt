@@ -27,7 +27,9 @@ object PocketColors {
     val BorderDark = Color(0xFF53917B)
 
     val Online = Color(0xFF35A854)
+    val Success = Online
     val Offline = Color(0xFFE85D75)
+    val Warning = Color(0xFFF59E0B)
     val DownloadBlue = Color(0xFF2F80ED)
     val Starting = Color(0xFFFFC800)
     val Danger = Color(0xFFFF6B6B)

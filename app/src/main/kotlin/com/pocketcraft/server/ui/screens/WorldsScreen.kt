@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -82,7 +83,8 @@ import kotlinx.coroutines.launch
 fun WorldsScreen(
     stateHolder: ServerStateHolder,
     onOpenWorldSetup: (Boolean) -> Unit = {},
-    onChangeVersion: () -> Unit = {}
+    onChangeVersion: () -> Unit = {},
+    onMessage: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -92,11 +94,15 @@ fun WorldsScreen(
         label = "worlds_backup_progress"
     )
     var showResetDialog by remember { mutableStateOf(false) }
+    var deletePlayerData by remember { mutableStateOf(false) }
+    var deleteDatapacks by remember { mutableStateOf(false) }
+    var deleteLogs by remember { mutableStateOf(false) }
     var showRestoreDialog by remember { mutableStateOf<BackupEntry?>(null) }
     var showDeleteDialog by remember { mutableStateOf<BackupEntry?>(null) }
     var showDeleteWorldDialog by remember { mutableStateOf<WorldEntry?>(null) }
     var showImportGuide by remember { mutableStateOf(false) }
     var isImportingWorld by remember { mutableStateOf(false) }
+    var importProgress by remember { mutableStateOf(0f) }
     var importDimension by remember { mutableStateOf("overworld") }
     val worldPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -104,13 +110,17 @@ fun WorldsScreen(
         uri?.let {
             scope.launch {
                 val activeWorld = stateHolder.config.worldName.ifBlank { "world" }
-                val importFolder = when (importDimension) {
-                    "nether" -> "${activeWorld}_nether"
-                    "end" -> "${activeWorld}_the_end"
-                    else -> activeWorld
-                }
+                val importFolder = activeWorld
                 isImportingWorld = true
-                val result = WorldImporter.importWorld(context, it, stateHolder.versionLabel, importFolder)
+                importProgress = 0f
+                val result = WorldImporter.importWorld(
+                    context = context,
+                    zipUri = it,
+                    serverType = stateHolder.config.serverType,
+                    serverVersionId = stateHolder.versionLabel,
+                    folderName = importFolder,
+                    onProgress = { p -> importProgress = p }
+                )
                 isImportingWorld = false
                 if (result.isSuccess) {
                     Toast.makeText(context, "$importFolder imported successfully!", Toast.LENGTH_SHORT).show()
@@ -196,10 +206,18 @@ fun WorldsScreen(
                         )
                     }
                     OutlinedButton(
-                        onClick = { showResetDialog = true },
+                        onClick = {
+                            if (stateHolder.status != ServerStatus.OFFLINE) {
+                                onMessage("Stop the server before resetting the world.")
+                            } else {
+                                deletePlayerData = false
+                                deleteDatapacks = false
+                                deleteLogs = false
+                                showResetDialog = true
+                            }
+                        },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
-                        enabled = stateHolder.status == ServerStatus.OFFLINE,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = PocketColors.Offline)
                     ) {
                         Text("RESET", fontWeight = FontWeight.Bold)
@@ -312,6 +330,7 @@ fun WorldsScreen(
                     subtitle = "Main world ($activeWorld)",
                     icon = "🌍",
                     isImporting = isImportingWorld && importDimension == "overworld",
+                    importProgress = importProgress,
                     serverOffline = stateHolder.status == ServerStatus.OFFLINE,
                     onUpload = {
                         importDimension = "overworld"
@@ -323,6 +342,7 @@ fun WorldsScreen(
                     subtitle = "Nether dimension (${activeWorld}_nether)",
                     icon = "🔥",
                     isImporting = isImportingWorld && importDimension == "nether",
+                    importProgress = importProgress,
                     serverOffline = stateHolder.status == ServerStatus.OFFLINE,
                     onUpload = {
                         importDimension = "nether"
@@ -334,6 +354,7 @@ fun WorldsScreen(
                     subtitle = "End dimension (${activeWorld}_the_end)",
                     icon = "🌑",
                     isImporting = isImportingWorld && importDimension == "end",
+                    importProgress = importProgress,
                     serverOffline = stateHolder.status == ServerStatus.OFFLINE,
                     onUpload = {
                         importDimension = "end"
@@ -412,21 +433,66 @@ fun WorldsScreen(
             containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Reset World?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
-                Text("This will permanently delete the current world folder. Make sure you have a backup if you want to keep your progress.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("⚠️ Reset World", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text(
+                    "Choose what to delete. Plugins, mods, config files, and server.properties will be preserved.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ResetDeleteRow(
+                        label = "World folders (world, world_nether, world_the_end)",
+                        checked = true,
+                        enabled = false,
+                        onCheckedChange = {}
+                    )
+                    ResetDeleteRow(
+                        label = "Player data (playerdata, stats, advancements)",
+                        checked = deletePlayerData,
+                        enabled = true,
+                        onCheckedChange = { deletePlayerData = it }
+                    )
+                    ResetDeleteRow(
+                        label = "Datapacks",
+                        checked = deleteDatapacks,
+                        enabled = true,
+                        onCheckedChange = { deleteDatapacks = it }
+                    )
+                    ResetDeleteRow(
+                        label = "Logs",
+                        checked = deleteLogs,
+                        enabled = true,
+                        onCheckedChange = { deleteLogs = it }
+                    )
+                }
+                Text(
+                    "Always preserved: plugins/, mods/, config/, server.properties, and config files.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
                 TextButton(
                     onClick = {
                         scope.launch {
-                            val msg = stateHolder.resetWorld()
-                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                            resetSheetState.hide()
-                            showResetDialog = false
+                            if (stateHolder.status != ServerStatus.OFFLINE) {
+                                onMessage("Stop the server before resetting the world.")
+                            } else {
+                                val msg = stateHolder.resetWorld(
+                                    deletePlayerData = deletePlayerData,
+                                    deleteDatapacks = deleteDatapacks,
+                                    deleteLogs = deleteLogs
+                                )
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                resetSheetState.hide()
+                                showResetDialog = false
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("RESET WORLD", color = PocketColors.Offline, fontWeight = FontWeight.Bold)
+                    Text("DELETE SELECTED", color = PocketColors.Offline, fontWeight = FontWeight.Bold)
                 }
                 TextButton(
                     onClick = {
@@ -761,6 +827,35 @@ private fun SwipeableWorldSlotItem(
 }
 
 @Composable
+private fun ResetDeleteRow(
+    label: String,
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) {
+                onCheckedChange(!checked)
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = if (enabled) onCheckedChange else null,
+            enabled = enabled
+        )
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
 private fun BackupItem(
     backup: com.pocketcraft.server.ui.screens.BackupEntry,
     onRestore: () -> Unit,
@@ -807,6 +902,7 @@ private fun DimensionUploadRow(
     subtitle: String,
     icon: String,
     isImporting: Boolean,
+    importProgress: Float = 0f,
     serverOffline: Boolean,
     onUpload: () -> Unit
 ) {
@@ -843,7 +939,31 @@ private fun DimensionUploadRow(
                 }
             }
         }
-        if (!serverOffline) {
+        
+        if (isImporting) {
+            val animatedProgress by animateFloatAsState(
+                targetValue = importProgress.coerceIn(0f, 1f),
+                animationSpec = tween(durationMillis = 300),
+                label = "import_progress"
+            )
+            Spacer(Modifier.height(8.dp))
+            LinearProgressIndicator(
+                progress = { animatedProgress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(999.dp)),
+                color = PocketColors.Primary
+            )
+            Text(
+                text = "${(importProgress * 100).toInt()}% extracted",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+
+        if (!serverOffline && !isImporting) {
             Text(
                 "Stop server to upload",
                 fontSize = 11.sp,

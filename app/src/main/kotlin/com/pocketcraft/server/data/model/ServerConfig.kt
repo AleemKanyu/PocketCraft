@@ -15,9 +15,9 @@ data class ServerConfig(
     val onlineMode: Boolean = false,
     val motd: String = "A PocketCraft Server",
     val pvp: Boolean = true,
-    /** Keep low (6) for mobile performance */
-    val viewDistance: Int = 6,
-    val simulationDistance: Int = 4,
+    /** Keep low (5) for mobile performance */
+    val viewDistance: Int = 5,
+    val simulationDistance: Int = 3,
     val spawnProtection: Int = 16,
     val allowFlight: Boolean = false,
     val whiteList: Boolean = false,
@@ -40,6 +40,7 @@ data class ServerConfig(
     // World settings
     val generateStructures: Boolean = true,
     val levelType: String = "default",
+    val maxWorldSize: Int = 29999984,
     val maxBuildHeight: Int = 320,
     val useNativeTransport: Boolean = true,
     // Performance settings
@@ -54,7 +55,11 @@ data class ServerConfig(
     val serverDescription: String = "",
     val serverPhotoUri: String? = null,
     // Join message settings
-    val joinMessageEnabled: Boolean = false,
-    val joinMessageText: String = "Welcome to the server! Have fun!",
-    val joinMessageUrl: String = ""
+    val joinMessageEnabled: Boolean = true,
+    val joinMessageText: String = "Hosted on PocketCraft! Enjoy and join our Discord using the link already defined in the code.",
+    val joinMessageUrl: String = "https://discord.gg/NGPzXFYp",
+    // Advanced versioning
+    val serverType: ServerType = ServerType.PAPER,
+    val gameVersion: String = "",
+    val customJarPath: String? = null
 )

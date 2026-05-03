@@ -34,6 +34,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.net.Uri
+import android.content.Intent
+import com.pocketcraft.server.update.UpdateConfig
+import com.pocketcraft.server.update.UpdateManager
+import com.pocketcraft.server.ui.components.UpdatePopup
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -94,6 +99,19 @@ class MainActivity : ComponentActivity() {
             var themePreference by remember { mutableStateOf(initialThemePreference) }
             val systemDarkTheme = isSystemInDarkTheme()
             val darkTheme = themePreference.resolve(systemDark = systemDarkTheme)
+
+            var updateConfig by remember { mutableStateOf<UpdateConfig?>(null) }
+            var hasCheckedForUpdate by remember { mutableStateOf(false) }
+
+            LaunchedEffect(Unit) {
+                if (!hasCheckedForUpdate) {
+                    val config = UpdateManager.fetchUpdateConfig()
+                    if (config != null && config.showUpdatePopup) {
+                        updateConfig = config
+                    }
+                    hasCheckedForUpdate = true
+                }
+            }
 
             PocketCraftTheme(darkTheme = darkTheme) {
                 var jreReady by remember { mutableStateOf(false) }
@@ -171,6 +189,21 @@ class MainActivity : ComponentActivity() {
                                 ThemePreferenceStore.save(this@MainActivity, nextPreference)
                                 FirebaseAnalyticsManager.logThemeChanged(nextPreference.name.lowercase())
                             }
+                        }
+                    )
+                }
+
+                updateConfig?.let { config ->
+                    UpdatePopup(
+                        config = config,
+                        onUpdateNow = {
+                            runCatching {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(config.playStoreUrl))
+                                startActivity(intent)
+                            }
+                        },
+                        onDismiss = {
+                            updateConfig = null
                         }
                     )
                 }

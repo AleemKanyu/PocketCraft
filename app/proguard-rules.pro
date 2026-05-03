@@ -30,3 +30,11 @@
 -keep class com.pocketcraft.server.NativeLauncher { *; }
 -keep class com.pocketcraft.server.server.ServerLauncher { *; }
 -keep class com.pocketcraft.server.server.ServerHostService { *; }
+
+# Gson
+-keepattributes Signature
+-keepattributes *Annotation*
+-keepattributes EnclosingMethod
+-keepattributes InnerClasses
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken

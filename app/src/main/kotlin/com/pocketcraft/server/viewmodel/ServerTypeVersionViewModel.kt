@@ -1,0 +1,239 @@
+package com.pocketcraft.server.viewmodel
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.pocketcraft.server.data.model.ServerType
+import com.pocketcraft.server.data.preferences.AppPreferencesStore
+import com.pocketcraft.server.server.ServerJarManager
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+
+@HiltViewModel
+class ServerTypeVersionViewModel @Inject constructor(
+    application: Application
+) : AndroidViewModel(application) {
+
+    private val _selectedType = MutableStateFlow(ServerType.PAPER)
+    val selectedType: StateFlow<ServerType> = _selectedType.asStateFlow()
+
+    private val _availableVersions = MutableStateFlow<List<String>>(emptyList())
+    val availableVersions: StateFlow<List<String>> = _availableVersions.asStateFlow()
+
+    private val _selectedVersion = MutableStateFlow<String?>(null)
+    val selectedVersion: StateFlow<String?> = _selectedVersion.asStateFlow()
+
+    private val _customJarPath = MutableStateFlow<String?>(null)
+    val customJarPath: StateFlow<String?> = _customJarPath.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
+
+    private val _showRcVersions = MutableStateFlow(false)
+    val showRcVersions: StateFlow<Boolean> = _showRcVersions.asStateFlow()
+
+    private val _downloadedVersions = MutableStateFlow<Set<String>>(emptySet())
+    val downloadedVersions: StateFlow<Set<String>> = _downloadedVersions.asStateFlow()
+
+    private val _isOffline = MutableStateFlow(false)
+    val isOffline: StateFlow<Boolean> = _isOffline.asStateFlow()
+
+    private var initializedSelectionKey: Triple<ServerType, String?, String?>? = null
+    private val quickVersionFallbacks = listOf(
+        "1.21.6", "1.21.4", "1.21.1", "1.20.6", "1.20.4", "1.20.1",
+        "1.19.4", "1.19.2", "1.18.2", "1.17.1", "1.16.5"
+    )
+
+    init {
+        viewModelScope.launch {
+            AppPreferencesStore.showRcVersionsFlow(getApplication()).collect { showRc ->
+                _showRcVersions.value = showRc
+                if (_selectedType.value.supportsVersionSelect) {
+                    fetchVersionsForType(_selectedType.value)
+                }
+            }
+        }
+        fetchVersionsForType(ServerType.PAPER)
+        refreshDownloadedVersions()
+    }
+
+    fun setServerType(type: ServerType) {
+        _selectedType.value = type
+        if (type.supportsVersionSelect) {
+            fetchVersionsForType(type)
+        } else {
+            _availableVersions.value = emptyList()
+            _selectedVersion.value = null
+        }
+    }
+
+    fun initializeSelection(
+        serverType: ServerType,
+        gameVersion: String?,
+        customJarPath: String?
+    ) {
+        val key = Triple(serverType, gameVersion, customJarPath)
+        if (initializedSelectionKey == key) return
+        initializedSelectionKey = key
+        _selectedType.value = serverType
+        _customJarPath.value = customJarPath
+        if (serverType.supportsVersionSelect) {
+            fetchVersionsForType(serverType, preferredVersion = gameVersion)
+        } else {
+            _selectedVersion.value = null
+            _availableVersions.value = emptyList()
+            refreshDownloadedVersions()
+        }
+    }
+
+    fun setSelectedVersion(version: String) {
+        _selectedVersion.value = version
+    }
+
+    fun setCustomJarPath(path: String) {
+        _customJarPath.value = path
+    }
+
+    fun isVersionDownloaded(version: String): Boolean {
+        return _downloadedVersions.value.contains(version)
+    }
+
+    fun deleteDownloadedVersion(version: String) {
+        viewModelScope.launch {
+            runCatching {
+                val versionDir = File(getApplication<Application>().filesDir, "servers/$version")
+                val file = File(versionDir, jarNameForVersion(_selectedType.value, version))
+                if (file.exists()) {
+                    file.delete()
+                }
+            }.onFailure {
+                _error.value = it.message ?: "Could not delete downloaded version"
+            }
+            refreshDownloadedVersions()
+        }
+    }
+
+    private fun refreshDownloadedVersions() {
+        viewModelScope.launch {
+            _downloadedVersions.value = listDownloadedVersionsForType(_selectedType.value).toSet()
+        }
+    }
+
+    fun refresh() {
+        fetchVersionsForType(_selectedType.value)
+    }
+
+    private fun fetchVersionsForType(type: ServerType, preferredVersion: String? = null) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            
+            // Step 1: Try cache first (Instant UI)
+            val cached = withContext(Dispatchers.IO) {
+                ServerJarManager.fetchAvailableVersions(getApplication(), type, forceRefresh = false)
+            }
+            if (cached.isNotEmpty()) {
+                updateVersionList(cached, preferredVersion)
+            }
+
+            // Step 2: Network check
+            val online = com.pocketcraft.server.util.NetworkUtils.isOnline(getApplication())
+            _isOffline.value = !online
+            if (!online) {
+                if (_availableVersions.value.isEmpty()) {
+                    _error.value = "No internet connection. Please check your network and try again."
+                }
+                _isLoading.value = false
+                return@launch
+            }
+
+            // Step 3: Background refresh (Force network)
+            try {
+                val networkVersions = withContext(Dispatchers.IO) {
+                    ServerJarManager.fetchAvailableVersions(getApplication(), type, forceRefresh = true)
+                }
+                
+                if (networkVersions.isNotEmpty()) {
+                    updateVersionList(networkVersions, preferredVersion)
+                }
+            } catch (e: Exception) {
+                if (_availableVersions.value.isEmpty()) {
+                    _error.value = "No internet connection. Please check your network and try again."
+                } else {
+                    // Log but don't show error if we already have cached data
+                    android.util.Log.w("ServerTypeVersionViewModel", "Background refresh failed: ${e.message}")
+                }
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    private fun updateVersionList(versions: List<String>, preferredVersion: String?) {
+        val filteredVersions = if (_showRcVersions.value) {
+            versions
+        } else {
+            versions.filterNot { isPreReleaseVersion(it) }
+        }
+        
+        // If offline, only show downloaded versions
+        val finalVersions = if (_isOffline.value) {
+            val downloaded = listDownloadedVersionsForType(_selectedType.value)
+            filteredVersions.filter { downloaded.contains(it) }
+        } else {
+            filteredVersions
+        }
+
+        _availableVersions.value = finalVersions
+        
+        val previousSelection = _selectedVersion.value
+        _selectedVersion.value = when {
+            preferredVersion != null && finalVersions.contains(preferredVersion) -> preferredVersion
+            previousSelection != null && finalVersions.contains(previousSelection) -> previousSelection
+            // Do NOT auto-pick any version if no selection exists
+            else -> null
+        }
+        refreshDownloadedVersions()
+    }
+
+    private fun quickFallbackVersions(type: ServerType): List<String> {
+        if (!type.supportsVersionSelect) return emptyList()
+        val downloaded = listDownloadedVersionsForType(type)
+        return if (downloaded.isNotEmpty()) downloaded else quickVersionFallbacks
+    }
+
+    private fun isPreReleaseVersion(version: String): Boolean {
+        val preReleasePattern = Regex(
+            ".*(?:^|[.-])(rc|pre|beta|snapshot|alpha)(?:[.-]?\\d+)?(?:$|[.-]).*",
+            RegexOption.IGNORE_CASE
+        )
+        return preReleasePattern.matches(version.lowercase())
+    }
+
+    private fun jarNameForVersion(type: ServerType, version: String): String {
+        return "${type.name.lowercase()}-$version.jar"
+    }
+
+    private fun listDownloadedVersionsForType(type: ServerType): List<String> {
+        val serversDir = File(getApplication<Application>().filesDir, "servers")
+        if (!serversDir.exists()) return emptyList()
+        
+        val typeLower = type.name.lowercase()
+        return serversDir.listFiles()?.filter { it.isDirectory }?.mapNotNull { versionDir ->
+            val version = versionDir.name
+            val jarFile = File(versionDir, "$typeLower-$version.jar")
+            if (jarFile.exists() && jarFile.isFile && jarFile.length() > 50_000L) version else null
+        }?.distinct()?.sortedDescending() ?: emptyList()
+    }
+}

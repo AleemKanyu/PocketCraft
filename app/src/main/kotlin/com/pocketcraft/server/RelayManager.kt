@@ -1,22 +1,35 @@
 package com.pocketcraft.server
 
 import android.content.Context
+import com.pocketcraft.server.config.RelayServers
+import com.pocketcraft.server.data.preferences.RELAY_SECRET
 import com.pocketcraft.server.relay.BedrockUdpBridge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
+import java.net.Inet4Address
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class RelayManager(private val context: Context) {
 
@@ -27,37 +40,55 @@ class RelayManager(private val context: Context) {
         private const val PLAYER_BRIDGE_BUFFER_SIZE = 16 * 1024
         private const val LOW_LATENCY_WARMUP_BYTES = 128 * 1024L
         private const val LOW_LATENCY_WARMUP_NS = 4_000_000_000L
+        private const val INITIAL_POOL_SIZE = 5
         private const val TARGET_POOL_SIZE = 5
         private const val POOL_REFRESH_FLOOR = 2
         private const val IDLE_REPLENISH_DELAY_MS = 1_500L
         private const val SOCKET_OPEN_STAGGER_MS = 250L
         private const val TUNNEL_HEARTBEAT_INTERVAL_MS = 15_000L
-        private const val IDLE_SOCKET_REFRESH_INTERVAL_MS = 45_000L
+        private const val IDLE_SOCKET_REFRESH_INTERVAL_MS = 120_000L
+        private const val SOCKET_IDLE_TIMEOUT_MS = 120_000L
         private const val INITIAL_POOL_READY_TIMEOUT_MS = 12_000L
+        private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
 
     private var activeRelaySessionId: String? = null
     var assignedPort: Int? = null
         private set
+    private val _isPoolReady = MutableStateFlow(false)
+    val isPoolReady: StateFlow<Boolean> = _isPoolReady.asStateFlow()
+    @Volatile
+    private var activeRelayHost: String? = null
+    @Volatile
+    private var activeRelayIsFallback = false
+    @Volatile
+    private var preferFallbackRelay = false
 
     private var bedrockUdpBridge: BedrockUdpBridge? = null
     @Volatile
     private var activeBedrockSocket: Socket? = null
 
-    private val POOL_SIZE = TARGET_POOL_SIZE
-    private val socketPool = mutableListOf<Socket>()
+    private val poolTargetSize = AtomicInteger(INITIAL_POOL_SIZE)
+    private val socketPool = mutableListOf<PooledSocket>()
     private val connectingSockets = AtomicInteger(0)
     private val poolTopUpScheduled = AtomicBoolean(false)
     private val consecutiveFailures = AtomicInteger(0)
     private var poolJob = SupervisorJob()
     private var poolScope = CoroutineScope(Dispatchers.IO + poolJob)
     private var tunnelHeartbeatJob: kotlinx.coroutines.Job? = null
+    private val statusHttpClient = OkHttpClient()
     @Volatile
     private var lastIdleSocketRefreshAtMs = 0L
     @Volatile
     private var activeTunnelLocalPort: Int? = null
     @Volatile
     private var resolvedRelayIp: String? = null
+
+    private data class PooledSocket(
+        val socket: Socket,
+        var isBridging: Boolean = false,
+        val createdAt: Long = System.currentTimeMillis()
+    )
 
     data class RelayAddress(val host: String, val port: Int, val isFallback: Boolean = false) {
         override fun toString() = "$host:$port"
@@ -76,44 +107,67 @@ class RelayManager(private val context: Context) {
     suspend fun register(): RelayAddress = withContext(Dispatchers.IO) {
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
         val userId = currentRelaySessionId()
-        val relayHost = prefs.relayHost
-
-        android.util.Log.d("RelayManager", "Registering relay session: $userId on $relayHost")
-
-        val url = URL("http://$relayHost:$CONTROL_PORT/register")
-        val conn = url.openConnection() as HttpURLConnection
-
-        try {
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.connectTimeout = 10_000
-            conn.readTimeout = 10_000
-            conn.doOutput = true
-
-            val body = """{"userId":"$userId"}"""
-            android.util.Log.d("RelayManager", "Register request: $body")
-            conn.outputStream.write(body.toByteArray(Charsets.UTF_8))
-            conn.outputStream.flush()
-
-            val responseCode = conn.responseCode
-            android.util.Log.d("RelayManager", "Register response code: $responseCode")
-
-            if (responseCode != 200) {
-                throw IOException("Relay register failed: HTTP $responseCode")
+        val preferredRelayHost = prefs.relayHost
+        val fallbackRelayHost = RelayServers.SINGAPORE.host
+        val hostCandidates = buildList {
+            if (preferFallbackRelay && preferredRelayHost != fallbackRelayHost) {
+                add(fallbackRelayHost)
+                add(preferredRelayHost)
+            } else {
+                add(preferredRelayHost)
+                if (preferredRelayHost != fallbackRelayHost) add(fallbackRelayHost)
             }
+        }.distinct()
 
-            val response = conn.inputStream.bufferedReader().readText()
-            android.util.Log.d("RelayManager", "Register response: $response")
-            val json = JSONObject(response)
+        var lastError: Exception? = null
+        for (relayHost in hostCandidates) {
+            val isFallback = relayHost != preferredRelayHost
+            android.util.Log.d("RelayManager", "Registering relay session: $userId on $relayHost")
 
-            assignedPort = json.getInt("port")
-            val address = RelayAddress(relayHost, assignedPort!!, isFallback = false)
-            android.util.Log.d("RelayManager", "Register success: $address")
-            address
+            val url = URL("http://$relayHost:$CONTROL_PORT/register")
+            val conn = url.openConnection() as HttpURLConnection
 
-        } finally {
-            conn.disconnect()
+            try {
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.connectTimeout = 3_000
+                conn.readTimeout = 5_000
+                conn.doOutput = true
+
+                val body = """{"userId":"$userId"}"""
+                android.util.Log.d("RelayManager", "Register request: $body")
+                conn.outputStream.write(body.toByteArray(Charsets.UTF_8))
+                conn.outputStream.flush()
+
+                val responseCode = conn.responseCode
+                android.util.Log.d("RelayManager", "Register response code: $responseCode")
+
+                if (responseCode != 200) {
+                    throw IOException("Relay register failed: HTTP $responseCode")
+                }
+
+                val response = conn.inputStream.bufferedReader().readText()
+                android.util.Log.d("RelayManager", "Register response: $response")
+                val json = JSONObject(response)
+
+                assignedPort = json.getInt("port")
+                com.pocketcraft.server.data.preferences.AppPreferences(context).relayPort = assignedPort
+                activeRelayHost = relayHost
+                activeRelayIsFallback = isFallback
+                preferFallbackRelay = isFallback
+                resolvedRelayIp = null
+                val address = RelayAddress(relayHost, assignedPort!!, isFallback = isFallback)
+                android.util.Log.d("RelayManager", "Register success: $address")
+                return@withContext address
+            } catch (e: Exception) {
+                lastError = e
+                android.util.Log.w("RelayManager", "Register failed on $relayHost: ${e.message}")
+            } finally {
+                conn.disconnect()
+            }
         }
+
+        throw lastError ?: IOException("Relay register failed")
     }
 
     fun startBedrockBridge() {
@@ -144,12 +198,37 @@ class RelayManager(private val context: Context) {
     }
 
     /**
+     * Attempts to initialize the tunnel pool with exponential backoff.
+     */
+    suspend fun initPool(localPort: Int) {
+        var attempts = 0
+        while (attempts < 5) {
+            try {
+                android.util.Log.i("RelayManager", "Initializing relay pool (attempt ${attempts + 1}/5)")
+                val result = connectTunnelPool(localPort)
+                if (result.poolReady) {
+                    _isPoolReady.value = true
+                    android.util.Log.i("RelayManager", "Relay pool is ready.")
+                    return
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("RelayManager", "Failed to init pool: ${e.message}")
+            }
+            attempts++
+            _isPoolReady.value = false
+            delay(2000L * attempts)
+        }
+        android.util.Log.e("RelayManager", "Relay pool failed to initialize after 5 attempts.")
+    }
+
+    /**
      * Opens a pool of persistent TCP sockets from the phone to the relay.
      * The relay uses these sockets to forward incoming player traffic.
      * Must be called AFTER register() and AFTER the Minecraft server is ready on 25565.
      */
     suspend fun connectTunnelPool(localPort: Int): TunnelPoolResult = withContext(Dispatchers.IO) {
-        android.util.Log.i("RelayManager", "Starting pool of $POOL_SIZE sockets...")
+        resetPoolSizing()
+        android.util.Log.i("RelayManager", "Starting pool of ${poolTargetSize.get()} sockets...")
         activeTunnelLocalPort = localPort
         tunnelHeartbeatJob?.cancel()
         tunnelHeartbeatJob = poolScope.launch(Dispatchers.IO) {
@@ -169,16 +248,27 @@ class RelayManager(private val context: Context) {
                 // Keep the pool topped up, but avoid proactive socket churn here.
             }
         }
-        val readyAck = notifyPhoneReady(localPort)
+        topUpPool(localPort)
+        val poolReady = waitForInitialPoolReady()
+        val readyAck = if (poolReady) {
+            notifyPhoneReady(localPort)
+        } else {
+            false
+        }
         if (!readyAck) {
             android.util.Log.w(
                 "RelayManager",
                 "Relay control did not acknowledge phone-ready on known endpoints; player status ping may fail until relay API is updated."
             )
         }
-        topUpPool(localPort)
-        val poolReady = waitForInitialPoolReady()
         if (!poolReady) {
+            if (!activeRelayIsFallback && (activeRelayHost ?: "") != RelayServers.SINGAPORE.host) {
+                preferFallbackRelay = true
+                android.util.Log.w(
+                    "RelayManager",
+                    "Selected relay tunnel pool did not become ready. Next registration attempt will use fallback relay ${RelayServers.SINGAPORE.host}."
+                )
+            }
             android.util.Log.w(
                 "RelayManager",
                 "Relay tunnel pool did not become ready within ${INITIAL_POOL_READY_TIMEOUT_MS}ms."
@@ -190,18 +280,18 @@ class RelayManager(private val context: Context) {
     private suspend fun waitForInitialPoolReady(): Boolean {
         val deadline = System.currentTimeMillis() + INITIAL_POOL_READY_TIMEOUT_MS
         while (poolScope.isActive && System.currentTimeMillis() < deadline) {
-            if (currentPoolSize() > 0) {
+            if (currentPoolSize() >= TARGET_POOL_SIZE) {
                 return true
             }
             delay(100)
         }
-        return currentPoolSize() > 0
+        return currentPoolSize() >= TARGET_POOL_SIZE
     }
 
     suspend fun notifyPhoneReady(localPort: Int): Boolean = withContext(Dispatchers.IO) {
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
         val userId = currentRelaySessionId()
-        val relayHost = prefs.relayHost
+        val relayHost = activeRelayHost ?: prefs.relayHost
         val localIpCandidates = buildList {
             add(com.pocketcraft.server.server.ServerAddressResolver.getLocalIpAddress())
             add(resolveRouteLocalIp(relayHost))
@@ -242,8 +332,8 @@ class RelayManager(private val context: Context) {
                 try {
                     conn.requestMethod = "POST"
                     conn.setRequestProperty("Content-Type", "application/json")
-                    conn.connectTimeout = 10_000
-                    conn.readTimeout = 10_000
+                    conn.connectTimeout = 3_000
+                    conn.readTimeout = 5_000
                     conn.doOutput = true
 
                     conn.outputStream.write(body.toByteArray(Charsets.UTF_8))
@@ -256,6 +346,10 @@ class RelayManager(private val context: Context) {
                     }
                 } catch (e: Exception) {
                     android.util.Log.w("RelayManager", "Failed $endpoint notify attempt: ${e.message}")
+                    if (e is java.net.ConnectException || e is java.net.SocketTimeoutException || e is java.net.UnknownHostException || e is java.net.NoRouteToHostException) {
+                        android.util.Log.w("RelayManager", "Host $relayHost is unreachable, aborting phone-ready loop.")
+                        return@withContext false
+                    }
                 } finally {
                     conn.disconnect()
                 }
@@ -263,6 +357,63 @@ class RelayManager(private val context: Context) {
         }
 
         false
+    }
+
+    suspend fun postServerStatus(
+        motd: String,
+        players: Int,
+        maxPlayers: Int,
+        version: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        val relayPort = assignedPort ?: return@withContext false
+        val secret = RELAY_SECRET.trim()
+        if (secret.isBlank()) {
+            android.util.Log.w("RelayManager", "Skipping relay status publish because RELAY_SECRET is empty.")
+            return@withContext false
+        }
+
+        val body = JSONObject().apply {
+            put("host", activeRelayHost ?: "")
+            put("port", relayPort)
+            put("motd", motd.trim())
+            put("players", players.coerceAtLeast(0))
+            put("maxPlayers", maxPlayers.coerceAtLeast(1))
+            put("version", version.trim())
+        }
+
+        val endpoint = "/bedrock-status"
+        val relayHosts = listOfNotNull(activeRelayHost)
+        var anySuccess = false
+
+        relayHosts.forEach { relayHost ->
+            val request = Request.Builder()
+                .url("http://$relayHost:$CONTROL_PORT$endpoint")
+                .addHeader("X-PocketCraft-Secret", secret)
+                .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+
+            runCatching {
+                statusHttpClient.newCall(request).execute().use { response ->
+                    val responseBody = runCatching {
+                        response.body?.string().orEmpty()
+                    }.getOrDefault("")
+                    android.util.Log.i(
+                        "RelayManager",
+                        "Relay status POST $relayHost$endpoint -> HTTP ${response.code}, body=${responseBody.ifBlank { "<empty>" }}"
+                    )
+                    if (response.isSuccessful) {
+                        anySuccess = true
+                    }
+                }
+            }.onFailure { error ->
+                android.util.Log.w(
+                    "RelayManager",
+                    "Failed to publish relay status to $relayHost$endpoint: ${error.message}"
+                )
+            }
+        }
+
+        anySuccess
     }
 
     private fun resolveRouteLocalIp(relayHost: String): String? {
@@ -277,8 +428,31 @@ class RelayManager(private val context: Context) {
             ?.takeIf { it.isNotBlank() }
     }
 
+    private fun resolvePreferIPv4(host: String): InetAddress {
+        return InetAddress.getAllByName(host)
+            .firstOrNull { it is Inet4Address }
+            ?: InetAddress.getByName(host)
+    }
+
+    private fun resolveRelayIp(relayHost: String): String? {
+        val configuredFallback = RelayServers.getByHost(relayHost).fallbackIp
+        if (!configuredFallback.isNullOrBlank()) {
+            return configuredFallback
+        }
+        return runBlocking(Dispatchers.IO) {
+            runCatching {
+                withTimeoutOrNull(2_000L) {
+                    resolvePreferIPv4(relayHost).hostAddress
+                }
+            }.getOrNull()
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+        }
+    }
+
     private fun topUpPool(localPort: Int) {
-        while (poolScope.isActive && reservePoolSlotIfAvailable(POOL_SIZE)) {
+        val targetSize = poolTargetSize.get()
+        while (poolScope.isActive && reservePoolSlotIfAvailable(targetSize)) {
             openPhoneSocket(localPort)
         }
     }
@@ -302,13 +476,13 @@ class RelayManager(private val context: Context) {
 
         val socketToRefresh = synchronized(socketPool) {
             if (socketPool.size <= POOL_REFRESH_FLOOR) return@synchronized null
-            socketPool.firstOrNull()
+            socketPool.firstOrNull { !it.isBridging }
                 ?.also { socketPool.remove(it) }
         } ?: return
 
         lastIdleSocketRefreshAtMs = now
         android.util.Log.v("RelayManager", "Refreshing one idle relay socket to avoid stale pool entries.")
-        runCatching { socketToRefresh.close() }
+        runCatching { socketToRefresh.socket.close() }
         schedulePoolTopUp(localPort, delayMs = SOCKET_OPEN_STAGGER_MS)
     }
 
@@ -331,6 +505,7 @@ class RelayManager(private val context: Context) {
     private fun openPhoneSocket(localPort: Int) {
         poolScope.launch(Dispatchers.IO) {
             var socket: Socket? = null
+            var pooledSocket: PooledSocket? = null
             var addedToPool = false
             var reservedSlot = true
 
@@ -348,15 +523,17 @@ class RelayManager(private val context: Context) {
                     delay(staggerDelayMs)
                 }
 
-                val prefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
                 val userId = currentRelaySessionId()
-                val relayHost = prefs.relayHost
+                val relayHost = activeRelayHost ?: com.pocketcraft.server.data.preferences.AppPreferences(context).relayHost
 
                 var targetIp = resolvedRelayIp
                 if (targetIp == null) {
-                    targetIp = java.net.InetAddress.getByName(relayHost).hostAddress.also {
+                    targetIp = resolveRelayIp(relayHost).also {
                         resolvedRelayIp = it
                     }
+                }
+                if (targetIp.isNullOrBlank()) {
+                    throw IOException("Unable to resolve relay IP for $relayHost")
                 }
 
                 socket = Socket()
@@ -367,16 +544,16 @@ class RelayManager(private val context: Context) {
                 socket.outputStream.write("$userId\n".toByteArray(Charsets.UTF_8))
                 socket.outputStream.flush()
 
+                pooledSocket = PooledSocket(socket!!)
                 synchronized(socketPool) {
-                    socketPool.add(socket!!)
+                    socketPool.add(pooledSocket!!)
                     addedToPool = true
                 }
                 releaseReservedSlot()
-                android.util.Log.v("RelayManager", "Socket added to pool. Size: ${socketPool.size}/$POOL_SIZE")
+                android.util.Log.v("RelayManager", "Socket added to pool. Size: ${socketPool.size}/${poolTargetSize.get()}")
 
-                // Add a staggered timeout so sockets naturally rotate before the remote LB drops them
-                val baseTimeoutMs = 40_000
-                socket!!.soTimeout = baseTimeoutMs + kotlin.random.Random.nextInt(15_000)
+                // Keep idle pool sockets alive long enough to serve a join burst without churn.
+                socket!!.soTimeout = SOCKET_IDLE_TIMEOUT_MS.toInt()
 
                 val connectedAt = System.currentTimeMillis()
 
@@ -391,7 +568,8 @@ class RelayManager(private val context: Context) {
                     consecutiveFailures.set(0)
                 }
 
-                synchronized(socketPool) { socketPool.remove(socket!!) }
+                pooledSocket?.isBridging = true
+                synchronized(socketPool) { pooledSocket?.let { socketPool.remove(it) } }
                 addedToPool = false
 
                 if (firstByte == -2) {
@@ -434,7 +612,7 @@ class RelayManager(private val context: Context) {
                 android.util.Log.e("RelayManager", "Pool socket error: ${e.message}")
                 resolvedRelayIp = null
                 synchronized(socketPool) {
-                    socket?.let { socketPool.remove(it) }
+                    pooledSocket?.let { socketPool.remove(it) }
                 }
                 addedToPool = false
                 releaseReservedSlot()
@@ -691,15 +869,19 @@ class RelayManager(private val context: Context) {
         tunnelHeartbeatJob?.cancel()
         tunnelHeartbeatJob = null
         activeTunnelLocalPort = null
+        resetPoolSizing()
         poolJob.cancel()
         poolJob = SupervisorJob()
         poolScope = CoroutineScope(Dispatchers.IO + poolJob)
         poolTopUpScheduled.set(false)
         lastIdleSocketRefreshAtMs = 0L
         resolvedRelayIp = null
+        activeRelayHost = null
+        activeRelayIsFallback = false
+        _isPoolReady.value = false
 
         synchronized(socketPool) {
-            socketPool.forEach { try { it.close() } catch (_: Exception) {} }
+            socketPool.forEach { try { it.socket.close() } catch (_: Exception) {} }
             socketPool.clear()
         }
         connectingSockets.set(0)
@@ -708,13 +890,17 @@ class RelayManager(private val context: Context) {
         android.util.Log.i("RelayManager", "Tunnel disconnected and scope reset.")
     }
 
+    private fun resetPoolSizing() {
+        poolTargetSize.set(INITIAL_POOL_SIZE)
+    }
+
     /**
      * Unregisters userId from relay server (frees the port).
      * Call this when the user explicitly stops hosting, not just on pause.
      */
     suspend fun unregister() = withContext(Dispatchers.IO) {
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
-        val relayHost = prefs.relayHost
+        val relayHost = activeRelayHost ?: prefs.relayHost
         val sessionId = activeRelaySessionId
 
         if (!sessionId.isNullOrBlank()) {

@@ -5,6 +5,7 @@ import android.os.Build
 import com.pocketcraft.server.data.model.PlayerInfo
 import com.pocketcraft.server.data.model.ServerConfig
 import com.pocketcraft.server.data.model.ServerProfileSummary
+import com.pocketcraft.server.data.model.ServerType
 import com.pocketcraft.server.data.model.WorldDetails
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -13,6 +14,9 @@ import org.json.JSONObject
 import com.pocketcraft.server.setup.JreExtractor
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.service.ServerFileManager
+import com.pocketcraft.server.service.ServerPropertiesHelper.POCKETCRAFT_JOIN_MESSAGE_TEXT
+import com.pocketcraft.server.service.ServerPropertiesHelper.POCKETCRAFT_JOIN_MESSAGE_URL
+import com.pocketcraft.server.server.ServerPropertiesWriter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -29,8 +33,8 @@ class ServerConfigRepository @Inject constructor(
 ) {
     private val serverDir: File 
         get() {
-            val versionId = runBlocking { AppPreferencesStore.getSelectedVersionFlow(context).first() }
-            return ServerFileManager.getServerDir(context, versionId)
+            val worldName = runBlocking { AppPreferencesStore.getSelectedWorldFlow(context).first() }
+            return ServerFileManager.getServerDir(context, worldName)
         }
     private val serversDir: File get() = File(context.filesDir, "servers")
     private val activeServerFile: File get() = File(serverDir, ".active_server")
@@ -252,48 +256,24 @@ class ServerConfigRepository @Inject constructor(
             spawnNpcs = props["spawn-npcs"]?.toBoolean() ?: true,
             hardcore = props["hardcore"]?.toBoolean() ?: false,
             maxRamMb = props["pocketcraft-max-ram-mb"]?.toIntOrNull() ?: 1024,
+            entityBroadcastRangePercentage = props["entity-broadcast-range-percentage"]?.toIntOrNull() ?: 100,
             enableRcon = props["enable-rcon"]?.toBoolean() ?: true,
-            joinMessageEnabled = props["pocketcraft-join-message-enabled"]?.toBoolean() ?: false,
-            joinMessageText = props["pocketcraft-join-message-text"] ?: "Welcome to the server! Have fun!",
-            joinMessageUrl = props["pocketcraft-join-message-url"] ?: ""
+            generateStructures = props["generate-structures"]?.toBoolean() ?: true,
+            levelType = props["level-type"] ?: "default",
+            maxWorldSize = props["max-world-size"]?.toIntOrNull() ?: 29999984,
+            useNativeTransport = props["use-native-transport"]?.toBoolean() ?: true,
+            maxBuildHeight = props["max-build-height"]?.toIntOrNull() ?: 320,
+            joinMessageEnabled = true,
+            joinMessageText = POCKETCRAFT_JOIN_MESSAGE_TEXT,
+            joinMessageUrl = POCKETCRAFT_JOIN_MESSAGE_URL,
+            serverType = ServerType.fromString(props["pocketcraft-server-type"]),
+            gameVersion = props["pocketcraft-game-version"] ?: "",
+            customJarPath = props["pocketcraft-custom-jar-path"]
         )
     }
 
     private fun writeConfigFile(file: File, config: ServerConfig) {
-        val content = buildString {
-            appendLine("#Minecraft server properties (PocketCraft)")
-            appendLine("level-name=${config.worldName}")
-            appendLine("level-seed=${config.worldSeed}")
-            appendLine("max-players=${config.maxPlayers.coerceIn(1, 20)}")
-            appendLine("server-port=25565")
-            appendLine("difficulty=${config.difficulty}")
-            appendLine("gamemode=${config.gameMode}")
-            appendLine("online-mode=${config.onlineMode}")
-            appendLine("motd=${config.motd}")
-            appendLine("pvp=${config.pvp}")
-            appendLine("view-distance=${config.viewDistance}")
-            appendLine("simulation-distance=${config.simulationDistance}")
-            appendLine("spawn-protection=${config.spawnProtection}")
-            appendLine("enable-command-block=${config.commandBlocks}")
-            appendLine("allow-flight=${config.allowFlight}")
-            appendLine("white-list=${config.whiteList}")
-            appendLine("enforce-whitelist=${config.enforceWhitelist}")
-            appendLine("allow-nether=${config.netherEnabled}")
-            appendLine("spawn-monsters=${config.spawnMonsters}")
-            appendLine("spawn-animals=${config.spawnAnimals}")
-            appendLine("spawn-npcs=${config.spawnNpcs}")
-            appendLine("hardcore=${config.hardcore}")
-            appendLine("pocketcraft-max-ram-mb=${config.maxRamMb}")
-            appendLine("enable-rcon=true")
-            appendLine("rcon.port=25575")
-            appendLine("rcon.password=pocketcraft-internal-rcon")
-            appendLine("broadcast-rcon-to-ops=false")
-            appendLine("pocketcraft-join-message-enabled=${config.joinMessageEnabled}")
-            appendLine("pocketcraft-join-message-text=${config.joinMessageText}")
-            appendLine("pocketcraft-join-message-url=${config.joinMessageUrl}")
-        }
-        file.parentFile?.mkdirs()
-        file.writeText(content)
+        ServerPropertiesWriter.write(file, ServerPropertiesWriter.toSnapshot(config))
     }
 
     private fun serverFile(serverName: String): File =
@@ -332,8 +312,9 @@ class ServerConfigRepository @Inject constructor(
     fun isSetupComplete(): Boolean {
         if (!setupMarkerFile.exists()) return false
         if (!JreExtractor.isExtracted(context)) return false
+        val serversDir = File(context.filesDir, "servers")
         val hasDownloadedJar = serversDir.walkTopDown()
-            .any { it.isFile && it.extension == "jar" && it.length() > 1_000_000L }
+            .any { it.isFile && it.extension == "jar" && it.length() > 50_000L }
         if (!hasDownloadedJar) return false
 
         val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
@@ -382,14 +363,19 @@ class ServerConfigRepository @Inject constructor(
     }
 
     private fun detectServerVersion(): String {
-        val paperJar = serversDir.walkTopDown()
-            .filter { it.isFile && it.name.startsWith("paper-") && it.extension == "jar" }
-            ?.maxByOrNull { it.lastModified() }
-            ?.name
-            ?: "paper-1.20.4.jar"
-        val version = Regex("""paper-(.+)\.jar""").find(paperJar)?.groupValues?.getOrNull(1)
-            ?: "1.20.4"
-        return "Paper $version"
+        val serversDir = File(context.filesDir, "servers")
+        val jarName = serversDir.walkTopDown()
+            .filter { it.isFile && it.extension == "jar" }
+            .maxByOrNull { it.lastModified() }
+            ?.nameWithoutExtension ?: "unknown-version"
+
+        val typeAndVersion = jarName.split('-', limit = 2)
+        val typeLabel = typeAndVersion.getOrNull(0)
+            ?.lowercase()
+            ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+            ?: "Paper"
+        val version = typeAndVersion.getOrNull(1).orEmpty().ifBlank { "" }
+        return "$typeLabel $version"
     }
 
     private fun readTotalPlaytime(worldName: String): Pair<Long, Int> {

@@ -166,7 +166,7 @@ fun FilesScreen(
                         Text(text = "\uD83C\uDFAE", fontSize = 28.sp)
                         Column {
                             Text(
-                                text = "Minecraft Java ${stateHolder.versionLabel}",
+                                text = "Minecraft Java ${stateHolder.runtimeVersionLabel}",
                                 fontWeight = FontWeight.ExtraBold
                             )
                             Text(

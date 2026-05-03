@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.VideogameAsset
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shield
@@ -192,7 +193,7 @@ fun PlayersOnlineTab(
     var searchQuery by remember { mutableStateOf("") }
     var visibleCount by remember { mutableIntStateOf(10) }
 
-    val players = stateHolder.onlinePlayers
+    val players = stateHolder.sessionPlayers
         .distinctBy { canonicalPlayerName(it.name) }
     val filtered = players.filter { it.name.contains(searchQuery, ignoreCase = true) }
 
@@ -311,8 +312,11 @@ fun PlayersOnlineTab(
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             items(filtered.take(visibleCount)) { player ->
+                val isOnline = stateHolder.onlinePlayers.any { canonicalPlayerName(it.name) == canonicalPlayerName(player.name) }
                 PlayerOnlineCard(
                     player = player,
+                    isOnline = isOnline,
+                    isServerRunning = stateHolder.isRunning,
                     onOpenDetails = { onPlayerSelected(player) },
                     onKick = { stateHolder.kickPlayer(player.name) },
                     onBan = { stateHolder.banPlayer(player.name) },
@@ -345,6 +349,8 @@ fun PlayersOnlineTab(
 @Composable
 fun PlayerOnlineCard(
     player: PlayerInfo,
+    isOnline: Boolean,
+    isServerRunning: Boolean,
     onOpenDetails: () -> Unit,
     onKick: () -> Unit,
     onBan: () -> Unit,
@@ -372,27 +378,47 @@ fun PlayerOnlineCard(
                         .background(MaterialTheme.colorScheme.surfaceVariant),
                     contentScale = ContentScale.Crop
                 )
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .offset(x = 3.dp, y = 3.dp)
-                        .size(16.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(PocketColors.Primary)
-                        .border(width = 3.dp, color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(6.dp))
-                )
+                if (isOnline) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .offset(x = 3.dp, y = 3.dp)
+                            .size(16.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(PocketColors.Primary)
+                            .border(width = 3.dp, color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(6.dp))
+                    )
+                }
             }
             Column {
-                Text(
-                    player.name,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 18.sp
-                )
-                Text(
-                    "IP: ${player.ip.ifEmpty { "N/A" }} • Ping: ${player.pingMs}ms",
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(0.5f)
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        player.name,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp
+                    )
+                    if (player.isBedrock) {
+                        Icon(
+                            Icons.Default.VideogameAsset,
+                            contentDescription = "Bedrock Player",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(0.5f)
+                        )
+                    }
+                }
+                if (isOnline) {
+                    Text(
+                        "IP: ${player.ip.ifEmpty { "N/A" }} • Ping: ${player.pingMs}ms",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(0.5f)
+                    )
+                } else {
+                    Text(
+                        if (!isServerRunning) "Last session" else "Offline",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(0.5f)
+                    )
+                }
             }
         }
 

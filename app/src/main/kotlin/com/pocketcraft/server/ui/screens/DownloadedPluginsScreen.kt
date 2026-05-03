@@ -64,6 +64,7 @@ import com.pocketcraft.server.ui.theme.pocketCardShadowColor
 import com.pocketcraft.server.ui.theme.pocketHighContrastBorderColor
 import kotlinx.coroutines.launch
 import com.pocketcraft.server.ui.components.PocketCraftCard
+import java.util.Locale
 
 private enum class DownloadedContentTab(
     val label: String,
@@ -105,6 +106,9 @@ fun DownloadedPluginsScreen(
     var isUploading by remember { mutableStateOf(false) }
     var isDownloading by remember { mutableStateOf(false) }
     var items by remember(stateHolder.versionLabel, selectedTab) { mutableStateOf<List<Plugin>>(emptyList()) }
+    val runtimeKey = remember(stateHolder.config.serverType, stateHolder.config.gameVersion) {
+        "${stateHolder.config.serverType.name.lowercase(Locale.US)}-${stateHolder.config.gameVersion}"
+    }
 
     fun currentTab(): DownloadedContentTab = DownloadedContentTab.entries[selectedTab]
 
@@ -126,6 +130,7 @@ fun DownloadedPluginsScreen(
                 uri = uri,
                 versionId = stateHolder.versionLabel,
                 type = currentTab().type,
+                runtimeKey = runtimeKey,
                 onProgress = { uploadProgress = it.coerceIn(0, 100) }
             )
             isUploading = false
@@ -388,6 +393,7 @@ fun DownloadedPluginsScreen(
                                 versionId = stateHolder.versionLabel,
                                 type = currentTab().type,
                                 fileNameHint = null,
+                                runtimeKey = runtimeKey,
                                 onProgress = { downloadProgress = it.coerceIn(0, 100) }
                             )
                             isDownloading = false

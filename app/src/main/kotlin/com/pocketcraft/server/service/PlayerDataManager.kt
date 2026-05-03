@@ -17,8 +17,106 @@ object PlayerDataManager {
     private val _inventoryJson = MutableStateFlow<String?>(null)
     val inventoryJson: StateFlow<String?> = _inventoryJson.asStateFlow()
 
+    private val _activePlayers = MutableStateFlow<Set<String>>(emptySet())
+    val activePlayers: StateFlow<Set<String>> = _activePlayers.asStateFlow()
+
+    private val _sessionPlayers = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val sessionPlayers: StateFlow<Map<String, Long>> = _sessionPlayers.asStateFlow()
+
+    fun updateActivePlayers(players: Set<String>) {
+        _activePlayers.value = players
+    }
+
+    fun updateSessionPlayers(sessions: Map<String, Long>) {
+        _sessionPlayers.value = sessions
+    }
+
     fun getOfflineUuid(username: String): String {
         return UUID.nameUUIDFromBytes(("OfflinePlayer:" + username).toByteArray(StandardCharsets.UTF_8)).toString()
+    }
+
+    fun warnIfFloodgateUsernamePrefixChanged(serverDir: File) {
+        val floodgateConfig = listOf(
+            File(serverDir, "plugins/Floodgate/config.yml"),
+            File(serverDir, "plugins/Floodgate/floodgate.yml"),
+            File(serverDir, "plugins/floodgate/config.yml"),
+            File(serverDir, "plugins/floodgate/floodgate.yml")
+        ).firstOrNull { it.exists() } ?: return
+
+        val currentPrefix = runCatching {
+            floodgateConfig.readLines()
+                .firstOrNull { it.trimStart().startsWith("username-prefix:") }
+                ?.substringAfter(':')
+                ?.trim()
+                ?.removePrefix("\"")
+                ?.removeSuffix("\"")
+                ?.removePrefix("'")
+                ?.removeSuffix("'")
+                .orEmpty()
+        }.getOrDefault("")
+
+        val markerFile = File(floodgateConfig.parentFile ?: serverDir, ".pocketcraft-floodgate-prefix")
+        val previousPrefix = runCatching {
+            if (markerFile.exists()) markerFile.readText().trim() else null
+        }.getOrNull()
+
+        if (previousPrefix != null && previousPrefix != currentPrefix) {
+            android.util.Log.w(
+                "PlayerData",
+                "Floodgate username prefix changed - existing Bedrock player data may need to be manually cleared from world/playerdata/"
+            )
+        }
+
+        runCatching {
+            markerFile.writeText(currentPrefix)
+        }
+    }
+
+    /**
+     * Logs a warning if a Bedrock player's Xbox username is found under a different UUID
+     * than expected in the playerdata directory. This helps diagnose UUID instability
+     * caused by Floodgate configuration issues or key.pem regeneration.
+     */
+    fun checkForOrphanedData(playerName: String, currentUuid: String, worldDir: File) {
+        val playerdataDir = File(worldDir, "playerdata")
+        if (!playerdataDir.exists()) return
+
+        val datFiles = playerdataDir.listFiles { file ->
+            file.extension == "dat" && file.nameWithoutExtension.contains("-")
+        }.orEmpty()
+
+        if (datFiles.size <= 1) return
+
+        // Scan .dat files looking for lastKnownName matching this player
+        val matchingUuids = mutableListOf<String>()
+        for (datFile in datFiles) {
+            runCatching {
+                val bytes = java.util.zip.GZIPInputStream(datFile.inputStream()).use { it.readBytes() }
+                val nameIdx = indexOfTagInRange(bytes, "lastKnownName", 8, 0, bytes.size.coerceAtMost(2000))
+                if (nameIdx != -1) {
+                    val start = nameIdx + 1 + 2 + "lastKnownName".length
+                    val len = ((bytes[start].toInt() and 0xFF) shl 8) or (bytes[start + 1].toInt() and 0xFF)
+                    val name = String(bytes, start + 2, len)
+                    if (name.equals(playerName, ignoreCase = true)) {
+                        matchingUuids.add(datFile.nameWithoutExtension)
+                    }
+                }
+            }
+        }
+
+        if (matchingUuids.size > 1) {
+            android.util.Log.w(
+                "PlayerData",
+                "UUID instability detected for $playerName: found ${matchingUuids.size} playerdata files " +
+                    "(${matchingUuids.joinToString(", ")}). Current UUID: $currentUuid. " +
+                    "This may indicate Floodgate key.pem was regenerated or player-link is misconfigured."
+            )
+        } else {
+            android.util.Log.d(
+                "PlayerData",
+                "Checking playerdata integrity for $playerName ($currentUuid): OK"
+            )
+        }
     }
 
     /**

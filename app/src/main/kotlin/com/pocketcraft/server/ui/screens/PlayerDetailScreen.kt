@@ -400,7 +400,10 @@ fun PlayerDetailScreen(
                                 } else {
                                     scope.launch(Dispatchers.IO) {
                                         val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.versionLabel, player.uuid)
-                                        NBTParser.updatePlayerData(datFile, mapOf("Health" to 0f))
+                                        val success = NBTParser.updatePlayerData(datFile, mapOf("Health" to 0f))
+                                        if (success) {
+                                            health = 0f
+                                        }
                                         refreshTrigger++
                                     }
                                 }
@@ -418,7 +421,10 @@ fun PlayerDetailScreen(
                                 } else {
                                     scope.launch(Dispatchers.IO) {
                                         val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.versionLabel, player.uuid)
-                                        NBTParser.updatePlayerData(datFile, mapOf("Health" to 20f))
+                                        val success = NBTParser.updatePlayerData(datFile, mapOf("Health" to 20f))
+                                        if (success) {
+                                            health = 20f
+                                        }
                                         refreshTrigger++
                                     }
                                 }
@@ -438,7 +444,10 @@ fun PlayerDetailScreen(
                                 } else {
                                     scope.launch(Dispatchers.IO) {
                                         val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.versionLabel, player.uuid)
-                                        NBTParser.updatePlayerData(datFile, mapOf("foodLevel" to 0))
+                                        val success = NBTParser.updatePlayerData(datFile, mapOf("foodLevel" to 0))
+                                        if (success) {
+                                            hunger = 0
+                                        }
                                         refreshTrigger++
                                     }
                                 }
@@ -456,7 +465,10 @@ fun PlayerDetailScreen(
                                 } else {
                                     scope.launch(Dispatchers.IO) {
                                         val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.versionLabel, player.uuid)
-                                        NBTParser.updatePlayerData(datFile, mapOf("foodLevel" to 20))
+                                        val success = NBTParser.updatePlayerData(datFile, mapOf("foodLevel" to 20))
+                                        if (success) {
+                                            hunger = 20
+                                        }
                                         refreshTrigger++
                                     }
                                 }

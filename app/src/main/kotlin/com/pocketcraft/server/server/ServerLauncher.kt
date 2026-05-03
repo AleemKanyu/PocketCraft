@@ -3,16 +3,22 @@ package com.pocketcraft.server.server
 import android.content.Context
 import android.os.Build
 import com.pocketcraft.server.NativeLauncher
+import com.pocketcraft.server.data.repository.ServerConfigRepository
 import com.pocketcraft.server.service.PluginManager
+import com.pocketcraft.server.service.PlayerDataManager
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.service.ServerPropertiesHelper
+import com.pocketcraft.server.server.ServerPropertiesWriter
 import com.pocketcraft.server.setup.JreExtractor
 import java.io.File
 import java.io.InputStream
 import android.app.ActivityManager
 import com.pocketcraft.server.data.preferences.AppPreferences
+import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import java.util.Properties
 
 class ServerLauncher(private val context: Context) {
 
@@ -21,6 +27,16 @@ class ServerLauncher(private val context: Context) {
         private var activeExternalProcess: Process? = null
 
         fun hasActiveExternalProcess(): Boolean = activeExternalProcess?.isAlive == true
+
+        fun sendCommand(command: String) {
+            activeExternalProcess?.let { process ->
+                runCatching {
+                    val os = process.outputStream
+                    os.write((command + "\n").toByteArray())
+                    os.flush()
+                }
+            }
+        }
 
         fun requestForceStop() {
             activeExternalProcess?.let { process ->
@@ -37,61 +53,64 @@ class ServerLauncher(private val context: Context) {
 
     fun startServer(
         versionId: String,
+        jarPath: String,
         onOutput : (String) -> Unit,
         onError  : (String) -> Unit,
         onStopped: (Int) -> Unit
     ) {
-        if (!ServerFileManager.isServerJarReady(context, versionId)) {
-            onError("Server JAR not found for $versionId"); return
+        val jarFile = File(jarPath)
+        
+        // Pre-launch guard: abort immediately if JAR is missing or is a directory (EISDIR prevention)
+        if (!jarFile.exists() || jarFile.isDirectory) {
+            throw IllegalStateException("JAR not found: ${jarFile.absolutePath}")
         }
+
 
         ServerFileManager.prepareEula(context, versionId)
         ServerFileManager.prepareServerProperties(context, versionId)
         ServerFileManager.prepareRuntimeArtifacts(context, versionId)
+        
+        val serverDirFileLocal = ServerFileManager.getServerDir(context, versionId)
+        val props = ServerPropertiesHelper.readProperties(serverDirFileLocal)
+        val serverTypeStr = props.getProperty("pocketcraft-server-type", "PAPER")
+        val serverType = com.pocketcraft.server.data.model.ServerType.fromString(serverTypeStr)
+        com.pocketcraft.server.service.DimensionMigrator.syncDimensionsForServerType(context, versionId, serverType)
+        
         runBlocking(Dispatchers.IO) {
             PluginManager.ensureBedrockBridgePlugins(context, versionId).onFailure { error ->
                 onOutput("[PocketCraft] Warning: Could not refresh Bedrock bridge plugins: ${error.message}")
             }
         }
         PluginManager.enforceBedrockBridgeLocalConfig(context, versionId)
+        PluginManager.preserveFloodgateKey(context, versionId)
+        PlayerDataManager.warnIfFloodgateUsernamePrefixChanged(serverDirFileLocal)
 
         val jrePath   = JreExtractor.getJreDir(context).absolutePath
         val serverDirFile = ServerFileManager.getServerDir(context, versionId)
-        val jarPath   = ServerFileManager.getServerJarFile(context, versionId).absolutePath
         val serverDir = serverDirFile.absolutePath
         val tmpDir    = File(context.filesDir, "runtime-tmp").also { it.mkdirs() }.absolutePath
         val totalRam = getTotalRamMb(context)
+        applyPreferencesToServerProperties(serverDirFile, onOutput)
         applyRelayReadyRuntimeProfile(serverDirFile, onOutput)
         applyRelayReadyPaperGlobalConfig(serverDirFile, onOutput)
         applyRelayReadySpigotConfig(serverDirFile, onOutput)
         applyRelayReadyPaperWorldDefaults(serverDirFile, onOutput)
         val prefs = AppPreferences(context)
-        val reservedForSystemMb = when {
-            totalRam >= 8192 -> 1536
-            totalRam >= 6144 -> 1024
-            totalRam >= 4096 -> 768
-            else -> 512
-        }
-        val hardSafeMaxMb = (totalRam - reservedForSystemMb).coerceAtLeast(768)
-        val defaultSafeMaxMb = hardSafeMaxMb.coerceAtMost(3072)
+        val fullMaxMb = (totalRam * 0.80).toInt().coerceAtLeast(768)
 
         val (minRamMb, maxRamMb) = when (prefs.ramMode) {
             "full" -> {
-                val max = defaultSafeMaxMb
+                val max = fullMaxMb
                 val min = (max * 0.5).toInt().coerceAtLeast(512)
                 Pair(min, max)
             }
             "manual" -> {
-                val requested = prefs.manualRamMb.coerceAtLeast(512)
-                val max = requested.coerceAtMost(hardSafeMaxMb)
+                val max = prefs.manualRamMb.coerceAtLeast(512)
                 val min = (max * 0.5).toInt().coerceAtLeast(512)
-                if (requested > max) {
-                    onOutput("[PocketCraft] RAM request capped to ${max}MB to keep Android stable.")
-                }
                 Pair(min, max)
             }
             else -> {
-                val max = 512.coerceAtMost(defaultSafeMaxMb)
+                val max = 512.coerceAtMost(fullMaxMb)
                 val min = (max * 0.5).toInt().coerceAtLeast(256)
                 Pair(min, max)
             }
@@ -261,6 +280,9 @@ class ServerLauncher(private val context: Context) {
             "-Dos.version=Android-${Build.VERSION.RELEASE}",
             "-Djava.net.preferIPv4Stack=true",
             "-Djava.net.preferIPv6Addresses=false",
+            "-Dio.netty.eventLoopThreads=4",
+            "-Dfile.encoding=UTF-8",
+            "-Dusing.aikars.flags=https://mcflags.emc.gs",
             "-Dpaper.playerconnection.keepalive=90",
             "-Dorg.jline.terminal.jna=false",
             "-Dorg.jline.terminal.jni=false",
@@ -273,6 +295,8 @@ class ServerLauncher(private val context: Context) {
             "-Djna.nosys=true",
             "-Xshare:off",
             "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+AlwaysPreTouch",
+            "-XX:+UseStringDeduplication",
             "-XX:+UseG1GC",
             "-XX:+ParallelRefProcEnabled",
             "-XX:MaxGCPauseMillis=200",
@@ -287,9 +311,12 @@ class ServerLauncher(private val context: Context) {
             "-XX:G1MixedGCLiveThresholdPercent=90",
             "-XX:G1RSetUpdatingPauseTimePercent=5",
             "-XX:SurvivorRatio=32",
+            "-XX:MaxTenuringThreshold=1",
+            "-XX:+PerfDisableSharedMem",
             "-XX:-UsePerfData",
             "-XX:-UseContainerSupport",
             "-XX:ErrorFile=$errorFilePattern",
+            "-Dio.netty.allocator.maxOrder=9",
             "-Dio.netty.recycler.maxCapacityPerThread=0",
             "-Dio.netty.recycler.linkCapacity=1024",
             "-Djdk.lang.Process.launchMechanism=FORK",
@@ -319,6 +346,7 @@ class ServerLauncher(private val context: Context) {
                 environment()["TMPDIR"] = tmpDir
                 environment()["LD_LIBRARY_PATH"] = ldLibraryPath
                 environment()["PATH"] = "${javaBin.parent}:${System.getenv("PATH").orEmpty()}"
+                environment()["BIONIC_DISABLE_PTR_TAGGING"] = "1"
             }
             .start()
 
@@ -373,11 +401,25 @@ class ServerLauncher(private val context: Context) {
         return raw.coerceIn(512, 4096)
     }
 
+    private fun applyPreferencesToServerProperties(
+        serverDir: File,
+        onOutput: (String) -> Unit
+    ) {
+        val savedConfig = runBlocking(Dispatchers.IO) {
+            runCatching { ServerConfigRepository(context).loadConfig() }.getOrNull()
+        } ?: return
+        ServerPropertiesWriter.apply(serverDir, ServerPropertiesWriter.toSnapshot(savedConfig))
+        onOutput("[PocketCraft] Restored saved server settings before launch.")
+    }
+
     private fun applyRelayReadyRuntimeProfile(
         serverDir: File,
         onOutput: (String) -> Unit
     ) {
         val props = ServerPropertiesHelper.readProperties(serverDir)
+
+        val flightModeEnabled = runBlocking { AppPreferencesStore.isFlightModeEnabledFlow(context).first() }
+        
         val currentView = props.getProperty("view-distance", ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE.toString())
             .toIntOrNull()
             ?: ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE
@@ -393,9 +435,23 @@ class ServerLauncher(private val context: Context) {
             "entity-broadcast-range-percentage",
             ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT.toString()
         ).toIntOrNull()
+        val currentAllowFlight = props.getProperty("allow-flight", "false").toBoolean()
 
-        val tunedView = currentView.coerceIn(3, 32)
-        val tunedSimulation = currentSimulation.coerceIn(3, 32)
+        // Preserve the user-selected render distance across restarts.
+        // The relay tuning below keeps the lower bound sane, but should not
+        // force the slider back to the app default.
+        val maxView = 32
+        val maxSimulation = 32
+        var tunedView = currentView.coerceIn(3, maxView)
+        var tunedSimulation = currentSimulation.coerceIn(3, maxSimulation)
+        var tunedAllowFlight = currentAllowFlight
+
+
+        if (flightModeEnabled && !currentAllowFlight) {
+            tunedAllowFlight = true
+            onOutput("[PocketCraft] Flight Mode active: enabling allow-flight.")
+        }
+
         val tunedCompression = when {
             currentCompression == null -> ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD
             currentCompression < 0 -> ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD
@@ -419,6 +475,10 @@ class ServerLauncher(private val context: Context) {
         }
         if (tunedCompression != currentCompression) {
             props["network-compression-threshold"] = tunedCompression.toString()
+            changed = true
+        }
+        if (tunedAllowFlight != currentAllowFlight) {
+            props["allow-flight"] = tunedAllowFlight.toString()
             changed = true
         }
         if (tunedEntityBroadcast != currentEntityBroadcast) {
@@ -455,15 +515,23 @@ class ServerLauncher(private val context: Context) {
         var updated = original
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "auto-config-send-distance", "true")
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-generates", "0")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", "0")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", "12")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-loading-priority-override", "10")
         updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-generate-rate", "-1.0")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-load-rate", "100.0")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-load-rate", "200.0")
+        updated = ensureYamlSectionValue(updated, "misc", "io-threads", "3")
+        updated = ensureYamlSectionValue(updated, "misc", "worker-threads", "3")
         updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-send-rate", "100.0")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "target-player-chunk-send-rate", "-1.0")
         updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "4")
+        // Chunk system: dedicate threads for IO and generation
+        updated = ensureYamlSectionValue(updated, "chunk-system", "gen-parallelism", "default")
+        updated = ensureYamlSectionValue(updated, "chunk-system", "io-threads", "2")
+        updated = ensureYamlSectionValue(updated, "chunk-system", "worker-threads", "2")
 
         if (updated != original) {
             paperGlobal.writeText(updated)
-            onOutput("[PocketCraft] Paper relay tuning applied: client send distance + 4G network optimized chunk send/load limits")
+            onOutput("[PocketCraft] Paper global tuning applied: adaptive chunk send + dedicated IO/worker threads.")
         }
     }
 
@@ -499,12 +567,30 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlPathValue(updated, listOf("chunks"), "delay-chunk-unloads-by", "10s")
         // Keep spawn chunks loaded so the first player to join sees terrain immediately.
         updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded", "true")
-        // Ensure spawn radius is pre-generated (vanilla default 10, lower = faster first start)
-        updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded-range", "4")
+        // Ensure spawn radius is fully loaded (default 10) to prevent chunks not loading when joining
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded-range", "10")
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "max-auto-save-chunks-per-tick", "4")
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "prevent-moving-into-unloaded-chunks", "true")
+        updated = ensureYamlPathValue(updated, listOf("tick-rates"), "mob-spawner", "2")
+        updated = ensureYamlPathValue(updated, listOf("tick-rates"), "grass-spread", "4")
+        updated = ensureYamlPathValue(updated, listOf("tick-rates"), "container-update", "1")
+        // Entity save limits to reduce chunk I/O overhead
+        updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "arrow", "16")
+        updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "dragon_fireball", "3")
+        updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "egg", "8")
+        updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "ender_pearl", "8")
+        updated = removeYamlPathKey(updated, listOf("chunks", "entity-per-chunk-save-limit"), "experience_ball")
+        updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "experience_orb", "8")
+        updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "fireball", "8")
+        updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "firework_rocket", "8")
+        updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "small_fireball", "8")
+        updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "snowball", "8")
+        updated = removeYamlPathKey(updated, listOf("chunks", "entity-per-chunk-save-limit"), "thrown_exp_bottle")
+        updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "experience_bottle", "3")
 
         if (updated != original) {
             paperWorldDefaults.writeText(updated)
-            onOutput("[PocketCraft] Paper world defaults updated to buffer chunk unloads for 10s.")
+            onOutput("[PocketCraft] Paper world defaults updated: entity limits + chunk unload buffer + anti-void walking.")
         }
     }
 
@@ -567,6 +653,44 @@ class ServerLauncher(private val context: Context) {
             lines.add(searchEnd, "$keyIndent$key: $value")
         }
 
+        return lines.joinToString("\n").trimEnd() + "\n"
+    }
+
+    private fun removeYamlPathKey(
+        original: String,
+        path: List<String>,
+        key: String
+    ): String {
+        val lines = original
+            .ifBlank { "" }
+            .split('\n')
+            .toMutableList()
+
+        if (lines.size == 1 && lines[0].isBlank()) {
+            return original
+        }
+
+        var searchStart = 0
+        var searchEnd = lines.size
+
+        path.forEachIndexed { depth, section ->
+            val indent = "  ".repeat(depth)
+            val sectionIndex = (searchStart until searchEnd).firstOrNull { index ->
+                val line = lines[index]
+                line.trim() == "$section:" && leadingYamlIndent(line) == indent.length
+            } ?: return original
+
+            searchStart = sectionIndex + 1
+            searchEnd = findYamlSectionEnd(lines, sectionIndex)
+        }
+
+        val keyIndent = "  ".repeat(path.size)
+        val keyIndex = (searchStart until searchEnd).firstOrNull { index ->
+            val line = lines[index]
+            leadingYamlIndent(line) == keyIndent.length && line.trimStart().startsWith("$key:")
+        } ?: return original
+
+        lines.removeAt(keyIndex)
         return lines.joinToString("\n").trimEnd() + "\n"
     }
 

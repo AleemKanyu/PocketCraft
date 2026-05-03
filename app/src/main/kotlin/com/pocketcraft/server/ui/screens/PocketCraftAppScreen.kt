@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -39,6 +40,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,6 +61,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import com.pocketcraft.server.BuildConfig
+import com.pocketcraft.server.PocketCraftApp
 import com.pocketcraft.server.broadcast.FeedbackPromptCenter
 import com.pocketcraft.server.broadcast.FeedbackPromptPayload
 import com.pocketcraft.server.broadcast.PocketCraftMessagingService
@@ -68,23 +71,34 @@ import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.config.RemoteConfigManager
 import com.pocketcraft.server.R
+import com.pocketcraft.server.server.ServerHostService
 import com.pocketcraft.server.ui.components.BroadcastBanner
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.pocketPopupAccentContainerColor
-import com.pocketcraft.server.update.GitHubApkInstaller
-import com.pocketcraft.server.update.GitHubUpdateChecker
+import com.pocketcraft.server.service.ModpackManager
 import com.pocketcraft.server.viewmodel.BroadcastViewModel
 import com.google.firebase.crashlytics.ktx.crashlytics
 import com.google.firebase.ktx.Firebase
+import com.pocketcraft.server.data.model.ServerType
+import com.pocketcraft.server.server.ServerJarManager
+import com.pocketcraft.server.service.ServerFileManager
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-enum class Screen { LOADING, VERSION_PICKER, DOWNLOADING, SERVER }
+enum class Screen { LOADING, DOWNLOADING, VERSION_PICKER, SERVER }
 
 private const val TAG_POCKETCRAFT_APP = "PocketCraftApp"
+private data class PendingVersionChange(
+    val type: ServerType,
+    val version: String,
+    val customJar: String?
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,11 +106,19 @@ fun PocketCraftApp(
     isDarkTheme: Boolean,
     onDarkThemeChange: (Boolean) -> Unit
 ) {
-    var screen by remember { mutableStateOf(Screen.SERVER) }
+    var screen by remember { mutableStateOf(Screen.LOADING) }
     var transitionTarget by remember { mutableStateOf<Screen?>(null) }
-    var versionId by remember { mutableStateOf("1.21.6") }
+    var loadingStatus by remember { mutableStateOf("Preparing PocketCraft...") }
+    var versionDownloadProgress by remember { mutableStateOf(0) }
+    var versionId by remember { mutableStateOf("") }
+    var bootstrapComplete by remember { mutableStateOf(false) }
+    var selectedServerType by remember { mutableStateOf(ServerType.PAPER) }
     var downloadedVersions by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var pendingAutoDownloadVersion by remember { mutableStateOf<String?>(null) }
     var showVersionPickerDialog by remember { mutableStateOf(false) }
+    var showVersionRiskDialog by remember { mutableStateOf(false) }
+    var pendingVersionChange by remember { mutableStateOf<PendingVersionChange?>(null) }
+    var pendingVersionRollbackConfig by remember { mutableStateOf<Triple<ServerType, String, String?>?>(null) }
     var showExitDialog by remember { mutableStateOf(false) }
     var showCommunityDialog by remember { mutableStateOf(false) }
     var pendingCommunityDialog by remember { mutableStateOf(false) }
@@ -105,23 +127,12 @@ fun PocketCraftApp(
     var pendingInstagramDialog by remember { mutableStateOf(false) }
     var showConsentDialog by remember { mutableStateOf(false) }
     var pendingConsentDialog by remember { mutableStateOf(false) }
-    var showUpdateDialog by remember { mutableStateOf(false) }
-    var updateInfo by remember { mutableStateOf<GitHubUpdateChecker.ReleaseInfo?>(null) }
-    var showChangelogDialog by remember { mutableStateOf(false) }
-    var changelogInfo by remember { mutableStateOf<GitHubUpdateChecker.ReleaseInfo?>(null) }
     var pendingFeedbackPrompt by remember { mutableStateOf<FeedbackPromptPayload?>(null) }
     var showFeedbackPromptDialog by remember { mutableStateOf(false) }
     var feedbackPromptInput by remember { mutableStateOf("") }
     var sendingFeedbackPrompt by remember { mutableStateOf(false) }
     var feedbackPromptError by remember { mutableStateOf<String?>(null) }
-    var isDownloadingUpdate by remember { mutableStateOf(false) }
-    var updateDownloadProgress by remember { mutableStateOf(0) }
-    var updateDownloadStatus by remember { mutableStateOf("Preparing update...") }
-    var updateDownloadError by remember { mutableStateOf<String?>(null) }
-    var awaitingInstallPermission by remember { mutableStateOf(false) }
-    var pendingInstallResult by remember { mutableStateOf<GitHubApkInstaller.DownloadResult?>(null) }
     var homeScreenReady by remember { mutableStateOf(false) }
-    var releaseCheckHandled by remember { mutableStateOf(false) }
     var showDiscordButtonFromRemoteConfig by remember { mutableStateOf(true) }
     var showInstagramButtonFromRemoteConfig by remember { mutableStateOf(true) }
     var sessionClosedBroadcastIds by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -130,13 +141,12 @@ fun PocketCraftApp(
     val preferences = remember { AppPreferences(context) }
     val activity = remember(context) { context.findActivity() }
     val scope = rememberCoroutineScope()
-    val stateHolder = remember(versionId) { ServerStateHolder(context.applicationContext, versionId) }
+    val stateHolder = remember(versionId) { ServerStateHolder(context.applicationContext, versionId, selectedServerType) }
     val broadcastViewModel: BroadcastViewModel = hiltViewModel()
     val configBanner by broadcastViewModel.configBanner.collectAsState()
     val broadcasts by broadcastViewModel.visibleBroadcasts.collectAsState()
     val notificationsEnabled by AppPreferencesStore.isNotificationsEnabledFlow(context).collectAsState(initial = true)
     val analyticsConsentGranted by AppPreferencesStore.isAnalyticsConsentFlow(context).collectAsState(initial = false)
-    val adsConsentGranted by AppPreferencesStore.isAdsConsentFlow(context).collectAsState(initial = false)
     val legalVersionAccepted by AppPreferencesStore.getLegalVersionAcceptedFlow(context).collectAsState(initial = null)
     val isFirstLaunchAfterInstallOrUpdate = remember(BuildConfig.VERSION_NAME) {
         preferences.lastLaunchedAppVersion != BuildConfig.VERSION_NAME
@@ -150,15 +160,11 @@ fun PocketCraftApp(
         )
     }
     val hasBlockingSheet = showVersionPickerDialog ||
+        showVersionRiskDialog ||
         showConsentDialog ||
         showCommunityDialog ||
         showInstagramDialog ||
         showFeedbackPromptDialog ||
-        showUpdateDialog ||
-        showChangelogDialog ||
-        isDownloadingUpdate ||
-        awaitingInstallPermission ||
-        updateDownloadError != null ||
         showExitDialog
 
     DisposableEffect(stateHolder) {
@@ -179,22 +185,59 @@ fun PocketCraftApp(
 
     LaunchedEffect(Unit) {
         val setupComplete = AppPreferencesStore.isSetupCompleteFlow(context).first()
+        val storedVersionId = AppPreferencesStore.getStoredSelectedVersionFlow(context).first()
         val savedVersionId = AppPreferencesStore.getSelectedVersionFlow(context).first()
-        val pendingAutoDownloadVersion = AppPreferencesStore.getPendingAutoDownloadVersionFlow(context).first()
+        val savedServerType = ServerType.fromString(AppPreferencesStore.getSelectedServerTypeFlow(context).first())
+        val pending = AppPreferencesStore.getPendingAutoDownloadVersionFlow(context).first()
+        val activeVersionId = ServerHostService.getPersistedActiveVersion(context)
 
-        versionId = savedVersionId
+        selectedServerType = savedServerType
+        downloadedVersions = scanDownloadedRuntimeKeys(context.applicationContext)
+
+        val bootstrapVersion = when {
+            activeVersionId.isNotBlank() -> activeVersionId
+            !storedVersionId.isNullOrBlank() -> storedVersionId
+            else -> "" // Do NOT auto-pick any version if no selection exists
+        }
+        versionId = bootstrapVersion
+
+        if (!pending.isNullOrBlank() &&
+            !downloadedVersions.contains(runtimeDownloadKey(savedServerType, pending))
+        ) {
+            Log.i(TAG_POCKETCRAFT_APP, "Need download for version=$bootstrapVersion")
+            pendingAutoDownloadVersion = pending
+            transitionTarget = Screen.SERVER
+        }
 
         if (!setupComplete) {
             AppPreferencesStore.setSetupComplete(context, true)
         }
-        downloadedVersions = scanDownloadedVersionIds(context.applicationContext)
-
-        if (!pendingAutoDownloadVersion.isNullOrBlank() && !downloadedVersions.contains(pendingAutoDownloadVersion)) {
-            versionId = pendingAutoDownloadVersion
-            transitionTarget = Screen.DOWNLOADING
-            screen = Screen.LOADING
+        AppPreferencesStore.setSelectedServerType(context, savedServerType.name)
+        if (!bootstrapVersion.isNullOrBlank() && storedVersionId != bootstrapVersion) {
+            AppPreferencesStore.setSelectedVersion(context, bootstrapVersion)
         }
-        AppPreferencesStore.setPendingAutoDownloadVersion(context, null)
+        bootstrapComplete = true
+        transitionTarget = if (bootstrapVersion.isBlank()) Screen.VERSION_PICKER else Screen.SERVER
+    }
+
+    LaunchedEffect(stateHolder, versionId, selectedServerType, bootstrapComplete) {
+        if (!bootstrapComplete || versionId.isBlank()) return@LaunchedEffect
+        stateHolder.refreshAll()
+        snapshotFlow { stateHolder.isRefreshing }
+            .dropWhile { !it }
+            .first { !it }
+
+        val current = stateHolder.config
+        val shouldSyncRuntime = current.gameVersion != versionId || current.serverType != selectedServerType
+        if (shouldSyncRuntime) {
+            stateHolder.saveSettings(
+                current.copy(
+                    serverType = selectedServerType,
+                    gameVersion = versionId
+                )
+            )
+            stateHolder.refreshAll()
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -299,17 +342,13 @@ fun PocketCraftApp(
         showVersionPickerDialog,
         showCommunityDialog,
         showInstagramDialog,
-        showUpdateDialog,
-        isDownloadingUpdate,
-        awaitingInstallPermission,
-        updateDownloadError,
         showExitDialog,
         screen,
         homeScreenReady
     ) {
         if (!pendingConsentDialog) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
-        val hasBlockingPopup = showVersionPickerDialog || showUpdateDialog || isDownloadingUpdate || awaitingInstallPermission || updateDownloadError != null || showExitDialog || showCommunityDialog || showInstagramDialog
+        val hasBlockingPopup = showVersionPickerDialog || showExitDialog || showCommunityDialog || showInstagramDialog
         if (hasBlockingPopup) return@LaunchedEffect
         showConsentDialog = true
         pendingConsentDialog = false
@@ -320,10 +359,6 @@ fun PocketCraftApp(
         showVersionPickerDialog,
         showConsentDialog,
         showInstagramDialog,
-        showUpdateDialog,
-        isDownloadingUpdate,
-        awaitingInstallPermission,
-        updateDownloadError,
         showExitDialog,
         screen,
         homeScreenReady,
@@ -331,7 +366,7 @@ fun PocketCraftApp(
     ) {
         if (!pendingCommunityDialog) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
-        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showUpdateDialog || isDownloadingUpdate || awaitingInstallPermission || updateDownloadError != null || showExitDialog || showCommunityDialog || showInstagramDialog || hasPendingBroadcast
+        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showExitDialog || showCommunityDialog || showInstagramDialog || hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
         showCommunityDialog = true
         pendingCommunityDialog = false
@@ -347,10 +382,6 @@ fun PocketCraftApp(
         showVersionPickerDialog,
         showConsentDialog,
         showCommunityDialog,
-        showUpdateDialog,
-        isDownloadingUpdate,
-        awaitingInstallPermission,
-        updateDownloadError,
         showExitDialog,
         screen,
         homeScreenReady,
@@ -359,7 +390,7 @@ fun PocketCraftApp(
         if (!pendingInstagramDialog) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
         if (!showInstagramButtonFromRemoteConfig) return@LaunchedEffect
-        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showCommunityDialog || showUpdateDialog || isDownloadingUpdate || awaitingInstallPermission || updateDownloadError != null || showExitDialog || showInstagramDialog || showFeedbackPromptDialog || hasPendingBroadcast
+        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showCommunityDialog || showExitDialog || showInstagramDialog || showFeedbackPromptDialog || hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
         showInstagramDialog = true
         pendingInstagramDialog = false
@@ -371,10 +402,6 @@ fun PocketCraftApp(
         showConsentDialog,
         showCommunityDialog,
         showInstagramDialog,
-        showUpdateDialog,
-        isDownloadingUpdate,
-        awaitingInstallPermission,
-        updateDownloadError,
         showExitDialog,
         screen,
         homeScreenReady,
@@ -382,7 +409,7 @@ fun PocketCraftApp(
     ) {
         if (pendingFeedbackPrompt == null) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
-        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showCommunityDialog || showInstagramDialog || showUpdateDialog || isDownloadingUpdate || awaitingInstallPermission || updateDownloadError != null || showExitDialog || hasPendingBroadcast
+        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showCommunityDialog || showInstagramDialog || showExitDialog || hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
         showFeedbackPromptDialog = true
     }
@@ -407,79 +434,193 @@ fun PocketCraftApp(
         }
     }
 
-    DisposableEffect(lifecycleOwner, awaitingInstallPermission, pendingInstallResult) {
-        if (!awaitingInstallPermission || pendingInstallResult == null) {
-            onDispose { }
-        } else {
-            val observer = LifecycleEventObserver { _, event ->
-                if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
-                if (!GitHubApkInstaller.canRequestPackageInstalls(context.applicationContext)) return@LifecycleEventObserver
-
-                val pending = pendingInstallResult ?: return@LifecycleEventObserver
-                runCatching {
-                    context.startActivity(
-                        GitHubApkInstaller.buildInstallIntent(context.applicationContext, pending)
-                    )
-                    awaitingInstallPermission = false
-                    pendingInstallResult = null
-                }.onFailure { error ->
-                    updateDownloadError = error.message ?: "Could not open installer after permission was granted."
-                }
-            }
-            lifecycleOwner.lifecycle.addObserver(observer)
-            onDispose {
-                lifecycleOwner.lifecycle.removeObserver(observer)
-            }
-        }
-    }
-
-    LaunchedEffect(screen, homeScreenReady, hasPendingBroadcast, hasBlockingSheet, releaseCheckHandled) {
-        if (releaseCheckHandled) {
-            return@LaunchedEffect
-        }
-        if (screen != Screen.SERVER || !homeScreenReady || hasPendingBroadcast || hasBlockingSheet) {
-            return@LaunchedEffect
-        }
-
-        releaseCheckHandled = true
-        scope.launch {
-            val latestRelease = GitHubUpdateChecker.fetchLatestRelease(context)
-            if (latestRelease == null) return@launch
-            when {
-                GitHubUpdateChecker.compareVersions(latestRelease.tagName, BuildConfig.VERSION_NAME) > 0 -> {
-                    updateInfo = latestRelease
-                    delay(500)
-                    showUpdateDialog = true
-                }
-                GitHubUpdateChecker.compareVersions(latestRelease.tagName, BuildConfig.VERSION_NAME) == 0 &&
-                    isFirstLaunchAfterInstallOrUpdate &&
-                    latestRelease.body.isNotBlank() &&
-                    preferences.lastSeenChangelogVersion != latestRelease.tagName -> {
-                    changelogInfo = latestRelease
-                    delay(500)
-                    showChangelogDialog = true
-                }
-            }
-        }
-    }
-
-    BackHandler(enabled = screen == Screen.DOWNLOADING) {
-        screen = Screen.SERVER
-    }
-
-    fun requestVersionChange(version: String) {
+    fun requestVersionChange(type: ServerType, version: String) {
         Log.i(
             TAG_POCKETCRAFT_APP,
-            "requestVersionChange version=$version current=$versionId alreadyDownloaded=${downloadedVersions.contains(version)}"
+            "requestVersionChange version=$version current=$versionId"
         )
+        selectedServerType = type
         versionId = version
         scope.launch {
             AppPreferencesStore.setSetupComplete(context, true)
+            AppPreferencesStore.setSelectedServerType(context, type.name)
             AppPreferencesStore.setSelectedVersion(context, version)
             stateHolder.markActiveWorldSetupCompleted()
-            transitionTarget = if (downloadedVersions.contains(version)) Screen.SERVER else Screen.DOWNLOADING
-            Log.i(TAG_POCKETCRAFT_APP, "transition target=${transitionTarget?.name} for version=$version")
+            transitionTarget = Screen.SERVER
             screen = Screen.LOADING
+        }
+    }
+
+    suspend fun applyVersionChange(
+        type: ServerType,
+        resolvedVersion: String,
+        customJar: String?,
+        createNewWorld: Boolean
+    ) {
+        if (createNewWorld) {
+            val worldHint = "${type.name.lowercase()}_${resolvedVersion.replace('.', '_')}"
+            val createdMessage = stateHolder.createWorld(worldHint)
+            val createdWorld = parseCreatedWorldName(createdMessage)
+            if (createdWorld == null) {
+                Toast.makeText(context, createdMessage, Toast.LENGTH_LONG).show()
+                return
+            }
+            val switchResult = stateHolder.setActiveWorld(createdWorld, syncPluginProfiles = false)
+            if (!switchResult.startsWith("Active world switched")) {
+                Toast.makeText(context, switchResult, Toast.LENGTH_LONG).show()
+                return
+            }
+        }
+
+        val currentConfig = stateHolder.config
+        val newConfig = currentConfig.copy(
+            serverType = type,
+            gameVersion = resolvedVersion,
+            customJarPath = customJar
+        )
+        stateHolder.saveSettings(newConfig)
+
+        if (type == ServerType.MODPACK) {
+            val modpackId = customJar?.trim().orEmpty()
+            if (modpackId.isBlank()) {
+                Toast.makeText(context, "Please select a modpack first.", Toast.LENGTH_LONG).show()
+                return
+            }
+
+            loadingStatus = "Installing modpack..."
+            versionDownloadProgress = 0
+            screen = Screen.DOWNLOADING
+
+            val installResult = ModpackManager.installModpack(
+                context = context.applicationContext,
+                modpackId = modpackId,
+                onStatus = { status ->
+                    scope.launch { loadingStatus = status }
+                },
+                onProgress = { percent ->
+                    scope.launch { versionDownloadProgress = percent.coerceIn(0, 100) }
+                }
+            )
+
+            if (installResult.isFailure) {
+                Toast.makeText(
+                    context,
+                    "Failed to install modpack: ${installResult.exceptionOrNull()?.message ?: "unknown error"}",
+                    Toast.LENGTH_LONG
+                ).show()
+                loadingStatus = "Preparing PocketCraft..."
+                versionDownloadProgress = 0
+                transitionTarget = Screen.SERVER
+                screen = Screen.SERVER
+                return
+            }
+
+            AppPreferencesStore.setSelectedServerType(context, type.name)
+            AppPreferencesStore.setSelectedVersion(context, modpackId)
+            downloadedVersions = scanDownloadedRuntimeKeys(context.applicationContext)
+            requestVersionChange(type, modpackId)
+            return
+        }
+
+        if (type.supportsVersionSelect) {
+            loadingStatus = "Downloading $type $resolvedVersion..."
+            versionDownloadProgress = 0
+            screen = Screen.DOWNLOADING
+            val downloadResult = runCatching {
+                withContext(Dispatchers.IO) {
+                    val targetFile = ServerFileManager.getServerJarFile(
+                        context = context.applicationContext,
+                        gameVersion = resolvedVersion,
+                        serverType = type
+                    )
+                    ServerJarManager.resolveJar(
+                        serverType = type,
+                        gameVersion = resolvedVersion,
+                        customJarPath = null,
+                        targetFile = targetFile,
+                        onProgress = { percent ->
+                            scope.launch {
+                                versionDownloadProgress = percent.coerceIn(0, 100)
+                                loadingStatus = "Downloading $type $resolvedVersion... $percent%"
+                            }
+                        }
+                    ).collect { }
+                }
+            }
+            if (downloadResult.isFailure) {
+                val error = downloadResult.exceptionOrNull()
+                Toast.makeText(
+                    context,
+                    "Failed to download $type $resolvedVersion: ${error?.message ?: "unknown error"}",
+                    Toast.LENGTH_LONG
+                ).show()
+                loadingStatus = "Preparing PocketCraft..."
+                versionDownloadProgress = 0
+                transitionTarget = Screen.SERVER
+                screen = Screen.SERVER
+                return
+            }
+        }
+
+        if (type.supportsVersionSelect) {
+            AppPreferencesStore.setSelectedServerType(context, type.name)
+            AppPreferencesStore.setSelectedVersion(context, resolvedVersion)
+            downloadedVersions = scanDownloadedRuntimeKeys(context.applicationContext)
+            requestVersionChange(type, resolvedVersion)
+        } else {
+            loadingStatus = "Preparing PocketCraft..."
+            transitionTarget = Screen.SERVER
+            screen = Screen.SERVER
+        }
+    }
+
+    suspend fun discardPendingVersionChange() {
+        val rollback = pendingVersionRollbackConfig
+        pendingVersionChange = null
+        pendingVersionRollbackConfig = null
+        showVersionRiskDialog = false
+        if (rollback != null) {
+            val current = stateHolder.config
+            val shouldRollback = current.serverType != rollback.first ||
+                current.gameVersion != rollback.second ||
+                current.customJarPath != rollback.third
+            if (shouldRollback) {
+                stateHolder.saveSettings(
+                    current.copy(
+                        serverType = rollback.first,
+                        gameVersion = rollback.second,
+                        customJarPath = rollback.third
+                    )
+                )
+            }
+        }
+    }
+
+    LaunchedEffect(pendingAutoDownloadVersion, selectedServerType, downloadedVersions) {
+        val pending = pendingAutoDownloadVersion?.trim().orEmpty()
+        if (pending.isBlank()) return@LaunchedEffect
+        if (downloadedVersions.contains(runtimeDownloadKey(selectedServerType, pending))) {
+            pendingAutoDownloadVersion = null
+            AppPreferencesStore.setPendingAutoDownloadVersion(context, null)
+            return@LaunchedEffect
+        }
+
+        PocketCraftApp.applicationScope.launch {
+            runCatching {
+                withContext(Dispatchers.Main.immediate) {
+                    applyVersionChange(
+                        type = selectedServerType,
+                        resolvedVersion = pending,
+                        customJar = null,
+                        createNewWorld = false
+                    )
+                }
+            }
+            withContext(Dispatchers.Main.immediate) {
+                downloadedVersions = scanDownloadedRuntimeKeys(context.applicationContext)
+                pendingAutoDownloadVersion = null
+                AppPreferencesStore.setPendingAutoDownloadVersion(context, null)
+            }
         }
     }
 
@@ -487,27 +628,25 @@ fun PocketCraftApp(
         when (screen) {
             Screen.LOADING -> SplashScreen(
                 progress = 0.66f,
-                status = if (transitionTarget == Screen.DOWNLOADING) "Preparing download..." else "Preparing PocketCraft..."
+                status = loadingStatus
             )
 
-            Screen.DOWNLOADING -> AutoDownloadScreen(
-                versionId = versionId,
-                onReady = {
-                    Log.i(TAG_POCKETCRAFT_APP, "AutoDownloadScreen onReady version=$versionId")
-                    downloadedVersions = downloadedVersions + versionId
-                    screen = Screen.SERVER
-                }
+            Screen.DOWNLOADING -> SplashScreen(
+                progress = (versionDownloadProgress / 100f).coerceIn(0f, 1f),
+                status = loadingStatus
             )
 
             Screen.SERVER -> ServerScreen(
                 stateHolder = stateHolder,
                 onChangeVersion = { showVersionPickerDialog = true },
-                onVersionSelected = ::requestVersionChange,
+                onVersionSelected = { version ->
+                    requestVersionChange(stateHolder.config.serverType, version)
+                },
                 onRequestExit = { showExitDialog = true },
                 isDarkTheme = isDarkTheme,
                 onDarkThemeChange = onDarkThemeChange,
                 homeTopContent = {
-                    if (screen == Screen.SERVER && homeScreenReady) {
+                    if (screen == Screen.SERVER) {
                         configBanner?.let { banner ->
                             if (banner.id !in sessionClosedBroadcastIds) {
                                 BroadcastBanner(
@@ -523,18 +662,16 @@ fun PocketCraftApp(
                             }
                         }
                         broadcasts.forEach { message ->
-                            if (message.id !in sessionClosedBroadcastIds) {
-                                BroadcastBanner(
-                                    message = message,
-                                    onDismiss = {
-                                        broadcastViewModel.dismiss(message.id)
-                                        sessionClosedBroadcastIds = sessionClosedBroadcastIds + message.id
-                                    },
-                                    enableDetailsSheet = false,
-                                    outerPadding = PaddingValues(0.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
+                            BroadcastBanner(
+                                message = message,
+                                onDismiss = {
+                                    broadcastViewModel.dismiss(message.id)
+                                    sessionClosedBroadcastIds = sessionClosedBroadcastIds + message.id
+                                },
+                                enableDetailsSheet = false,
+                                outerPadding = PaddingValues(0.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
                 }
@@ -560,46 +697,126 @@ fun PocketCraftApp(
             containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text("Switch Minecraft version", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
-                    Text(
-                        "Choose a version below. If it is not downloaded yet, PocketCraft will fetch it automatically.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp
-                    )
-                }
-
-                VersionPickerScreen(
-                    selectedVersion = versionId,
-                    showWorldSetupHint = stateHolder.activeWorldNeedsSetup,
-                    worldName = stateHolder.config.worldName.ifBlank { "world" },
-                    embeddedInSheet = true,
-                    onVersionSelected = { selected ->
-                        scope.launch {
-                            versionPickerSheetState.hide()
-                            showVersionPickerDialog = false
-                            requestVersionChange(selected)
+            ServerTypeVersionBottomSheet(
+                onDismissRequest = {
+                    scope.launch {
+                        versionPickerSheetState.hide()
+                        showVersionPickerDialog = false
+                    }
+                },
+                onConfirm = { type, version, customJar ->
+                    scope.launch {
+                        versionPickerSheetState.hide()
+                        showVersionPickerDialog = false
+                        val currentConfig = stateHolder.config
+                        val resolvedVersion = when (type) {
+                            ServerType.MODPACK -> customJar ?: currentConfig.gameVersion
+                            else -> version ?: currentConfig.gameVersion
+                        }
+                        val shouldWarn = currentConfig.serverType != type || currentConfig.gameVersion != resolvedVersion
+                        if (shouldWarn) {
+                            pendingVersionRollbackConfig = Triple(
+                                currentConfig.serverType,
+                                currentConfig.gameVersion,
+                                currentConfig.customJarPath
+                            )
+                            pendingVersionChange = PendingVersionChange(type, resolvedVersion, customJar)
+                            showVersionRiskDialog = true
+                        } else {
+                            applyVersionChange(type, resolvedVersion, customJar, createNewWorld = false)
                         }
                     }
-                )
+                },
+                currentServerType = stateHolder.config.serverType,
+                currentGameVersion = stateHolder.config.gameVersion,
+                currentCustomJarPath = stateHolder.config.customJarPath
+            )
+        }
+    }
 
+    if (showVersionRiskDialog && pendingVersionChange != null) {
+        val riskSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val pending = pendingVersionChange!!
+        val current = stateHolder.config
+        val changeLabel = describeVersionChange(
+            oldType = current.serverType,
+            oldVersion = current.gameVersion,
+            newType = pending.type,
+            newVersion = pending.version
+        )
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    riskSheetState.hide()
+                    discardPendingVersionChange()
+                }
+            },
+            sheetState = riskSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Confirm server change", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text(
+                    "You are about to $changeLabel. Continuing can break worlds, plugins, or mods.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 14.sp
+                )
+                Text(
+                    "Safer option: start a new world for this server type/version.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp
+                )
+                DuoButton(
+                    text = "START NEW WORLD",
+                    onClick = {
+                        scope.launch {
+                            riskSheetState.hide()
+                            pendingVersionRollbackConfig = null
+                            showVersionRiskDialog = false
+                            applyVersionChange(
+                                type = pending.type,
+                                resolvedVersion = pending.version,
+                                customJar = pending.customJar,
+                                createNewWorld = true
+                            )
+                            pendingVersionChange = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                DuoButton(
+                    text = "CONTINUE (AT YOUR RISK)",
+                    onClick = {
+                        scope.launch {
+                            riskSheetState.hide()
+                            pendingVersionRollbackConfig = null
+                            showVersionRiskDialog = false
+                            applyVersionChange(
+                                type = pending.type,
+                                resolvedVersion = pending.version,
+                                customJar = pending.customJar,
+                                createNewWorld = false
+                            )
+                            pendingVersionChange = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
                 TextButton(
                     onClick = {
                         scope.launch {
-                            versionPickerSheetState.hide()
-                            showVersionPickerDialog = false
+                            riskSheetState.hide()
+                            discardPendingVersionChange()
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Close", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
+                    Text("Cancel")
                 }
             }
         }
@@ -620,7 +837,7 @@ fun PocketCraftApp(
             ) {
                 Text("Privacy choices", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                 Text(
-                    "Choose whether PocketCraft can use optional diagnostics, analytics, and ads. You can change this later in Settings > Privacy & Legal.",
+                    "Choose whether PocketCraft can use optional diagnostics and analytics. You can change this later in Settings > Privacy & Legal.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 14.sp
                 )
@@ -636,7 +853,6 @@ fun PocketCraftApp(
                         scope.launch {
                             AppPreferencesStore.setCrashDiagnosticsConsent(context, true)
                             AppPreferencesStore.setAnalyticsConsent(context, true)
-                            AppPreferencesStore.setAdsConsent(context, true)
                             AppPreferencesStore.setLegalVersionAccepted(context, BuildConfig.LEGAL_POLICY_VERSION)
                             runCatching {
                                 Firebase.crashlytics.setCrashlyticsCollectionEnabled(true)
@@ -655,7 +871,6 @@ fun PocketCraftApp(
                         scope.launch {
                             AppPreferencesStore.setCrashDiagnosticsConsent(context, true)
                             AppPreferencesStore.setAnalyticsConsent(context, false)
-                            AppPreferencesStore.setAdsConsent(context, false)
                             AppPreferencesStore.setLegalVersionAccepted(context, BuildConfig.LEGAL_POLICY_VERSION)
                             runCatching {
                                 Firebase.crashlytics.setCrashlyticsCollectionEnabled(true)
@@ -927,110 +1142,6 @@ fun PocketCraftApp(
         }
     }
 
-    if (showUpdateDialog && updateInfo != null) {
-        AppUpdateScreen(
-            updateInfo = updateInfo!!,
-            isDownloading = isDownloadingUpdate,
-            downloadProgress = updateDownloadProgress,
-            downloadStatus = updateDownloadStatus,
-            isAwaitingInstallPermission = awaitingInstallPermission,
-            errorMessage = updateDownloadError,
-            onUpdateNow = {
-                val selectedUpdate = updateInfo
-                if (selectedUpdate == null) {
-                    showUpdateDialog = false
-                    return@AppUpdateScreen
-                }
-                val apkUrl = selectedUpdate.downloadUrl
-                if (apkUrl.isNullOrBlank()) {
-                    updateDownloadError = "No APK asset was attached to this GitHub release."
-                    return@AppUpdateScreen
-                }
-
-                scope.launch {
-                    try {
-                        isDownloadingUpdate = true
-                        updateDownloadError = null
-                        updateDownloadStatus = "Downloading update..."
-                        updateDownloadProgress = 0
-
-                        val downloadResult = GitHubApkInstaller.downloadApk(
-                            context = context.applicationContext,
-                            downloadUrl = apkUrl,
-                            onProgress = { progress ->
-                                updateDownloadProgress = progress
-                                updateDownloadStatus = if (progress < 100) {
-                                    "Downloading update..."
-                                } else {
-                                    "Download complete. Opening installer..."
-                                }
-                            }
-                        ).getOrThrow()
-
-                        if (!GitHubApkInstaller.canRequestPackageInstalls(context.applicationContext)) {
-                            isDownloadingUpdate = false
-                            awaitingInstallPermission = true
-                            pendingInstallResult = downloadResult
-                            context.startActivity(GitHubApkInstaller.buildUnknownAppsSettingsIntent(context.applicationContext))
-                            return@launch
-                        }
-
-                        isDownloadingUpdate = false
-                        updateDownloadStatus = "Opening installer..."
-                        showUpdateDialog = false
-                        context.startActivity(GitHubApkInstaller.buildInstallIntent(context.applicationContext, downloadResult))
-                    } catch (error: Throwable) {
-                        isDownloadingUpdate = false
-                        updateDownloadError = error.message ?: "Could not download update from GitHub."
-                    }
-                }
-            },
-            onLater = {
-                if (!isDownloadingUpdate && !awaitingInstallPermission) {
-                    showUpdateDialog = false
-                    updateDownloadError = null
-                }
-            },
-            onOpenInstallSettings = {
-                runCatching {
-                    context.startActivity(
-                        GitHubApkInstaller.buildUnknownAppsSettingsIntent(context.applicationContext)
-                    )
-                }.onFailure { error ->
-                    updateDownloadError = error.message ?: "Could not open settings."
-                }
-            },
-            onInstallPermissionEnabled = {
-                if (GitHubApkInstaller.canRequestPackageInstalls(context.applicationContext)) {
-                    val pending = pendingInstallResult ?: return@AppUpdateScreen
-                    runCatching {
-                        context.startActivity(
-                            GitHubApkInstaller.buildInstallIntent(context.applicationContext, pending)
-                        )
-                        awaitingInstallPermission = false
-                        pendingInstallResult = null
-                        showUpdateDialog = false
-                    }.onFailure { error ->
-                        updateDownloadError = error.message ?: "Could not open installer."
-                    }
-                }
-            },
-            onDismissError = {
-                updateDownloadError = null
-            }
-        )
-    }
-
-    if (showChangelogDialog && changelogInfo != null) {
-        AppChangelogScreen(
-            releaseInfo = changelogInfo!!,
-            onDismiss = {
-                preferences.lastSeenChangelogVersion = changelogInfo!!.tagName
-                showChangelogDialog = false
-            }
-        )
-    }
-
     if (showFeedbackPromptDialog && pendingFeedbackPrompt != null) {
         val feedbackSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(
@@ -1132,17 +1243,67 @@ fun PocketCraftApp(
 }
 
 
-private fun scanDownloadedVersionIds(context: Context): Set<String> {
+private fun scanDownloadedRuntimeKeys(context: Context): Set<String> {
+    // JARs now live at files/servers/<version>/<type>-<version>.jar
     val serversRoot = File(context.filesDir, "servers")
-    val dirs = serversRoot.listFiles() ?: return emptySet()
-    return dirs.asSequence()
-        .filter { it.isDirectory }
-        .mapNotNull { dir ->
-            val version = dir.name
-            val jar = File(dir, "paper-$version.jar")
-            version.takeIf { jar.exists() && jar.length() > 1_000_000L }
+    if (!serversRoot.isDirectory) return emptySet()
+    val keys = mutableSetOf<String>()
+    serversRoot.listFiles()?.forEach { versionDir ->
+        if (!versionDir.isDirectory) return@forEach
+        versionDir.listFiles()?.forEach { jar ->
+            if (!jar.isFile) return@forEach
+            if (!jar.extension.equals("jar", ignoreCase = true)) return@forEach
+            if (jar.length() <= 50_000L) return@forEach
+            // jar name is "<type>-<version>.jar" where version matches parent dir
+            val nameWithout = jar.nameWithoutExtension
+            val typePrefix = nameWithout.substringBefore('-', "").takeIf { it.isNotBlank() } ?: return@forEach
+            val version = nameWithout.substringAfter('-', "").takeIf { it.isNotBlank() } ?: return@forEach
+            keys.add("${typePrefix.uppercase()}::$version")
         }
-        .toSet()
+    }
+    return keys
+}
+
+private fun runtimeDownloadKey(type: ServerType, version: String): String {
+    return "${type.name}::$version"
+}
+
+private fun latestDownloadedVersionForType(
+    downloadedRuntimeKeys: Set<String>,
+    type: ServerType
+): String? {
+    return downloadedRuntimeKeys.asSequence()
+        .mapNotNull { key ->
+            val parts = key.split("::", limit = 2)
+            val keyType = parts.getOrNull(0) ?: return@mapNotNull null
+            val version = parts.getOrNull(1)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            if (keyType != type.name) return@mapNotNull null
+            version
+        }
+        .sortedWith { left, right -> compareVersionIdsDescending(left, right) }
+        .firstOrNull()
+}
+
+private fun compareVersionIdsDescending(left: String, right: String): Int {
+    val leftParts = left.split('.', '-', '_')
+    val rightParts = right.split('.', '-', '_')
+    val maxLength = maxOf(leftParts.size, rightParts.size)
+    for (index in 0 until maxLength) {
+        val leftPart = leftParts.getOrNull(index)
+        val rightPart = rightParts.getOrNull(index)
+        if (leftPart == rightPart) continue
+
+        val leftNumber = leftPart?.toIntOrNull()
+        val rightNumber = rightPart?.toIntOrNull()
+        val comparison = when {
+            leftNumber != null && rightNumber != null -> rightNumber.compareTo(leftNumber)
+            leftNumber != null -> -1
+            rightNumber != null -> 1
+            else -> (rightPart ?: "").compareTo(leftPart ?: "")
+        }
+        if (comparison != 0) return comparison
+    }
+    return 0
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
@@ -1160,4 +1321,43 @@ private fun openExternalUrl(context: Context, url: String): Boolean {
         context.startActivity(intent)
         true
     }.getOrDefault(false)
+}
+
+private fun parseCreatedWorldName(message: String): String? {
+    val directPrefix = "World added: "
+    val renamedPrefix = "World added as "
+    return when {
+        message.startsWith(directPrefix) -> message.removePrefix(directPrefix).removeSuffix(".").trim().ifBlank { null }
+        message.startsWith(renamedPrefix) -> message.removePrefix(renamedPrefix).substringBefore(" because").trim().ifBlank { null }
+        else -> null
+    }
+}
+
+private fun describeVersionChange(
+    oldType: ServerType,
+    oldVersion: String,
+    newType: ServerType,
+    newVersion: String
+): String {
+    if (oldType != newType) {
+        return "switch server type from ${oldType.displayName} to ${newType.displayName}"
+    }
+    val cmp = compareVersionStrings(newVersion, oldVersion)
+    return when {
+        cmp > 0 -> "upgrade from $oldVersion to $newVersion"
+        cmp < 0 -> "downgrade from $oldVersion to $newVersion"
+        else -> "reconfigure the same version ($newVersion)"
+    }
+}
+
+private fun compareVersionStrings(left: String, right: String): Int {
+    val leftParts = left.split('.', '-', '_').mapNotNull { it.toIntOrNull() }
+    val rightParts = right.split('.', '-', '_').mapNotNull { it.toIntOrNull() }
+    val maxSize = maxOf(leftParts.size, rightParts.size)
+    for (index in 0 until maxSize) {
+        val l = leftParts.getOrElse(index) { 0 }
+        val r = rightParts.getOrElse(index) { 0 }
+        if (l != r) return l.compareTo(r)
+    }
+    return 0
 }

@@ -61,7 +61,8 @@ import kotlinx.coroutines.withContext
 fun StorageScreen(
     stateHolder: ServerStateHolder,
     onOpenWorldSetup: (Boolean) -> Unit = {},
-    onChangeVersion: () -> Unit = {}
+    onChangeVersion: () -> Unit = {},
+    onMessage: (String) -> Unit = {}
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
@@ -79,7 +80,8 @@ fun StorageScreen(
             0 -> WorldsScreen(
                 stateHolder = stateHolder,
                 onOpenWorldSetup = onOpenWorldSetup,
-                onChangeVersion = onChangeVersion
+                onChangeVersion = onChangeVersion,
+                onMessage = onMessage
             )
             else -> ServerFilesBrowser(stateHolder = stateHolder)
         }
@@ -186,7 +188,7 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                     modifier = Modifier.size(20.dp)
                 )
                 Text(
-                    "Server backups are saved to Downloads/PocketCraft Server Backups",
+                    "Server backups are saved to Downloads/PocketCraftWorldBackups/<world>",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -352,10 +354,17 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                 TextButton(
                     onClick = {
                         runCatching {
+                            val uri = androidx.core.content.FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                file
+                            )
                             context.startActivity(
                                 Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, file.absolutePath)
+                                    type = "*/*"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    putExtra(Intent.EXTRA_SUBJECT, file.name)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 }
                             )
                         }

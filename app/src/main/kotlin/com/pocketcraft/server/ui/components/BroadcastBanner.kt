@@ -58,6 +58,26 @@ fun BroadcastBanner(
     outerPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
     modifier: Modifier = Modifier
 ) {
+    fun normalizeBroadcastBody(raw: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.isBlank()) return trimmed
+        val discordRegex = Regex("(https?://(?:www\\.)?(?:discord\\.gg|discord\\.com/invite)/\\S+)", RegexOption.IGNORE_CASE)
+        val match = discordRegex.find(trimmed) ?: return trimmed
+        if (trimmed.contains("join our discord server", ignoreCase = true)) return trimmed
+        val link = match.value
+        val withoutLink = trimmed.replace(link, "").trim().trimEnd('-', ':')
+        return buildString {
+            if (withoutLink.isNotBlank()) {
+                append(withoutLink)
+                append('\n')
+            }
+            append("Join our Discord server:")
+            append('\n')
+            append(link)
+        }
+    }
+
+    val normalizedBody = remember(message.body) { normalizeBroadcastBody(message.body) }
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val (accent, container, headline) = when (message.type) {
         "critical" -> Triple(PocketColors.ConsoleError, PocketColors.ConsoleError.copy(alpha = 0.1f), "Critical Broadcast")
@@ -148,10 +168,10 @@ fun BroadcastBanner(
                             )
                         }
                     }
-                    if (message.body.isNotBlank()) {
+                    if (normalizedBody.isNotBlank()) {
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = message.body,
+                            text = normalizedBody,
                             color = bodyColor,
                             fontSize = 12.sp,
                             lineHeight = 16.sp,
@@ -213,9 +233,9 @@ fun BroadcastBanner(
                     )
                 }
 
-                if (message.body.isNotBlank()) {
+                if (normalizedBody.isNotBlank()) {
                     Text(
-                        text = message.body,
+                        text = normalizedBody,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 22.sp,
                         fontSize = 15.sp

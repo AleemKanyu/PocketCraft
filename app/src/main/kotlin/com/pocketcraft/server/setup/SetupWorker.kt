@@ -9,9 +9,10 @@ import androidx.work.WorkerParameters
 import com.pocketcraft.server.service.PluginManager
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.service.ServerPropertiesHelper
+import com.pocketcraft.server.server.ServerJarManager
+import com.pocketcraft.server.data.repository.ServerConfigRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import okhttp3.OkHttpClient
 import java.io.File
 
 const val PROGRESS_KEY = "progress_message"
@@ -19,6 +20,7 @@ const val PROGRESS_PERCENT = "progress_percent"
 const val STEP_KEY = "step"
 const val WORLD_SEED_KEY = "world_seed"
 const val SERVER_VERSION_KEY = "server_version"
+const val WORLD_NAME_KEY = "world_name"
 
 /**
  * WorkManager worker that orchestrates first-launch setup:
@@ -35,25 +37,33 @@ class SetupWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         return try {
-            val serverVersion = inputData.getString(SERVER_VERSION_KEY) ?: "1.20.4"
+            val serverVersion = inputData.getString(SERVER_VERSION_KEY) ?: ""
+            val worldName = inputData.getString(WORLD_NAME_KEY) ?: "default"
 
             // Step 1: Extract JRE
             setProgress(data("Extracting Java runtime…", 0, 1))
             JreExtractor.extractIfNeeded(applicationContext)
             setProgressSync(data("Java runtime ready.", 10, 1))
 
-            // Step 2: Download PaperMC
-            setProgress(data("Downloading PaperMC $serverVersion…", 20, 2))
-            val client = OkHttpClient()
-            val downloader = PaperMcDownloader(client, serverVersion)
+            // Step 2: Download Server JAR
+            setProgress(data("Downloading server $serverVersion…", 20, 2))
             
-            // Use ServerFileManager to get the correct version-specific directory
-            val versionDir = ServerFileManager.getServerDir(applicationContext, serverVersion)
+            // Use ServerFileManager to get the correct isolated directory
+            val versionDir = ServerFileManager.getServerDir(applicationContext, worldName)
+            val configRepo = ServerConfigRepository(applicationContext)
+            val config = configRepo.loadConfig()
             
-            downloader.download(versionDir).collect { percent ->
-                val overall = 20 + (percent * 0.5).toInt()
-                setProgress(data("Downloading PaperMC $serverVersion… $percent%", overall, 2))
-            }
+            val jarFile = ServerFileManager.getServerJarFile(applicationContext, serverVersion, config.serverType)
+            ServerJarManager.resolveJar(
+                serverType = config.serverType,
+                gameVersion = serverVersion,
+                customJarPath = config.customJarPath,
+                targetFile = jarFile,
+                onProgress = { percent ->
+                    val overall = 20 + (percent * 0.5).toInt()
+                    setProgressAsync(data("Downloading server $serverVersion… $percent%", overall, 2))
+                }
+            ).collect { jarFile -> }
 
             // Step 3: Write eula.txt
             setProgress(data("Accepting EULA…", 72, 3))
@@ -61,9 +71,8 @@ class SetupWorker @AssistedInject constructor(
                 .writeText("eula=true\n")
 
             // Step 4: Write server config
-            setProgress(data("Writing server config…", 80, 4))
             val worldSeed = inputData.getString(WORLD_SEED_KEY).orEmpty()
-            ServerFileManager.prepareServerProperties(applicationContext, serverVersion)
+            ServerFileManager.prepareServerProperties(applicationContext, worldName)
             val props = ServerPropertiesHelper.readProperties(versionDir)
             props["level-seed"] = worldSeed
             ServerPropertiesHelper.saveProperties(versionDir, props)
@@ -72,14 +81,14 @@ class SetupWorker @AssistedInject constructor(
             setProgress(data("Installing Bedrock bridge plugins…", 90, 5))
             PluginManager.ensureBedrockBridgePlugins(
                 context = applicationContext,
-                versionId = serverVersion
+                versionId = worldName
             ).getOrElse { error ->
                 throw IllegalStateException(
                     "Could not install built-in Bedrock bridge plugins: ${error.message}",
                     error
                 )
             }
-            PluginManager.enforceBedrockBridgeLocalConfig(applicationContext, serverVersion)
+            PluginManager.enforceBedrockBridgeLocalConfig(applicationContext, worldName)
 
             // Step 6: Mark complete
             setProgress(data("Setup complete!", 100, 6))

@@ -42,6 +42,7 @@ import com.pocketcraft.server.ui.theme.PocketColors
 
 @Composable
 fun VersionUpgradeCard(
+    serverTypeName: String,
     currentVersion: String,
     availableVersions: List<String>,
     onUpgrade: (String) -> Unit,
@@ -62,8 +63,9 @@ fun VersionUpgradeCard(
             ) {
                 FlatEmojiIcon("🎮", modifier = Modifier.size(28.dp), tint = PocketColors.PrimaryDark)
                 Column {
+                    val displayVersion = if (currentVersion.isBlank()) "Select Version" else "$serverTypeName $currentVersion"
                     Text(
-                        "Minecraft Java $currentVersion",
+                        text = displayVersion,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 15.sp
                     )

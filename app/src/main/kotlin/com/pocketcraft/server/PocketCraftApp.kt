@@ -9,16 +9,26 @@ import androidx.work.Configuration
 import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.ktx.crashlytics
 import com.google.firebase.ktx.Firebase
+import com.pocketcraft.server.data.preferences.AppPreferences
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import javax.inject.Inject
 
 @HiltAndroidApp
 open class PocketCraftApp : Application(), Configuration.Provider {
 
+    companion object {
+        val applicationScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    }
+
     @Inject lateinit var workerFactory: HiltWorkerFactory
 
     override fun onCreate() {
         super.onCreate()
+        AppPreferences.init(this)
         runCatching {
             FirebaseApp.initializeApp(this)
             Firebase.crashlytics.setCrashlyticsCollectionEnabled(true)
@@ -35,6 +45,11 @@ open class PocketCraftApp : Application(), Configuration.Provider {
             }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
+    }
+
+    override fun onTerminate() {
+        applicationScope.cancel()
+        super.onTerminate()
     }
 
     private fun currentProcessName(): String {

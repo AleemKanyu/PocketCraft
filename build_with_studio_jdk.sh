@@ -13,7 +13,7 @@ fi
 export JAVA_HOME="$STUDIO_JDK"
 export PATH="$JAVA_HOME/bin:$PATH"
 
-MODE="${1:-apk}"
+MODE="${1:-install}"
 shift || true
 
 case "$MODE" in
