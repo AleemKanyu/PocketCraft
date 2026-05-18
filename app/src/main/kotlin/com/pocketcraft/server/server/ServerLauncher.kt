@@ -10,8 +10,11 @@ import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.service.ServerPropertiesHelper
 import com.pocketcraft.server.server.ServerPropertiesWriter
 import com.pocketcraft.server.setup.JreExtractor
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
+import java.util.zip.ZipFile
+import java.util.zip.ZipInputStream
 import android.app.ActivityManager
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
@@ -52,8 +55,10 @@ class ServerLauncher(private val context: Context) {
     }
 
     fun startServer(
+        worldName: String,
         versionId: String,
         jarPath: String,
+        runtime: JreExtractor.RuntimeSpec,
         onOutput : (String) -> Unit,
         onError  : (String) -> Unit,
         onStopped: (Int) -> Unit
@@ -66,59 +71,50 @@ class ServerLauncher(private val context: Context) {
         }
 
 
-        ServerFileManager.prepareEula(context, versionId)
-        ServerFileManager.prepareServerProperties(context, versionId)
-        ServerFileManager.prepareRuntimeArtifacts(context, versionId)
+        ServerFileManager.prepareEula(context, worldName)
+        ServerFileManager.prepareServerProperties(context, worldName)
+        ServerFileManager.prepareRuntimeArtifacts(context, worldName)
+        PluginManager.removeIncompatiblePlugins(context, worldName)
         
-        val serverDirFileLocal = ServerFileManager.getServerDir(context, versionId)
+        val serverDirFileLocal = ServerFileManager.getServerDir(context, worldName)
         val props = ServerPropertiesHelper.readProperties(serverDirFileLocal)
         val serverTypeStr = props.getProperty("pocketcraft-server-type", "PAPER")
         val serverType = com.pocketcraft.server.data.model.ServerType.fromString(serverTypeStr)
-        com.pocketcraft.server.service.DimensionMigrator.syncDimensionsForServerType(context, versionId, serverType)
         
-        runBlocking(Dispatchers.IO) {
-            PluginManager.ensureBedrockBridgePlugins(context, versionId).onFailure { error ->
-                onOutput("[PocketCraft] Warning: Could not refresh Bedrock bridge plugins: ${error.message}")
-            }
-        }
-        PluginManager.enforceBedrockBridgeLocalConfig(context, versionId)
-        PluginManager.preserveFloodgateKey(context, versionId)
+        com.pocketcraft.server.service.DimensionMigrator.syncDimensionsForServerType(context, worldName, serverType)
+        PluginManager.enforceBedrockBridgeLocalConfig(context, worldName)
         PlayerDataManager.warnIfFloodgateUsernamePrefixChanged(serverDirFileLocal)
 
-        val jrePath   = JreExtractor.getJreDir(context).absolutePath
-        val serverDirFile = ServerFileManager.getServerDir(context, versionId)
+        val jrePath   = JreExtractor.getJreDir(context, runtime).absolutePath
+        chmodJreRuntime(context, runtime)
+
+        val serverDirFile = ServerFileManager.getServerDir(context, worldName)
         val serverDir = serverDirFile.absolutePath
         val tmpDir    = File(context.filesDir, "runtime-tmp").also { it.mkdirs() }.absolutePath
         val totalRam = getTotalRamMb(context)
-        applyPreferencesToServerProperties(serverDirFile, onOutput)
         applyRelayReadyRuntimeProfile(serverDirFile, onOutput)
         applyRelayReadyPaperGlobalConfig(serverDirFile, onOutput)
         applyRelayReadySpigotConfig(serverDirFile, onOutput)
         applyRelayReadyPaperWorldDefaults(serverDirFile, onOutput)
-        val prefs = AppPreferences(context)
-        val fullMaxMb = (totalRam * 0.80).toInt().coerceAtLeast(768)
 
-        val (minRamMb, maxRamMb) = when (prefs.ramMode) {
-            "full" -> {
-                val max = fullMaxMb
-                val min = (max * 0.5).toInt().coerceAtLeast(512)
-                Pair(min, max)
-            }
-            "manual" -> {
-                val max = prefs.manualRamMb.coerceAtLeast(512)
-                val min = (max * 0.5).toInt().coerceAtLeast(512)
-                Pair(min, max)
-            }
-            else -> {
-                val max = 512.coerceAtMost(fullMaxMb)
-                val min = (max * 0.5).toInt().coerceAtLeast(256)
-                Pair(min, max)
+        // Fix 1: Dynamic JVM heap allocation based on UI settings
+        val prefs = AppPreferences(context)
+        val maxRamMb = if (!prefs.isMaxPowerMode) {
+            // Safe defaults for non-max power mode, but allow up to 2GB on high-end devices
+            (totalRam * 0.35).toLong().coerceIn(768L, 2048L).toInt()
+        } else {
+            when (prefs.ramMode) {
+                "low"    -> (totalRam * 0.25).toLong().coerceIn(512L, 1024L).toInt()
+                "manual" -> prefs.manualRamMb.coerceIn(512, 6144)
+                "full"   -> (totalRam * 0.85).toLong().coerceIn(1024L, 6144L).toInt()
+                else     -> 1024
             }
         }
+        val minRamMb = (maxRamMb / 2).coerceAtLeast(512)
 
-        onOutput("[PocketCraft] RAM profile: mode=${prefs.ramMode}, heap=${minRamMb}MB..${maxRamMb}MB, total=${totalRam}MB")
+        onOutput("[PocketCraft] JVM memory: mode=${prefs.ramMode}, maxPower=${prefs.isMaxPowerMode}, heap=${minRamMb}MB..${maxRamMb}MB, total=${totalRam}MB")
 
-        val javaBin = JreExtractor.getJavaBinary(context)
+        val javaBin = JreExtractor.getJavaBinary(context, runtime)
         val libjli = File(jrePath, "lib/libjli.so")
         val libjvm = File(jrePath, "lib/server/libjvm.so")
         if (!javaBin.exists()) {
@@ -131,20 +127,30 @@ class ServerLauncher(private val context: Context) {
             onError("libjvm.so not found — JRE may not be extracted correctly"); return
         }
 
-        onOutput("[PocketCraft] Starting $versionId...")
+        val shimDir = File(context.filesDir, "lib-shims").also { it.mkdirs() }
+        val libs = if (Build.SUPPORTED_64_BIT_ABIS.isNotEmpty()) "/system/lib64" else "/system/lib"
+
+        runCatching {
+            if (extractAndPatchJnaLibrary(jarPath, serverDirFile, shimDir)) {
+                onOutput("[PocketCraft] Patched JNA native dispatch library for Android")
+            }
+        }.onFailure { e ->
+            onOutput("[PocketCraft] JNA patching skipped: ${e.message}")
+        }
+
+        onOutput("[PocketCraft] Starting world '$worldName' (version $versionId)...")
         onOutput("[PocketCraft] JRE: $jrePath")
         onOutput("[PocketCraft] JAR: $jarPath")
         
-        val shimDir = File(context.filesDir, "lib-shims").also { it.mkdirs() }
-        val libs = if (Build.SUPPORTED_64_BIT_ABIS.isNotEmpty()) "/system/lib64" else "/system/lib"
-        
+        val tmpShimDir = File(tmpDir)
         runCatching {
             listOf(
                 "libc.so.6" to "$libs/libc.so",
                 "libdl.so.2" to "$libs/libdl.so",
                 "libm.so.6" to "$libs/libm.so",
                 "librt.so.1" to "$libs/libc.so",
-                "libpthread.so.0" to "$libs/libc.so"
+                "libpthread.so.0" to "$libs/libc.so",
+                "libutil.so.1" to "$libs/libc.so"
             ).forEach { (shim, target) ->
                 val shimFile = File(shimDir, shim)
                 if (!shimFile.exists()) {
@@ -155,6 +161,12 @@ class ServerLauncher(private val context: Context) {
                         onOutput("[PocketCraft] Warning: Failed to create shim $shim: ${e.message}")
                     }
                 }
+                val tmpShimFile = File(tmpShimDir, shim)
+                if (!tmpShimFile.exists()) {
+                    try {
+                        android.system.Os.symlink(target, tmpShimFile.absolutePath)
+                    } catch (_: Exception) {}
+                }
             }
         }.onFailure { e ->
             onOutput("[PocketCraft] Warning: Shim creation pool failed: ${e.message}")
@@ -163,7 +175,23 @@ class ServerLauncher(private val context: Context) {
         Thread {
             var result = -1
             try {
-                result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    // Android 12+ introduces the Phantom Process Killer.
+                    // By running the JVM in-process via JNI, we hide it inside the Foreground Service.
+                    onOutput("[PocketCraft] Bypassing Phantom Process Killer: Launching in-process JVM on Android ${Build.VERSION.RELEASE}.")
+                    NativeLauncher.launchJVM(
+                        jrePath = jrePath,
+                        jarPath = jarPath,
+                        serverDir = serverDir,
+                        tmpDir = tmpDir,
+                        nativeLibDir = context.applicationInfo.nativeLibraryDir,
+                        shimDir = shimDir.absolutePath,
+                        minRamMb = minRamMb,
+                        maxRamMb = maxRamMb,
+                        serverType = serverType.name,
+                        port = resolveServerPort(worldName)
+                    )
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     val externalExit = runCatching {
                         launchExternalJvm(
                             javaBin = javaBin,
@@ -174,12 +202,13 @@ class ServerLauncher(private val context: Context) {
                             shimDir = shimDir,
                             minRamMb = minRamMb,
                             maxRamMb = maxRamMb,
+                            worldName = worldName,
                             onOutput = onOutput,
                             onError = onError
                         )
                     }.getOrElse { error ->
                         onOutput(
-                            "[PocketCraft] External JVM launch failed before startup on Android ${Build.VERSION.RELEASE}: ${error.message}. Falling back to isolated bootstrap."
+                            "[PocketCraft] External JVM launch failed on Android ${Build.VERSION.RELEASE}: ${error.message}. Falling back to isolated bootstrap."
                         )
                         Int.MIN_VALUE
                     }
@@ -194,7 +223,9 @@ class ServerLauncher(private val context: Context) {
                             nativeLibDir = context.applicationInfo.nativeLibraryDir,
                             shimDir = shimDir.absolutePath,
                             minRamMb = minRamMb,
-                            maxRamMb = maxRamMb
+                            maxRamMb = maxRamMb,
+                            serverType = serverType.name,
+                            port = resolveServerPort(worldName)
                         )
                     } else {
                         externalExit
@@ -209,6 +240,7 @@ class ServerLauncher(private val context: Context) {
                         shimDir = shimDir,
                         minRamMb = minRamMb,
                         maxRamMb = maxRamMb,
+                        worldName = worldName,
                         onOutput = onOutput,
                         onError = onError
                     )
@@ -234,12 +266,21 @@ class ServerLauncher(private val context: Context) {
         shimDir: File,
         minRamMb: Int,
         maxRamMb: Int,
+        worldName: String,
         onOutput: (String) -> Unit,
         onError: (String) -> Unit
     ): Int {
         val errorFilePattern = File(serverDir, "hs_err_pid%p.log").absolutePath
         val nativeLibDir = context.applicationInfo.nativeLibraryDir
-        val wrapperBin = File(nativeLibDir, "libserverwrap.so")
+        val wrapperBinSource = File(nativeLibDir, "libserverwrap.so")
+        val wrapperBin = File(context.codeCacheDir, "serverwrap")
+        if (wrapperBinSource.exists() && !wrapperBin.exists()) {
+            wrapperBinSource.copyTo(wrapperBin)
+        }
+        if (wrapperBin.exists() && !wrapperBin.canExecute()) {
+            wrapperBin.setExecutable(true, false)
+            android.util.Log.d("ServerLauncher", "Set serverwrap executable: ${wrapperBin.absolutePath}")
+        }
         val archLibDir = detectRuntimeLibDir(jrePath)
         val jvmDir = File(archLibDir, "server").takeIf { it.isDirectory } ?: File(jrePath, "lib/server")
 
@@ -260,7 +301,7 @@ class ServerLauncher(private val context: Context) {
             append(nativeLibDir)
         }
 
-        val jnaBootPath = "$nativeLibDir:${shimDir.absolutePath}"
+        val jnaBootPath = "${shimDir.absolutePath}:$nativeLibDir"
         val jnaLibraryPath = jnaBootPath
  
         val vmArgs = mutableListOf(
@@ -273,6 +314,7 @@ class ServerLauncher(private val context: Context) {
             "-Dio.netty.native.workdir=$tmpDir",
             "-Djna.boot.library.path=$jnaBootPath",
             "-Djna.library.path=$jnaLibraryPath",
+            "-Djna.nounpack=true",
             "-Duser.home=$serverDir",
             "-Duser.language=${System.getProperty("user.language").orEmpty()}",
             "-Duser.timezone=${java.util.TimeZone.getDefault().id}",
@@ -292,7 +334,7 @@ class ServerLauncher(private val context: Context) {
             "-DPaper.IgnoreJavaVersion=true",
             "-Dsun.zip.disableMemoryMapping=true",
             "-Djdk.attach.allowAttachSelf=true",
-            "-Djna.nosys=true",
+            "-Djna.nosys=false",
             "-Xshare:off",
             "-XX:+UnlockExperimentalVMOptions",
             "-XX:+AlwaysPreTouch",
@@ -303,7 +345,7 @@ class ServerLauncher(private val context: Context) {
             "-XX:+DisableExplicitGC",
             "-XX:G1NewSizePercent=30",
             "-XX:G1MaxNewSizePercent=40",
-            "-XX:G1HeapRegionSize=8M",
+            "-XX:G1HeapRegionSize=4m",
             "-XX:G1ReservePercent=20",
             "-XX:G1HeapWastePercent=5",
             "-XX:G1MixedGCCountTarget=4",
@@ -317,15 +359,23 @@ class ServerLauncher(private val context: Context) {
             "-XX:-UseContainerSupport",
             "-XX:ErrorFile=$errorFilePattern",
             "-Dio.netty.allocator.maxOrder=9",
+            "-Dio.netty.recycler.maxCapacity=0",
             "-Dio.netty.recycler.maxCapacityPerThread=0",
             "-Dio.netty.recycler.linkCapacity=1024",
+            "-Dio.netty.allocator.type=unpooled",
             "-Djdk.lang.Process.launchMechanism=FORK",
             "-jar",
             jarPath,
-            "--nogui",
+            "nogui",
             "--port",
-            "25565"
+            resolveServerPort(worldName).toString()
         )
+
+        // Ensure java binary is executable (Android 10 W^X fix)
+        if (javaBin.exists() && !javaBin.canExecute()) {
+            javaBin.setExecutable(true, false)
+            android.util.Log.d("ServerLauncher", "Set java executable: ${javaBin.absolutePath}")
+        }
 
         val launcherName = if (wrapperBin.exists()) "serverwrap" else "java"
         onOutput("[PocketCraft] Launching dedicated Java process on Android ${Build.VERSION.RELEASE} via $launcherName.")
@@ -344,8 +394,8 @@ class ServerLauncher(private val context: Context) {
                 environment()["JAVA_HOME"] = jrePath
                 environment()["HOME"] = serverDir
                 environment()["TMPDIR"] = tmpDir
-                environment()["LD_LIBRARY_PATH"] = ldLibraryPath
-                environment()["PATH"] = "${javaBin.parent}:${System.getenv("PATH").orEmpty()}"
+                environment()["LD_LIBRARY_PATH"] = "$jrePath/lib/server:$jrePath/lib:$jrePath/lib/jli:$ldLibraryPath"
+                environment()["PATH"] = "$jrePath/bin:/system/bin:/system/xbin:${javaBin.parent}:${System.getenv("PATH").orEmpty()}"
                 environment()["BIONIC_DISABLE_PTR_TAGGING"] = "1"
             }
             .start()
@@ -401,17 +451,6 @@ class ServerLauncher(private val context: Context) {
         return raw.coerceIn(512, 4096)
     }
 
-    private fun applyPreferencesToServerProperties(
-        serverDir: File,
-        onOutput: (String) -> Unit
-    ) {
-        val savedConfig = runBlocking(Dispatchers.IO) {
-            runCatching { ServerConfigRepository(context).loadConfig() }.getOrNull()
-        } ?: return
-        ServerPropertiesWriter.apply(serverDir, ServerPropertiesWriter.toSnapshot(savedConfig))
-        onOutput("[PocketCraft] Restored saved server settings before launch.")
-    }
-
     private fun applyRelayReadyRuntimeProfile(
         serverDir: File,
         onOutput: (String) -> Unit
@@ -440,8 +479,23 @@ class ServerLauncher(private val context: Context) {
         // Preserve the user-selected render distance across restarts.
         // The relay tuning below keeps the lower bound sane, but should not
         // force the slider back to the app default.
-        val maxView = 32
-        val maxSimulation = 32
+        val maxPowerEnabled = AppPreferences(context).isMaxPowerMode
+        val totalRam = getTotalRamMb(context)
+        val maxView = if (maxPowerEnabled) 32 else {
+            when {
+                totalRam >= 6144 -> 12
+                totalRam >= 4096 -> 10
+                totalRam >= 3072 -> 8
+                else -> 6
+            }
+        }
+        val maxSimulation = if (maxPowerEnabled) 16 else {
+            when {
+                totalRam >= 4096 -> 8
+                totalRam >= 3072 -> 6
+                else -> 4
+            }
+        }
         var tunedView = currentView.coerceIn(3, maxView)
         var tunedSimulation = currentSimulation.coerceIn(3, maxSimulation)
         var tunedAllowFlight = currentAllowFlight
@@ -461,7 +515,7 @@ class ServerLauncher(private val context: Context) {
         val tunedEntityBroadcast = when {
             currentEntityBroadcast == null -> ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
             currentEntityBroadcast <= 0 -> ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
-            else -> currentEntityBroadcast.coerceAtMost(ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT)
+            else -> currentEntityBroadcast
         }
 
         var changed = false
@@ -514,20 +568,24 @@ class ServerLauncher(private val context: Context) {
 
         var updated = original
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "auto-config-send-distance", "true")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-generates", "0")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", "12")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-generates", "1")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", "4")
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-loading-priority-override", "10")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-generate-rate", "-1.0")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-load-rate", "200.0")
-        updated = ensureYamlSectionValue(updated, "misc", "io-threads", "3")
-        updated = ensureYamlSectionValue(updated, "misc", "worker-threads", "3")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-send-rate", "100.0")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "target-player-chunk-send-rate", "-1.0")
-        updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "4")
-        // Chunk system: dedicate threads for IO and generation
+        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-generate-rate", "10.0")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-load-rate", "100.0")
+        updated = ensureYamlSectionValue(updated, "misc", "io-threads", "2")
+        updated = ensureYamlSectionValue(updated, "misc", "worker-threads", "2")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-send-rate", "40.0")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "target-player-chunk-send-rate", "20.0")
+        updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "2")
+        // Chunk system: dedicate minimal threads for IO and generation on mobile
         updated = ensureYamlSectionValue(updated, "chunk-system", "gen-parallelism", "default")
-        updated = ensureYamlSectionValue(updated, "chunk-system", "io-threads", "2")
-        updated = ensureYamlSectionValue(updated, "chunk-system", "worker-threads", "2")
+        updated = ensureYamlSectionValue(updated, "chunk-system", "io-threads", "1")
+        updated = ensureYamlSectionValue(updated, "chunk-system", "worker-threads", "1")
+
+        // Disable bundled Spark profiler (fails to load native libraries on Android)
+        updated = ensureYamlSectionValue(updated, "spark", "enabled", "false")
+        updated = ensureYamlSectionValue(updated, "spark", "enable-immediately", "false")
 
         if (updated != original) {
             paperGlobal.writeText(updated)
@@ -547,6 +605,8 @@ class ServerLauncher(private val context: Context) {
         // server.properties value is always the one Paper actually uses.
         updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "view-distance", "default")
         updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "simulation-distance", "default")
+        updated = ensureYamlPathValue(updated, listOf("settings"), "moved-too-quickly-multiplier", "1000.0")
+        updated = ensureYamlPathValue(updated, listOf("settings"), "moved-wrongly-threshold", "1000.0")
 
         if (updated != original) {
             spigotFile.writeText(updated)
@@ -744,6 +804,17 @@ class ServerLauncher(private val context: Context) {
         }
     }
 
+    private fun resolveServerPort(worldName: String): Int {
+        val serverDir = ServerFileManager.getServerDir(context, worldName)
+        val propsFile = File(serverDir, "server.properties")
+        if (!propsFile.exists()) return 25565
+        return runCatching {
+            propsFile.inputStream().use { input ->
+                Properties().apply { load(input) }
+            }.getProperty("server-port", "25565").toInt()
+        }.getOrDefault(25565)
+    }
+
     private fun streamLines(
         inputStream: InputStream,
         onOutput: (String) -> Unit,
@@ -756,5 +827,267 @@ class ServerLauncher(private val context: Context) {
         }.onFailure { error ->
             onError("[PocketCraft] Failed to read server output: ${error.message}")
         }
+    }
+
+    private fun chmodJreRuntime(context: Context, runtime: JreExtractor.RuntimeSpec) {
+        val jreDir = JreExtractor.getJreDir(context, runtime)
+        val jreBinDir = File(jreDir, "bin")
+        val jreLibDir = File(jreDir, "lib")
+
+        listOf(jreBinDir, jreLibDir).forEach { dir ->
+            if (dir.exists()) {
+                dir.walkTopDown().forEach { file ->
+                    if (file.isFile && !file.canExecute()) {
+                        file.setExecutable(true, false)
+                    }
+                }
+            }
+        }
+        android.util.Log.d("ServerLauncher", "Finished chmod on jre-runtime (Android 10 compat)")
+    }
+
+    private fun extractAndPatchJnaLibrary(paperJarPath: String, serverDir: File, shimDir: File): Boolean {
+        if (isPatchedJnaCacheCurrent(paperJarPath, shimDir)) {
+            return false
+        }
+
+        var patched = runCatching {
+            val paperJar = ZipFile(paperJarPath)
+            paperJar.use { jar ->
+                val directEntry = jar.getEntry("com/sun/jna/linux-aarch64/libjnidispatch.so")
+                if (directEntry != null) {
+                    val libBytes = jar.getInputStream(directEntry).readBytes()
+                    val patchedBytes = patchElfDtNeeded(libBytes) ?: return@runCatching false
+                    writePatchedJnaCache(paperJarPath, shimDir, patchedBytes)
+                    return@runCatching true
+                }
+
+                val jnaEntry = jar.entries().asSequence()
+                    .filter { !it.isDirectory && it.name.endsWith(".jar") }
+                    .firstOrNull {
+                        val name = it.name.substringAfterLast('/')
+                        name.startsWith("jna-") && !name.contains("jna-platform") && !name.contains("jna-jpms")
+                    } ?: return@runCatching false
+
+                val jnaBytes = jar.getInputStream(jnaEntry).readBytes()
+                patchJnaFromBytes(jnaBytes, shimDir, paperJarPath)
+            }
+        }.getOrDefault(false)
+
+        if (!patched) {
+            val librariesDir = File(serverDir, "libraries")
+            if (librariesDir.exists()) {
+                val jnaJar = librariesDir.walkTopDown().firstOrNull {
+                    it.isFile && it.name.startsWith("jna-") && !it.name.contains("jna-platform") && !it.name.contains("jna-jpms") && it.name.endsWith(".jar")
+                }
+                if (jnaJar != null) {
+                    val jnaBytes = jnaJar.readBytes()
+                    patched = patchJnaFromBytes(jnaBytes, shimDir, paperJarPath)
+                }
+            }
+        }
+        return patched
+    }
+
+    private fun patchJnaFromBytes(jnaBytes: ByteArray, shimDir: File, cacheKeyPath: String): Boolean {
+        val zis = ZipInputStream(ByteArrayInputStream(jnaBytes))
+        zis.use { stream ->
+            var entry = stream.nextEntry
+            while (entry != null) {
+                if (entry.name.contains("linux-aarch64/libjnidispatch.so")) {
+                    val libBytes = stream.readBytes()
+                    val patched = patchElfDtNeeded(libBytes) ?: return false
+                    writePatchedJnaCache(cacheKeyPath, shimDir, patched)
+                    return true
+                }
+                entry = stream.nextEntry
+            }
+        }
+        return false
+    }
+
+    private fun isPatchedJnaCacheCurrent(paperJarPath: String, shimDir: File): Boolean {
+        val cachedLibrary = File(shimDir, "libjnidispatch.so")
+        val stampFile = File(shimDir, "libjnidispatch.meta")
+        if (!cachedLibrary.exists() || cachedLibrary.length() <= 0L || !stampFile.exists()) {
+            return false
+        }
+
+        val expectedStamp = buildJnaCacheStamp(paperJarPath)
+        val currentStamp = runCatching { stampFile.readText(Charsets.UTF_8).trim() }.getOrDefault("")
+        return currentStamp == expectedStamp
+    }
+
+    private fun writePatchedJnaCache(paperJarPath: String?, shimDir: File, patchedBytes: ByteArray) {
+        val dest = File(shimDir, "libjnidispatch.so")
+        dest.writeBytes(patchedBytes)
+        dest.setExecutable(true)
+        if (paperJarPath != null) {
+            File(shimDir, "libjnidispatch.meta").writeText(buildJnaCacheStamp(paperJarPath), Charsets.UTF_8)
+        }
+    }
+
+    private fun buildJnaCacheStamp(paperJarPath: String): String {
+        val jarFile = File(paperJarPath)
+        return listOf(
+            jarFile.absolutePath,
+            jarFile.length().toString(),
+            jarFile.lastModified().toString()
+        ).joinToString("|")
+    }
+
+    private fun patchElfDtNeeded(data: ByteArray): ByteArray? {
+        if (data.size < 64) return null
+        if (data[0] != 0x7f.toByte() || data[1] != 'E'.code.toByte() ||
+            data[2] != 'L'.code.toByte() || data[3] != 'F'.code.toByte()) return null
+        if (data[4] != 2.toByte()) return null
+
+        val result = data.copyOf()
+
+        val shoff = readU64(result, 40)
+        val shnum = readU16(result, 60)
+        val shentsize = readU16(result, 58)
+        val shstrndx = readU16(result, 62)
+
+        val shstrtabOff = readU64(result, shoff + shstrndx * shentsize + 24)
+
+        var dynstrOff = -1L
+        var dynstrSize = 0L
+        var dynamicOff = -1L
+        var dynamicSize = 0L
+
+        for (i in 0 until shnum) {
+            val soff = shoff + i * shentsize
+            val shType = readU32(result, soff + 4)
+            if (shType == 3L) {
+                val nameOff = readU32(result, soff)
+                val name = readCString(result, shstrtabOff + nameOff)
+                if (name == ".dynstr") {
+                    dynstrOff = readU64(result, soff + 24)
+                    dynstrSize = readU64(result, soff + 32)
+                }
+            } else if (shType == 6L) { // SHT_DYNAMIC
+                dynamicOff = readU64(result, soff + 24)
+                dynamicSize = readU64(result, soff + 32)
+            }
+        }
+
+        if (dynstrOff < 0) return null
+
+        // Each entry: (pattern bytes, replacement — must be <= pattern length, rest zero-padded)
+        val patches = listOf(
+            // libc.so.6\0  -> libc.so\0 + one zero pad
+            "libc.so.6".toByteArray() to byteArrayOf(
+                'l'.code.toByte(), 'i'.code.toByte(), 'b'.code.toByte(),
+                'c'.code.toByte(), '.'.code.toByte(), 's'.code.toByte(),
+                'o'.code.toByte(), 0, 0
+            ),
+            // libm.so.6\0 -> libm.so\0 + one zero pad
+            "libm.so.6".toByteArray() to byteArrayOf(
+                'l'.code.toByte(), 'i'.code.toByte(), 'b'.code.toByte(),
+                'm'.code.toByte(), '.'.code.toByte(), 's'.code.toByte(),
+                'o'.code.toByte(), 0, 0
+            ),
+            // libutil.so.1\0 -> libc.so\0 + five zero pads  (13 -> 8 bytes + 5 nulls)
+            "libutil.so.1".toByteArray() to byteArrayOf(
+                'l'.code.toByte(), 'i'.code.toByte(), 'b'.code.toByte(),
+                'c'.code.toByte(), '.'.code.toByte(), 's'.code.toByte(),
+                'o'.code.toByte(), 0, 0, 0, 0, 0, 0
+            ),
+            // libpthread.so.0\0 -> libc.so\0 + seven zero pads (16 -> 8 bytes + 8 nulls)
+            "libpthread.so.0".toByteArray() to byteArrayOf(
+                'l'.code.toByte(), 'i'.code.toByte(), 'b'.code.toByte(),
+                'c'.code.toByte(), '.'.code.toByte(), 's'.code.toByte(),
+                'o'.code.toByte(), 0, 0, 0, 0, 0, 0, 0, 0, 0
+            ),
+            // libdl.so.2\0 -> libdl.so\0 + one zero pad
+            "libdl.so.2".toByteArray() to byteArrayOf(
+                'l'.code.toByte(), 'i'.code.toByte(), 'b'.code.toByte(),
+                'd'.code.toByte(), 'l'.code.toByte(), '.'.code.toByte(),
+                's'.code.toByte(), 'o'.code.toByte(), 0, 0
+            ),
+            // librt.so.1\0 -> libc.so\0 + two zero pads
+            "librt.so.1".toByteArray() to byteArrayOf(
+                'l'.code.toByte(), 'i'.code.toByte(), 'b'.code.toByte(),
+                'c'.code.toByte(), '.'.code.toByte(), 's'.code.toByte(),
+                'o'.code.toByte(), 0, 0, 0
+            )
+        )
+
+        var found = false
+        val start = dynstrOff.toInt()
+        val end = (dynstrOff + dynstrSize).toInt()
+
+        for ((target, replacement) in patches) {
+            // replacement array must exactly cover pattern length (incl. null terminator)
+            var pos = start
+            while (pos <= end - target.size) {
+                var match = true
+                for (i in target.indices) {
+                    if (result[pos + i] != target[i]) { match = false; break }
+                }
+                if (match) {
+                    for (i in replacement.indices) result[pos + i] = replacement[i]
+                    found = true
+                    break
+                }
+                pos++
+            }
+        }
+
+        // Safely scan the .dynamic section to neutralize problematic versioning tags:
+        // DT_VERNEEDNUM (0x6fffffff), DT_VERNEED (0x6ffffffe), and DT_VERSYM (0x6ffffff0)
+        // We replace the tag with DT_RPATH (15) and set the value to 0 to appease Android 14+.
+        if (dynamicOff >= 0 && dynamicSize > 0) {
+            val numEntries = (dynamicSize / 16).toInt()
+            for (i in 0 until numEntries) {
+                val entryOff = dynamicOff + i * 16
+                val dTag = readU64(result, entryOff)
+                if (dTag == 0x6fffffffL || dTag == 0x6ffffffeL || dTag == 0x6ffffff0L) {
+                    val idx = entryOff.toInt()
+                    // Replace TAG with 15 (DT_RPATH)
+                    result[idx] = 15
+                    for (j in 1 until 8) result[idx + j] = 0
+                    // Replace VALUE with 0
+                    for (j in 0 until 8) result[idx + 8 + j] = 0
+                    found = true
+                }
+            }
+        }
+
+        return if (found) result else null
+    }
+
+    private fun readU64(data: ByteArray, off: Long): Long {
+        val i = off.toInt()
+        return ((data[i].toLong() and 0xff)) or
+               ((data[i + 1].toLong() and 0xff) shl 8) or
+               ((data[i + 2].toLong() and 0xff) shl 16) or
+               ((data[i + 3].toLong() and 0xff) shl 24) or
+               ((data[i + 4].toLong() and 0xff) shl 32) or
+               ((data[i + 5].toLong() and 0xff) shl 40) or
+               ((data[i + 6].toLong() and 0xff) shl 48) or
+               ((data[i + 7].toLong() and 0xff) shl 56)
+    }
+
+    private fun readU32(data: ByteArray, off: Long): Long {
+        val i = off.toInt()
+        return ((data[i].toLong() and 0xff)) or
+               ((data[i + 1].toLong() and 0xff) shl 8) or
+               ((data[i + 2].toLong() and 0xff) shl 16) or
+               ((data[i + 3].toLong() and 0xff) shl 24)
+    }
+
+    private fun readU16(data: ByteArray, off: Long): Long {
+        val i = off.toInt()
+        return ((data[i].toLong() and 0xff)) or
+               ((data[i + 1].toLong() and 0xff) shl 8)
+    }
+
+    private fun readCString(data: ByteArray, off: Long): String {
+        val i = off.toInt()
+        var end = i
+        while (end < data.size && data[end] != 0.toByte()) end++
+        return if (end > i) String(data.copyOfRange(i, end)) else ""
     }
 }

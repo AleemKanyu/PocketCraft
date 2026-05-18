@@ -146,7 +146,12 @@ class MainActivity : ComponentActivity() {
                         jreProgress = 0
                         jreStatus = "Preparing Minecraft Runtime..."
                         withContext(Dispatchers.IO) {
-                            JreExtractor.extractIfNeeded(applicationContext) { percent, status ->
+                            val selectedVersion = AppPreferencesStore
+                                .getSelectedVersionFlow(applicationContext)
+                                .first()
+                                .orEmpty()
+                            val runtime = JreExtractor.runtimeForVersion(selectedVersion)
+                            JreExtractor.extractIfNeeded(applicationContext, runtime) { percent, status ->
                                 runOnUiThread {
                                     jreProgress = percent
                                     jreStatus = status

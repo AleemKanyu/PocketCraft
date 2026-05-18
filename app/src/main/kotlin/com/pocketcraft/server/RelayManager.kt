@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -67,6 +68,8 @@ class RelayManager(private val context: Context) {
     private var bedrockUdpBridge: BedrockUdpBridge? = null
     @Volatile
     private var activeBedrockSocket: Socket? = null
+    private val bedrockTxChannel = Channel<ByteArray>(capacity = 512)
+    private var bedrockTxJob: kotlinx.coroutines.Job? = null
 
     private val poolTargetSize = AtomicInteger(INITIAL_POOL_SIZE)
     private val socketPool = mutableListOf<PooledSocket>()
@@ -97,6 +100,14 @@ class RelayManager(private val context: Context) {
     data class TunnelPoolResult(
         val readyAck: Boolean,
         val poolReady: Boolean
+    )
+
+    data class TunnelHealth(
+        val healthy: Boolean,
+        val poolSize: Int,
+        val poolReady: Boolean,
+        val heartbeatActive: Boolean,
+        val hasLocalPort: Boolean
     )
 
     /**
@@ -172,26 +183,48 @@ class RelayManager(private val context: Context) {
 
     fun startBedrockBridge() {
         if (bedrockUdpBridge != null) return
-        bedrockUdpBridge = BedrockUdpBridge { frame ->
-            val socket = activeBedrockSocket
-            if (socket != null && !socket.isClosed) {
-                poolScope.launch(Dispatchers.IO) {
-                    try {
-                        val output = socket.getOutputStream()
-                        synchronized(output) {
-                            output.write(frame)
-                            output.flush()
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("RelayManager", "Failed to send Bedrock response: ${e.message}")
-                    }
+        
+        bedrockTxJob?.cancel()
+        bedrockTxJob = poolScope.launch(Dispatchers.IO) {
+            for (frame in bedrockTxChannel) {
+                var socket = activeBedrockSocket
+                var waitedMs = 0L
+                while ((socket == null || socket.isClosed) && waitedMs < 2_000L && poolScope.isActive) {
+                    delay(25)
+                    waitedMs += 25
+                    socket = activeBedrockSocket
                 }
+
+                if (socket == null || socket.isClosed) {
+                    android.util.Log.w(
+                        "RelayManager",
+                        "Dropping Bedrock response frame (${frame.size} bytes) because no active Bedrock relay socket is available."
+                    )
+                    continue
+                }
+
+                try {
+                    val output = socket.getOutputStream()
+                    output.write(frame)
+                    output.flush()
+                } catch (e: Exception) {
+                    android.util.Log.e("RelayManager", "Failed to send Bedrock response: ${e.message}")
+                }
+            }
+        }
+
+        bedrockUdpBridge = BedrockUdpBridge { frame ->
+            val result = bedrockTxChannel.trySend(frame)
+            if (result.isFailure) {
+                android.util.Log.w("RelayManager", "Dropped Bedrock UDP frame due to channel capacity")
             }
         }
         bedrockUdpBridge?.start()
     }
 
     fun stopBedrockBridge() {
+        bedrockTxJob?.cancel()
+        bedrockTxJob = null
         bedrockUdpBridge?.stop()
         bedrockUdpBridge = null
         activeBedrockSocket = null
@@ -286,6 +319,21 @@ class RelayManager(private val context: Context) {
             delay(100)
         }
         return currentPoolSize() >= TARGET_POOL_SIZE
+    }
+
+    fun snapshotTunnelHealth(): TunnelHealth {
+        val poolSize = currentPoolSize()
+        val poolReady = _isPoolReady.value
+        val heartbeatActive = tunnelHeartbeatJob?.isActive == true
+        val hasLocalPort = activeTunnelLocalPort != null
+        val healthy = poolReady && heartbeatActive && hasLocalPort && poolSize >= POOL_REFRESH_FLOOR
+        return TunnelHealth(
+            healthy = healthy,
+            poolSize = poolSize,
+            poolReady = poolReady,
+            heartbeatActive = heartbeatActive,
+            hasLocalPort = hasLocalPort
+        )
     }
 
     suspend fun notifyPhoneReady(localPort: Int): Boolean = withContext(Dispatchers.IO) {
@@ -660,6 +708,10 @@ class RelayManager(private val context: Context) {
                 pOffset += read
             }
             if (pOffset == payloadLen) {
+                android.util.Log.d(
+                    "RelayManager",
+                    "Received first Bedrock relay frame (${firstFrame.size} bytes); forwarding to local Geyser."
+                )
                 bedrockUdpBridge?.onIncomingFrame(firstFrame)
             }
             
@@ -706,6 +758,7 @@ class RelayManager(private val context: Context) {
             android.util.Log.e("RelayManager", "Bedrock bridge error: ${e.message}")
         } finally {
             if (activeBedrockSocket == relaySocket) {
+                android.util.Log.i("RelayManager", "Bedrock relay socket closed.")
                 activeBedrockSocket = null
             }
             if (!handedOffToJavaBridge) {

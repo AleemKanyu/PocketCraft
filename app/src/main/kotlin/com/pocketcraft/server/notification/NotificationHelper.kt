@@ -19,21 +19,19 @@ object NotificationHelper {
      * On Android O+ the channel sound cannot be changed after first creation, so we pin it to
      * silent from the start with a distinct ID.
      */
-    const val CHANNEL_ID = "pocketcraft_server_silent"
-    private const val CHANNEL_NAME = "Server Status"
-    private const val NOTIFICATION_ID_ONLINE = 1001
+    const val CHANNEL_ID = "pocketcraft_server_alerts"
+    private const val CHANNEL_NAME = "Server Status Alerts"
+    private const val NOTIFICATION_ID_ONLINE = 1002
 
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
-                // LOW = shown in shade, no sound, no heads-up banner
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Notifies when the server starts (no sound — in-app audio only)"
-                enableVibration(false)
-                setSound(null, null)   // Explicitly silent
+                description = "Notifies when the server completely starts"
+                enableVibration(true)
             }
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
@@ -42,33 +40,20 @@ object NotificationHelper {
 
     /**
      * Called when the server transitions to ONLINE.
-     *
-     * Behaviour:
-     * - App on screen (foreground) → play in-app sound only, no push notification.
-     * - App closed / in background → send exactly one silent push notification, no sound.
+     * Always sends a heads-up push notification so the user knows the server started.
      */
     fun notifyServerOnline(context: Context, version: String) {
-        if (com.pocketcraft.server.MainActivity.isAppInForeground) {
-            // App is visible — in-app sound is triggered by SoundManager directly in ServerStateHolder.
-            // Nothing extra to do here.
-            return
-        }
-
-        // App is not on screen — send a silent push notification so the user knows the server
-        // started (e.g. it was started via Auto-Restart while they were away).
         try {
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setContentTitle("Server is Online! 🎮")
                 .setContentText("Minecraft $version is ready. Players can now connect.")
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .setSound(null)          // No system sound — channel is already silent
-                .setVibrate(null)        // No vibration
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
 
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_ONLINE, builder.build())
         } catch (e: Exception) {
-            // Silent failure — notification is informational only
+            // Silent failure
         }
     }
 

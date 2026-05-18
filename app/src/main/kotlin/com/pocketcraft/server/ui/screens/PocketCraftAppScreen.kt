@@ -135,13 +135,16 @@ fun PocketCraftApp(
     var homeScreenReady by remember { mutableStateOf(false) }
     var showDiscordButtonFromRemoteConfig by remember { mutableStateOf(true) }
     var showInstagramButtonFromRemoteConfig by remember { mutableStateOf(true) }
-    var sessionClosedBroadcastIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val preferences = remember { AppPreferences(context) }
     val activity = remember(context) { context.findActivity() }
     val scope = rememberCoroutineScope()
-    val stateHolder = remember(versionId) { ServerStateHolder(context.applicationContext, versionId, selectedServerType) }
+    val selectedWorld by AppPreferencesStore.getSelectedWorldFlow(context).collectAsState(initial = "world")
+    val stateHolder = remember(versionId, selectedWorld) {
+        ServerStateHolder(context.applicationContext, versionId, selectedServerType, "world") // Forced to 'world' for debugging
+    }
     val broadcastViewModel: BroadcastViewModel = hiltViewModel()
     val configBanner by broadcastViewModel.configBanner.collectAsState()
     val broadcasts by broadcastViewModel.visibleBroadcasts.collectAsState()
@@ -153,11 +156,8 @@ fun PocketCraftApp(
     }
     val colorScheme = MaterialTheme.colorScheme
     val popupAccentContainerColor = pocketPopupAccentContainerColor()
-    val hasPendingBroadcast by remember(configBanner, broadcasts, sessionClosedBroadcastIds) {
-        mutableStateOf(
-            (configBanner != null && configBanner!!.id !in sessionClosedBroadcastIds) ||
-                broadcasts.any { it.id !in sessionClosedBroadcastIds }
-        )
+    val hasPendingBroadcast by remember(configBanner, broadcasts) {
+        mutableStateOf(configBanner != null || broadcasts.isNotEmpty())
     }
     val hasBlockingSheet = showVersionPickerDialog ||
         showVersionRiskDialog ||
@@ -648,26 +648,18 @@ fun PocketCraftApp(
                 homeTopContent = {
                     if (screen == Screen.SERVER) {
                         configBanner?.let { banner ->
-                            if (banner.id !in sessionClosedBroadcastIds) {
-                                BroadcastBanner(
-                                    message = banner,
-                                    onDismiss = {
-                                        broadcastViewModel.dismissConfigBanner()
-                                        sessionClosedBroadcastIds = sessionClosedBroadcastIds + banner.id
-                                    },
-                                    enableDetailsSheet = false,
-                                    outerPadding = PaddingValues(0.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
+                            BroadcastBanner(
+                                message = banner,
+                                onDismiss = { broadcastViewModel.dismissConfigBanner() },
+                                enableDetailsSheet = false,
+                                outerPadding = PaddingValues(0.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                         broadcasts.forEach { message ->
                             BroadcastBanner(
                                 message = message,
-                                onDismiss = {
-                                    broadcastViewModel.dismiss(message.id)
-                                    sessionClosedBroadcastIds = sessionClosedBroadcastIds + message.id
-                                },
+                                onDismiss = { broadcastViewModel.dismiss(message.id) },
                                 enableDetailsSheet = false,
                                 outerPadding = PaddingValues(0.dp),
                                 modifier = Modifier.fillMaxWidth()
@@ -791,6 +783,7 @@ fun PocketCraftApp(
                 )
                 DuoButton(
                     text = "CONTINUE (AT YOUR RISK)",
+                    variant = com.pocketcraft.server.ui.components.DuoButtonVariant.Danger,
                     onClick = {
                         scope.launch {
                             riskSheetState.hide()
@@ -1244,8 +1237,8 @@ fun PocketCraftApp(
 
 
 private fun scanDownloadedRuntimeKeys(context: Context): Set<String> {
-    // JARs now live at files/servers/<version>/<type>-<version>.jar
-    val serversRoot = File(context.filesDir, "servers")
+    // JARs now live at files/servers/binaries/<version>/<type>-<version>.jar
+    val serversRoot = File(context.filesDir, "servers/binaries")
     if (!serversRoot.isDirectory) return emptySet()
     val keys = mutableSetOf<String>()
     serversRoot.listFiles()?.forEach { versionDir ->

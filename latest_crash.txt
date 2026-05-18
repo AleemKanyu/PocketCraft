@@ -1,0 +1,256 @@
+--------- beginning of crash
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: FATAL EXCEPTION: main
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: Process: com.google.android.GoogleCamera, PID: 23793
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: java.lang.RuntimeException: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{b606583 u0a537 TRNB idle change:procadj procs:0 seq(1003261,1002314)}
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:109)
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:106)
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:201)
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:288)
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:7939)
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:551)
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:854)
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: Caused by: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{b606583 u0a537 TRNB idle change:procadj procs:0 seq(1003261,1002314)}
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	at android.app.ContextImpl.startServiceCommon(ContextImpl.java:1908)
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	at android.app.ContextImpl.startService(ContextImpl.java:1864)
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	at android.content.ContextWrapper.startService(ContextWrapper.java:817)
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	at grk.c(PG:2)
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	at com.google.android.apps.camera.keepalive.ProcessGcService.onStartJob(PG:5)
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	at android.app.job.JobService$1.onStartJob(JobService.java:68)
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:105)
+05-13 01:37:23.755 23793 23793 E AndroidRuntime: 	... 7 more
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: FATAL EXCEPTION: main
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: Process: com.google.android.GoogleCamera, PID: 12397
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: java.lang.RuntimeException: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{e571dfc u0a537 TRNB idle change:procadj procs:0 seq(1137573,1137017)}
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:109)
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:106)
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:201)
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:288)
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:7939)
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:551)
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:854)
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: Caused by: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{e571dfc u0a537 TRNB idle change:procadj procs:0 seq(1137573,1137017)}
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	at android.app.ContextImpl.startServiceCommon(ContextImpl.java:1908)
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	at android.app.ContextImpl.startService(ContextImpl.java:1864)
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	at android.content.ContextWrapper.startService(ContextWrapper.java:817)
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	at grk.c(PG:2)
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	at com.google.android.apps.camera.keepalive.ProcessGcService.onStartJob(PG:5)
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	at android.app.job.JobService$1.onStartJob(JobService.java:68)
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:105)
+05-13 07:43:45.252 12397 12397 E AndroidRuntime: 	... 7 more
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: FATAL EXCEPTION: main
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: Process: com.google.android.GoogleCamera, PID: 16265
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: java.lang.RuntimeException: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{598ad0a u0a537 TRNB idle change:procadj procs:0 seq(1206876,1195022)}
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:109)
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:106)
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:201)
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:288)
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:7939)
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:551)
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:854)
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: Caused by: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{598ad0a u0a537 TRNB idle change:procadj procs:0 seq(1206876,1195022)}
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	at android.app.ContextImpl.startServiceCommon(ContextImpl.java:1908)
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	at android.app.ContextImpl.startService(ContextImpl.java:1864)
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	at android.content.ContextWrapper.startService(ContextWrapper.java:817)
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	at grk.c(PG:2)
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	at com.google.android.apps.camera.keepalive.ProcessGcService.onStartJob(PG:5)
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	at android.app.job.JobService$1.onStartJob(JobService.java:68)
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:105)
+05-13 09:24:04.861 16265 16265 E AndroidRuntime: 	... 7 more
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: FATAL EXCEPTION: main
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: Process: com.google.android.GoogleCamera, PID: 4456
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: java.lang.RuntimeException: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{ff994a4 u0a537 TRNB idle change:procadj procs:0 seq(1349456,1335228)}
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:109)
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:106)
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:201)
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:288)
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:7939)
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:551)
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:854)
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: Caused by: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{ff994a4 u0a537 TRNB idle change:procadj procs:0 seq(1349456,1335228)}
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	at android.app.ContextImpl.startServiceCommon(ContextImpl.java:1908)
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	at android.app.ContextImpl.startService(ContextImpl.java:1864)
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	at android.content.ContextWrapper.startService(ContextWrapper.java:817)
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	at grk.c(PG:2)
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	at com.google.android.apps.camera.keepalive.ProcessGcService.onStartJob(PG:5)
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	at android.app.job.JobService$1.onStartJob(JobService.java:68)
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:105)
+05-13 16:07:49.534  4456  4456 E AndroidRuntime: 	... 7 more
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: FATAL EXCEPTION: main
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: Process: com.google.android.GoogleCamera, PID: 11456
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: java.lang.RuntimeException: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{f5aecc3 u0a537 TRNB idle change:procadj procs:0 seq(2065530,2065185)}
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:109)
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:106)
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:201)
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:288)
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:7939)
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:551)
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:854)
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: Caused by: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{f5aecc3 u0a537 TRNB idle change:procadj procs:0 seq(2065530,2065185)}
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	at android.app.ContextImpl.startServiceCommon(ContextImpl.java:1908)
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	at android.app.ContextImpl.startService(ContextImpl.java:1864)
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	at android.content.ContextWrapper.startService(ContextWrapper.java:817)
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	at grk.c(PG:2)
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	at com.google.android.apps.camera.keepalive.ProcessGcService.onStartJob(PG:5)
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	at android.app.job.JobService$1.onStartJob(JobService.java:68)
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:105)
+05-14 21:55:35.624 11456 11456 E AndroidRuntime: 	... 7 more
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: FATAL EXCEPTION: main
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: Process: com.google.android.GoogleCamera, PID: 11577
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: java.lang.RuntimeException: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{48c8bcd u0a537 TRNB idle change:procadj procs:0 seq(2067162,2065808)}
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:109)
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:106)
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:201)
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:288)
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:7939)
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:551)
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:854)
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: Caused by: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{48c8bcd u0a537 TRNB idle change:procadj procs:0 seq(2067162,2065808)}
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	at android.app.ContextImpl.startServiceCommon(ContextImpl.java:1908)
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	at android.app.ContextImpl.startService(ContextImpl.java:1864)
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	at android.content.ContextWrapper.startService(ContextWrapper.java:817)
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	at grk.c(PG:2)
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	at com.google.android.apps.camera.keepalive.ProcessGcService.onStartJob(PG:5)
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	at android.app.job.JobService$1.onStartJob(JobService.java:68)
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:105)
+05-14 22:00:00.033 11577 11577 E AndroidRuntime: 	... 7 more
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: FATAL EXCEPTION: main
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: Process: com.google.android.GoogleCamera, PID: 11814
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: java.lang.RuntimeException: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{77372a2 u0a537 TRNB idle change:procadj procs:0 seq(2067616,2067581)}
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:109)
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:106)
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:201)
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:288)
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:7939)
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:551)
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:854)
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: Caused by: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{77372a2 u0a537 TRNB idle change:procadj procs:0 seq(2067616,2067581)}
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	at android.app.ContextImpl.startServiceCommon(ContextImpl.java:1908)
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	at android.app.ContextImpl.startService(ContextImpl.java:1864)
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	at android.content.ContextWrapper.startService(ContextWrapper.java:817)
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	at grk.c(PG:2)
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	at com.google.android.apps.camera.keepalive.ProcessGcService.onStartJob(PG:5)
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	at android.app.job.JobService$1.onStartJob(JobService.java:68)
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:105)
+05-14 22:02:09.121 11814 11814 E AndroidRuntime: 	... 7 more
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: FATAL EXCEPTION: main
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: Process: com.google.android.GoogleCamera, PID: 15324
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: java.lang.RuntimeException: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{23c0aab u0a537 TRNB idle change:procadj procs:0 seq(2100734,2100563)}
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:109)
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:106)
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:201)
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:288)
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:7939)
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:551)
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:854)
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: Caused by: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{23c0aab u0a537 TRNB idle change:procadj procs:0 seq(2100734,2100563)}
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	at android.app.ContextImpl.startServiceCommon(ContextImpl.java:1908)
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	at android.app.ContextImpl.startService(ContextImpl.java:1864)
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	at android.content.ContextWrapper.startService(ContextWrapper.java:817)
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	at grk.c(PG:2)
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	at com.google.android.apps.camera.keepalive.ProcessGcService.onStartJob(PG:5)
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	at android.app.job.JobService$1.onStartJob(JobService.java:68)
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:105)
+05-14 23:18:13.427 15324 15324 E AndroidRuntime: 	... 7 more
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: FATAL EXCEPTION: main
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: Process: com.google.android.GoogleCamera, PID: 16019
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: java.lang.RuntimeException: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{c4a2488 u0a537 TRNB idle change:procadj procs:0 seq(2106389,2106132)}
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:109)
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:106)
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:201)
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:288)
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:7939)
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:551)
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:854)
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: Caused by: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{c4a2488 u0a537 TRNB idle change:procadj procs:0 seq(2106389,2106132)}
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	at android.app.ContextImpl.startServiceCommon(ContextImpl.java:1908)
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	at android.app.ContextImpl.startService(ContextImpl.java:1864)
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	at android.content.ContextWrapper.startService(ContextWrapper.java:817)
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	at grk.c(PG:2)
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	at com.google.android.apps.camera.keepalive.ProcessGcService.onStartJob(PG:5)
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	at android.app.job.JobService$1.onStartJob(JobService.java:68)
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:105)
+05-14 23:34:18.518 16019 16019 E AndroidRuntime: 	... 7 more
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: FATAL EXCEPTION: main
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: Process: com.google.android.GoogleCamera, PID: 17686
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: java.lang.RuntimeException: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{29b98dd u0a537 TRNB idle change:procadj procs:0 seq(2116325,2116004)}
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:109)
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:106)
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:201)
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:288)
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:7939)
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:551)
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:854)
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: Caused by: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{29b98dd u0a537 TRNB idle change:procadj procs:0 seq(2116325,2116004)}
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	at android.app.ContextImpl.startServiceCommon(ContextImpl.java:1908)
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	at android.app.ContextImpl.startService(ContextImpl.java:1864)
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	at android.content.ContextWrapper.startService(ContextWrapper.java:817)
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	at grk.c(PG:2)
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	at com.google.android.apps.camera.keepalive.ProcessGcService.onStartJob(PG:5)
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	at android.app.job.JobService$1.onStartJob(JobService.java:68)
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:105)
+05-15 00:40:47.129 17686 17686 E AndroidRuntime: 	... 7 more
+--------- beginning of system
+--
+05-15 08:24:51.651  1948  2413 W NetworkManagement: 	at android.os.HandlerThread.run(HandlerThread.java:67)
+05-15 08:24:51.697  1948  1948 D ActivityManager: sync unfroze 31857 com.google.android.GoogleCamera
+05-15 08:24:51.699  1948  1948 D CompatibilityChangeReporter: Compat change id reported: 168419799; UID 10537; state: DISABLED
+05-15 08:24:51.699  1948  1948 D CompatibilityChangeReporter: Compat change id reported: 273564678; UID 10537; state: DISABLED
+05-15 08:24:51.709  1948  3795 W ActivityManager: Background start not allowed: service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService } to com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService from pid=31857 uid=10537 pkg=com.google.android.GoogleCamera startFg?=false
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: FATAL EXCEPTION: main
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: Process: com.google.android.GoogleCamera, PID: 31857
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: java.lang.RuntimeException: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{b6d99e3 u0a537 TRNB bg:+28m8s954ms idle change:procadj procs:0 seq(2266545,2236499)}
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:109)
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:106)
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:201)
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:288)
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:7939)
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:551)
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:854)
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: Caused by: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{b6d99e3 u0a537 TRNB bg:+28m8s954ms idle change:procadj procs:0 seq(2266545,2236499)}
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	at android.app.ContextImpl.startServiceCommon(ContextImpl.java:1908)
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	at android.app.ContextImpl.startService(ContextImpl.java:1864)
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	at android.content.ContextWrapper.startService(ContextWrapper.java:817)
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	at grk.c(PG:2)
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	at com.google.android.apps.camera.keepalive.ProcessGcService.onStartJob(PG:5)
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	at android.app.job.JobService$1.onStartJob(JobService.java:68)
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:105)
+05-15 08:24:51.710 31857 31857 E AndroidRuntime: 	... 7 more
+05-15 08:24:51.719  1948  2541 D CompatibilityChangeReporter: Compat change id reported: 177438394; UID 10370; state: DISABLED
+--
+05-15 09:30:00.195  1948  4366 D CompatibilityChangeReporter: Compat change id reported: 226439802; UID 10390; state: DISABLED
+05-15 09:30:00.196  1948  4366 D CompatibilityChangeReporter: Compat change id reported: 218533173; UID 10390; state: ENABLED
+05-15 09:30:00.205  1948  7680 D CompatibilityChangeReporter: Compat change id reported: 161145287; UID 10350; state: DISABLED
+05-15 09:30:00.275  1948  4813 D ActivityManager: sync unfroze 31701 com.android.providers.calendar
+05-15 09:30:00.276  1948  4366 W ActivityManager: Background start not allowed: service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService } to com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService from pid=18905 uid=10537 pkg=com.google.android.GoogleCamera startFg?=false
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: FATAL EXCEPTION: main
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: Process: com.google.android.GoogleCamera, PID: 18905
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: java.lang.RuntimeException: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{b7f805a u0a537 TRNB idle change:procadj procs:0 seq(2307150,2306940)}
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:109)
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:106)
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:201)
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:288)
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:7939)
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:551)
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:854)
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: Caused by: android.app.BackgroundServiceStartNotAllowedException: Not allowed to start service Intent { cmp=com.google.android.GoogleCamera/com.google.android.apps.camera.prewarm.NoOpPrewarmService }: app is in background uid UidRecord{b7f805a u0a537 TRNB idle change:procadj procs:0 seq(2307150,2306940)}
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	at android.app.ContextImpl.startServiceCommon(ContextImpl.java:1908)
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	at android.app.ContextImpl.startService(ContextImpl.java:1864)
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	at android.content.ContextWrapper.startService(ContextWrapper.java:817)
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	at grk.c(PG:2)
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	at com.google.android.apps.camera.keepalive.ProcessGcService.onStartJob(PG:5)
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	at android.app.job.JobService$1.onStartJob(JobService.java:68)
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	at android.app.job.JobServiceEngine$JobHandler.handleMessage(JobServiceEngine.java:105)
+05-15 09:30:00.287 18905 18905 E AndroidRuntime: 	... 7 more
+05-15 09:30:00.292  1948  7680 D CompatibilityChangeReporter: Compat change id reported: 161145287; UID 10537; state: DISABLED

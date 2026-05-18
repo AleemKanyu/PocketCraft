@@ -6,10 +6,10 @@ import java.util.Properties
 object ServerPropertiesHelper {
 
     const val RELAY_READY_COMPRESSION_THRESHOLD = 256
-    const val DEFAULT_VIEW_DISTANCE = 5
-    const val DEFAULT_SIMULATION_DISTANCE = 3
-    const val RELAY_READY_ENTITY_BROADCAST_PERCENT = 75
-    const val POCKETCRAFT_JOIN_MESSAGE_TEXT = "Hosted on PocketCraft! Enjoy and join our Discord using the link already defined in the code."
+    const val DEFAULT_VIEW_DISTANCE = 6
+    const val DEFAULT_SIMULATION_DISTANCE = 4
+    const val RELAY_READY_ENTITY_BROADCAST_PERCENT = 50
+    const val POCKETCRAFT_JOIN_MESSAGE_TEXT = "hosted on Pocketcraft"
     const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/NGPzXFYp"
 
     fun getServerPropertiesFile(serverDir: File): File {
@@ -31,7 +31,7 @@ object ServerPropertiesHelper {
             props["gamemode"] = "survival"
             props["online-mode"] = "false"
             props["pvp"] = "true"
-            props["allow-flight"] = "false"
+            props["allow-flight"] = "true"
             props["hardcore"] = "false"
             props["view-distance"] = DEFAULT_VIEW_DISTANCE.toString()
             props["simulation-distance"] = DEFAULT_SIMULATION_DISTANCE.toString()
@@ -41,6 +41,7 @@ object ServerPropertiesHelper {
             props["allow-nether"] = "true"
             props["enable-command-block"] = "true"
             props["pocketcraft-max-ram-mb"] = "1024"
+            props["entity-broadcast-range-percentage"] = RELAY_READY_ENTITY_BROADCAST_PERCENT.toString()
             // Relay traffic needs compression to keep chunk/login bursts stable.
             props["network-compression-threshold"] = RELAY_READY_COMPRESSION_THRESHOLD.toString()
             props["sync-chunk-writes"] = "false"
@@ -63,6 +64,14 @@ object ServerPropertiesHelper {
         }
         if (props.getProperty("pocketcraft-join-message-url") != POCKETCRAFT_JOIN_MESSAGE_URL) {
             props["pocketcraft-join-message-url"] = POCKETCRAFT_JOIN_MESSAGE_URL
+            needsPersist = true
+        }
+        if (props.getProperty("enable-rcon") != "true" || 
+            props.getProperty("rcon.port") != "25575" || 
+            props.getProperty("rcon.password") != "pocketcraft-internal-rcon") {
+            props["enable-rcon"] = "true"
+            props["rcon.port"] = "25575"
+            props["rcon.password"] = "pocketcraft-internal-rcon"
             needsPersist = true
         }
         if (needsPersist) {

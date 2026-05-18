@@ -101,34 +101,14 @@ fun WorldsScreen(
     var showDeleteDialog by remember { mutableStateOf<BackupEntry?>(null) }
     var showDeleteWorldDialog by remember { mutableStateOf<WorldEntry?>(null) }
     var showImportGuide by remember { mutableStateOf(false) }
-    var isImportingWorld by remember { mutableStateOf(false) }
-    var importProgress by remember { mutableStateOf(0f) }
     var importDimension by remember { mutableStateOf("overworld") }
     val worldPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let {
-            scope.launch {
-                val activeWorld = stateHolder.config.worldName.ifBlank { "world" }
-                val importFolder = activeWorld
-                isImportingWorld = true
-                importProgress = 0f
-                val result = WorldImporter.importWorld(
-                    context = context,
-                    zipUri = it,
-                    serverType = stateHolder.config.serverType,
-                    serverVersionId = stateHolder.versionLabel,
-                    folderName = importFolder,
-                    onProgress = { p -> importProgress = p }
-                )
-                isImportingWorld = false
-                if (result.isSuccess) {
-                    Toast.makeText(context, "$importFolder imported successfully!", Toast.LENGTH_SHORT).show()
-                    stateHolder.refreshAll()
-                } else {
-                    Toast.makeText(context, "Import failed: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
-                }
-            }
+            val activeWorld = stateHolder.config.worldName.ifBlank { "world" }
+            val importFolder = activeWorld
+            stateHolder.importWorldDimension(it, importFolder)
         }
     }
 
@@ -329,8 +309,8 @@ fun WorldsScreen(
                     title = "Upload Overworld",
                     subtitle = "Main world ($activeWorld)",
                     icon = "🌍",
-                    isImporting = isImportingWorld && importDimension == "overworld",
-                    importProgress = importProgress,
+                    isImporting = stateHolder.isImportingWorld && importDimension == "overworld",
+                    importProgress = stateHolder.importProgressPercent,
                     serverOffline = stateHolder.status == ServerStatus.OFFLINE,
                     onUpload = {
                         importDimension = "overworld"
@@ -341,8 +321,8 @@ fun WorldsScreen(
                     title = "Upload Nether",
                     subtitle = "Nether dimension (${activeWorld}_nether)",
                     icon = "🔥",
-                    isImporting = isImportingWorld && importDimension == "nether",
-                    importProgress = importProgress,
+                    isImporting = stateHolder.isImportingWorld && importDimension == "nether",
+                    importProgress = stateHolder.importProgressPercent,
                     serverOffline = stateHolder.status == ServerStatus.OFFLINE,
                     onUpload = {
                         importDimension = "nether"
@@ -353,8 +333,8 @@ fun WorldsScreen(
                     title = "Upload The End",
                     subtitle = "End dimension (${activeWorld}_the_end)",
                     icon = "🌑",
-                    isImporting = isImportingWorld && importDimension == "end",
-                    importProgress = importProgress,
+                    isImporting = stateHolder.isImportingWorld && importDimension == "end",
+                    importProgress = stateHolder.importProgressPercent,
                     serverOffline = stateHolder.status == ServerStatus.OFFLINE,
                     onUpload = {
                         importDimension = "end"

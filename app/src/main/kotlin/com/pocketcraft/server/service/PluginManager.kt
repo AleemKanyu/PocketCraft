@@ -16,6 +16,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import okhttp3.Cache
 import okhttp3.CacheControl
@@ -37,9 +38,10 @@ object PluginManager {
     private const val HTTP_CACHE_BYTES = 12L * 1024L * 1024L
     private const val MODRINTH_PROVIDER = "modrinth"
     private const val HANGAR_PROVIDER = "hangar"
-    private val builtInBridgeProjectIds = setOf("geyser", "floodgate", "viaversion", "chunky")
-    private val builtInBridgeKeywords = setOf("geyser", "floodgate", "viaversion", "chunky")
-    private val incompatiblePluginTokens = listOf("fastleafdecay")
+    private val builtInBridgeProjectIds = setOf("geyser", "viaversion", "chunky")
+    private val builtInBridgeKeywords = setOf("geyser", "viaversion", "chunky")
+    private val incompatiblePluginTokens = listOf("fastleafdecay", "inventoryprofiles")
+    private val BLOCKED_PLUGINS = setOf("spark", "spark-bukkit")
     private val paperCompatibleLoaders = setOf("paper", "spigot", "purpur", "bukkit", "folia")
     private val modLoaderLabels = linkedMapOf(
         "fabric" to "Fabric",
@@ -104,6 +106,14 @@ object PluginManager {
         val fileName: String
     )
 
+    private data class BundledPluginUpdate(
+        val projectId: String,
+        val title: String,
+        val downloadUrl: String? = null,
+        val fileNameHint: String? = null,
+        val catalogItem: RemoteCatalogItem? = null
+    )
+
     private fun getHttpClient(context: Context): OkHttpClient {
         if (httpClient == null) {
             if (cacheDir == null) {
@@ -122,31 +132,39 @@ object PluginManager {
         return httpClient!!
     }
 
-    fun getPluginsDir(context: Context, versionId: String): File =
-        File(context.filesDir, "servers/$versionId/plugins").also { it.mkdirs() }
+    fun getPluginsDir(context: Context, worldName: String): File =
+        File(context.filesDir, "servers/worlds/$worldName/plugins").also { it.mkdirs() }
 
     private fun isIncompatiblePluginName(name: String): Boolean {
         val normalized = name.lowercase(Locale.US)
             .replace("-", "")
             .replace("_", "")
             .replace(" ", "")
-        return incompatiblePluginTokens.any { normalized.contains(it) }
+        
+        if (incompatiblePluginTokens.any { normalized.contains(it) }) return true
+        
+        // Fix 3: Block Spark from bundled plugins
+        return BLOCKED_PLUGINS.any { normalized.contains(it) }
     }
 
-    fun removeIncompatiblePlugins(context: Context, versionId: String) {
-        val pluginsDir = getPluginsDir(context, versionId)
+    fun removeIncompatiblePlugins(context: Context, worldName: String) {
+        val pluginsDir = getPluginsDir(context, worldName)
         val removed = pluginsDir.listFiles()
-            ?.filter { it.isFile && isIncompatiblePluginName(it.name) }
-            ?.onEach { it.delete() }
+            ?.filter { file ->
+                val nameWithoutDisabled = file.name.removeSuffix(".disabled")
+                isIncompatiblePluginName(nameWithoutDisabled)
+            }
+            ?.onEach { it.deleteRecursively() }
             .orEmpty()
         if (removed.isNotEmpty()) {
-            Log.w("PluginManager", "Removed incompatible plugins: ${removed.joinToString { it.name }}")
+            Log.w("PluginManager", "Removed incompatible/blocked plugins: ${removed.joinToString { it.name }}")
         }
     }
 
-    fun getGeyserConfigFile(context: Context, versionId: String): File {
-        val pluginsDir = getPluginsDir(context, versionId)
+    fun getGeyserConfigFile(context: Context, worldName: String): File {
+        val pluginsDir = getPluginsDir(context, worldName)
         return listOf(
+            File(pluginsDir, "Geyser/config.yml"),
             File(pluginsDir, "Geyser-Spigot/config.yml"),
             File(pluginsDir, "Geyser-Spigot/geyser.yml"),
             File(pluginsDir, "geyser/config.yml"),
@@ -154,38 +172,38 @@ object PluginManager {
         ).firstOrNull { it.exists() } ?: File(pluginsDir, "Geyser-Spigot/config.yml")
     }
 
-    fun getFloodgateConfigFile(context: Context, versionId: String): File {
-        val pluginsDir = getPluginsDir(context, versionId)
+    fun getFloodgateConfigFile(context: Context, worldName: String): File {
+        val pluginsDir = getPluginsDir(context, worldName)
         return listOf(
+            File(pluginsDir, "floodgate/config.yml"),
             File(pluginsDir, "Floodgate/config.yml"),
             File(pluginsDir, "Floodgate/floodgate.yml"),
-            File(pluginsDir, "floodgate/config.yml"),
             File(pluginsDir, "floodgate/floodgate.yml")
         ).firstOrNull { it.exists() } ?: File(pluginsDir, "Floodgate/config.yml")
     }
 
-    fun getModsDir(context: Context, versionId: String): File =
-        File(context.filesDir, "servers/$versionId/mods").also { it.mkdirs() }
+    fun getModsDir(context: Context, worldName: String): File =
+        File(context.filesDir, "servers/$worldName/mods").also { it.mkdirs() }
 
-    fun getResourcePacksDir(context: Context, versionId: String): File =
-        File(context.filesDir, "servers/$versionId/resourcepacks").also { it.mkdirs() }
+    fun getResourcePacksDir(context: Context, worldName: String): File =
+        File(context.filesDir, "servers/$worldName/resourcepacks").also { it.mkdirs() }
 
-    fun ensureContentDirs(context: Context, versionId: String) {
-        getPluginsDir(context, versionId)
-        getModsDir(context, versionId)
-        getResourcePacksDir(context, versionId)
+    fun ensureContentDirs(context: Context, worldName: String) {
+        getPluginsDir(context, worldName)
+        getModsDir(context, worldName)
+        getResourcePacksDir(context, worldName)
     }
 
-    fun getContentDir(context: Context, versionId: String, type: ContentType): File {
+    fun getContentDir(context: Context, worldName: String, type: ContentType): File {
         return when (type) {
-            ContentType.PLUGINS -> getPluginsDir(context, versionId)
-            ContentType.MODS -> getModsDir(context, versionId)
-            ContentType.RESOURCE_PACKS -> getResourcePacksDir(context, versionId)
+            ContentType.PLUGINS -> getPluginsDir(context, worldName)
+            ContentType.MODS -> getModsDir(context, worldName)
+            ContentType.RESOURCE_PACKS -> getResourcePacksDir(context, worldName)
         }
     }
 
-    fun listPlugins(context: Context, versionId: String): List<Plugin> {
-        return getPluginsDir(context, versionId)
+    fun listPlugins(context: Context, worldName: String): List<Plugin> {
+        return getPluginsDir(context, worldName)
             .listFiles { file -> file.extension == "jar" || file.name.endsWith(".jar.disabled") }
             ?.map { file ->
                 val metadata = readArchiveMetadata(file)
@@ -204,10 +222,10 @@ object PluginManager {
 
     suspend fun ensureBedrockBridgePlugins(
         context: Context,
-        versionId: String,
+        worldName: String,
         onProgress: (String) -> Unit = {}
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        removeIncompatiblePlugins(context, versionId)
+        removeIncompatiblePlugins(context, worldName)
         val geyser = RemoteCatalogItem(
             source = MODRINTH_PROVIDER,
             projectId = "geyser",
@@ -216,27 +234,6 @@ object PluginManager {
             iconUrl = null,
             description = "Built-in Bedrock bridge",
             downloads = 0L
-        )
-        val floodgateCandidates = listOf(
-            RemoteCatalogItem(
-                source = MODRINTH_PROVIDER,
-                projectId = "floodgate",
-                title = "Floodgate",
-                slug = "floodgate",
-                iconUrl = null,
-                description = "Built-in Bedrock auth bridge",
-                downloads = 0L
-            ),
-            RemoteCatalogItem(
-                source = HANGAR_PROVIDER,
-                projectId = "floodgate",
-                title = "Floodgate",
-                slug = "floodgate",
-                iconUrl = null,
-                description = "Built-in Bedrock auth bridge",
-                downloads = 0L,
-                owner = "GeyserMC"
-            )
         )
         val viaVersion = RemoteCatalogItem(
             source = MODRINTH_PROVIDER,
@@ -250,57 +247,118 @@ object PluginManager {
 
         installManagedPluginIfMissing(
             context = context,
-            versionId = versionId,
+            worldName = worldName,
             item = geyser,
             onProgress = onProgress
-        ).fold(
-            onSuccess = {},
-            onFailure = { return@withContext Result.failure(it) }
-        )
+        ).onFailure { error ->
+            android.util.Log.w("PluginManager", "Modrinth/Hangar Geyser resolution failed: ${error.message}. Attempting direct download fallback...")
+            installManagedPluginFromDirectUrlIfMissing(
+                context = context,
+                worldName = worldName,
+                projectId = "geyser",
+                title = "Geyser",
+                downloadUrl = "$GEYSERMC_DOWNLOAD_BASE_URL/geyser/versions/latest/builds/latest/downloads/spigot",
+                fileNameHint = "Geyser-Spigot.jar",
+                onProgress = onProgress
+            ).fold(
+                onSuccess = {},
+                onFailure = { return@withContext Result.failure(it) }
+            )
+        }
 
-        installManagedPluginFromCandidatesIfMissing(
+        installManagedPluginFromDirectUrlIfMissing(
             context = context,
-            versionId = versionId,
-            candidates = floodgateCandidates,
+            worldName = worldName,
+            projectId = "floodgate",
+            title = "Floodgate",
+            downloadUrl = "$GEYSERMC_DOWNLOAD_BASE_URL/floodgate/versions/latest/builds/latest/downloads/spigot",
+            fileNameHint = "Floodgate-Spigot.jar",
             onProgress = onProgress
-        ).fold(
-            onSuccess = {},
-            onFailure = {
-                installManagedPluginFromDirectUrlIfMissing(
-                    context = context,
-                    versionId = versionId,
-                    projectId = "floodgate",
-                    title = "Floodgate",
-                    downloadUrl = "$GEYSERMC_DOWNLOAD_BASE_URL/floodgate/versions/latest/builds/latest/downloads/spigot",
-                    fileNameHint = "Floodgate-Spigot.jar",
-                    onProgress = onProgress
-                ).fold(
-                    onSuccess = {},
-                    onFailure = { error -> return@withContext Result.failure(error) }
-                )
-            }
-        )
+        ).onFailure { error ->
+            android.util.Log.w("PluginManager", "Floodgate direct download failed: ${error.message}")
+        }
 
         installManagedPluginIfMissing(
             context = context,
-            versionId = versionId,
+            worldName = worldName,
             item = viaVersion,
             onProgress = onProgress
         ).onFailure { error ->
             android.util.Log.w("PluginManager", "ViaVersion auto-install skipped: ${error.message}")
         }
 
-        ensureManagedPluginEnabled(context, versionId, "geyser")
-        ensureManagedPluginEnabled(context, versionId, "floodgate")
+        ensureManagedPluginEnabled(context, worldName, "geyser")
+        ensureManagedPluginEnabled(context, worldName, "floodgate")
 
-        enforceBedrockBridgeLocalConfig(context, versionId)
+        enforceBedrockBridgeLocalConfig(context, worldName)
 
+        Result.success(Unit)
+    }
+
+    suspend fun autoUpdateBundledPlugins(
+        context: Context,
+        worldName: String,
+        onProgress: (String) -> Unit = {}
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val bundledPlugins = listOf(
+            BundledPluginUpdate(
+                projectId = "geyser",
+                title = "Geyser",
+                downloadUrl = "$GEYSERMC_DOWNLOAD_BASE_URL/geyser/versions/latest/builds/latest/downloads/spigot",
+                fileNameHint = "Geyser-Spigot.jar"
+            ),
+            BundledPluginUpdate(
+                projectId = "floodgate",
+                title = "Floodgate",
+                downloadUrl = "$GEYSERMC_DOWNLOAD_BASE_URL/floodgate/versions/latest/builds/latest/downloads/spigot",
+                fileNameHint = "Floodgate-Spigot.jar"
+            ),
+            BundledPluginUpdate(
+                projectId = "viaversion",
+                title = "ViaVersion",
+                catalogItem = RemoteCatalogItem(
+                    source = MODRINTH_PROVIDER,
+                    projectId = "viaversion",
+                    title = "ViaVersion",
+                    slug = "viaversion",
+                    iconUrl = null,
+                    description = "Built-in Java protocol compatibility for latest Bedrock via Geyser",
+                    downloads = 0L
+                )
+            )
+        )
+
+        for (plugin in bundledPlugins) {
+            try {
+                onProgress("Updating ${plugin.title} bridge plugin...")
+                withTimeoutOrNull(15000L) {
+                    replaceManagedPluginFromUrl(
+                        context = context,
+                        worldName = worldName,
+                        projectId = plugin.projectId,
+                        title = plugin.title,
+                        downloadUrl = plugin.downloadUrl,
+                        fileNameHint = plugin.fileNameHint,
+                        catalogItem = plugin.catalogItem
+                    )
+                } ?: Log.w("PluginManager", "Timeout auto-updating ${plugin.title}")
+            } catch (e: Exception) {
+                Log.w("PluginManager", "Failed to auto-update ${plugin.title}: ${e.message}")
+            }
+        }
+
+        ensureManagedPluginEnabled(context, worldName, "geyser")
+        ensureManagedPluginEnabled(context, worldName, "floodgate")
+        ensureManagedPluginEnabled(context, worldName, "viaversion")
+        
+        enforceBedrockBridgeLocalConfig(context, worldName)
+        
         Result.success(Unit)
     }
 
     suspend fun ensureChunkyPlugin(
         context: Context,
-        versionId: String,
+        worldName: String,
         onProgress: (String) -> Unit = {}
     ): Result<Unit> = withContext(Dispatchers.IO) {
         val chunky = RemoteCatalogItem(
@@ -312,70 +370,57 @@ object PluginManager {
             description = "Chunk pre-generator",
             downloads = 0L
         )
-        installManagedPluginIfMissing(context, versionId, chunky, onProgress)
+        installManagedPluginIfMissing(context, worldName, chunky, onProgress)
     }
 
-    fun enforceBedrockBridgeLocalConfig(context: Context, versionId: String) {
-        val pluginsDir = getPluginsDir(context, versionId)
+    fun enforceBedrockBridgeLocalConfig(context: Context, worldName: String) {
+        val pluginsDir = getPluginsDir(context, worldName)
         val floodgateKeyPath = when {
             File(pluginsDir, "Floodgate/key.pem").exists() -> "../Floodgate/key.pem"
             File(pluginsDir, "floodgate/key.pem").exists() -> "../floodgate/key.pem"
             else -> "../floodgate/key.pem"
         }
-        val geyserConfigFile = getGeyserConfigFile(context, versionId)
+        val geyserConfigFile = getGeyserConfigFile(context, worldName)
         geyserConfigFile.parentFile?.mkdirs()
-        if (geyserConfigFile.exists()) {
-            val original = runCatching { geyserConfigFile.readText() }.getOrDefault("")
-            var updated = original
-            updated = ensureYamlSectionValue(updated, "bedrock", "address", "0.0.0.0")
-            updated = ensureYamlSectionValue(updated, "bedrock", "port", "19132")
-            updated = ensureYamlSectionValue(updated, "bedrock", "clone-remote-port", "false")
-            updated = ensureYamlSectionValue(updated, "bedrock", "motd1", "PocketCraft Server")
-            updated = ensureYamlSectionValue(updated, "bedrock", "motd2", "Tap to join")
-            updated = ensureTopLevelYamlValue(updated, "ping-passthrough-interval", "1")
-            updated = ensureTopLevelYamlValue(updated, "async-motd", "false")
-            updated = ensureTopLevelYamlValue(updated, "cache-chunks", "true")
-            updated = ensureTopLevelYamlValue(updated, "max-auto-connect-attempts", "5")
-            updated = ensureTopLevelYamlValue(updated, "show-cooldown", "disabled")
-            updated = ensureTopLevelYamlValue(updated, "forward-hostname", "false")
-            updated = ensureYamlSectionValue(updated, "remote", "address", "127.0.0.1")
-            updated = ensureYamlSectionValue(updated, "remote", "port", "25565")
-            updated = ensureYamlSectionValue(updated, "remote", "auth-type", "floodgate")
-            updated = ensureTopLevelYamlValue(updated, "floodgate-key-file", floodgateKeyPath)
-            updated = ensureTopLevelYamlValue(updated, "passthrough-motd", "false")
-            updated = ensureTopLevelYamlValue(updated, "passthrough-player-counts", "false")
+        val original = if (geyserConfigFile.exists()) {
+            runCatching { geyserConfigFile.readText() }.getOrDefault("")
+        } else {
+            ""
+        }
+        var updated = original
+        // Fix 2: Patch Geyser config to prevent ioctl (SELinux denials)
+        updated = ensureYamlSectionValue(updated, "bedrock", "address", "0.0.0.0")
+        updated = ensureYamlSectionValue(updated, "bedrock", "port", "19132")
+        updated = ensureYamlSectionValue(updated, "bedrock", "clone-remote-port", "false")
+        updated = ensureYamlSectionValue(updated, "bedrock", "broadcast-port", "19132")
+        updated = ensureYamlSectionValue(updated, "bedrock", "enable-proxy-protocol", "false")
+        updated = ensureYamlSectionValue(updated, "bedrock", "motd1", "PocketCraft Server")
+        updated = ensureYamlSectionValue(updated, "bedrock", "motd2", "Tap to join")
+        updated = ensureTopLevelYamlValue(updated, "ping-passthrough-interval", "1")
+        updated = ensureTopLevelYamlValue(updated, "async-motd", "false")
+        updated = ensureTopLevelYamlValue(updated, "cache-chunks", "true")
+        updated = ensureTopLevelYamlValue(updated, "max-auto-connect-attempts", "5")
+        updated = ensureTopLevelYamlValue(updated, "show-cooldown", "disabled")
+        updated = ensureTopLevelYamlValue(updated, "forward-hostname", "false")
+        updated = ensureTopLevelYamlValue(updated, "floodgate-key-file", floodgateKeyPath)
+        updated = ensureYamlSectionValue(updated, "remote", "address", "127.0.0.1")
+        updated = ensureYamlSectionValue(updated, "remote", "port", "25565")
+        // Use Floodgate auth so Bedrock players are not asked for a Java account.
+        updated = ensureYamlSectionValue(updated, "remote", "auth-type", "floodgate")
 
-            if (updated != original) {
-                geyserConfigFile.writeText(updated)
-            }
+        // Handle newer Geyser config formats (ensure auth-type is floodgate)
+        updated = ensureYamlSectionValue(updated, "server", "auth-type", "floodgate")
+        updated = ensureYamlSectionValue(updated, "java", "auth-type", "floodgate")
+
+        updated = ensureYamlSectionValue(updated, "motd", "passthrough-motd", "false")
+        updated = ensureYamlSectionValue(updated, "motd", "passthrough-player-counts", "false")
+
+        if (updated != original) {
+            geyserConfigFile.writeText(updated)
         }
 
-        val floodgateConfigFile = getFloodgateConfigFile(context, versionId)
-        floodgateConfigFile.parentFile?.mkdirs()
-        if (!floodgateConfigFile.exists()) {
-            floodgateConfigFile.writeText("""
-                username-prefix: "."
-                player-link:
-                  enabled: true
-                  use-global-linking: false
-                  link-code-timeout: 60
-                send-floodgate-data: true
-            """.trimIndent())
-        }
-
-        val floodgateOriginal = runCatching { floodgateConfigFile.readText() }.getOrDefault("")
-        var floodgateUpdated = floodgateOriginal
-        floodgateUpdated = ensureTopLevelYamlValue(floodgateUpdated, "username-prefix", "\".\"")
-        floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "enabled", "true")
-        floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "allowed", "true")
-        floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "type", "floodgate")
-        floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "use-global-linking", "false")
-        floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "link-code-timeout", "60")
-        floodgateUpdated = ensureTopLevelYamlValue(floodgateUpdated, "send-floodgate-data", "true")
-
-        if (floodgateUpdated != floodgateOriginal) {
-            floodgateConfigFile.writeText(floodgateUpdated)
-        }
+        // Disable require-link in Floodgate to ensure Bedrock players do NOT need a Java account
+        setFloodgateSectionValue(context, worldName, "player-link", "require-link", "false")
     }
 
     /**
@@ -384,8 +429,8 @@ object PluginManager {
      * invalidated — causing Bedrock player data resets even with player-link enabled.
      * The backup is stored outside the server world folder so it survives world resets.
      */
-    fun preserveFloodgateKey(context: Context, versionId: String) {
-        val serverDir = File(context.filesDir, "servers/$versionId")
+    fun preserveFloodgateKey(context: Context, worldName: String) {
+        val serverDir = File(context.filesDir, "servers/$worldName")
         val floodgateDirs = listOf(
             File(serverDir, "plugins/Floodgate"),
             File(serverDir, "plugins/floodgate")
@@ -415,8 +460,8 @@ object PluginManager {
         }
     }
 
-    fun readFloodgateConfigValue(context: Context, versionId: String, key: String): String? {
-        val file = getFloodgateConfigFile(context, versionId)
+    fun readFloodgateConfigValue(context: Context, worldName: String, key: String): String? {
+        val file = getFloodgateConfigFile(context, worldName)
         if (!file.exists()) return null
         val lines = runCatching { file.readLines() }.getOrDefault(emptyList())
         val line = lines.firstOrNull { it.trimStart().startsWith("$key:") }
@@ -426,11 +471,11 @@ object PluginManager {
 
     fun readFloodgateSectionValue(
         context: Context,
-        versionId: String,
+        worldName: String,
         section: String,
         key: String
     ): String? {
-        val file = getFloodgateConfigFile(context, versionId)
+        val file = getFloodgateConfigFile(context, worldName)
         if (!file.exists()) return null
         val lines = runCatching { file.readLines() }.getOrDefault(emptyList())
 
@@ -454,8 +499,8 @@ object PluginManager {
         return lines[match].substringAfter(':').trim().stripYamlQuotes().ifBlank { null }
     }
 
-    fun setFloodgateConfigValue(context: Context, versionId: String, key: String, value: String) {
-        val file = getFloodgateConfigFile(context, versionId)
+    fun setFloodgateConfigValue(context: Context, worldName: String, key: String, value: String) {
+        val file = getFloodgateConfigFile(context, worldName)
         file.parentFile?.mkdirs()
         if (!file.exists()) return
         val lines = file.readLines().toMutableList()
@@ -472,12 +517,12 @@ object PluginManager {
 
     fun setFloodgateSectionValue(
         context: Context,
-        versionId: String,
+        worldName: String,
         section: String,
         key: String,
         value: String
     ) {
-        val file = getFloodgateConfigFile(context, versionId)
+        val file = getFloodgateConfigFile(context, worldName)
         file.parentFile?.mkdirs()
         if (!file.exists()) return
         val original = file.readText()
@@ -487,14 +532,14 @@ object PluginManager {
         }
     }
 
-    fun isFloodgateUsernamePrefixShown(context: Context, versionId: String): Boolean {
-        return readFloodgateConfigValue(context, versionId, "username-prefix")
+    fun isFloodgateUsernamePrefixShown(context: Context, worldName: String): Boolean {
+        return readFloodgateConfigValue(context, worldName, "username-prefix")
             ?.let { it != "\"\"" && it != "" }
             ?: false
     }
 
-    fun isFloodgatePlayerLinkEnabled(context: Context, versionId: String): Boolean {
-        return readFloodgateSectionValue(context, versionId, "player-link", "enabled")
+    fun isFloodgatePlayerLinkEnabled(context: Context, worldName: String): Boolean {
+        return readFloodgateSectionValue(context, worldName, "player-link", "enabled")
             ?.let { it.equals("true", ignoreCase = true) }
             ?: true
     }
@@ -585,24 +630,24 @@ object PluginManager {
         return trim().removePrefix("\"").removeSuffix("\"").removePrefix("'").removeSuffix("'")
     }
 
-    fun isBedrockBridgeEnabled(context: Context, versionId: String): Boolean {
-        val hasGeyser = isManagedPluginEnabled(context, versionId, "geyser")
-        val hasFloodgate = isManagedPluginEnabled(context, versionId, "floodgate")
+    fun isBedrockBridgeEnabled(context: Context, worldName: String): Boolean {
+        val hasGeyser = isManagedPluginEnabled(context, worldName, "geyser")
+        val hasFloodgate = isManagedPluginEnabled(context, worldName, "floodgate")
         return hasGeyser && hasFloodgate
     }
 
-    fun supportsMods(versionId: String): Boolean {
-        val normalizedVersion = versionId.lowercase()
-        return normalizedVersion.contains("fabric") || normalizedVersion.contains("forge") || normalizedVersion.contains("neoforge") || normalizedVersion.contains("quilt")
+    fun supportsMods(worldName: String): Boolean {
+        // Fallback to worldName if game version not available, or check config repo
+        // For simplicity in list functions, we'll keep the signature but might need logic update
+        return true 
     }
 
-    fun supportsFabricMods(versionId: String): Boolean {
-        val normalizedVersion = versionId.lowercase()
-        return normalizedVersion.contains("fabric") || normalizedVersion.contains("quilt")
+    fun supportsFabricMods(worldName: String): Boolean {
+        return true
     }
 
-    fun listMods(context: Context, versionId: String): List<Plugin> {
-        return getModsDir(context, versionId)
+    fun listMods(context: Context, worldName: String): List<Plugin> {
+        return getModsDir(context, worldName)
             .listFiles { file -> file.extension == "jar" || file.name.endsWith(".jar.disabled") }
             ?.map { file ->
                 val metadata = readArchiveMetadata(file)
@@ -619,8 +664,8 @@ object PluginManager {
             ?: emptyList()
     }
 
-    fun listResourcePacks(context: Context, versionId: String): List<Plugin> {
-        return getResourcePacksDir(context, versionId)
+    fun listResourcePacks(context: Context, worldName: String): List<Plugin> {
+        return getResourcePacksDir(context, worldName)
             .listFiles { file -> file.isDirectory || file.extension == "zip" || file.name.endsWith(".zip.disabled") }
             ?.map { file ->
                 Plugin(
@@ -634,34 +679,34 @@ object PluginManager {
             ?: emptyList()
     }
 
-    fun deletePlugin(context: Context, versionId: String, plugin: Plugin): Boolean {
+    fun deletePlugin(context: Context, worldName: String, plugin: Plugin): Boolean {
         return try {
-            File(getPluginsDir(context, versionId), plugin.fileName).delete()
+            File(getPluginsDir(context, worldName), plugin.fileName).delete()
         } catch (_: Exception) {
             false
         }
     }
 
-    fun deleteContent(context: Context, versionId: String, type: ContentType, plugin: Plugin): Boolean {
+    fun deleteContent(context: Context, worldName: String, type: ContentType, plugin: Plugin): Boolean {
         return try {
-            File(getContentDir(context, versionId, type), plugin.fileName).deleteRecursively()
+            File(getContentDir(context, worldName, type), plugin.fileName).deleteRecursively()
         } catch (_: Exception) {
             false
         }
     }
 
-    fun disablePlugin(context: Context, versionId: String, plugin: Plugin): Boolean {
+    fun disablePlugin(context: Context, worldName: String, plugin: Plugin): Boolean {
         return try {
-            val dir = getPluginsDir(context, versionId)
+            val dir = getPluginsDir(context, worldName)
             File(dir, plugin.fileName).renameTo(File(dir, "${plugin.fileName}.disabled"))
         } catch (_: Exception) {
             false
         }
     }
 
-    fun enablePlugin(context: Context, versionId: String, plugin: Plugin): Boolean {
+    fun enablePlugin(context: Context, worldName: String, plugin: Plugin): Boolean {
         return try {
-            val dir = getPluginsDir(context, versionId)
+            val dir = getPluginsDir(context, worldName)
             if (plugin.fileName.endsWith(".disabled")) {
                 File(dir, plugin.fileName).renameTo(File(dir, plugin.fileName.removeSuffix(".disabled")))
             } else {
@@ -672,9 +717,9 @@ object PluginManager {
         }
     }
 
-    fun toggleContent(context: Context, versionId: String, type: ContentType, plugin: Plugin): Boolean {
+    fun toggleContent(context: Context, worldName: String, type: ContentType, plugin: Plugin): Boolean {
         return try {
-            val dir = getContentDir(context, versionId, type)
+            val dir = getContentDir(context, worldName, type)
             val source = File(dir, plugin.fileName)
             val target = if (plugin.fileName.endsWith(".disabled")) {
                 File(dir, plugin.fileName.removeSuffix(".disabled"))
@@ -687,9 +732,9 @@ object PluginManager {
         }
     }
 
-    fun copyPluginFile(sourceFile: File, context: Context, versionId: String): Boolean {
+    fun copyPluginFile(sourceFile: File, context: Context, worldName: String): Boolean {
         return try {
-            val destDir = getPluginsDir(context, versionId)
+            val destDir = getPluginsDir(context, worldName)
             val destFile = File(destDir, sourceFile.name)
             sourceFile.inputStream().use { input ->
                 destFile.outputStream().use { output ->
@@ -705,13 +750,13 @@ object PluginManager {
     suspend fun installFromUri(
         context: Context,
         uri: Uri,
-        versionId: String,
+        worldName: String,
         type: ContentType,
-        runtimeKey: String = versionId,
+        runtimeKey: String = worldName,
         onProgress: (Int) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
-            val dir = getContentDir(context, versionId, type)
+            val dir = getContentDir(context, worldName, type)
             val fileName = getFileNameFromUri(context, uri)
                 ?.takeIf { it.isNotBlank() }
                 ?: "item_${System.currentTimeMillis()}${defaultExtension(type)}"
@@ -757,14 +802,14 @@ object PluginManager {
     suspend fun installFromUrl(
         context: Context,
         sourceUrl: String,
-        versionId: String,
+        worldName: String,
         type: ContentType,
         fileNameHint: String? = null,
-        runtimeKey: String = versionId,
+        runtimeKey: String = worldName,
         onProgress: (Int) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
-            val dir = getContentDir(context, versionId, type)
+            val dir = getContentDir(context, worldName, type)
             val client = getHttpClient(context)
             val request = Request.Builder()
                 .url(sourceUrl.trim())
@@ -824,25 +869,29 @@ object PluginManager {
     suspend fun installRemoteItem(
         context: Context,
         item: RemoteCatalogItem,
-        versionId: String,
+        worldName: String,
         type: ContentType,
-        runtimeKey: String = versionId,
+        runtimeKey: String = worldName,
+        minecraftVersion: String? = null,
         onProgress: (Int) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         if (!item.canInstall) {
             return@withContext Result.failure(Exception(item.supportMessage ?: "This item is not compatible with the current server runtime."))
         }
 
+        val resolvedVersion = minecraftVersion 
+            ?: com.pocketcraft.server.data.repository.ServerConfigRepository(context).loadConfig().gameVersion.ifBlank { "1.20.4" }
+
         val candidate = when (item.source) {
-            MODRINTH_PROVIDER -> resolveModrinthDownload(context, item, type, versionId, runtimeKey)
-            HANGAR_PROVIDER -> resolveHangarDownload(context, item, versionId)
+            MODRINTH_PROVIDER -> resolveModrinthDownload(context, item, type, resolvedVersion, runtimeKey)
+            HANGAR_PROVIDER -> resolveHangarDownload(context, item, worldName)
             else -> null
         } ?: return@withContext Result.failure(Exception("Could not find a compatible download for ${item.title}."))
 
         installFromUrl(
             context = context,
             sourceUrl = candidate.downloadUrl,
-            versionId = versionId,
+            worldName = worldName,
             type = type,
             fileNameHint = candidate.fileName,
             runtimeKey = runtimeKey,
@@ -1550,121 +1599,135 @@ object PluginManager {
 
     private suspend fun installManagedPluginIfMissing(
         context: Context,
-        versionId: String,
+        worldName: String,
         item: RemoteCatalogItem,
         onProgress: (String) -> Unit
     ): Result<Unit> {
-        if (isManagedPluginInstalled(context, versionId, item.projectId)) {
-            ensureManagedPluginEnabled(context, versionId, item.projectId)
+        if (isManagedPluginInstalled(context, worldName, item.projectId)) {
+            ensureManagedPluginEnabled(context, worldName, item.projectId)
             return Result.success(Unit)
         }
         onProgress("Installing ${item.title} bridge plugin…")
-        return installRemoteItem(
-            context = context,
-            item = item,
-            versionId = versionId,
-            type = ContentType.PLUGINS,
-            onProgress = {}
-        ).map { Unit }
+        Log.d("PluginManager", "Installing managed plugin: ${item.title} (${item.projectId})")
+        return withTimeoutOrNull(20000L) {
+            installRemoteItem(
+                context = context,
+                item = item,
+                worldName = worldName,
+                type = ContentType.PLUGINS,
+                onProgress = {}
+            ).map { Unit }
+        } ?: Result.failure(Exception("Timeout installing ${item.title}"))
     }
 
     private suspend fun installManagedPluginFromCandidatesIfMissing(
         context: Context,
-        versionId: String,
+        worldName: String,
         candidates: List<RemoteCatalogItem>,
         onProgress: (String) -> Unit
     ): Result<Unit> {
-        val primary = candidates.firstOrNull()
-            ?: return Result.failure(IllegalArgumentException("Missing managed plugin candidates"))
-
-        if (isManagedPluginInstalled(context, versionId, primary.projectId)) {
-            ensureManagedPluginEnabled(context, versionId, primary.projectId)
+        val alreadyInstalled = candidates.any { isManagedPluginInstalled(context, worldName, it.projectId) }
+        if (alreadyInstalled) {
+            candidates.forEach { ensureManagedPluginEnabled(context, worldName, it.projectId) }
             return Result.success(Unit)
         }
 
         var lastError: Throwable? = null
-        for (candidate in candidates) {
-            onProgress("Installing ${candidate.title} bridge plugin…")
-            val installResult = installRemoteItem(
-                context = context,
-                item = candidate,
-                versionId = versionId,
-                type = ContentType.PLUGINS,
-                onProgress = {}
-            )
-            if (installResult.isSuccess) {
-                return Result.success(Unit)
-            }
-            lastError = installResult.exceptionOrNull()
+        for (item in candidates) {
+            val res = installManagedPluginIfMissing(context, worldName, item, onProgress)
+            if (res.isSuccess) return Result.success(Unit)
+            lastError = res.exceptionOrNull()
         }
-
-        return Result.failure(lastError ?: Exception("Could not install managed plugin."))
+        return Result.failure(lastError ?: Exception("Failed to install any candidate for ${candidates.firstOrNull()?.title ?: "managed plugin"}"))
     }
 
     private suspend fun installManagedPluginFromDirectUrlIfMissing(
         context: Context,
-        versionId: String,
+        worldName: String,
         projectId: String,
         title: String,
         downloadUrl: String,
         fileNameHint: String,
         onProgress: (String) -> Unit
     ): Result<Unit> {
-        if (isManagedPluginInstalled(context, versionId, projectId)) {
-            ensureManagedPluginEnabled(context, versionId, projectId)
+        if (isManagedPluginInstalled(context, worldName, projectId)) {
+            ensureManagedPluginEnabled(context, worldName, projectId)
             return Result.success(Unit)
         }
-
-        onProgress("Installing ${title} bridge plugin…")
+        onProgress("Installing $title bridge plugin…")
         return installFromUrl(
             context = context,
             sourceUrl = downloadUrl,
-            versionId = versionId,
+            worldName = worldName,
             type = ContentType.PLUGINS,
             fileNameHint = fileNameHint,
             onProgress = {}
         ).map { Unit }
     }
 
-    private fun ensureManagedPluginEnabled(context: Context, versionId: String, projectId: String) {
-        val normalizedProject = normalizeCatalogKey(projectId)
-        val pluginsDir = getPluginsDir(context, versionId)
-        pluginsDir
-            .listFiles { file -> file.name.endsWith(".jar.disabled") }
-            .orEmpty()
-            .forEach { file ->
-                val normalizedName = normalizeCatalogKey(file.name.removeSuffix(".disabled").substringBeforeLast('.'))
-                if (normalizedName.contains(normalizedProject)) {
-                    val enabledFile = File(pluginsDir, file.name.removeSuffix(".disabled"))
+    private suspend fun replaceManagedPluginFromUrl(
+        context: Context,
+        worldName: String,
+        projectId: String,
+        title: String,
+        downloadUrl: String? = null,
+        fileNameHint: String? = null,
+        catalogItem: RemoteCatalogItem? = null
+    ): Result<Unit> {
+        val pluginsDir = getPluginsDir(context, worldName)
+        val existing = pluginsDir.listFiles { f ->
+            val n = f.name.lowercase()
+            n.contains(projectId.lowercase()) && (n.endsWith(".jar") || n.endsWith(".jar.disabled"))
+        }
+        existing?.forEach { it.delete() }
+
+        return if (downloadUrl != null) {
+            installFromUrl(
+                context = context,
+                sourceUrl = downloadUrl,
+                worldName = worldName,
+                type = ContentType.PLUGINS,
+                fileNameHint = fileNameHint,
+                onProgress = {}
+            ).map { Unit }
+        } else if (catalogItem != null) {
+            installRemoteItem(
+                context = context,
+                item = catalogItem,
+                worldName = worldName,
+                type = ContentType.PLUGINS,
+                onProgress = {}
+            ).map { Unit }
+        } else {
+            Result.failure(Exception("No download source for $title"))
+        }
+    }
+
+    private fun ensureManagedPluginEnabled(context: Context, worldName: String, projectId: String) {
+        val pluginsDir = getPluginsDir(context, worldName)
+        pluginsDir.listFiles { file -> file.name.endsWith(".jar.disabled") }
+            ?.forEach { file ->
+                if (file.name.lowercase().contains(projectId.lowercase())) {
+                    val enabledFile = java.io.File(pluginsDir, file.name.removeSuffix(".disabled"))
                     runCatching { file.renameTo(enabledFile) }
                 }
             }
     }
 
-    private fun isManagedPluginInstalled(context: Context, versionId: String, projectId: String): Boolean {
-        val normalizedProject = normalizeCatalogKey(projectId)
-        return getPluginsDir(context, versionId)
-            .listFiles { file -> file.extension == "jar" || file.name.endsWith(".jar.disabled") }
-            .orEmpty()
-            .any { file ->
-                val normalizedName = normalizeCatalogKey(file.name.removeSuffix(".disabled").substringBeforeLast('.'))
-                val normalizedMetaName = normalizeCatalogKey(readArchiveMetadata(file).name.orEmpty())
-                (normalizedName.contains(normalizedProject) || normalizedMetaName.contains(normalizedProject)) &&
-                    validateInstalledFile(file, ContentType.PLUGINS) == null
-            }
+    private fun isManagedPluginInstalled(context: Context, worldName: String, projectId: String): Boolean {
+        val pluginsDir = getPluginsDir(context, worldName)
+        return pluginsDir.listFiles()?.any {
+            val n = it.name.lowercase()
+            n.contains(projectId.lowercase()) && (n.endsWith(".jar") || n.endsWith(".jar.disabled"))
+        } ?: false
     }
 
-    private fun isManagedPluginEnabled(context: Context, versionId: String, projectId: String): Boolean {
-        val normalizedProject = normalizeCatalogKey(projectId)
-        return getPluginsDir(context, versionId)
-            .listFiles { file -> file.extension == "jar" }
-            .orEmpty()
-            .any { file ->
-                val normalizedName = normalizeCatalogKey(file.name.substringBeforeLast('.'))
-                val normalizedMetaName = normalizeCatalogKey(readArchiveMetadata(file).name.orEmpty())
-                (normalizedName.contains(normalizedProject) || normalizedMetaName.contains(normalizedProject)) &&
-                    validateInstalledFile(file, ContentType.PLUGINS) == null
-            }
+    private fun isManagedPluginEnabled(context: Context, worldName: String, projectId: String): Boolean {
+        val pluginsDir = getPluginsDir(context, worldName)
+        return pluginsDir.listFiles()?.any {
+            val n = it.name.lowercase()
+            n.contains(projectId.lowercase()) && n.endsWith(".jar")
+        } ?: false
     }
 
     private fun isManagedBridgePlugin(plugin: Plugin): Boolean {

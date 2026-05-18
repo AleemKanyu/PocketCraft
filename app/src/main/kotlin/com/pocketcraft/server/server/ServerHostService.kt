@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -20,8 +21,10 @@ import com.pocketcraft.server.RelayManager
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.server.ServerLauncher
 import com.pocketcraft.server.service.ConsoleParser
+import com.pocketcraft.server.service.PluginManager
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.service.ServerVersionMigrator
+import com.pocketcraft.server.setup.JreExtractor
 import java.io.File
 import java.io.OutputStream
 import java.io.RandomAccessFile
@@ -35,6 +38,7 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +48,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,7 +57,17 @@ import com.pocketcraft.server.data.preferences.AppPreferencesStore
 
 class ServerHostService : Service() {
 
+    private enum class ServerStage(val notificationText: String) {
+        DOWNLOADING_SERVER("Downloading server..."),
+        EXTRACTING_JRE("Preparing Java runtime..."),
+        CHECKING_PLUGINS("Checking Bedrock bridge..."),
+        STARTING_SERVER("Starting server... (30-60s)"),
+        RUNNING("Server is running"),
+        STOPPING("Stopping server...")
+    }
+
     private var currentVersionId: String? = null
+    private var currentWorldName: String? = null
     private var serverProcess: java.lang.Process? = null
     private var isLaunching = false
     private var isNewWorld = false
@@ -82,6 +97,7 @@ class ServerHostService : Service() {
     private var serverReadyNotificationShown = false
     private val relayStatusPlayerCount = AtomicInteger(0)
     private val relayOnlinePlayers = linkedSetOf<String>()
+    private val relayHealthFailures = AtomicInteger(0)
     private var relayStatusJob: Job? = null
     private var serverReadyFallbackJob: Job? = null
 
@@ -102,11 +118,19 @@ class ServerHostService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // ALWAYS call startForeground immediately to prevent ForegroundServiceDidNotStartInTimeException
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText))
+        }
+
         val versionId = intent?.getStringExtra(EXTRA_VERSION_ID)
         if (intent?.action == ACTION_STOP) {
             stopReason = "user"
             autoRecoverAttempts = 0
             autoRecoverWindowStartMs = 0L
+            updateNotification(ServerStage.STOPPING, force = true)
             currentVersionId?.let {
                 sendEvent(it, EVENT_OUTPUT, "[PocketCraft] Stop requested.")
             }
@@ -121,15 +145,23 @@ class ServerHostService : Service() {
 
         // If service restarts without explicit action but server was running, restart it
         val hasExplicitStart = intent?.action == ACTION_START && !versionId.isNullOrBlank()
+        val worldName = (intent?.getStringExtra(EXTRA_WORLD_NAME)
+            ?: getPersistedActiveWorld(applicationContext))
+            .trim()
+            .ifBlank { "world" }
         val activeVersion = if (!hasExplicitStart) getPersistedActiveVersion(applicationContext) else versionId
 
-        if (!hasExplicitStart && activeVersion.isNotBlank()) {
+        if (!hasExplicitStart && activeVersion.isNotBlank() && worldName.isNotBlank()) {
             // Service restarted after being killed, resume running server
-            return resumeServer(activeVersion)
+            return resumeServer(activeVersion, worldName)
         }
 
         if (!hasExplicitStart || versionId.isNullOrBlank()) {
             return START_STICKY
+        }
+
+        if (!isEulaAccepted(worldName)) {
+            return abortStartForEula(versionId, worldName)
         }
 
         if (isLaunching) {
@@ -137,76 +169,93 @@ class ServerHostService : Service() {
             return START_STICKY
         }
 
+        val existingServerPort = resolveServerPort(worldName)
+        if (isLocalServerPortOpen(existingServerPort)) {
+            return attachToExistingServer(versionId, worldName, existingServerPort, "start request")
+        }
+
         isLaunching = true
         currentVersionId = versionId
+        currentWorldName = worldName
         stopReason = "unknown"
         serverReadyNotificationShown = false
         serverReadyHandled.set(false)
         chunkyRunning.set(false)
         chunkyPausedForPlayer.set(false)
-        chunkyRunning.set(false)
-        chunkyPausedForPlayer.set(false)
         setServerReadyState(false)
         relayStatusPlayerCount.set(0)
         synchronized(relayOnlinePlayers) { relayOnlinePlayers.clear() }
-        persistRuntimeState(applicationContext, versionId, RUNTIME_STATE_STARTING)
-        resetNotificationState("Starting $versionId")
-        startForeground(NOTIFICATION_ID, createForegroundNotification("Starting $versionId"))
-        startLogcatBridge(versionId)
+        persistRuntimeState(applicationContext, versionId, worldName, RUNTIME_STATE_STARTING)
+        resetNotificationState(ServerStage.STARTING_SERVER.notificationText)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText))
+        }
+        // On Android 12+ the JVM runs in-process via JNI (NativeLauncher).
+        // launcher.c pipes JVM stdout/stderr into logcat at full native speed.
+        // startLogcatBridge() would re-broadcast every one of those lines on the
+        // main thread, causing a broadcast flood (~100s of events/sec).
+        // startServerLogTail() already tails logs/latest.log and handles all output,
+        // so the logcat bridge is redundant on this path.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            startLogcatBridge(versionId)
+        }
+
+        // Clear old log if starting fresh so we don't read "Done" from previous session
+        val latestLogFile = java.io.File(com.pocketcraft.server.service.ServerFileManager.getServerDir(applicationContext, worldName), "logs/latest.log")
+        if (latestLogFile.exists()) {
+            runCatching { latestLogFile.delete() }
+        }
+
         startServerLogTail(versionId)
-        val serverPort = resolveServerPort(versionId)
+        val serverPort = resolveServerPort(worldName)
         currentServerPort = serverPort
         startPortProbe(versionId, serverPort)
         scheduleServerReadyFallback(versionId)
         acquireWakeLock()
 
-        val serverDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(applicationContext, versionId)
-        val worldDir = java.io.File(serverDir, "world")
+        val serverDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(applicationContext, worldName)
+        val worldDir = java.io.File(serverDir, resolveConfiguredLevelName(serverDir))
         isNewWorld = !worldDir.exists()
 
 
-        // Migration: Check if world needs to be moved from a previous version directory
-        val previousVersion = getPersistedActiveVersion(applicationContext)
-        if (previousVersion.isNotBlank() && previousVersion != versionId) {
-            val prevServerDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(applicationContext, previousVersion)
-            val prevPropsFile = java.io.File(prevServerDir, "server.properties")
-            val prevWorldName = runCatching {
-                if (prevPropsFile.exists()) {
-                    prevPropsFile.inputStream().use { input ->
-                        java.util.Properties().apply { load(input) }
-                    }.getProperty("level-name", "world")
-                } else "world"
-            }.getOrDefault("world")
-
-            com.pocketcraft.server.service.ServerVersionMigrator.migrateActiveWorldIfNeeded(
-                context = applicationContext,
-                fromVersionId = previousVersion,
-                toVersionId = versionId,
-                worldName = prevWorldName.ifBlank { "world" }
-            )
-        }
 
         serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            migrateLegacyStorageIfNeeded(versionId, worldName)
             val configRepo = com.pocketcraft.server.data.repository.ServerConfigRepository(applicationContext)
             val config = configRepo.loadConfig()
-            val serverDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(applicationContext, versionId)
-            val targetFile = com.pocketcraft.server.service.ServerFileManager.getServerJarFile(applicationContext, config.gameVersion, config.serverType)
-            
+            // Use versionId as fallback if pocketcraft-game-version was never written
+            val resolvedGameVersion = config.gameVersion.ifBlank { versionId }
+            val runtime = JreExtractor.runtimeForVersion(resolvedGameVersion)
+            val serverDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(applicationContext, worldName)
+            val targetFile = com.pocketcraft.server.service.ServerFileManager.getServerJarFile(applicationContext, resolvedGameVersion, config.serverType)
+            // Ensure parent directory exists before resolveJar tries to write the file
+            targetFile.parentFile?.mkdirs()
+            android.util.Log.d("ServerHostService", "[startServer] versionId=$versionId gameVersion=${config.gameVersion} resolvedGameVersion=$resolvedGameVersion serverType=${config.serverType} targetFile=${targetFile.absolutePath} exists=${targetFile.exists()} isDir=${targetFile.isDirectory}")
+
             try {
+                updateNotification(ServerStage.EXTRACTING_JRE, force = true)
+                ensureRuntimeExtracted(versionId, runtime)
                 com.pocketcraft.server.server.ServerJarManager.resolveJar(
                     serverType = config.serverType,
-                    gameVersion = config.gameVersion,
+                    gameVersion = resolvedGameVersion,
                     customJarPath = config.customJarPath,
                     targetFile = targetFile,
                     onProgress = { pct -> 
-                        updateNotification("Downloading server: $pct%", force = true)
+                        updateNotification("${ServerStage.DOWNLOADING_SERVER.notificationText} $pct%", force = false)
                         sendEvent(versionId, EVENT_OUTPUT, "Downloading server: $pct%")
                     }
                 ).collect { jarFile ->
-                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    updateNotification(ServerStage.CHECKING_PLUGINS, force = true)
+                    updateNotification(ServerStage.STARTING_SERVER, force = true)
+
+                    withContext(kotlinx.coroutines.Dispatchers.IO) {
                         ServerLauncher(applicationContext).startServer(
+                            worldName = worldName,
                             versionId = versionId,
                             jarPath = jarFile.absolutePath,
+                            runtime = runtime,
             onOutput = { line ->
                 handleObservedOutputLine(versionId, line)
             },
@@ -222,6 +271,7 @@ class ServerHostService : Service() {
                 }
             },
             onStopped = { exitCode ->
+                logJvmCrash(exitCode)
                 isLaunching = false
                 stopInProgress.set(false)
                 relayJob?.cancel()
@@ -237,8 +287,14 @@ class ServerHostService : Service() {
                 stopPortProbe()
 
                 if (exitCode != 0 && stopReason != "user") {
-                    sendEvent(versionId, EVENT_SERVER_CRASHED, "exit_code=$exitCode")
-                    sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Server exited unexpectedly (code $exitCode).")
+                    if (exitCode == 127) {
+                        sendEvent(versionId, EVENT_SERVER_CRASHED, "exit_code=127")
+                        sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Exit code 127: Java binary not executable on this device.")
+                        sendEvent(versionId, EVENT_ERROR, "[PocketCraft] [HINT] Go to Settings → Apps → PocketCraft → Storage → Clear Cache, then restart.")
+                    } else {
+                        sendEvent(versionId, EVENT_SERVER_CRASHED, "exit_code=$exitCode")
+                        sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Server exited unexpectedly (code $exitCode).")
+                    }
                 }
 
                 val shouldAutoRecover = exitCode != 0 && shouldScheduleAutoRecover(versionId)
@@ -253,13 +309,13 @@ class ServerHostService : Service() {
                     serviceScope.launch {
                         kotlinx.coroutines.delay(delayMs)
                         if (stopReason != "user") {
-                            start(applicationContext, versionId)
+                            start(applicationContext, versionId, activeWorldNameOrDefault())
                         }
                     }
                 }
 
                 persistPublicAddress(applicationContext, "")
-                persistRuntimeState(applicationContext, versionId, RUNTIME_STATE_OFFLINE)
+                persistRuntimeState(applicationContext, versionId, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE)
                 serverReadyNotificationShown = false
                 serverReadyHandled.set(false)
                 setServerReadyState(false)
@@ -267,7 +323,7 @@ class ServerHostService : Service() {
                 if (shouldAutoRecover) {
                     updateNotification("Recovering server...", force = true)
                 } else {
-                    updateNotification("Server stopped", force = true)
+                    updateNotification(ServerStage.STOPPING, force = true)
                 }
             }
         )
@@ -280,12 +336,12 @@ class ServerHostService : Service() {
                     isLaunching = false
                     stopInProgress.set(false)
                     persistPublicAddress(applicationContext, "")
-                    persistRuntimeState(applicationContext, versionId, RUNTIME_STATE_OFFLINE)
+                    persistRuntimeState(applicationContext, versionId, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE)
                     serverReadyNotificationShown = false
                     serverReadyHandled.set(false)
                     setServerReadyState(false)
                     releaseWakeLock()
-                    updateNotification("Server stopped", force = true)
+                    updateNotification(ServerStage.STOPPING, force = true)
                 }
             }
         }
@@ -297,8 +353,13 @@ class ServerHostService : Service() {
         // If this service is being destroyed unexpectedly, avoid leaving
         // a detached JVM process running without relay/control.
         forceTerminateHostedServer()
+        val inProcessRuntime = !ServerLauncher.hasActiveExternalProcess()
+        if (inProcessRuntime && isLaunching) {
+            android.util.Log.e("PocketCraft", "Service destroyed while JVM thread active. Killing :server process to prevent leak.")
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
         persistPublicAddress(applicationContext, "")
-        currentVersionId?.let { persistRuntimeState(applicationContext, it, RUNTIME_STATE_OFFLINE) }
+        currentVersionId?.let { persistRuntimeState(applicationContext, it, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE) }
         serverReadyFallbackJob?.cancel()
         serverReadyFallbackJob = null
         setServerReadyState(false)
@@ -323,37 +384,43 @@ class ServerHostService : Service() {
             val inProcessRuntime = !ServerLauncher.hasActiveExternalProcess()
             try {
                 if (inProcessRuntime) {
-                    // Native in-process JVM has no Process handle; stop it via RCON.
+                    // Native in-process JVM has no Process handle.
+                    // Signal the companion plugin to perform graceful shutdown first.
+                    try {
+                        currentWorldName?.let { worldName ->
+                            val serverDir = ServerFileManager.getServerDir(applicationContext, worldName)
+                            val signalFile = File(serverDir, "plugins/PocketCraftCompanion/graceful_stop.signal")
+                            signalFile.parentFile?.mkdirs()
+                            signalFile.createNewFile()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("PocketCraft", "Failed to write stop signal: " + e.message)
+                    }
                     runCatching { sendRconStop() }
-
-                    // Give Paper time to flush chunks and fully close sockets.
-                    val deadline = SystemClock.elapsedRealtime() + STOP_GRACE_PERIOD_MS
-                    while (SystemClock.elapsedRealtime() < deadline) {
-                        if (!isLocalServerPortOpen(currentServerPort)) break
-                        delay(300)
-                    }
                 } else {
-                    serverProcess?.outputStream?.let {
-                        it.write("stop\n".toByteArray())
-                        it.flush()
-                    }
+                    ServerLauncher.sendCommand("stop")
                 }
 
-                val proc = serverProcess
-                if (proc != null) {
-                    launch { proc.inputStream.copyTo(OutputStream.nullOutputStream()) }
-                    launch { proc.errorStream.copyTo(OutputStream.nullOutputStream()) }
-                    val exited = proc.waitFor(10, TimeUnit.SECONDS)
-                    if (!exited) {
-                        android.util.Log.w("PocketCraft", "Server did not stop in 10s, forcing kill")
+                // Wait max 45 seconds for the server to gracefully stop (chunk saving can take time)
+                val deadline = SystemClock.elapsedRealtime() + 45_000L
+                while (SystemClock.elapsedRealtime() < deadline) {
+                    if (!isLaunching) { // isLaunching is set to false in onStopped
+                        break
                     }
+                    delay(500)
                 }
+
             } catch (e: Exception) {
                 android.util.Log.e("PocketCraft", "Error during stop: ${e.message}")
             } finally {
                 forceTerminateHostedServer()
-                relayManager.stopBedrockBridge()
-                // Do not unregister() here to keep the port assigned
+                try {
+                    relayManager.stopBedrockBridge()
+                    kotlinx.coroutines.withTimeout(3000L) {
+                        relayManager.disconnect()
+                    }
+                } catch (_: Exception) {}
+
                 relayJob?.cancel()
                 relayJob = null
                 relayStatusJob?.cancel()
@@ -367,29 +434,31 @@ class ServerHostService : Service() {
                 stopServerLogTail()
                 stopPortProbe()
                 releaseWakeLock()
-                // Clear launch state before emitting STOPPED so restart listeners can
-                // immediately request a fresh start without hitting "already starting".
+
                 isLaunching = false
                 currentVersionId?.let { versionId ->
                     persistPublicAddress(applicationContext, "")
-                    persistRuntimeState(applicationContext, versionId, RUNTIME_STATE_OFFLINE)
+                    persistRuntimeState(applicationContext, versionId, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE)
                     sendEvent(versionId, EVENT_STOPPED, "[INFO] Server stopped.")
                 }
                 relayStatusPlayerCount.set(0)
                 synchronized(relayOnlinePlayers) { relayOnlinePlayers.clear() }
-                // Fallback stop signal when version-scoped event cannot be emitted.
-                sendBroadcast(Intent(EVENT_STOPPED).setPackage(packageName))
-                stopForeground(STOP_FOREGROUND_REMOVE)
 
-                if (inProcessRuntime && isLocalServerPortOpen(currentServerPort)) {
-                    // Last resort for native/in-process mode: kill :server process to guarantee
-                    // complete stop before UI triggers automatic restart.
-                    android.util.Log.w("PocketCraft", "Server still accepting on port $currentServerPort after stop grace period. Killing host process.")
-                    android.os.Process.killProcess(android.os.Process.myPid())
-                    return@launch
+                sendBroadcast(Intent(EVENT_STOPPED).setPackage(packageName))
+                try {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } catch (e: Exception) {
+                    android.util.Log.e("PocketCraft", "Error stopping foreground: ${e.message}")
                 }
 
-                stopSelf()
+                if (inProcessRuntime && isLaunching) {
+                    android.util.Log.e("PocketCraft", "Server JVM thread did not exit after 45s stop grace period. Force killing :server process.")
+                    stopSelf()
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                } else {
+                    stopSelf()
+                }
+
                 stopInProgress.set(false)
             }
         }
@@ -404,10 +473,39 @@ class ServerHostService : Service() {
         }.getOrDefault(false)
     }
 
+    private suspend fun waitForLocalServerPort(port: Int, timeoutMs: Long): Boolean {
+        val deadline = SystemClock.elapsedRealtime() + timeoutMs
+        while (SystemClock.elapsedRealtime() < deadline) {
+            if (isLocalServerPortOpen(port)) return true
+            delay(500)
+        }
+        return isLocalServerPortOpen(port)
+    }
+
     private fun forceTerminateHostedServer() {
         runCatching { ServerLauncher.requestForceStop() }
         runCatching { serverProcess?.destroyForcibly() }
         serverProcess = null
+    }
+
+    private fun logJvmCrash(exitCode: Int) {
+        android.util.Log.e("ServerHostService", "JVM process exited with code: $exitCode")
+
+        // Capture last 50 lines of log buffer as crash context
+        val stderrLog = File(filesDir, "logs/last_crash_stderr.txt")
+        runCatching {
+            stderrLog.parentFile?.mkdirs()
+            val tail = synchronized(logBuffer) {
+                logBuffer.toList().takeLast(50)
+            }
+            stderrLog.writeText(tail.joinToString("\n"))
+        }
+
+        // Log to Crashlytics if exit was abnormal
+        if (exitCode != 0 && exitCode != 130 && exitCode != 143) { // 130/143 are SIGINT/SIGTERM
+            val exception = RuntimeException("JVM exited abnormally: code=$exitCode")
+            FirebaseCrashlytics.getInstance().recordException(exception)
+        }
     }
 
     private fun updateNotification(text: String, force: Boolean = false) {
@@ -443,6 +541,10 @@ class ServerHostService : Service() {
             val manager = getSystemService(NotificationManager::class.java)
             manager.notify(NOTIFICATION_ID, createForegroundNotification(cleanText))
         }
+    }
+
+    private fun updateNotification(stage: ServerStage, force: Boolean = false) {
+        updateNotification(stage.notificationText, force)
     }
 
     private fun resetNotificationState(initialText: String = "") {
@@ -518,6 +620,32 @@ class ServerHostService : Service() {
         manager.createNotificationChannel(timeoutChannel)
     }
 
+    private suspend fun ensureRuntimeExtracted(
+        versionId: String,
+        runtime: JreExtractor.RuntimeSpec
+    ) {
+        var lastPercent = -1
+        runCatching {
+            JreExtractor.extractIfNeeded(applicationContext, runtime) { percent, status ->
+                if (percent == 0 || percent == 100 || percent - lastPercent >= 15) {
+                    lastPercent = percent
+                    sendEvent(
+                        versionId,
+                        EVENT_OUTPUT,
+                        "[PocketCraft] ${status} (${runtime.displayName})"
+                    )
+                }
+            }
+        }.onFailure { error ->
+            sendEvent(
+                versionId,
+                EVENT_ERROR,
+                "[PocketCraft] Runtime setup failed: ${error.message}"
+            )
+            throw error
+        }
+    }
+
     private fun sendEvent(versionId: String, type: String, line: String) {
         sendBroadcast(
             Intent(ACTION_SERVER_EVENT).apply {
@@ -578,8 +706,9 @@ class ServerHostService : Service() {
     private fun startServerLogTail(versionId: String) {
         if (logTailRunning.getAndSet(true)) return
 
-        val latestLog = File(ServerFileManager.getServerDir(applicationContext, versionId), "logs/latest.log")
-        val initialOffset = latestLog.takeIf { it.exists() }?.length() ?: 0L
+        val latestLog = File(ServerFileManager.getServerDir(applicationContext, activeWorldNameOrDefault()), "logs/latest.log")
+        // Read up to 128KB of backlog so the user sees the start-up logs even if the tailer starts a bit late.
+        val initialOffset = latestLog.takeIf { it.exists() }?.let { (it.length() - 131072).coerceAtLeast(0L) } ?: 0L
 
         logTailThread = Thread {
             var offset = initialOffset
@@ -644,7 +773,6 @@ class ServerHostService : Service() {
                         val line = "[PocketCraft] Server port $port is open. Finalizing startup..."
                         sendEvent(versionId, EVENT_OUTPUT, line)
                         updateNotification("Finalizing server startup...", force = true)
-                        onRelayReadyToStart(versionId)
                         break
                     } catch (_: Exception) {
                         Thread.sleep(1500)
@@ -663,8 +791,8 @@ class ServerHostService : Service() {
         }
     }
 
-    private fun resolveServerPort(versionId: String): Int {
-        val serverDir = ServerFileManager.getServerDir(applicationContext, versionId)
+    private fun resolveServerPort(worldName: String): Int {
+        val serverDir = ServerFileManager.getServerDir(applicationContext, worldName.trim().ifBlank { activeWorldNameOrDefault() })
         val propsFile = File(serverDir, "server.properties")
         if (!propsFile.exists()) return 25565
 
@@ -673,6 +801,17 @@ class ServerHostService : Service() {
                 Properties().apply { load(input) }
             }.getProperty("server-port", "25565").toIntOrNull() ?: 25565
         }.getOrDefault(25565)
+    }
+
+    private fun resolveConfiguredLevelName(serverDir: File): String {
+        return runCatching {
+            val propsFile = File(serverDir, "server.properties")
+            val props = Properties()
+            if (propsFile.exists()) {
+                propsFile.inputStream().use { props.load(it) }
+            }
+            props.getProperty("level-name", "world").trim().ifBlank { "world" }
+        }.getOrDefault("world")
     }
 
     private fun looksLikeServerReady(line: String): Boolean {
@@ -710,15 +849,36 @@ class ServerHostService : Service() {
 
                     registrationAttempts++
                     android.util.Log.i("ServerHostService", "Relay registration attempt $registrationAttempts/$maxRegistrationAttempts")
+                    sendEvent(
+                        versionId,
+                        EVENT_OUTPUT,
+                        "[PocketCraft] Relay attempt $registrationAttempts/$maxRegistrationAttempts..."
+                    )
 
                     val address = relayManager.register()
+                    sendEvent(
+                        versionId,
+                        EVENT_OUTPUT,
+                        "[PocketCraft] Relay registered: $address"
+                    )
                     publishRelayStatus(versionId)
                     relayManager.initPool(currentServerPort)
                     if (!relayManager.isPoolReady.value) {
+                        sendEvent(
+                            versionId,
+                            EVENT_OUTPUT,
+                            "[PocketCraft] Relay registered, but tunnel sockets did not become ready."
+                        )
                         throw java.io.IOException("Relay tunnel pool did not become ready")
                     }
+                    sendEvent(
+                        versionId,
+                        EVENT_OUTPUT,
+                        "[PocketCraft] Relay tunnel is ready."
+                    )
 
                     persistPublicAddress(applicationContext, address.toString())
+                    relayHealthFailures.set(0)
 
                     registrationAttempts = 0
 
@@ -742,6 +902,11 @@ class ServerHostService : Service() {
                     if (!isActive) break
 
                     android.util.Log.e("ServerHostService", "Relay Error (attempt $registrationAttempts): ${e.message}")
+                    sendEvent(
+                        versionId,
+                        EVENT_OUTPUT,
+                        "[PocketCraft] Relay attempt $registrationAttempts failed: ${e.message ?: "unknown error"}"
+                    )
                     relayStatusJob?.cancel()
                     relayStatusJob = null
 
@@ -772,6 +937,7 @@ class ServerHostService : Service() {
 
     private fun reconnectRelay() {
         val versionId = currentVersionId ?: return
+        relayHealthFailures.set(0)
         relayJob?.cancel()
         relayJob = null
         relayStatusJob?.cancel()
@@ -802,16 +968,18 @@ class ServerHostService : Service() {
         // Show "Server is Online" notification once with sound
         if (!serverReadyNotificationShown) {
             serverReadyNotificationShown = true
-            val notificationText = "Server is Online! Players can now connect."
+            val notificationText = ServerStage.RUNNING.notificationText
             runCatching {
                 val manager = getSystemService(NotificationManager::class.java)
                 manager.notify(NOTIFICATION_ID, createForegroundNotification(notificationText, playSound = true))
             }
+            // Send the push notification
+            com.pocketcraft.server.notification.NotificationHelper.notifyServerOnline(applicationContext, versionId)
         }
 
         autoRecoverAttempts = 0
         autoRecoverWindowStartMs = 0L
-        currentVersionId?.let { persistRuntimeState(applicationContext, it, RUNTIME_STATE_RUNNING) }
+        currentVersionId?.let { persistRuntimeState(applicationContext, it, activeWorldNameOrDefault(), RUNTIME_STATE_RUNNING) }
     }
 
     private fun scheduleServerReadyFallback(versionId: String) {
@@ -875,62 +1043,187 @@ class ServerHostService : Service() {
     }
 
     private fun releaseWakeLock() {
-        wakeLock?.let {
-            if (it.isHeld) it.release()
-            android.util.Log.i("ServerHostService", "WakeLock released.")
+        try {
+            wakeLock?.let {
+                if (it.isHeld) it.release()
+                android.util.Log.i("ServerHostService", "WakeLock released.")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ServerHostService", "Error releasing WakeLock: ${e.message}")
+        } finally {
+            wakeLock = null
         }
-        wakeLock = null
     }
 
-    private fun resumeServer(versionId: String): Int {
+    private fun activeWorldNameOrDefault(): String {
+        return currentWorldName
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: getPersistedActiveWorld(applicationContext).trim().ifBlank { "world" }
+    }
+
+    private fun attachToExistingServer(
+        versionId: String,
+        worldName: String,
+        serverPort: Int,
+        reason: String
+    ): Int {
+        isLaunching = true
+        currentVersionId = versionId
+        currentWorldName = worldName
+        currentServerPort = serverPort
+        stopReason = "unknown"
+        serverReadyNotificationShown = false
+        serverReadyHandled.set(false)
+        chunkyRunning.set(false)
+        chunkyPausedForPlayer.set(false)
+        relayStatusPlayerCount.set(0)
+        synchronized(relayOnlinePlayers) { relayOnlinePlayers.clear() }
+        persistRuntimeState(applicationContext, versionId, worldName, RUNTIME_STATE_RUNNING)
+        resetNotificationState(ServerStage.RUNNING.notificationText)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.RUNNING.notificationText), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.RUNNING.notificationText))
+        }
+        startLogcatBridge(versionId)
+        startServerLogTail(versionId)
+        acquireWakeLock()
+        sendEvent(
+            versionId,
+            EVENT_OUTPUT,
+            "[PocketCraft] Found an existing Minecraft server on localhost:$serverPort during $reason. Reattaching relay instead of starting another server."
+        )
+        onServerReady()
+        return START_STICKY
+    }
+
+    private fun migrateLegacyStorageIfNeeded(versionId: String, worldName: String) {
+        val result = ServerVersionMigrator.migrateLegacyVersionStorageIfNeeded(
+            context = applicationContext,
+            versionId = versionId,
+            worldName = worldName
+        )
+        if (!result.migrated) return
+
+        sendEvent(
+            versionId,
+            EVENT_OUTPUT,
+            "[PocketCraft] Restored existing world data from the legacy version folder."
+        )
+        result.backupDir?.let { backup ->
+            sendEvent(
+                versionId,
+                EVENT_OUTPUT,
+                "[PocketCraft] A newer generated world was moved aside before restore: $backup"
+            )
+        }
+    }
+
+    private fun isEulaAccepted(worldName: String): Boolean {
+        val prefs = AppPreferences(applicationContext)
+        ServerFileManager.prepareEula(applicationContext, worldName)
+        val accepted = ServerFileManager.isEulaAccepted(applicationContext, worldName)
+        if (accepted && !prefs.eulaAccepted) {
+            prefs.eulaAccepted = true
+        }
+        return accepted
+    }
+
+    private fun abortStartForEula(versionId: String, worldName: String): Int {
+        sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Accept the Minecraft EULA to start the server.")
+        persistRuntimeState(
+            applicationContext,
+            versionId,
+            worldName.ifBlank { "world" },
+            RUNTIME_STATE_OFFLINE
+        )
+        stopSelf()
+        return START_NOT_STICKY
+    }
+
+    private fun resumeServer(versionId: String, worldName: String): Int {
         if (isLaunching || currentVersionId != null) {
             return START_STICKY
         }
 
+        if (!isEulaAccepted(worldName)) {
+            return abortStartForEula(versionId, worldName)
+        }
+
         isLaunching = true
         currentVersionId = versionId
+        currentWorldName = worldName
         stopReason = "unknown"
         serverReadyNotificationShown = false
         serverReadyHandled.set(false)
         setServerReadyState(false)
         relayStatusPlayerCount.set(0)
         synchronized(relayOnlinePlayers) { relayOnlinePlayers.clear() }
-        persistRuntimeState(applicationContext, versionId, RUNTIME_STATE_STARTING)
-        resetNotificationState("Resuming $versionId")
-        startForeground(NOTIFICATION_ID, createForegroundNotification("Resuming $versionId"))
+        persistRuntimeState(applicationContext, versionId, worldName, RUNTIME_STATE_STARTING)
+        resetNotificationState(ServerStage.STARTING_SERVER.notificationText)
         startLogcatBridge(versionId)
-        startServerLogTail(versionId)
-        val serverPort = resolveServerPort(versionId)
+        val serverPort = resolveServerPort(worldName)
         currentServerPort = serverPort
+        val existingServerDetected = runBlocking(Dispatchers.IO) {
+            waitForLocalServerPort(serverPort, timeoutMs = 12_000L)
+        }
+        if (existingServerDetected) {
+            isLaunching = false
+            currentVersionId = null
+            currentWorldName = null
+            return attachToExistingServer(versionId, worldName, serverPort, "service resume")
+        }
+
+        // If we reach here, we are starting fresh. Clear old log and start tailing.
+        val latestLogFile = java.io.File(com.pocketcraft.server.service.ServerFileManager.getServerDir(applicationContext, worldName), "logs/latest.log")
+        if (latestLogFile.exists()) {
+            runCatching { latestLogFile.delete() }
+        }
+        startServerLogTail(versionId)
+
         startPortProbe(versionId, serverPort)
         scheduleServerReadyFallback(versionId)
         acquireWakeLock()
 
-        val serverDirPre = com.pocketcraft.server.service.ServerFileManager.getServerDir(applicationContext, versionId)
-        val worldDir = java.io.File(serverDirPre, "world")
+        val serverDirPre = com.pocketcraft.server.service.ServerFileManager.getServerDir(applicationContext, worldName)
+        val worldDir = java.io.File(serverDirPre, resolveConfiguredLevelName(serverDirPre))
         isNewWorld = !worldDir.exists()
 
         serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            migrateLegacyStorageIfNeeded(versionId, worldName)
             val configRepo = com.pocketcraft.server.data.repository.ServerConfigRepository(applicationContext)
             val config = configRepo.loadConfig()
-            val serverDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(applicationContext, versionId)
-            val targetFile = com.pocketcraft.server.service.ServerFileManager.getServerJarFile(applicationContext, config.gameVersion, config.serverType)
-            
+            // Use versionId as fallback if pocketcraft-game-version was never written
+            val resolvedGameVersion = config.gameVersion.ifBlank { versionId }
+            val runtime = JreExtractor.runtimeForVersion(resolvedGameVersion)
+            val serverDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(applicationContext, worldName)
+            val targetFile = com.pocketcraft.server.service.ServerFileManager.getServerJarFile(applicationContext, resolvedGameVersion, config.serverType)
+            // Ensure parent directory exists before resolveJar tries to write the file
+            targetFile.parentFile?.mkdirs()
+            android.util.Log.d("ServerHostService", "[resumeServer] versionId=$versionId gameVersion=${config.gameVersion} resolvedGameVersion=$resolvedGameVersion serverType=${config.serverType} targetFile=${targetFile.absolutePath} exists=${targetFile.exists()} isDir=${targetFile.isDirectory}")
+
             try {
+                updateNotification(ServerStage.EXTRACTING_JRE, force = true)
+                ensureRuntimeExtracted(versionId, runtime)
                 com.pocketcraft.server.server.ServerJarManager.resolveJar(
                     serverType = config.serverType,
-                    gameVersion = config.gameVersion,
+                    gameVersion = resolvedGameVersion,
                     customJarPath = config.customJarPath,
                     targetFile = targetFile,
                     onProgress = { pct -> 
-                        updateNotification("Downloading server: $pct%", force = true)
+                        updateNotification("${ServerStage.DOWNLOADING_SERVER.notificationText} $pct%", force = false)
                         sendEvent(versionId, EVENT_OUTPUT, "Downloading server: $pct%")
                     }
                 ).collect { jarFile ->
-                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    updateNotification(ServerStage.CHECKING_PLUGINS, force = true)
+                    updateNotification(ServerStage.STARTING_SERVER, force = true)
+                    withContext(kotlinx.coroutines.Dispatchers.IO) {
                         ServerLauncher(applicationContext).startServer(
+                            worldName = worldName,
                             versionId = versionId,
                             jarPath = jarFile.absolutePath,
+                            runtime = runtime,
             onOutput = { line ->
                 handleObservedOutputLine(versionId, line)
             },
@@ -946,6 +1239,7 @@ class ServerHostService : Service() {
                 }
             },
             onStopped = { exitCode ->
+                logJvmCrash(exitCode)
                 isLaunching = false
                 stopInProgress.set(false)
                 relayJob?.cancel()
@@ -963,8 +1257,14 @@ class ServerHostService : Service() {
                 stopPortProbe()
 
                 if (exitCode != 0 && stopReason != "user") {
-                    sendEvent(versionId, EVENT_SERVER_CRASHED, "exit_code=$exitCode")
-                    sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Server exited unexpectedly (code $exitCode).")
+                    if (exitCode == 127) {
+                        sendEvent(versionId, EVENT_SERVER_CRASHED, "exit_code=127")
+                        sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Exit code 127: Java binary not executable on this device.")
+                        sendEvent(versionId, EVENT_ERROR, "[PocketCraft] [HINT] Go to Settings → Apps → PocketCraft → Storage → Clear Cache, then restart.")
+                    } else {
+                        sendEvent(versionId, EVENT_SERVER_CRASHED, "exit_code=$exitCode")
+                        sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Server exited unexpectedly (code $exitCode).")
+                    }
                 }
 
                 val shouldAutoRecover = exitCode != 0 && shouldScheduleAutoRecover(versionId)
@@ -979,13 +1279,13 @@ class ServerHostService : Service() {
                     serviceScope.launch {
                         kotlinx.coroutines.delay(delayMs)
                         if (stopReason != "user") {
-                            start(applicationContext, versionId)
+                            start(applicationContext, versionId, activeWorldNameOrDefault())
                         }
                     }
                 }
 
                 persistPublicAddress(applicationContext, "")
-                persistRuntimeState(applicationContext, versionId, RUNTIME_STATE_OFFLINE)
+                persistRuntimeState(applicationContext, versionId, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE)
                 serverReadyNotificationShown = false
                 serverReadyHandled.set(false)
                 relayStatusPlayerCount.set(0)
@@ -1011,7 +1311,7 @@ class ServerHostService : Service() {
                     serverReadyFallbackJob?.cancel()
                     serverReadyFallbackJob = null
                     persistPublicAddress(applicationContext, "")
-                    persistRuntimeState(applicationContext, versionId, RUNTIME_STATE_OFFLINE)
+                    persistRuntimeState(applicationContext, versionId, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE)
                     serverReadyNotificationShown = false
                     serverReadyHandled.set(false)
                     setServerReadyState(false)
@@ -1035,6 +1335,7 @@ class ServerHostService : Service() {
                 relayStatusPlayerCount.set(relayOnlinePlayers.size)
                 com.pocketcraft.server.service.PlayerDataManager.updateActivePlayers(relayOnlinePlayers.toSet())
             }
+            ServerLauncher.sendCommand(POCKETCRAFT_JOIN_TELLRAW)
             serviceScope.launch(Dispatchers.IO) {
                 publishRelayStatus(versionId)
             }
@@ -1064,6 +1365,19 @@ class ServerHostService : Service() {
                 sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] Resuming Chunky pre-generation now that players are offline.")
             }
         }
+        ConsoleParser.parseCommand(line)?.let { (name, cmd) ->
+            if (cmd.equals("/ram", ignoreCase = true) || cmd.equals("/memory", ignoreCase = true)) {
+                val runtime = Runtime.getRuntime()
+                val max = runtime.maxMemory() / (1024 * 1024)
+                val total = runtime.totalMemory() / (1024 * 1024)
+                val free = runtime.freeMemory() / (1024 * 1024)
+                val used = total - free
+
+                val msg = "[PocketCraft] Server RAM: ${used}MB used of ${max}MB max"
+                ServerLauncher.sendCommand("tellraw $name {\"text\":\"$msg\",\"color\":\"green\"}")
+            }
+        }
+
         if (looksLikeServerReady(line)) {
             onServerReady()
         }
@@ -1097,12 +1411,41 @@ class ServerHostService : Service() {
             while (isActive) {
                 delay(30_000)
                 publishRelayStatus(versionId)
+                ensureRelayTunnelHealthy(versionId)
             }
         }
     }
 
+    private suspend fun ensureRelayTunnelHealthy(versionId: String) {
+        if (!tunnelStarted.get()) return
+        if (!isLocalServerPortOpen(currentServerPort)) return
+
+        val health = relayManager.snapshotTunnelHealth()
+        if (health.healthy) {
+            relayHealthFailures.set(0)
+            return
+        }
+
+        val failures = relayHealthFailures.incrementAndGet()
+        android.util.Log.w(
+            "ServerHostService",
+            "Relay health degraded (pool=${health.poolSize}, ready=${health.poolReady}, heartbeat=${health.heartbeatActive}, localPortBound=${health.hasLocalPort}, failures=$failures)."
+        )
+        if (failures < 2) return
+
+        relayHealthFailures.set(0)
+        sendEvent(
+            versionId,
+            EVENT_OUTPUT,
+            "[PocketCraft] Relay health degraded. Reconnecting internet relay..."
+        )
+        serviceScope.launch(Dispatchers.Main.immediate) {
+            reconnectRelay()
+        }
+    }
+
     private suspend fun publishRelayStatus(versionId: String) {
-        val serverDir = ServerFileManager.getServerDir(applicationContext, versionId)
+        val serverDir = ServerFileManager.getServerDir(applicationContext, activeWorldNameOrDefault())
         val propsFile = File(serverDir, "server.properties")
         val props = Properties().apply {
             if (propsFile.exists()) {
@@ -1128,8 +1471,10 @@ class ServerHostService : Service() {
                 .filterIsInstance<Inet4Address>()
                 .firstOrNull { !it.isLoopbackAddress && !it.isLinkLocalAddress }
                 ?.hostAddress
+        }.onFailure { e ->
+            android.util.Log.e("ServerHostService", "Failed to get network interfaces (SELinux?): ${e.message}")
         }.getOrNull()
-        return if (ip.isNullOrBlank()) null else "$ip:$port"
+        return if (ip.isNullOrBlank()) "0.0.0.0:$port" else "$ip:$port"
     }
 
     private fun decodeLogLine(raw: String?): String? {
@@ -1153,27 +1498,31 @@ class ServerHostService : Service() {
     }
 
     private fun sendRconStop() {
-        val password = "pocketcraft-internal-rcon"
-        java.net.Socket().use { socket ->
-            socket.connect(java.net.InetSocketAddress("127.0.0.1", 25575), 2000)
-            socket.soTimeout = 3000
-            val out = java.io.DataOutputStream(socket.getOutputStream())
-            val inp = java.io.DataInputStream(socket.getInputStream())
+        try {
+            val password = "pocketcraft-internal-rcon"
+            java.net.Socket().use { socket ->
+                socket.connect(java.net.InetSocketAddress("127.0.0.1", 25575), 2000)
+                socket.soTimeout = 3000
+                val out = java.io.DataOutputStream(socket.getOutputStream())
+                val inp = java.io.DataInputStream(socket.getInputStream())
 
-            fun writeIntLE(v: Int) { out.write(v and 0xFF); out.write((v shr 8) and 0xFF); out.write((v shr 16) and 0xFF); out.write((v shr 24) and 0xFF) }
-            fun readIntLE(): Int { val b0=inp.read();val b1=inp.read();val b2=inp.read();val b3=inp.read(); return (b0 and 0xFF) or ((b1 and 0xFF) shl 8) or ((b2 and 0xFF) shl 16) or ((b3 and 0xFF) shl 24) }
-            fun sendPkt(id: Int, type: Int, payload: String) {
-                val pb = payload.toByteArray(Charsets.UTF_8)
-                writeIntLE(4 + 4 + pb.size + 2); writeIntLE(id); writeIntLE(type); out.write(pb); out.write(0); out.write(0); out.flush()
-            }
-            fun readPkt(): Int { val len=readIntLE(); val id=readIntLE(); readIntLE(); val payLen=(len-10).coerceAtLeast(0); if(payLen>0) inp.skipBytes(payLen); inp.read(); inp.read(); return id }
+                fun writeIntLE(v: Int) { out.write(v and 0xFF); out.write((v shr 8) and 0xFF); out.write((v shr 16) and 0xFF); out.write((v shr 24) and 0xFF) }
+                fun readIntLE(): Int { val b0=inp.read();val b1=inp.read();val b2=inp.read();val b3=inp.read(); return (b0 and 0xFF) or ((b1 and 0xFF) shl 8) or ((b2 and 0xFF) shl 16) or ((b3 and 0xFF) shl 24) }
+                fun sendPkt(id: Int, type: Int, payload: String) {
+                    val pb = payload.toByteArray(Charsets.UTF_8)
+                    writeIntLE(4 + 4 + pb.size + 2); writeIntLE(id); writeIntLE(type); out.write(pb); out.write(0); out.write(0); out.flush()
+                }
+                fun readPkt(): Int { val len=readIntLE(); val id=readIntLE(); readIntLE(); val payLen=(len-10).coerceAtLeast(0); if(payLen>0) inp.skipBytes(payLen); inp.read(); inp.read(); return id }
 
-            sendPkt(1, 3, password)
-            val authId = readPkt()
-            if (authId != -1) {
-                sendPkt(2, 2, "stop")
-                readPkt()
+                sendPkt(1, 3, password)
+                val authId = readPkt()
+                if (authId != -1) {
+                    sendPkt(2, 2, "stop")
+                    readPkt()
+                }
             }
+        } catch (e: Exception) {
+            android.util.Log.e("ServerHostService", "RCON stop failed: ${e.message}")
         }
     }
 
@@ -1187,7 +1536,7 @@ class ServerHostService : Service() {
         private const val NOTIFICATION_ID = 1111
         private const val NOTIFICATION_UPDATE_INTERVAL_MS = 2500L
         private const val IMPORTANT_NOTIFICATION_UPDATE_INTERVAL_MS = 750L
-        private const val STOP_GRACE_PERIOD_MS = 12_000L
+        private const val STOP_GRACE_PERIOD_MS = 8_000L
 
         const val ACTION_START = "com.pocketcraft.server.action.START_SERVER"
         const val ACTION_STOP = "com.pocketcraft.server.action.STOP_SERVER"
@@ -1195,6 +1544,7 @@ class ServerHostService : Service() {
         const val ACTION_SERVER_EVENT = "com.pocketcraft.server.action.SERVER_EVENT"
 
         const val EXTRA_VERSION_ID = "version_id"
+        const val EXTRA_WORLD_NAME = "world_name"
         const val EXTRA_EVENT_TYPE = "event_type"
         const val EXTRA_LINE = "line"
 
@@ -1212,76 +1562,114 @@ class ServerHostService : Service() {
         const val EXTRA_CHUNKY_PERCENT = "chunky_percent"
         private const val PREFS_NAME = "pocketcraft_runtime_state"
         private const val KEY_ACTIVE_VERSION = "active_version"
+        private const val KEY_ACTIVE_WORLD = "active_world"
         private const val KEY_RUNTIME_STATE = "runtime_state"
         private const val KEY_PUBLIC_ADDRESS = "public_address"
+        private const val POCKETCRAFT_JOIN_TELLRAW =
+            """tellraw @a ["",{"text":"hosted on Pocketcraft","color":"green","bold":true},{"text":"\nJoin our Discord: ","color":"white"},{"text":"https://discord.gg/nc7ceYWVfT","color":"aqua","underlined":true}]"""
         const val RUNTIME_STATE_OFFLINE = "offline"
         const val RUNTIME_STATE_STARTING = "starting"
         const val RUNTIME_STATE_RUNNING = "running"
         private val _serverReadyState = MutableStateFlow(false)
         val serverReadyState: StateFlow<Boolean> = _serverReadyState.asStateFlow()
 
-        fun start(context: Context, versionId: String) {
+        fun start(context: Context, versionId: String, worldName: String) {
             val intent = Intent(context, ServerHostService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_VERSION_ID, versionId)
+                putExtra(EXTRA_WORLD_NAME, worldName)
             }
-            ContextCompat.startForegroundService(context, intent)
+            try {
+                ContextCompat.startForegroundService(context, intent)
+            } catch (e: Exception) {
+                android.util.Log.e("ServerHostService", "Failed to start service: ${e.message}")
+            }
         }
 
         fun stop(context: Context) {
             val intent = Intent(context, ServerHostService::class.java).apply {
                 action = ACTION_STOP
             }
-            ContextCompat.startForegroundService(context, intent)
+            try {
+                context.startService(intent)
+            } catch (e: Exception) {
+                android.util.Log.e("ServerHostService", "Failed to stop service: ${e.message}")
+            }
         }
 
         fun reconnectRelay(context: Context) {
             val intent = Intent(context, ServerHostService::class.java).apply {
                 action = ACTION_RECONNECT_RELAY
             }
-            ContextCompat.startForegroundService(context, intent)
+            try {
+                ContextCompat.startForegroundService(context, intent)
+            } catch (e: Exception) {
+                android.util.Log.e("ServerHostService", "Failed to reconnect relay: ${e.message}")
+            }
         }
 
         fun getPersistedActiveVersion(context: Context): String {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            return prefs.getString(KEY_ACTIVE_VERSION, null).orEmpty()
+            return readStateFile(context).optString(KEY_ACTIVE_VERSION, "")
+        }
+
+        fun getPersistedActiveWorld(context: Context): String {
+            return readStateFile(context).optString(KEY_ACTIVE_WORLD, "")
         }
 
         fun getPersistedRuntimeState(context: Context, versionId: String): String {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val activeVersion = prefs.getString(KEY_ACTIVE_VERSION, null)
+            val state = readStateFile(context)
+            val activeVersion = state.optString(KEY_ACTIVE_VERSION, "")
             if (activeVersion != versionId) {
                 return RUNTIME_STATE_OFFLINE
             }
-            return prefs.getString(KEY_RUNTIME_STATE, RUNTIME_STATE_OFFLINE) ?: RUNTIME_STATE_OFFLINE
+            return state.optString(KEY_RUNTIME_STATE, RUNTIME_STATE_OFFLINE)
         }
 
         fun getPersistedPublicAddress(context: Context, versionId: String): String? {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val activeVersion = prefs.getString(KEY_ACTIVE_VERSION, null)
+            val state = readStateFile(context)
+            val activeVersion = state.optString(KEY_ACTIVE_VERSION, "")
             if (activeVersion != versionId) {
                 return null
             }
-            return prefs.getString(KEY_PUBLIC_ADDRESS, null)?.trim()?.ifBlank { null }
+            return state.optString(KEY_PUBLIC_ADDRESS, "").trim().ifBlank { null }
         }
 
-        private fun persistRuntimeState(context: Context, versionId: String, state: String) {
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putString(KEY_ACTIVE_VERSION, if (state == RUNTIME_STATE_OFFLINE) "" else versionId)
-                .putString(KEY_RUNTIME_STATE, state)
-                .apply()
+        fun persistRuntimeState(context: Context, versionId: String, worldName: String, state: String) {
+            val obj = readStateFile(context)
+            obj.put(KEY_ACTIVE_VERSION, if (state == RUNTIME_STATE_OFFLINE) "" else versionId)
+            obj.put(KEY_ACTIVE_WORLD, if (state == RUNTIME_STATE_OFFLINE) "" else worldName)
+            obj.put(KEY_RUNTIME_STATE, state)
+            obj.put("server_pid", android.os.Process.myPid())
+            writeStateFile(context, obj)
+        }
+
+        fun getServerPid(context: Context): Int {
+            return readStateFile(context).optInt("server_pid", -1)
         }
 
         private fun persistPublicAddress(context: Context, address: String?) {
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putString(KEY_PUBLIC_ADDRESS, address?.trim().orEmpty())
-                .apply()
+            val obj = readStateFile(context)
+            obj.put(KEY_PUBLIC_ADDRESS, address?.trim().orEmpty())
+            writeStateFile(context, obj)
         }
 
-        fun isWhitelistEnabled(context: Context, serverVersion: String): Boolean {
-            val propsFile = File(context.filesDir, "servers/$serverVersion/server.properties")
+        private fun getStateFile(context: Context): File {
+            return File(context.filesDir, "runtime_state.json")
+        }
+
+        private fun readStateFile(context: Context): org.json.JSONObject {
+            val file = getStateFile(context)
+            if (!file.exists()) return org.json.JSONObject()
+            return runCatching { org.json.JSONObject(file.readText()) }.getOrDefault(org.json.JSONObject())
+        }
+
+        private fun writeStateFile(context: Context, obj: org.json.JSONObject) {
+            val file = getStateFile(context)
+            runCatching { file.writeText(obj.toString()) }
+        }
+
+        fun isWhitelistEnabled(context: Context, worldName: String): Boolean {
+            val propsFile = File(com.pocketcraft.server.service.ServerFileManager.getServerDir(context, worldName), "server.properties")
             if (!propsFile.exists()) return false
             return propsFile.readLines().any { it.trim() == "white-list=true" }
         }

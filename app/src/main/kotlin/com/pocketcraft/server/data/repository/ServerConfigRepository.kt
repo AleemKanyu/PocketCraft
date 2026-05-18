@@ -210,6 +210,8 @@ class ServerConfigRepository @Inject constructor(
             |  bungeecord: false
             |  sample-count: 12
             |  timeout-time: 60
+            |  moved-too-quickly-multiplier: 10.0
+            |  moved-wrongly-threshold: 0.0625
             |world-settings:
             |  default:
             |    view-distance: ${config.viewDistance}
@@ -246,7 +248,7 @@ class ServerConfigRepository @Inject constructor(
             viewDistance = props["view-distance"]?.toIntOrNull() ?: 6,
             simulationDistance = props["simulation-distance"]?.toIntOrNull() ?: 4,
             spawnProtection = props["spawn-protection"]?.toIntOrNull() ?: 16,
-            allowFlight = props["allow-flight"]?.toBoolean() ?: false,
+            allowFlight = props["allow-flight"]?.toBoolean() ?: true,
             whiteList = props["white-list"]?.toBoolean() ?: false,
             enforceWhitelist = props["enforce-whitelist"]?.toBoolean() ?: false,
             commandBlocks = props["enable-command-block"]?.toBoolean() ?: true,
@@ -256,7 +258,7 @@ class ServerConfigRepository @Inject constructor(
             spawnNpcs = props["spawn-npcs"]?.toBoolean() ?: true,
             hardcore = props["hardcore"]?.toBoolean() ?: false,
             maxRamMb = props["pocketcraft-max-ram-mb"]?.toIntOrNull() ?: 1024,
-            entityBroadcastRangePercentage = props["entity-broadcast-range-percentage"]?.toIntOrNull() ?: 100,
+            entityBroadcastRangePercentage = props["entity-broadcast-range-percentage"]?.toIntOrNull() ?: 50,
             enableRcon = props["enable-rcon"]?.toBoolean() ?: true,
             generateStructures = props["generate-structures"]?.toBoolean() ?: true,
             levelType = props["level-type"] ?: "default",
@@ -311,7 +313,7 @@ class ServerConfigRepository @Inject constructor(
 
     fun isSetupComplete(): Boolean {
         if (!setupMarkerFile.exists()) return false
-        if (!JreExtractor.isExtracted(context)) return false
+        val runtime = JreExtractor.findExtractedRuntime(context) ?: return false
         val serversDir = File(context.filesDir, "servers")
         val hasDownloadedJar = serversDir.walkTopDown()
             .any { it.isFile && it.extension == "jar" && it.length() > 50_000L }
@@ -326,7 +328,7 @@ class ServerConfigRepository @Inject constructor(
             else -> null
         } ?: return false
 
-        val jreDir = JreExtractor.getJreDir(context)
+        val jreDir = JreExtractor.getJreDir(context, runtime)
         val jreLibDir = File(jreDir, "lib")
         val jvmCandidates = listOf(
             File(File(jreLibDir, arch), "server/libjvm.so"),
@@ -389,15 +391,27 @@ class ServerConfigRepository @Inject constructor(
             ?.forEach { statsFile ->
                 val ticks = runCatching {
                     val root = JSONObject(statsFile.readText())
-                    val customStats = root.optJSONObject("stats")
-                        ?.optJSONObject("minecraft:custom")
-                    when {
-                        customStats == null -> 0L
-                        customStats.has("minecraft:play_time") ->
-                            customStats.optLong("minecraft:play_time", 0L)
-                        customStats.has("minecraft:play_one_minute") ->
-                            customStats.optLong("minecraft:play_one_minute", 0L)
-                        else -> 0L
+                    val stats = root.optJSONObject("stats")
+                    
+                    if (stats != null) {
+                        // New format (1.15+)
+                        val customStats = stats.optJSONObject("minecraft:custom")
+                        when {
+                            customStats == null -> 0L
+                            customStats.has("minecraft:play_time") ->
+                                customStats.optLong("minecraft:play_time", 0L)
+                            customStats.has("minecraft:play_one_minute") ->
+                                customStats.optLong("minecraft:play_one_minute", 0L)
+                            else -> 0L
+                        }
+                    } else {
+                        // Legacy flat format (e.g. 1.12.2 and older)
+                        when {
+                            root.has("stat.playOneMinute") -> root.optLong("stat.playOneMinute", 0L)
+                            root.has("minecraft:play_time") -> root.optLong("minecraft:play_time", 0L)
+                            root.has("play_time") -> root.optLong("play_time", 0L)
+                            else -> 0L
+                        }
                     }
                 }.getOrDefault(0L)
                 if (ticks > 0) {

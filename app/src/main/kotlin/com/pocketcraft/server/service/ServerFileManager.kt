@@ -2,22 +2,36 @@ package com.pocketcraft.server.service
 
 import android.content.Context
 import com.pocketcraft.server.data.model.ServerType
+import com.pocketcraft.server.data.preferences.AppPreferences
 import java.io.File
 
 object ServerFileManager {
 
     /**
-     * Returns the directory where a specific version's server files are stored.
+     * Returns the directory where a specific world's server files are stored.
      */
     fun getServerDir(context: Context, worldName: String): File {
-        return File(context.filesDir, "servers/$worldName").also { it.mkdirs() }
+        return File(context.filesDir, "servers/worlds/$worldName").also { it.mkdirs() }
+    }
+
+    /**
+     * Returns the directory without creating it. Useful for checking existence.
+     */
+    fun getServerDirNoCreate(context: Context, worldName: String): File {
+        return File(context.filesDir, "servers/worlds/$worldName")
+    }
+
+    /**
+     * Returns the directory where a specific version's server JAR is stored.
+     */
+    fun getServerJarDir(context: Context, gameVersion: String): File {
+        return File(context.filesDir, "servers/binaries/$gameVersion").also { it.mkdirs() }
     }
 
     fun getServerJarFile(context: Context, gameVersion: String, serverType: ServerType): File {
-        val serverDir = File(context.filesDir, "servers/$gameVersion")
-        serverDir.mkdirs()
+        val jarDir = getServerJarDir(context, gameVersion)
         val jarName = "${serverType.name.lowercase()}-$gameVersion.jar"
-        return File(serverDir, jarName)
+        return File(jarDir, jarName)
     }
 
     /**
@@ -30,9 +44,38 @@ object ServerFileManager {
     }
 
     /**
-     * Ensures eula.txt exists with eula=true in the server directory.
+     * Checks if eula.txt exists and has eula=true.
+     */
+    fun isEulaAccepted(context: Context, worldName: String): Boolean {
+        val serverDir = getServerDir(context, worldName)
+        val eulaFile = File(serverDir, "eula.txt")
+        if (!eulaFile.exists()) return false
+        return runCatching {
+            eulaFile.readLines().any { it.trim().equals("eula=true", ignoreCase = true) }
+        }.getOrDefault(false)
+    }
+
+    /**
+     * Writes eula.txt with eula=true in the server directory.
+     */
+    fun acceptEula(context: Context, worldName: String) {
+        val serverDir = getServerDir(context, worldName)
+        val eulaFile = File(serverDir, "eula.txt")
+        try {
+            eulaFile.writeText("eula=true\n")
+        } catch (e: Exception) {
+            android.util.Log.e("ServerFileManager", "Failed to write eula.txt", e)
+        }
+    }
+
+    /**
+     * Ensures eula.txt exists when the user has already accepted the EULA.
      */
     fun prepareEula(context: Context, worldName: String) {
+        val prefs = AppPreferences(context)
+        if (!prefs.eulaAccepted) return
+        if (isEulaAccepted(context, worldName)) return
+
         val serverDir = getServerDir(context, worldName)
         val eulaFile = File(serverDir, "eula.txt")
         try {
@@ -51,6 +94,7 @@ object ServerFileManager {
         props.setProperty("server-port", "25565")
         props.setProperty("level-name", resolvedWorldName)
         props.setProperty("server-ip", "")                 // bind all interfaces
+        props.setProperty("online-mode", "false")
         // Ensure RCON is enabled for in-app console commands
         props.setProperty("enable-rcon", "true")
         props.setProperty("rcon.port", "25575")
@@ -66,8 +110,21 @@ object ServerFileManager {
     }
 
     private fun resolveStableWorldName(serverDir: File, props: java.util.Properties): String {
-        val explicit = props.getProperty("level-name")?.trim().orEmpty()
-        if (explicit.isNotBlank()) return explicit
+        var explicit = props.getProperty("level-name")?.trim().orEmpty()
+        // If the level-name was accidentally saved as a dimension folder, correct it
+        if (explicit.endsWith("_nether")) explicit = explicit.removeSuffix("_nether")
+        if (explicit.endsWith("_the_end")) explicit = explicit.removeSuffix("_the_end")
+        
+        // Only trust the existing level-name if its folder actually contains world data
+        if (explicit.isNotBlank()) {
+            val candidateDir = File(serverDir, explicit)
+            val hasWorldData = File(candidateDir, "level.dat").exists() ||
+                File(candidateDir, "region").isDirectory ||
+                File(serverDir, "level.dat").exists() ||   // flat layout
+                File(serverDir, "region").isDirectory       // flat layout
+            if (hasWorldData) return explicit
+            android.util.Log.w("ServerFileManager", "level-name='$explicit' but no world data found there — falling back to discovery")
+        }
 
         val fromRegistry = props.getProperty("pocketcraft-world-list")
             .orEmpty()
@@ -79,7 +136,7 @@ object ServerFileManager {
         val discoveredWorld = serverDir.listFiles()
             .orEmpty()
             .asSequence()
-            .filter { it.isDirectory }
+            .filter { it.isDirectory && !it.name.endsWith("_nether") && !it.name.endsWith("_the_end") }
             .firstOrNull { dir ->
                 File(dir, "level.dat").exists() || File(dir, "region").isDirectory
             }
@@ -90,6 +147,17 @@ object ServerFileManager {
     fun prepareRuntimeArtifacts(context: Context, worldName: String) {
         val serverDir = getServerDir(context, worldName)
         File(serverDir, "logs").mkdirs()
+        
+        val pluginsDir = File(serverDir, "plugins").also { it.mkdirs() }
+        runCatching {
+            context.assets.open("default_plugins/PocketCraftCompanion.jar").use { input ->
+                File(pluginsDir, "PocketCraftCompanion.jar").outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+        }.onFailure { 
+            android.util.Log.e("ServerFileManager", "Failed to bundle PocketCraftCompanion.jar: ${it.message}")
+        }
 
         serverDir.walkTopDown().forEach { file ->
             if (file.isFile && file.name.endsWith(".tmp")) {

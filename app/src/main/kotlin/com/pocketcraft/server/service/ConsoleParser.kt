@@ -9,6 +9,10 @@ data class ChunkyProgress(
     val percent: Float
 )
 
+sealed interface ServerEvent {
+    data object ServerFullyReady : ServerEvent
+}
+
 /**
  * Parses raw stdout lines from the PaperMC server into structured [ConsoleMessage] objects
  * and extracts semantic events (player join/leave, TPS, server ready, etc.).
@@ -38,11 +42,14 @@ object ConsoleParser {
         RegexOption.IGNORE_CASE
     )
 
+    // e.g. "[17:30:06 INFO]: Steve issued server command: /ram"
+    private val COMMAND_REGEX = Regex("""(\S+) issued server command: (.+)""", RegexOption.IGNORE_CASE)
+
     // e.g. "[17:31:00 INFO]: TPS from last 1m, 5m, 15m: 19.98, 19.99, 20.0"
     private val TPS_REGEX = Regex("""TPS from last 1m, 5m, 15m: ([\d.]+)""")
 
-    // e.g. "[17:30:01 WARN]: ..."   "[17:30:01 ERROR]: ..."
-    private val LEVEL_REGEX = Regex("""\[\d{2}:\d{2}:\d{2} (INFO|WARN|ERROR|FATAL)\]""")
+    // e.g. "[17:30:01 WARN]: ..."   "[11:05:32] [Server thread/INFO]:"
+    private val LEVEL_REGEX = Regex("""\[\d{2}:\d{2}:\d{2}\] \[(?:.*?/)?(INFO|WARN|ERROR|FATAL)\]""")
 
     // Chat: "[17:30:15 INFO]: <Steve> hello"
     private val CHAT_REGEX = Regex("""<(\w+)> """)
@@ -70,6 +77,9 @@ object ConsoleParser {
 
     fun isDone(line: String): Boolean = DONE_REGEX.containsMatchIn(line)
 
+    fun parseEvent(line: String): ServerEvent? =
+        if (DONE_REGEX.containsMatchIn(line)) ServerEvent.ServerFullyReady else null
+
     fun parseTps(line: String): Float? =
         TPS_REGEX.find(line)?.groupValues?.get(1)?.toFloatOrNull()
 
@@ -90,6 +100,14 @@ object ConsoleParser {
     fun parseLeave(line: String): String? =
         LEAVE_REGEX.find(line)?.groupValues?.get(1)
 
+    /** Returns (player, command) if a player issued a command. */
+    fun parseCommand(line: String): Pair<String, String>? {
+        COMMAND_REGEX.find(line)?.let { match ->
+            return match.groupValues[1] to match.groupValues[2]
+        }
+        return null
+    }
+
     fun isPreparingStartRegion(line: String): Boolean = PREPARING_START_REGION_REGEX.containsMatchIn(line)
 
     fun parseChunkyProgress(line: String): ChunkyProgress? {
@@ -101,6 +119,22 @@ object ConsoleParser {
             )
         }
         return null
+    }
+
+    // e.g. "[17:30:06 INFO]: [PocketCraftPing] Steve:10 Alex:42"
+    private val PING_REGEX = Regex("""\[PocketCraftPing\](.*)""")
+
+    fun parsePing(line: String): Map<String, Int> {
+        val match = PING_REGEX.find(line) ?: return emptyMap()
+        val data = match.groupValues[1].trim()
+        val pings = mutableMapOf<String, Int>()
+        for (pair in data.split(" ")) {
+            val parts = pair.split(":")
+            if (parts.size == 2) {
+                pings[parts[0]] = parts[1].toIntOrNull() ?: -1
+            }
+        }
+        return pings
     }
 
     /** Returns the cleaned console text, stripping ANSI color codes. */

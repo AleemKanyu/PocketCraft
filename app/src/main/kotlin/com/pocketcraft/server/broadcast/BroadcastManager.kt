@@ -16,14 +16,13 @@ import java.util.Date
 
 data class BroadcastMessage(
     val id: String = "",
+    val active: Boolean = false,
     val title: String = "",
     val body: String = "",
     val type: String = "info",
-    val createdAt: Date? = null,
-    val expiresAt: Date? = null,
-    val targetMinVersion: Int = 0,
     val dismissible: Boolean = true,
-    val active: Boolean = true
+    val createdAt: Timestamp? = null,
+    val targetMinVersion: Int = 0
 )
 
 object BroadcastManager {
@@ -41,7 +40,7 @@ object BroadcastManager {
         if (hasCache) {
             trySend(loadCachedBroadcasts(appContext, appVersionCode))
         } else {
-            trySend(listOf(defaultOfflineBroadcast()))
+            trySend(emptyList())
         }
 
         val listener = db.collection("broadcasts")
@@ -52,48 +51,16 @@ object BroadcastManager {
                     if (cached.isNotEmpty()) {
                         Log.i("BroadcastManager", "Using ${cached.size} cached broadcast(s) while Firestore is unavailable.")
                         trySend(cached)
-                    } else {
-                        val fallback = listOf(defaultOfflineBroadcast())
-                        Log.i("BroadcastManager", "Using built-in offline fallback broadcast.")
-                        trySend(fallback)
                     }
+                    // No cache = show nothing; don't show a fake maintenance banner
                     return@addSnapshotListener
                 }
 
-                val now = Date()
                 val messages = snapshot.documents.mapNotNull { doc ->
-                    val title = doc.firstString("title", "headline", "name")
-                        .orEmpty()
-                        .trim()
-                        .ifBlank { "Important Broadcast" }
-                    val body = doc.firstString("body", "message", "description", "text", "content")
-                        .orEmpty()
-                        .trim()
-                        .ifBlank { "Hosted on PocketCraft !" }
+                    doc.toObject(BroadcastMessage::class.java)?.copy(id = doc.id)
+                }.filter { it.active && appVersionCode >= it.targetMinVersion }
+                .sortedByDescending { it.createdAt?.seconds ?: 0 }
 
-                    val expiresAt = doc.firstDate("expiresAt", "expiry", "expires")
-                    val targetMinVersion = doc.firstInt("targetMinVersion", "minVersion", "versionCode")
-                    val createdAt = doc.firstDate("createdAt", "created", "timestamp")
-                    val dismissible = doc.firstBoolean("dismissible", "canDismiss", "dismissable") ?: true
-                    val active = doc.firstBoolean("active", "enabled", "show") ?: true
-                    val type = doc.firstString("type", "severity", "category").normalizeType(default = "warning")
-
-                    if (expiresAt != null && expiresAt.before(now)) return@mapNotNull null
-                    if (targetMinVersion > appVersionCode) return@mapNotNull null
-                    if (!active) return@mapNotNull null
-
-                    BroadcastMessage(
-                        id = doc.id,
-                        title = title,
-                        body = body,
-                        type = type,
-                        createdAt = createdAt,
-                        expiresAt = expiresAt,
-                        targetMinVersion = targetMinVersion,
-                        dismissible = dismissible,
-                        active = active
-                    )
-                }.sortedByDescending { it.createdAt ?: Date(0) }
                 cacheBroadcasts(appContext, messages)
                 Log.i("BroadcastManager", "Loaded ${messages.size} active broadcast(s) from Firestore.")
                 trySend(messages)
@@ -141,7 +108,7 @@ object BroadcastManager {
                     title = title,
                     body = body,
                     type = json.optString("type", "info").normalizeType(),
-                    createdAt = Timestamp.now().toDate(),
+                    createdAt = Timestamp.now(),
                     dismissible = json.optBoolean("dismissible", true),
                     active = true
                 )
@@ -149,17 +116,7 @@ object BroadcastManager {
         }.getOrNull()
     }
 
-    private fun defaultOfflineBroadcast(): BroadcastMessage {
-        return BroadcastMessage(
-            id = "offline_maintenance_banner",
-            title = "Mantainance Break !",
-            body = "You might face server disconnections for some time ,so play on wifi for now",
-            type = "warning",
-            createdAt = Date(),
-            dismissible = false,
-            active = true
-        )
-    }
+
 
     private fun cacheBroadcasts(context: Context, messages: List<BroadcastMessage>) {
         val payload = JSONArray().apply {
@@ -169,8 +126,7 @@ object BroadcastManager {
                     put("title", message.title)
                     put("body", message.body)
                     put("type", message.type)
-                    put("createdAt", message.createdAt?.time ?: JSONObject.NULL)
-                    put("expiresAt", message.expiresAt?.time ?: JSONObject.NULL)
+                    put("createdAt", message.createdAt?.seconds ?: JSONObject.NULL)
                     put("targetMinVersion", message.targetMinVersion)
                     put("dismissible", message.dismissible)
                     put("active", message.active)
@@ -191,15 +147,12 @@ object BroadcastManager {
         if (raw.isBlank()) return emptyList()
 
         return runCatching {
-            val now = Date()
             JSONArray(raw).let { array ->
                 buildList {
                     for (index in 0 until array.length()) {
                         val json = array.optJSONObject(index) ?: continue
-                        val createdAt = json.optLongOrNull("createdAt")?.let { Date(it) }
-                        val expiresAt = json.optLongOrNull("expiresAt")?.let { Date(it) }
+                        val createdAt = json.optLongOrNull("createdAt")?.let { Timestamp(it, 0) }
                         val targetMinVersion = json.optInt("targetMinVersion", 0)
-                        if (expiresAt != null && expiresAt.before(now)) continue
                         if (targetMinVersion > appVersionCode) continue
 
                         add(
@@ -209,14 +162,13 @@ object BroadcastManager {
                                 body = json.optString("body").ifBlank { "Hosted on PocketCraft !" },
                                 type = json.optString("type").normalizeType(default = "warning"),
                                 createdAt = createdAt,
-                                expiresAt = expiresAt,
                                 targetMinVersion = targetMinVersion,
                                 dismissible = json.optBoolean("dismissible", true),
                                 active = json.optBoolean("active", true)
                             )
                         )
                     }
-                }.sortedByDescending { it.createdAt ?: Date(0) }
+                }.sortedByDescending { it.createdAt?.seconds ?: 0 }
             }
         }.getOrElse {
             Log.w("BroadcastManager", "Failed to decode cached broadcasts: ${it.message}")

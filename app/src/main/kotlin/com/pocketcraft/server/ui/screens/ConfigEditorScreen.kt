@@ -61,7 +61,12 @@ fun ConfigEditorScreen(
             val loaded = ServerPropertiesHelper.readProperties(serverDir)
             props.clear()
             loaded.forEach { key, value ->
-                props[key.toString()] = value.toString()
+                val keyText = key.toString()
+                props[keyText] = if (keyText == "level-type") {
+                    sanitizeLevelType(value.toString())
+                } else {
+                    value.toString()
+                }
             }
             isLoaded = true
             loadError = null
@@ -168,7 +173,7 @@ fun ConfigEditorScreen(
                             val saved = withContext(Dispatchers.IO) {
                                 val toSave = Properties().apply {
                                     props.forEach { (key, value) ->
-                                        setProperty(key, value)
+                                        setProperty(key, if (key == "level-type") sanitizeLevelType(value) else value)
                                     }
                                 }
                                 serverDir.mkdirs()
@@ -245,6 +250,13 @@ fun ConfigEditorScreen(
             }
         }
     }
+}
+
+private fun sanitizeLevelType(raw: String): String {
+    return raw.trim()
+        .replace("\\\\", ":")
+        .replace("\\", ":")
+        .replace("minecraft:minecraft:", "minecraft:")
 }
 
 @Composable

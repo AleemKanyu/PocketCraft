@@ -105,7 +105,7 @@ fun DownloadedPluginsScreen(
     var downloadProgress by remember { mutableIntStateOf(0) }
     var isUploading by remember { mutableStateOf(false) }
     var isDownloading by remember { mutableStateOf(false) }
-    var items by remember(stateHolder.versionLabel, selectedTab) { mutableStateOf<List<Plugin>>(emptyList()) }
+    var items by remember(stateHolder.activeWorld, selectedTab) { mutableStateOf<List<Plugin>>(emptyList()) }
     val runtimeKey = remember(stateHolder.config.serverType, stateHolder.config.gameVersion) {
         "${stateHolder.config.serverType.name.lowercase(Locale.US)}-${stateHolder.config.gameVersion}"
     }
@@ -114,9 +114,9 @@ fun DownloadedPluginsScreen(
 
     fun refresh() {
         items = when (currentTab().type) {
-            PluginManager.ContentType.PLUGINS -> PluginManager.listPlugins(context, stateHolder.versionLabel)
-            PluginManager.ContentType.MODS -> PluginManager.listMods(context, stateHolder.versionLabel)
-            PluginManager.ContentType.RESOURCE_PACKS -> PluginManager.listResourcePacks(context, stateHolder.versionLabel)
+            PluginManager.ContentType.PLUGINS -> PluginManager.listPlugins(context, stateHolder.activeWorld)
+            PluginManager.ContentType.MODS -> PluginManager.listMods(context, stateHolder.activeWorld)
+            PluginManager.ContentType.RESOURCE_PACKS -> PluginManager.listResourcePacks(context, stateHolder.activeWorld)
         }
     }
 
@@ -128,7 +128,7 @@ fun DownloadedPluginsScreen(
             val result = PluginManager.installFromUri(
                 context = context,
                 uri = uri,
-                versionId = stateHolder.versionLabel,
+                worldName = stateHolder.activeWorld,
                 type = currentTab().type,
                 runtimeKey = runtimeKey,
                 onProgress = { uploadProgress = it.coerceIn(0, 100) }
@@ -143,7 +143,7 @@ fun DownloadedPluginsScreen(
         }
     }
 
-    LaunchedEffect(stateHolder.versionLabel, selectedTab) {
+    LaunchedEffect(stateHolder.activeWorld, selectedTab) {
         refresh()
     }
 
@@ -261,7 +261,7 @@ fun DownloadedPluginsScreen(
                         onToggle = {
                             val success = PluginManager.toggleContent(
                                 context = context,
-                                versionId = stateHolder.versionLabel,
+                                worldName = stateHolder.activeWorld,
                                 type = currentTab().type,
                                 plugin = item
                             )
@@ -303,7 +303,7 @@ fun DownloadedPluginsScreen(
                     onClick = {
                         val deleted = PluginManager.deleteContent(
                             context = context,
-                            versionId = stateHolder.versionLabel,
+                            worldName = stateHolder.activeWorld,
                             type = currentTab().type,
                             plugin = item
                         )
@@ -390,7 +390,7 @@ fun DownloadedPluginsScreen(
                             val result = PluginManager.installFromUrl(
                                 context = context,
                                 sourceUrl = cleanUrl,
-                                versionId = stateHolder.versionLabel,
+                                worldName = stateHolder.activeWorld,
                                 type = currentTab().type,
                                 fileNameHint = null,
                                 runtimeKey = runtimeKey,

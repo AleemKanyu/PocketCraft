@@ -122,7 +122,7 @@ fun PluginsHubScreen(
     var downloadingCatalogKey by remember { mutableStateOf<String?>(null) }
     var isDiscoverLoading by remember { mutableStateOf(false) }
     var discoveredItems by remember { mutableStateOf<List<PluginManager.RemoteCatalogItem>>(emptyList()) }
-    var downloadedItems by remember(stateHolder.versionLabel, selectedTab) { mutableStateOf<List<Plugin>>(emptyList()) }
+    var downloadedItems by remember(stateHolder.activeWorld, selectedTab) { mutableStateOf<List<Plugin>>(emptyList()) }
     var downloadedSectionExpanded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var catalogRetryToken by remember { mutableIntStateOf(0) }
@@ -143,11 +143,11 @@ fun PluginsHubScreen(
     val showModsWarning = isModsTab && !supportsMods
 
     suspend fun loadDownloadedItems(): List<Plugin> = withContext(Dispatchers.IO) {
-        PluginManager.ensureContentDirs(context, stateHolder.versionLabel)
+        PluginManager.ensureContentDirs(context, stateHolder.activeWorld)
         when (currentTab().type) {
-            PluginManager.ContentType.PLUGINS -> PluginManager.listPlugins(context, stateHolder.versionLabel)
-            PluginManager.ContentType.MODS -> PluginManager.listMods(context, stateHolder.versionLabel)
-            PluginManager.ContentType.RESOURCE_PACKS -> PluginManager.listResourcePacks(context, stateHolder.versionLabel)
+            PluginManager.ContentType.PLUGINS -> PluginManager.listPlugins(context, stateHolder.activeWorld)
+            PluginManager.ContentType.MODS -> PluginManager.listMods(context, stateHolder.activeWorld)
+            PluginManager.ContentType.RESOURCE_PACKS -> PluginManager.listResourcePacks(context, stateHolder.activeWorld)
         }
     }
 
@@ -165,7 +165,7 @@ fun PluginsHubScreen(
             val result = PluginManager.installFromUri(
                 context = context,
                 uri = uri,
-                versionId = stateHolder.versionLabel,
+                worldName = stateHolder.activeWorld,
                 type = currentTab().type,
                 runtimeKey = runtimeKey,
                 onProgress = { uploadProgress = it.coerceIn(0, 100) }
@@ -180,14 +180,14 @@ fun PluginsHubScreen(
         }
     }
 
-    LaunchedEffect(selectedTab, stateHolder.versionLabel) {
+    LaunchedEffect(selectedTab, stateHolder.activeWorld) {
         resourcePackIcons.clear()
         downloadedItems = loadDownloadedItems()
     }
 
-    LaunchedEffect(selectedTab, downloadedItems, stateHolder.versionLabel) {
+    LaunchedEffect(selectedTab, downloadedItems, stateHolder.activeWorld) {
         if (currentTab().type == PluginManager.ContentType.RESOURCE_PACKS) {
-            val root = PluginManager.getContentDir(context, stateHolder.versionLabel, currentTab().type)
+            val root = PluginManager.getContentDir(context, stateHolder.activeWorld, currentTab().type)
             downloadedItems.forEach { item ->
                 if (!resourcePackIcons.containsKey(item.fileName)) {
                     resourcePackIcons[item.fileName] = withContext(Dispatchers.IO) {
@@ -198,7 +198,7 @@ fun PluginsHubScreen(
         }
     }
 
-    LaunchedEffect(selectedTab, query, catalogRetryToken, stateHolder.versionLabel) {
+    LaunchedEffect(selectedTab, query, catalogRetryToken, stateHolder.activeWorld) {
         delay(250)
         isDiscoverLoading = true
         errorMessage = null
@@ -368,7 +368,7 @@ fun PluginsHubScreen(
                         onToggle = {
                             val success = PluginManager.toggleContent(
                                 context = context,
-                                versionId = stateHolder.versionLabel,
+                                worldName = stateHolder.activeWorld,
                                 type = currentTab().type,
                                 plugin = item
                             )
@@ -480,9 +480,10 @@ fun PluginsHubScreen(
                                     val result = PluginManager.installRemoteItem(
                                         context = context,
                                         item = remote,
-                                        versionId = stateHolder.versionLabel,
+                                        worldName = stateHolder.activeWorld,
                                         type = currentTab().type,
                                         runtimeKey = runtimeKey,
+                                        minecraftVersion = stateHolder.config.gameVersion,
                                         onProgress = { downloadProgress = it.coerceIn(0, 100) }
                                     )
                                     isDownloading = false
@@ -531,7 +532,7 @@ fun PluginsHubScreen(
                     onClick = {
                         PluginManager.deleteContent(
                             context = context,
-                            versionId = stateHolder.versionLabel,
+                            worldName = stateHolder.activeWorld,
                             type = currentTab().type,
                             plugin = deleting
                         )
@@ -632,7 +633,7 @@ fun PluginsHubScreen(
                                 val result = PluginManager.installFromUrl(
                                     context = context,
                                     sourceUrl = urlInput,
-                                    versionId = stateHolder.versionLabel,
+                                    worldName = stateHolder.activeWorld,
                                     type = currentTab().type,
                                     fileNameHint = null,
                                     runtimeKey = runtimeKey,

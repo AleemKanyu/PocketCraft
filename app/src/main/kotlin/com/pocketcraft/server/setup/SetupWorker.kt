@@ -42,7 +42,8 @@ class SetupWorker @AssistedInject constructor(
 
             // Step 1: Extract JRE
             setProgress(data("Extracting Java runtime…", 0, 1))
-            JreExtractor.extractIfNeeded(applicationContext)
+            val runtime = JreExtractor.runtimeForVersion(serverVersion)
+            JreExtractor.extractIfNeeded(applicationContext, runtime)
             setProgressSync(data("Java runtime ready.", 10, 1))
 
             // Step 2: Download Server JAR
@@ -65,10 +66,8 @@ class SetupWorker @AssistedInject constructor(
                 }
             ).collect { jarFile -> }
 
-            // Step 3: Write eula.txt
-            setProgress(data("Accepting EULA…", 72, 3))
-            java.io.File(versionDir, "eula.txt")
-                .writeText("eula=true\n")
+            // Step 3: Skip EULA (User will accept on first launch)
+            setProgress(data("Preparing Server Environment…", 72, 3))
 
             // Step 4: Write server config
             val worldSeed = inputData.getString(WORLD_SEED_KEY).orEmpty()
@@ -81,7 +80,7 @@ class SetupWorker @AssistedInject constructor(
             setProgress(data("Installing Bedrock bridge plugins…", 90, 5))
             PluginManager.ensureBedrockBridgePlugins(
                 context = applicationContext,
-                versionId = worldName
+                worldName = worldName
             ).getOrElse { error ->
                 throw IllegalStateException(
                     "Could not install built-in Bedrock bridge plugins: ${error.message}",

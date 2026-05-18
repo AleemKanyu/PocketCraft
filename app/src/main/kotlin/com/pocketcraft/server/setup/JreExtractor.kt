@@ -11,32 +11,71 @@ import java.io.InputStream
 
 object JreExtractor {
 
-    private const val ASSET_DIR = "jre-runtime"
-    private const val VERSION_TAG = "jre_v3_extracted"
+    data class RuntimeSpec(
+        val id: String,
+        val assetDir: String,
+        val extractedDirName: String,
+        val markerName: String,
+        val displayName: String
+    )
 
-    fun getJreDir(context: Context): File {
+    private val RUNTIME_JAVA_21 = RuntimeSpec(
+        id = "java21",
+        assetDir = "jre-runtime",
+        extractedDirName = "jre-runtime",
+        markerName = "jre_v4_extracted",
+        displayName = "Java 21"
+    )
+
+    private val RUNTIME_JAVA_25 = RuntimeSpec(
+        id = "java25",
+        assetDir = "jre-runtime-25",
+        extractedDirName = "jre-runtime-25",
+        markerName = "jre25_v1_extracted",
+        displayName = "Java 25"
+    )
+
+    private val DEFAULT_RUNTIME = RUNTIME_JAVA_21
+
+    fun runtimeForVersion(versionId: String): RuntimeSpec {
+        val major = parseMajorVersion(versionId)
+        return if (major != null && major >= 26) {
+            RUNTIME_JAVA_25
+        } else {
+            DEFAULT_RUNTIME
+        }
+    }
+
+    fun findExtractedRuntime(context: Context): RuntimeSpec? {
+        return listOf(RUNTIME_JAVA_25, RUNTIME_JAVA_21)
+            .firstOrNull { isExtracted(context, it) }
+    }
+
+    fun getJreDir(context: Context, runtime: RuntimeSpec = DEFAULT_RUNTIME): File {
         val base = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             context.codeCacheDir
         } else {
             context.filesDir
         }
-        return File(base, ASSET_DIR)
+        return File(base, runtime.extractedDirName)
     }
 
-    fun getJavaBinary(context: Context): File = File(getJreDir(context), "bin/java")
+    fun getJavaBinary(context: Context, runtime: RuntimeSpec = DEFAULT_RUNTIME): File =
+        File(getJreDir(context, runtime), "bin/java")
 
-    fun isExtracted(context: Context): Boolean {
-        val jreDir = getJreDir(context)
-        val marker = File(context.filesDir, VERSION_TAG)
+    fun isExtracted(context: Context, runtime: RuntimeSpec = DEFAULT_RUNTIME): Boolean {
+        val jreDir = getJreDir(context, runtime)
+        val marker = File(context.filesDir, runtime.markerName)
         return marker.exists() && hasRequiredRuntimeFiles(jreDir)
     }
 
     fun extractIfNeeded(
         context: Context,
+        runtime: RuntimeSpec = DEFAULT_RUNTIME,
         onProgress: (Int, String) -> Unit = { _, _ -> }
     ) {
-        val jreDir = getJreDir(context)
-        val marker = File(context.filesDir, VERSION_TAG)
+        val jreDir = getJreDir(context, runtime)
+        val marker = File(context.filesDir, runtime.markerName)
         onProgress(0, "Checking Minecraft Runtime...")
 
         if (marker.exists() && hasRequiredRuntimeFiles(jreDir)) {
@@ -44,11 +83,15 @@ object JreExtractor {
             return
         }
 
-        val assetChildren = context.assets.list(ASSET_DIR).orEmpty()
+        val assetChildren = context.assets.list(runtime.assetDir).orEmpty()
         if (assetChildren.isEmpty()) {
+            if (runtime != DEFAULT_RUNTIME) {
+                extractIfNeeded(context, DEFAULT_RUNTIME, onProgress)
+                return
+            }
             throw IllegalStateException(
-                "Missing app/src/main/assets/jre-runtime/. Copy the contents of " +
-                "PojavLauncher assets/components/jre-21/ into that folder and rebuild."
+                "Missing app/src/main/assets/${runtime.assetDir}/. Copy the contents of " +
+                "PojavLauncher assets/components/jre-21/ or jre-25/ into that folder and rebuild."
             )
         }
 
@@ -59,24 +102,28 @@ object JreExtractor {
         jreDir.mkdirs()
 
         when {
-            hasExpandedRuntimeLayout(context.assets) -> {
-                val totalFiles = countAssetFiles(context.assets, ASSET_DIR).coerceAtLeast(1)
+            hasExpandedRuntimeLayout(context.assets, runtime.assetDir) -> {
+                val totalFiles = countAssetFiles(context.assets, runtime.assetDir).coerceAtLeast(1)
                 val copiedFiles = intArrayOf(0)
                 copyAssetFolder(
                     assets = context.assets,
-                    assetPath = ASSET_DIR,
+                    assetPath = runtime.assetDir,
                     destPath = jreDir.absolutePath,
                     totalFiles = totalFiles,
                     copiedFiles = copiedFiles,
                     onProgress = onProgress
                 )
             }
-            hasComponentRuntimeLayout(context.assets) -> {
-                extractComponentRuntime(context, jreDir, onProgress)
+            hasComponentRuntimeLayout(context.assets, runtime.assetDir) -> {
+                extractComponentRuntime(context, runtime.assetDir, jreDir, onProgress)
             }
             else -> {
+                if (runtime != DEFAULT_RUNTIME) {
+                    extractIfNeeded(context, DEFAULT_RUNTIME, onProgress)
+                    return
+                }
                 throw IllegalStateException(
-                    "Unsupported assets/jre-runtime layout. Expected either extracted bin/lib " +
+                    "Unsupported assets/${runtime.assetDir} layout. Expected either extracted bin/lib " +
                         "contents or component archives like universal.tar.xz and bin-arm64.tar.xz."
                 )
             }
@@ -108,13 +155,13 @@ object JreExtractor {
         return libjli.exists() && libjvm.exists()
     }
 
-    private fun hasExpandedRuntimeLayout(assets: AssetManager): Boolean {
-        val entries = assets.list(ASSET_DIR).orEmpty().toSet()
+    private fun hasExpandedRuntimeLayout(assets: AssetManager, assetDir: String): Boolean {
+        val entries = assets.list(assetDir).orEmpty().toSet()
         return "bin" in entries && "lib" in entries
     }
 
-    private fun hasComponentRuntimeLayout(assets: AssetManager): Boolean {
-        val entries = assets.list(ASSET_DIR).orEmpty().toSet()
+    private fun hasComponentRuntimeLayout(assets: AssetManager, assetDir: String): Boolean {
+        val entries = assets.list(assetDir).orEmpty().toSet()
         if ("universal.tar.xz" !in entries) return false
         val archName = abiArchiveName()
         return "bin-$archName.tar.xz" in entries
@@ -122,12 +169,13 @@ object JreExtractor {
 
     private fun extractComponentRuntime(
         context: Context,
+        assetDir: String,
         jreDir: File,
         onProgress: (Int, String) -> Unit
     ) {
         extractTarXzAsset(
             assets = context.assets,
-            assetPath = "$ASSET_DIR/universal.tar.xz",
+            assetPath = "$assetDir/universal.tar.xz",
             destDir = jreDir,
             progressStart = 5,
             progressEnd = 40,
@@ -136,13 +184,18 @@ object JreExtractor {
         )
         extractTarXzAsset(
             assets = context.assets,
-            assetPath = "$ASSET_DIR/bin-${abiArchiveName()}.tar.xz",
+            assetPath = "$assetDir/bin-${abiArchiveName()}.tar.xz",
             destDir = jreDir,
             progressStart = 40,
             progressEnd = 75,
             statusLabel = "Extracting Runtime Binaries...",
             onProgress = onProgress
         )
+    }
+
+    private fun parseMajorVersion(versionId: String): Int? {
+        val match = Regex("\\d+").find(versionId) ?: return null
+        return match.value.toIntOrNull()
     }
 
     private fun abiArchiveName(): String {

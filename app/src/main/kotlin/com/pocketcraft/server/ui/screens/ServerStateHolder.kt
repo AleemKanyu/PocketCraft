@@ -19,11 +19,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.derivedStateOf
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import com.pocketcraft.server.analytics.FirebaseAnalyticsManager
 import com.pocketcraft.server.WorldImporter
 import com.pocketcraft.server.data.model.PlayerInfo
 import com.pocketcraft.server.data.model.ServerConfig
 import com.pocketcraft.server.data.model.ServerType
+import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.data.repository.ServerConfigRepository
 import com.pocketcraft.server.notification.NotificationHelper
@@ -91,20 +96,21 @@ data class WorldEntry(
 class ServerStateHolder(
     private val context: Context,
     val versionId: String,
-    private val initialServerType: ServerType = ServerType.PAPER
+    private val initialServerType: ServerType = ServerType.PAPER,
+    val activeWorld: String = "world"
 ) {
     companion object {
-        const val DEFAULT_SERVER_DESCRIPTION = "Hosted on Pocketcraft !"
+        const val DEFAULT_SERVER_DESCRIPTION = "hosted on Pocketcraft"
         private const val POCKETCRAFT_JOIN_MESSAGE_TEXT =
-            "Hosted on PocketCraft! Enjoy and join our Discord using the link already defined in the code."
+            "hosted on Pocketcraft"
         private const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/NGPzXFYp"
     }
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val serverDir = ServerFileManager.getServerDir(appContext, versionId)
+    private val serverDir = ServerFileManager.getServerDir(appContext, activeWorld)
     private val serverPhotosDir = File(serverDir, "server_photos").also { it.mkdirs() }
     private val backupsDir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "PocketCraft Server Backups").also { it.mkdirs() }
-    private val logsQueue = ArrayDeque<String>(240)
+    private val logsQueue = ArrayDeque<String>(2000)
     private var receiverRegistered = false
     private var startedAtMillis: Long? = null
     private var startupStartedAtMillis: Long? = null
@@ -202,12 +208,14 @@ class ServerStateHolder(
         private set
     var serverJoinable by mutableStateOf(false)
         private set
+    val isServerFullyReady: Boolean get() = serverJoinable
     var movedTooQuicklyCount by mutableStateOf(0)
         private set
-    var showFastMovementBanner by mutableStateOf(false)
-        private set
     private var lastMovedTooQuicklyMillis = 0L
-    private var fastMovementBannerJob: Job? = null
+    var isImportingWorld by mutableStateOf(false)
+        private set
+    var importProgressPercent by mutableStateOf(0f)
+        private set
 
     val logs = mutableStateListOf<String>()
     val onlinePlayers = mutableStateListOf<PlayerInfo>()
@@ -218,6 +226,21 @@ class ServerStateHolder(
     val bannedPlayers = mutableStateListOf<PlayerInfo>()
     val backups = mutableStateListOf<BackupEntry>()
     val worlds = mutableStateListOf<WorldEntry>()
+
+    private fun attemptTransitionToOnline() {
+        if (!isStarting) return
+        
+        val isRelayReady = !publicAddress.isNullOrBlank() || tunnelError != null || !tunnelConnecting
+        if (areSpawnChunksLoaded && isRelayReady) {
+            markServerReady()
+            markJoinable()
+            
+            bedrockBridgeEnabled = PluginManager.isBedrockBridgeEnabled(appContext, versionId)
+            
+            // Force a full refresh to pick up migrated player stats and world metadata
+            refreshAll()
+        }
+    }
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -283,6 +306,9 @@ class ServerStateHolder(
                                 appendLog("[PocketCraft] NOTE: India relay is offline. Falling back to Singapore for connection.")
                             }
                         }
+                        if (isStarting) {
+                            attemptTransitionToOnline()
+                        }
                     }
                     ServerHostService.EVENT_TUNNEL_FAILED -> {
                         tunnelConnecting = false
@@ -292,6 +318,9 @@ class ServerStateHolder(
                         }
                         tunnelError = line.ifBlank { "Internet relay unavailable." }
                         appendLog("[WARN] ${tunnelError.orEmpty()}")
+                        if (isStarting) {
+                            attemptTransitionToOnline()
+                        }
                     }
                     ServerHostService.EVENT_SERVER_CRASHED -> {
                         appendLog("[ERROR] Server process crashed (${line.ifBlank { "unknown" }}).")
@@ -412,8 +441,10 @@ class ServerStateHolder(
     val status: ServerStatus
         get() = when {
             isRestarting -> ServerStatus.RESTARTING
-            isStarting && (!areSpawnChunksLoaded || onlinePlayers.isEmpty()) -> ServerStatus.STARTING
-            isRunning || onlinePlayers.isNotEmpty() -> ServerStatus.ONLINE
+            // Derive server status from runtime lifecycle only.
+            // Player presence and address availability are independent UI concerns.
+            isStarting -> ServerStatus.STARTING
+            isRunning -> ServerStatus.ONLINE
             else -> ServerStatus.OFFLINE
         }
 
@@ -467,11 +498,46 @@ class ServerStateHolder(
         }
     }
 
+    var showEulaDialog by mutableStateOf(false)
+        private set
+
+    fun dismissEulaDialog() {
+        showEulaDialog = false
+    }
+
+    fun acceptEula() {
+        showEulaDialog = false
+        scope.launch(Dispatchers.IO) {
+            // Persist acceptance globally so we never ask again
+            AppPreferences(appContext).eulaAccepted = true
+            ServerFileManager.acceptEula(appContext, activeWorld)
+            withContext(Dispatchers.Main) {
+                appendLog("[PocketCraft] EULA accepted. Press Start Server to continue.")
+            }
+        }
+    }
+
     fun startServer(isRestart: Boolean = false) {
         if (versionId.isBlank()) {
             appendLog("[ERROR] No version selected. Please select a Minecraft version first.")
             return
         }
+        // Check persisted preference first — only ask once ever
+        val prefs = AppPreferences(appContext)
+        if (!prefs.eulaAccepted) {
+            // Also check if the file is already present (e.g. from a manual import)
+            val eulaFile = File(serverDir, "eula.txt")
+            val acceptedByFile = eulaFile.exists() && eulaFile.readText().contains("eula=true")
+            if (acceptedByFile) {
+                // Promote the file acceptance to the preference so we don't ask again
+                prefs.eulaAccepted = true
+            } else {
+                showEulaDialog = true
+                return
+            }
+        }
+        // Ensure eula.txt is present in the active world dir (for new worlds or switched worlds)
+        ServerFileManager.prepareEula(appContext, activeWorld)
         if (isRunning || (!isRestart && isStarting) || isStopping) return
         lastStartRequestedMillis = System.currentTimeMillis()
         stopWatchdogJob?.cancel()
@@ -532,7 +598,7 @@ class ServerStateHolder(
 
             markActiveWorldSetupCompleted()
             FirebaseAnalyticsManager.logServerStarted(versionId, config.maxPlayers)
-            ServerHostService.start(appContext, versionId)
+            ServerHostService.start(appContext, versionId, activeWorld)
             
             // Re-sync UI state once service starts
             delay(1000)
@@ -628,7 +694,7 @@ class ServerStateHolder(
             }
         }
 
-        if (logsQueue.size >= 240) {
+        if (logsQueue.size >= 2000) {
             logsQueue.removeFirst()
             if (logs.isNotEmpty()) {
                 logs.removeAt(0)
@@ -640,7 +706,7 @@ class ServerStateHolder(
         if (isLegacyRelayAuthError(cleanLine)) {
             val hint = "[PocketCraft] Legacy relay plugin auth failed (401). Disable/remove old Minekube/relay plugin from the server plugins folder."
             if (logsQueue.lastOrNull() != hint) {
-                if (logsQueue.size >= 240) {
+                if (logsQueue.size >= 2000) {
                     logsQueue.removeFirst()
                     if (logs.isNotEmpty()) {
                         logs.removeAt(0)
@@ -648,6 +714,17 @@ class ServerStateHolder(
                 }
                 logsQueue.addLast(hint)
                 logs.add(hint)
+            }
+        }
+
+        ConsoleParser.parsePing(cleanLine).takeIf { it.isNotEmpty() }?.let { pings ->
+            onlinePlayers.replaceAll { player ->
+                val newPing = pings[player.name] ?: pings[player.name.lowercase()]
+                if (newPing != null) {
+                    player.copy(pingMs = newPing)
+                } else {
+                    player
+                }
             }
         }
 
@@ -694,27 +771,14 @@ class ServerStateHolder(
             }
         }
 
-        if (isStarting && (ConsoleParser.isDone(cleanLine) ||
-            cleanLine.contains("RCON running on", ignoreCase = true)
-        )) {
-            markServerReady()
-            if (ConsoleParser.isDone(cleanLine)) {
-                markJoinable()
-            }
-
-            bedrockBridgeEnabled = PluginManager.isBedrockBridgeEnabled(appContext, versionId)
-
-            // Force a full refresh to pick up migrated player stats and world metadata
-            refreshAll()
-        }
-
-        if (isStarting && (cleanLine.contains("joined the game", ignoreCase = true) || cleanLine.contains("UUID of player", ignoreCase = true) || (cleanLine.contains("Done (", ignoreCase = true) && areSpawnChunksLoaded))) {
-            markServerReady()
-        }
-
         if (cleanLine.contains("Preparing spawn area: 100%", ignoreCase = true) || 
-            cleanLine.contains("Preparing start region for level", ignoreCase = true) && cleanLine.contains("100%", ignoreCase = true)) {
+            cleanLine.contains("Preparing start region for level", ignoreCase = true) && cleanLine.contains("100%", ignoreCase = true) ||
+            ConsoleParser.isDone(cleanLine) ||
+            cleanLine.contains("Done (", ignoreCase = true)) {
             areSpawnChunksLoaded = true
+            if (isStarting) {
+                attemptTransitionToOnline()
+            }
         }
 
         if (cleanLine.contains("[Chunky] Task finished", ignoreCase = true)) {
@@ -730,13 +794,6 @@ class ServerStateHolder(
 
         if (cleanLine.contains("moved too quickly", ignoreCase = true)) {
             val now = System.currentTimeMillis()
-            
-            showFastMovementBanner = true
-            fastMovementBannerJob?.cancel()
-            fastMovementBannerJob = scope.launch {
-                delay(10000)
-                showFastMovementBanner = false
-            }
 
             if (now - lastMovedTooQuicklyMillis > 10000) {
                 movedTooQuicklyCount = 1
@@ -746,9 +803,8 @@ class ServerStateHolder(
             lastMovedTooQuicklyMillis = now
             
             if (movedTooQuicklyCount >= 5) {
-                appendLog("[PocketCraft] Detected severe movement lag (5+ events). Restarting for optimization...")
+                appendLog("[PocketCraft] Detected severe movement lag (5+ events). Please consider reducing render distance.")
                 movedTooQuicklyCount = 0
-                restartServer()
             }
         }
     }
@@ -978,9 +1034,8 @@ class ServerStateHolder(
             onlinePlayers[existingIndex] = mergedPlayer
         } else {
             onlinePlayers.add(mergedPlayer)
-            if (!isRunning) {
-                markServerReady()
-            }
+            // Removed markServerReady() call to prevent premature transitions from offline to online status
+            // Wait for proper startup progression handled by attemptTransitionToOnline
         }
     }
 
@@ -1001,6 +1056,7 @@ class ServerStateHolder(
                 tps = 0f
                 stopWatchdogJob?.cancel()
                 stopWatchdogJob = null
+                resetJoinable()
             }
             return
         }
@@ -1014,9 +1070,11 @@ class ServerStateHolder(
         if (state.isRunning) {
             startPeriodicWorldSave()
             startPeriodicLocationPolling()
+            markJoinable()
         } else if (!isStarting) {
             stopPeriodicWorldSave()
             stopPeriodicLocationPolling()
+            resetJoinable()
         }
         if (isStarting && startupStartedAtMillis == null) {
             startupStartedAtMillis = System.currentTimeMillis()
@@ -1041,28 +1099,47 @@ class ServerStateHolder(
         }
     }
 
-    private fun readPersistedRuntimeState(): PersistedRuntimeState {
-        if (!isServiceActive()) {
-            return PersistedRuntimeState()
-        }
-
-        return when (ServerHostService.getPersistedRuntimeState(appContext, versionId)) {
-            ServerHostService.RUNTIME_STATE_RUNNING -> PersistedRuntimeState(
-                isRunning = true
-            )
-            ServerHostService.RUNTIME_STATE_STARTING -> PersistedRuntimeState(
-                isStarting = true
-            )
-            else -> PersistedRuntimeState()
-        }
+    private fun isServerPortOpen(port: Int): Boolean {
+        return runCatching {
+            java.net.Socket().use { socket ->
+                socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 1000)
+                true
+            }
+        }.getOrDefault(false)
     }
 
-    fun isServiceActive(): Boolean {
-        val activityManager = appContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-            ?: return false
-        return activityManager.runningAppProcesses?.any {
-            it.processName == "${appContext.packageName}:server"
-        } == true
+    private fun isServiceActive(): Boolean {
+        return isServerProcessAlive()
+    }
+
+    private fun readPersistedRuntimeState(): PersistedRuntimeState {
+        val rawState = ServerHostService.getPersistedRuntimeState(appContext, versionId)
+        
+        if (rawState == ServerHostService.RUNTIME_STATE_RUNNING) {
+            // Verify if the server is actually running by checking its port
+            if (isServerPortOpen(config.port)) {
+                return PersistedRuntimeState(isRunning = true)
+            }
+            // If the port is closed, double check the process just in case
+            if (isServiceActive()) {
+                return PersistedRuntimeState(isRunning = true)
+            }
+            // If both fail, it's a dead state
+            ServerHostService.persistRuntimeState(appContext, versionId, config.worldName, ServerHostService.RUNTIME_STATE_OFFLINE)
+            return PersistedRuntimeState()
+        }
+        
+        if (rawState == ServerHostService.RUNTIME_STATE_STARTING) {
+            // If starting, just check if the service process is alive
+            if (isServiceActive()) {
+                return PersistedRuntimeState(isStarting = true)
+            }
+            // Dead state
+            ServerHostService.persistRuntimeState(appContext, versionId, config.worldName, ServerHostService.RUNTIME_STATE_OFFLINE)
+            return PersistedRuntimeState()
+        }
+        
+        return PersistedRuntimeState()
     }
 
     fun kickPlayer(name: String) {
@@ -1651,10 +1728,13 @@ class ServerStateHolder(
                         zip.putNextEntry(ZipEntry(entry.relativePath))
                         zip.closeEntry()
                     } else {
-                        addFileToZip(entry.file, entry.relativePath, zip)
-                        processedFiles++
+                        // Exclude the profile cache directory to avoid doubling the backup size,
+                        // as we already included the active plugins/mods/resourcepacks.
+                        if (!entry.relativePath.startsWith("world_plugin_profiles/")) {
+                            addFileToZip(entry.file, entry.relativePath, zip)
+                            processedFiles++
+                        }
                     }
-                    kotlinx.coroutines.delay(10)
                 }
 
                 withContext(Dispatchers.Main) {
@@ -1699,7 +1779,7 @@ class ServerStateHolder(
     }
 
     suspend fun importBackup(uri: Uri): String = withContext(Dispatchers.IO) {
-        if (isRunning || isStarting || isBackingUp || isRestoringBackup || isDownloadingBackup) {
+        if (isRunning || isStarting || isStopping || isBackingUp || isRestoringBackup || isDownloadingBackup) {
             return@withContext "Stop active backup or server actions before importing a backup."
         }
 
@@ -1727,6 +1807,8 @@ class ServerStateHolder(
                 }
 
                 clearServerDirectoryForRestore()
+                // Give the OS a moment to fully release file handles after deletion
+                delay(300)
                 val totalEntries = allEntries.size
                 var processedEntries = 0
 
@@ -1781,7 +1863,7 @@ class ServerStateHolder(
     }
 
     suspend fun restoreBackup(entry: BackupEntry): String = withContext(Dispatchers.IO) {
-        if (isRunning || isStarting) {
+        if (isRunning || isStarting || isStopping) {
             return@withContext "Stop the server before restoring a backup."
         }
 
@@ -1800,6 +1882,8 @@ class ServerStateHolder(
                     return@withContext "Backup is empty."
                 }
                 clearServerDirectoryForRestore()
+                // Give the OS a moment to fully release file handles after deletion
+                delay(300)
                 val totalEntries = allEntries.size
                 var processedEntries = 0
 
@@ -2056,13 +2140,23 @@ class ServerStateHolder(
         scope.cancel()
     }
 
+    private fun isServerProcessAlive(): Boolean {
+        val pid = ServerHostService.getServerPid(appContext)
+        if (pid <= 0) return false
+        return java.io.File("/proc/$pid").exists()
+    }
+
     private fun startStopWatchdog() {
         stopWatchdogJob?.cancel()
         stopWatchdogJob = scope.launch {
-            repeat(30) {
+            repeat(45) { // Wait up to 45 seconds for process to exit
                 delay(1000)
-                val persisted = withContext(Dispatchers.IO) { readPersistedRuntimeState() }
-                if (!persisted.isRunning && !persisted.isStarting) {
+                // In addition to runtime state, strictly verify the :server process has actually died.
+                // If the process is dead, the JVM has successfully finished System.exit(0)
+                if (!isServerProcessAlive()) {
+                    // Update state to offline because the process might have died before updating SharedPreferences
+                    ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
+                    
                     val shouldRestart = pendingRestart
                     pendingRestart = false
                     stopStartupProgressTracking(reset = !shouldRestart)
@@ -2080,10 +2174,29 @@ class ServerStateHolder(
                     appendLog("[INFO] Server stopped.")
                     if (shouldRestart) {
                         appendLog("[PocketCraft] Starting server again...")
-                        startServer()
+                        startServer(isRestart = true)
                     }
                     cancel()
                 }
+            }
+            // If it times out after 45 seconds, assume it failed to stop and reset UI
+            if (isStopping) {
+                pendingRestart = false
+                isRestartingCycle = false
+                stopStartupProgressTracking(reset = true)
+                isStopping = false
+                isStarting = false
+                isRunning = false
+                stopPeriodicWorldSave()
+                stopPeriodicLocationPolling()
+                tps = 0f
+                publicAddress = null
+                tunnelConnecting = false
+                tunnelError = null
+                startedAtMillis = null
+                onlinePlayers.clear()
+                ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
+                appendLog("[ERROR] Server stop timed out. Process may be hung.")
             }
         }
     }
@@ -2185,23 +2298,28 @@ class ServerStateHolder(
     private fun readSnapshot(): DashboardSnapshot {
         val loadedConfig = loadConfig()
         val properties = ServerPropertiesHelper.readProperties(serverDir)
-        val activeWorldName = sanitizeWorldName(loadedConfig.worldName.ifBlank { "world" })
-        val worldDetails = readWorldServerDetails(properties, activeWorldName)
+        // activeWorldName in properties is the level-name, but we must use activeWorld (slot name) for file lookups
+        val levelName = sanitizeWorldName(loadedConfig.worldName.ifBlank { "world" })
+        val worldDetails = readWorldServerDetails(properties, levelName)
+        
+        val knownPlayers = readKnownPlayers(activeWorld)
+        android.util.Log.i("ServerStateHolder", "readSnapshot: activeWorld=$activeWorld, knownPlayers size=${knownPlayers.size}")
+        
         return DashboardSnapshot(
             config = loadedConfig,
             localIp = resolveLocalIp(),
-            serverName = worldDetails.first.ifBlank { activeWorldName },
+            serverName = worldDetails.first.ifBlank { levelName },
             serverPhotoUrl = worldDetails.second,
             serverDescription = worldDetails.third,
-            worldSizeMb = bytesToDisplayMb(worldDirectoryCandidates(loadedConfig.worldName).sumOf(::directorySize)),
-            worlds = listWorldEntries(loadedConfig.worldName),
-            knownPlayers = readKnownPlayers(loadedConfig.worldName),
+            worldSizeMb = bytesToDisplayMb(worldDirectoryCandidates(activeWorld).sumOf(::directorySize)),
+            worlds = listWorldEntries(activeWorld),
+            knownPlayers = knownPlayers,
             whitelist = readNamedList("whitelist.json"),
             ops = readNamedList("ops.json"),
             banned = readNamedList("banned-players.json"),
-            backups = listBackupsForWorld(activeWorldName),
+            backups = listBackupsForWorld(activeWorld),
             relayHost = com.pocketcraft.server.data.preferences.AppPreferences(appContext).relayHost,
-            activeWorldNeedsSetup = !readWorldsWithCompletedSetup(properties).contains(activeWorldName),
+            activeWorldNeedsSetup = !readWorldsWithCompletedSetup(properties).contains(levelName),
             bedrockBridgeEnabled = PluginManager.isBedrockBridgeEnabled(appContext, versionId)
         )
     }
@@ -2527,18 +2645,32 @@ class ServerStateHolder(
 
     private fun readKnownPlayers(worldName: String): List<PlayerInfo> {
         val knownUuids = linkedSetOf<String>()
+        val candidates = worldDirectoryCandidates(worldName)
+        android.util.Log.i("ServerStateHolder", "readKnownPlayers: worldName=$worldName, candidates size=${candidates.size}")
 
-        worldDirectoryCandidates(worldName).forEach { worldDir ->
-            File(worldDir, "stats").listFiles()
+        candidates.forEach { worldDir ->
+            android.util.Log.i("ServerStateHolder", "readKnownPlayers: Checking candidate dir=${worldDir.absolutePath}")
+            // Try stats (case-insensitive)
+            val statsDir = worldDir.listFiles()?.find { it.isDirectory && it.name.equals("stats", ignoreCase = true) }
+            val statsCount = statsDir?.listFiles()
                 ?.filter { it.isFile && it.extension.equals("json", ignoreCase = true) }
                 ?.mapTo(knownUuids) { it.nameWithoutExtension }
-            File(worldDir, "playerdata").listFiles()
+                ?.size ?: 0
+            android.util.Log.i("ServerStateHolder", "readKnownPlayers: statsDir=${statsDir?.absolutePath}, found $statsCount jsons")
+
+            // Try playerdata (case-insensitive)
+            val pdDir = worldDir.listFiles()?.find { it.isDirectory && it.name.equals("playerdata", ignoreCase = true) }
+            val pdCount = pdDir?.listFiles()
                 ?.filter { it.isFile && it.extension.equals("dat", ignoreCase = true) }
                 ?.mapTo(knownUuids) { it.nameWithoutExtension }
+                ?.size ?: 0
+            android.util.Log.i("ServerStateHolder", "readKnownPlayers: pdDir=${pdDir?.absolutePath}, found $pdCount dats")
         }
 
         // Use usercache.json ONLY for name resolution (includes Bedrock players via Geyser)
         val cachedData = loadUserCache()
+        android.util.Log.i("ServerStateHolder", "readKnownPlayers: total unique UUIDs=${knownUuids.size}, cachedData size=${cachedData.size}")
+
         
         val opLookup = readNamedList("ops.json")
         val opUuids = opLookup.mapNotNull { it.uuid.takeIf(String::isNotBlank) }.toSet()
@@ -2702,12 +2834,56 @@ class ServerStateHolder(
     }
 
     private fun worldDirectoryCandidates(worldName: String): List<File> {
-        val normalizedName = worldName.ifBlank { "world" }
-        return listOf(
-            File(serverDir, normalizedName),
-            File(serverDir, "${normalizedName}_nether"),
-            File(serverDir, "${normalizedName}_the_end")
-        ).distinctBy { it.absolutePath }
+        val wDir = ServerFileManager.getServerDirNoCreate(appContext, worldName)
+        if (!wDir.exists()) return emptyList()
+
+        val props = ServerPropertiesHelper.readProperties(wDir)
+        val explicit = props.getProperty("level-name")?.trim().orEmpty().ifBlank { "world" }
+        val sanitized = sanitizeWorldName(explicit)
+
+        // Non-world directories inside the server dir that should not count toward world size
+        val ignoredDirs = setOf(
+            "logs", "plugins", "cache", "config", "libraries",
+            "bundler", "versions", "crash-reports"
+        )
+
+        val candidates = mutableListOf<File>()
+
+        // Always include the named world subfolders (overworld + dimensions)
+        candidates.add(File(wDir, sanitized))
+        candidates.add(File(wDir, "${sanitized}_nether"))
+        candidates.add(File(wDir, "${sanitized}_the_end"))
+
+        // If world data lives directly at serverDir root (flattened layout)
+        if (File(wDir, "level.dat").exists() || File(wDir, "region").isDirectory) {
+            val rootWorldFiles = setOf(
+                "advancements", "data", "datapacks", "DIM-1", "DIM1", "entities",
+                "level.dat", "level.dat_old", "playerdata", "poi", "region",
+                "session.lock", "stats", "uid.dat"
+            )
+            rootWorldFiles.forEach { candidates.add(File(wDir, it)) }
+        }
+
+        // Include all top-level directories that look like world/dimension data
+        // (e.g. world, world_nether, world_the_end) even if their name differs from sanitized
+        wDir.listFiles()?.forEach { f ->
+            if (f.isDirectory && f.name !in ignoredDirs) {
+                if (directoryLooksLikeWorldDimension(f)) {
+                    candidates.add(f)
+                }
+            }
+        }
+        
+        // Final fallback: Deep search for ANY directory containing a level.dat, playerdata, or stats
+        wDir.walkTopDown().maxDepth(3).filter { it.isDirectory }.forEach { dir ->
+            if (File(dir, "level.dat").exists() || 
+                File(dir, "playerdata").isDirectory || 
+                File(dir, "stats").isDirectory) {
+                candidates.add(dir)
+            }
+        }
+
+        return candidates.filter { it.exists() }.distinctBy { it.absolutePath }
     }
 
     private fun listWorldEntries(activeWorld: String): List<WorldEntry> {
@@ -2748,11 +2924,12 @@ class ServerStateHolder(
     }
 
     private fun directoryLooksLikeWorldDimension(directory: File): Boolean {
-        if (File(directory, "level.dat").exists()) return true
-        if (File(directory, "region").isDirectory) return true
-        if (File(directory, "stats").isDirectory) return true
-        if (File(directory, "playerdata").isDirectory) return true
-        return false
+        if (!directory.isDirectory) return false
+        val children = directory.listFiles() ?: return false
+        return children.any { it.name.equals("level.dat", ignoreCase = true) } ||
+               children.any { it.name.equals("region", ignoreCase = true) && it.isDirectory } ||
+               children.any { it.name.equals("stats", ignoreCase = true) && it.isDirectory } ||
+               children.any { it.name.equals("playerdata", ignoreCase = true) && it.isDirectory }
     }
 
     private fun extractWorldBaseName(directoryName: String): String? {
@@ -2809,6 +2986,33 @@ class ServerStateHolder(
         props[worldRegistryKey] = merged.joinToString(",")
         props["server-port"] = singleServerPort.toString()
         ServerPropertiesHelper.saveProperties(serverDir, props)
+    }
+
+    fun importWorldDimension(uri: Uri, targetWorld: String) {
+        if (isImportingWorld || isRunning || isStarting) return
+        isImportingWorld = true
+        importProgressPercent = 0f
+        
+        scope.launch {
+            try {
+                WorldImporter.importWorld(
+                    context = context,
+                    zipUri = uri,
+                    serverType = config.serverType,
+                    serverVersionId = versionId,
+                    folderName = targetWorld,
+                    onProgress = { progress ->
+                        importProgressPercent = (progress * 100).coerceIn(0f, 100f)
+                    }
+                )
+                refreshAll()
+            } catch (e: Exception) {
+                android.util.Log.e("ServerStateHolder", "Failed to import dimension", e)
+            } finally {
+                isImportingWorld = false
+                importProgressPercent = 0f
+            }
+        }
     }
 
     fun markActiveWorldSetupCompleted() {

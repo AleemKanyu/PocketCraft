@@ -61,6 +61,7 @@ fun ServerTypeVersionBottomSheet(
     var modpackError by remember { mutableStateOf<String?>(null) }
     val isOffline by viewModel.isOffline.collectAsState()
     var selectedModpackId by remember { mutableStateOf<String?>(null) }
+    var versionToDelete by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(currentServerType, currentGameVersion, currentCustomJarPath) {
         viewModel.initializeSelection(
@@ -365,7 +366,7 @@ fun ServerTypeVersionBottomSheet(
                                             }
                                         }
                                         if (isDownloaded) {
-                                            IconButton(onClick = { viewModel.deleteDownloadedVersion(version) }) {
+                                            IconButton(onClick = { versionToDelete = version }) {
                                                 Icon(
                                                     imageVector = Icons.Default.Delete,
                                                     contentDescription = "Delete downloaded version",
@@ -450,8 +451,8 @@ fun ServerTypeVersionBottomSheet(
                                         }
                                     }
                                     if (isDownloaded) {
-                                        IconButton(onClick = { viewModel.deleteDownloadedVersion(version) }) {
-                                            Icon(
+                                        IconButton(onClick = { versionToDelete = version }) {
+                                                Icon(
                                                 imageVector = Icons.Default.Delete,
                                                 contentDescription = "Delete downloaded version",
                                                 tint = MaterialTheme.colorScheme.error
@@ -668,5 +669,28 @@ fun ServerTypeVersionBottomSheet(
                 }
             }
         }
+    }
+
+    if (versionToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { versionToDelete = null },
+            title = { Text("Delete Version", fontWeight = FontWeight.Bold) },
+            text = { Text("Are you sure you want to delete the downloaded files for $versionToDelete? This will free up storage, but you will need to re-download it to use it.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    versionToDelete?.let { viewModel.deleteDownloadedVersion(it) }
+                    versionToDelete = null
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { versionToDelete = null }) {
+                    Text("Cancel")
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(24.dp)
+        )
     }
 }

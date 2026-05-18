@@ -1,0 +1,22 @@
+TRADEMARK & BRAND ATTRIBUTION
+
+This application, ARM-MC, utilizes names, logos, and links to external services for identification and navigational purposes only.
+
+Minecraft & Microsoft
+NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT. Minecraft is a trademark of Mojang Synergies AB.
+
+Server Software Brands
+The logos and names for the following services are trademarks of their respective owners:
+
+PaperMC: (https://papermc.io)
+
+FabricMC: (https://fabricmc.net)
+
+NeoForged: (https://neoforged.net)
+
+Non-Affiliation & External Links
+ARM-MC is not affiliated with, endorsed by, or sponsored by PaperMC, FabricMC, or NeoForged.
+
+This app provides direct links to the official websites of these providers to allow users to download server software independently. ARM-MC does not host, re-distribute, or provide these server JAR files. All software downloaded via these links is subject to the terms and licenses provided by the respective developers.
+
+All other product names, logos, and brands are property of their respective owners.

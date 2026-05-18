@@ -588,7 +588,8 @@ object ModpackManager {
         onStatus: (String) -> Unit = {},
         onProgress: (Int) -> Unit = {}
     ) = withContext(Dispatchers.IO) {
-        JreExtractor.extractIfNeeded(context)
+        val runtime = JreExtractor.runtimeForVersion(loader.minecraftVersion)
+        JreExtractor.extractIfNeeded(context, runtime)
         // JreExtractor.ensureRuntimePermissions(context)
         onProgress(62)
 
@@ -634,6 +635,7 @@ object ModpackManager {
             serverDir = serverDir,
             installerJar = installerJar,
             mainClass = "net.minecraftforge.installer.SimpleInstaller",
+            runtime = runtime,
             onStatus = onStatus,
             onProgress = onProgress
         )
@@ -659,7 +661,8 @@ object ModpackManager {
         onStatus: (String) -> Unit = {},
         onProgress: (Int) -> Unit = {}
     ) = withContext(Dispatchers.IO) {
-        JreExtractor.extractIfNeeded(context)
+        val runtime = JreExtractor.runtimeForVersion(loader.minecraftVersion)
+        JreExtractor.extractIfNeeded(context, runtime)
         onProgress(62)
 
         val version = loader.loaderVersion.trim()
@@ -693,6 +696,7 @@ object ModpackManager {
             serverDir = serverDir,
             installerJar = installerJar,
             mainClass = "net.neoforged.installer.SimpleInstaller",
+            runtime = runtime,
             onStatus = onStatus,
             onProgress = onProgress
         )
@@ -762,13 +766,14 @@ object ModpackManager {
         serverDir: File,
         installerJar: File,
         mainClass: String,
+        runtime: JreExtractor.RuntimeSpec,
         onStatus: (String) -> Unit = {},
         onProgress: (Int) -> Unit = {}
     ) {
-        val jreDir = JreExtractor.getJreDir(context).absolutePath
-        val javaBin = JreExtractor.getJavaBinary(context)
+        val jreDir = JreExtractor.getJreDir(context, runtime).absolutePath
+        val javaBin = JreExtractor.getJavaBinary(context, runtime)
         if (!javaBin.exists()) {
-            throw Exception("Java runtime is not available for Forge installation")
+            throw Exception("${runtime.displayName} runtime is not available for Forge installation")
         }
         ensureExecutable(javaBin, "java")
 
@@ -1021,7 +1026,8 @@ object ModpackManager {
             "libdl.so.2" to "$libs/libdl.so",
             "libm.so.6" to "$libs/libm.so",
             "librt.so.1" to "$libs/libc.so",
-            "libpthread.so.0" to "$libs/libc.so"
+            "libpthread.so.0" to "$libs/libc.so",
+            "libutil.so.1" to "$libs/libc.so"
         ).forEach { (shim, target) ->
             val shimFile = File(shimDir, shim)
             if (!shimFile.exists()) {

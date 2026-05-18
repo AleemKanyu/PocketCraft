@@ -114,6 +114,8 @@ fun PlayerDetailScreen(
     var health by remember { mutableStateOf<Float?>(null) }
     var hunger by remember { mutableStateOf<Int?>(null) }
     var worldSpawnPos by remember { mutableStateOf<PlayerLocation?>(null) }
+    var resolvedOfflineUuid by remember { mutableStateOf(player.uuid) }
+    val offlineUuid = if (resolvedOfflineUuid.isNotBlank()) resolvedOfflineUuid else player.uuid
 
     var delXp by remember { mutableStateOf(false) }
     var delEnder by remember { mutableStateOf(false) }
@@ -131,9 +133,9 @@ fun PlayerDetailScreen(
             delay(700)
             val statusSnapshot = withContext(Dispatchers.IO) {
                 Triple(
-                    PlayerDataManager.isWhitelisted(context, stateHolder.versionLabel, player.name),
-                    PlayerDataManager.isBanned(context, stateHolder.versionLabel, player.name),
-                    PlayerDataManager.isOp(context, stateHolder.versionLabel, player.name)
+                    PlayerDataManager.isWhitelisted(context, stateHolder.activeWorld, player.name),
+                    PlayerDataManager.isBanned(context, stateHolder.activeWorld, player.name),
+                    PlayerDataManager.isOp(context, stateHolder.activeWorld, player.name)
                 )
             }
             whitelisted = statusSnapshot.first
@@ -146,9 +148,9 @@ fun PlayerDetailScreen(
     LaunchedEffect(player.name, stateHolder.versionLabel) {
         val statusSnapshot = withContext(Dispatchers.IO) {
             Triple(
-                PlayerDataManager.isWhitelisted(context, stateHolder.versionLabel, player.name),
-                PlayerDataManager.isBanned(context, stateHolder.versionLabel, player.name),
-                PlayerDataManager.isOp(context, stateHolder.versionLabel, player.name)
+                PlayerDataManager.isWhitelisted(context, stateHolder.activeWorld, player.name),
+                PlayerDataManager.isBanned(context, stateHolder.activeWorld, player.name),
+                PlayerDataManager.isOp(context, stateHolder.activeWorld, player.name)
             )
         }
         whitelisted = statusSnapshot.first
@@ -156,18 +158,28 @@ fun PlayerDetailScreen(
         op = statusSnapshot.third
     }
 
-    LaunchedEffect(player.uuid, stateHolder.versionLabel) {
-        if (player.uuid.isNotBlank()) {
+    LaunchedEffect(player.name, player.uuid, stateHolder.versionLabel, stateHolder.activeWorld) {
+        val resolvedUuid = withContext(Dispatchers.IO) {
+            PlayerDataManager.resolveOfflineDataUuid(
+                context = context,
+                worldName = stateHolder.activeWorld,
+                playerName = player.name,
+                playerUuid = player.uuid
+            )
+        }
+        resolvedOfflineUuid = resolvedUuid
+
+        if (resolvedUuid.isNotBlank()) {
             val offlineSnapshot = withContext(Dispatchers.IO) {
-                val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.versionLabel, player.uuid)
+                val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.activeWorld, resolvedUuid)
                 NBTParser.parsePlayerData(datFile)
             }
-            
+
             val worldSpawn = withContext(Dispatchers.IO) {
-                val levelFile = PlayerDataManager.getLevelDataFile(context, stateHolder.versionLabel)
+                val levelFile = PlayerDataManager.getLevelDataFile(context, stateHolder.activeWorld)
                 NBTParser.parseLevelData(levelFile)
             }
-            
+
             offlineSnapshot?.let {
                 currentPos = it.currentPos
                 respawnPos = it.respawnPos ?: worldSpawn
@@ -180,7 +192,7 @@ fun PlayerDetailScreen(
 
             stats = withContext(Dispatchers.IO) {
                 PlayerDataManager.parseStats(
-                    PlayerDataManager.getStatsFile(context, stateHolder.versionLabel, player.uuid)
+                    PlayerDataManager.getStatsFile(context, stateHolder.activeWorld, resolvedUuid)
                 )
             }
         } else {
@@ -399,7 +411,7 @@ fun PlayerDetailScreen(
                                     stateHolder.sendCommand("kill $commandTarget")
                                 } else {
                                     scope.launch(Dispatchers.IO) {
-                                        val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.versionLabel, player.uuid)
+                                        val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.activeWorld, offlineUuid)
                                         val success = NBTParser.updatePlayerData(datFile, mapOf("Health" to 0f))
                                         if (success) {
                                             health = 0f
@@ -420,7 +432,7 @@ fun PlayerDetailScreen(
                                     health = 20f
                                 } else {
                                     scope.launch(Dispatchers.IO) {
-                                        val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.versionLabel, player.uuid)
+                                        val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.activeWorld, offlineUuid)
                                         val success = NBTParser.updatePlayerData(datFile, mapOf("Health" to 20f))
                                         if (success) {
                                             health = 20f
@@ -443,7 +455,7 @@ fun PlayerDetailScreen(
                                     hunger = 0
                                 } else {
                                     scope.launch(Dispatchers.IO) {
-                                        val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.versionLabel, player.uuid)
+                                        val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.activeWorld, offlineUuid)
                                         val success = NBTParser.updatePlayerData(datFile, mapOf("foodLevel" to 0))
                                         if (success) {
                                             hunger = 0
@@ -464,7 +476,7 @@ fun PlayerDetailScreen(
                                     hunger = 20
                                 } else {
                                     scope.launch(Dispatchers.IO) {
-                                        val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.versionLabel, player.uuid)
+                                        val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.activeWorld, offlineUuid)
                                         val success = NBTParser.updatePlayerData(datFile, mapOf("foodLevel" to 20))
                                         if (success) {
                                             hunger = 20
@@ -535,7 +547,7 @@ fun PlayerDetailScreen(
 
         item {
             PlayerDataDeletionSection(
-                playerUuid = player.uuid,
+                playerUuid = offlineUuid,
                 delXp = delXp,
                 delEnder = delEnder,
                 delPlayer = delPlayer,
@@ -582,8 +594,8 @@ fun PlayerDetailScreen(
                         scope.launch {
                             PlayerDataManager.deletePlayerData(
                                 context = context,
-                                serverVersion = stateHolder.versionLabel,
-                                playerUuid = player.uuid,
+                                worldName = stateHolder.activeWorld,
+                                playerUuid = offlineUuid,
                                 deleteExperience = delXp,
                                 deleteInventory = false,
                                 deleteEnderChest = delEnder,

@@ -140,13 +140,21 @@ object ServerJarManager {
         }
 
         val expectedMinSize = if (serverType == ServerType.FABRIC) 50_000L else 1_000_000L
+        android.util.Log.d("ServerJarManager", "resolveJar: serverType=$serverType gameVersion=$gameVersion targetFile=${targetFile.absolutePath} exists=${targetFile.exists()} isDir=${targetFile.isDirectory} size=${targetFile.length()}")
         if (targetFile.exists() && targetFile.length() > expectedMinSize) {
+            android.util.Log.d("ServerJarManager", "resolveJar: cache hit, emitting ${targetFile.absolutePath}")
             onProgress(100)
             emit(targetFile)
             return@flow
         }
 
+        if (targetFile.exists() && targetFile.isDirectory) {
+            android.util.Log.e("ServerJarManager", "resolveJar: targetFile is a DIRECTORY — deleting it: ${targetFile.absolutePath}")
+            targetFile.deleteRecursively()
+        }
+
         val downloadUrl = when (serverType) {
+
             ServerType.PAPER -> resolvePaperUrl(gameVersion)
             ServerType.PURPUR -> resolvePurpurUrl(gameVersion)
             ServerType.FABRIC -> resolveFabricUrl(gameVersion)

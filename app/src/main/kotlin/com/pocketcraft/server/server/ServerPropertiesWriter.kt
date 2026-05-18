@@ -20,6 +20,8 @@ data class ServerPrefsSnapshot(
     val allowFlight: Boolean,
     val whiteList: Boolean,
     val enforceWhitelist: Boolean,
+    val opPermissionLevel: Int,
+    val playerIdleTimeout: Int,
     val commandBlocks: Boolean,
     val netherEnabled: Boolean,
     val spawnMonsters: Boolean,
@@ -42,9 +44,10 @@ object ServerPropertiesWriter {
     private const val TAG = "ServerPropertiesWriter"
 
     fun apply(serverDir: File, prefs: ServerPrefsSnapshot) {
-        val props = loadExistingFromServerDir(serverDir)
+        val file = File(serverDir, "server.properties")
+        val props = loadExisting(file)
         overlayManagedValues(props, prefs)
-        save(serverDir, props)
+        save(file, props)
         Log.d(
             TAG,
             "server.properties updated: view-distance=${prefs.viewDistance}, simulation-distance=${prefs.simulationDistance}, max-players=${prefs.maxPlayers}"
@@ -64,7 +67,7 @@ object ServerPropertiesWriter {
         props["server-port"] = "25565"
         props["difficulty"] = prefs.difficulty.lowercase()
         props["gamemode"] = prefs.gameMode.lowercase()
-        props["online-mode"] = prefs.onlineMode.toString()
+        props["online-mode"] = "false"
         props["motd"] = prefs.motd
         props["pvp"] = prefs.pvp.toString()
         props["view-distance"] = prefs.viewDistance.coerceIn(3, 32).toString()
@@ -73,6 +76,8 @@ object ServerPropertiesWriter {
         props["allow-flight"] = prefs.allowFlight.toString()
         props["white-list"] = prefs.whiteList.toString()
         props["enforce-whitelist"] = prefs.enforceWhitelist.toString()
+        props["op-permission-level"] = prefs.opPermissionLevel.coerceIn(1, 4).toString()
+        props["player-idle-timeout"] = prefs.playerIdleTimeout.coerceAtLeast(0).toString()
         props["enable-command-block"] = prefs.commandBlocks.toString()
         props["allow-nether"] = prefs.netherEnabled.toString()
         props["spawn-monsters"] = prefs.spawnMonsters.toString()
@@ -114,7 +119,11 @@ object ServerPropertiesWriter {
             difficulty = config.difficulty,
             gameMode = config.gameMode,
             onlineMode = config.onlineMode,
-            motd = config.motd,
+            motd = if (config.motd.isBlank()) {
+                "Hosted on Pocketcraft"
+            } else {
+                "${config.motd} - Hosted on Pocketcraft"
+            },
             pvp = config.pvp,
             viewDistance = config.viewDistance,
             simulationDistance = config.simulationDistance,
@@ -122,6 +131,8 @@ object ServerPropertiesWriter {
             allowFlight = config.allowFlight,
             whiteList = config.whiteList,
             enforceWhitelist = config.enforceWhitelist,
+            opPermissionLevel = config.opPermissionLevel,
+            playerIdleTimeout = config.playerIdleTimeout,
             commandBlocks = config.commandBlocks,
             netherEnabled = config.netherEnabled,
             spawnMonsters = config.spawnMonsters,

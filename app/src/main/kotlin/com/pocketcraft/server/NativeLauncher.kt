@@ -31,7 +31,9 @@ object NativeLauncher {
         nativeLibDir: String,
         shimDir  : String,
         minRamMb : Int,
-        maxRamMb : Int
+        maxRamMb : Int,
+        serverType: String,
+        port: Int
     ): Int
 
     init {

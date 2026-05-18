@@ -81,8 +81,8 @@ fun BackupsScreen(
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
-            val message = stateHolder.importBackup(uri)
-            onMessage(message)
+            val result = stateHolder.importBackup(uri)
+            onMessage(result)
         }
     }
 

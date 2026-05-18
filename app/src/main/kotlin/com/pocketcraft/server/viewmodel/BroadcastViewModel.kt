@@ -23,6 +23,9 @@ class BroadcastViewModel @Inject constructor(
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
+    private val prefs = context.getSharedPreferences("broadcast_dismissed", Context.MODE_PRIVATE)
+    private val DISMISSED_KEY = "dismissed_ids"
+
     private val versionCode: Int = runCatching {
         val packageInfo: PackageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
         packageInfo.longVersionCode.toInt()
@@ -32,7 +35,8 @@ class BroadcastViewModel @Inject constructor(
         BroadcastManager.getBroadcastsFlow(context, versionCode)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val dismissed = MutableStateFlow<Set<String>>(emptySet())
+    /** IDs of broadcasts the user has dismissed — persisted across app restarts. */
+    private val dismissed = MutableStateFlow<Set<String>>(loadDismissedIds())
 
     private val _configBanner = MutableStateFlow<BroadcastMessage?>(null)
     val configBanner: StateFlow<BroadcastMessage?> = _configBanner
@@ -44,6 +48,8 @@ class BroadcastViewModel @Inject constructor(
 
     init {
         BroadcastManager.initRemoteConfig { message ->
+            // Only show remote config banner if it hasn't been dismissed this session
+            // Config banners are session-only (they change content regularly)
             _configBanner.value = message
         }
 
@@ -58,10 +64,31 @@ class BroadcastViewModel @Inject constructor(
     }
 
     fun dismiss(id: String) {
-        dismissed.value = dismissed.value + id
+        val updated = dismissed.value + id
+        dismissed.value = updated
+        saveDismissedIds(updated)
     }
 
     fun dismissConfigBanner() {
         _configBanner.value = null
+    }
+
+    /** Purge stale dismissed IDs that no longer exist in live broadcasts, to prevent unbounded growth. */
+    fun purgeStaleDismissed(activeBroadcastIds: Set<String>) {
+        val current = dismissed.value
+        val pruned = current.intersect(activeBroadcastIds)
+        if (pruned != current) {
+            dismissed.value = pruned
+            saveDismissedIds(pruned)
+        }
+    }
+
+    private fun loadDismissedIds(): Set<String> {
+        val raw = prefs.getString(DISMISSED_KEY, null) ?: return emptySet()
+        return raw.split(",").filter { it.isNotBlank() }.toSet()
+    }
+
+    private fun saveDismissedIds(ids: Set<String>) {
+        prefs.edit().putString(DISMISSED_KEY, ids.joinToString(",")).apply()
     }
 }

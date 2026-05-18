@@ -518,7 +518,10 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                                 }
                                 scope.launch {
                                     val selectedVersion = setupVersion.trim()
-                                    AppPreferences(context).relayHost = setupRelayHost
+                                    AppPreferences(context).apply {
+                                        bedrockRelayRegion = if (setupRelayHost.contains("mine")) "MUMBAI" else "SINGAPORE"
+                                        relayHost = setupRelayHost
+                                    }
                                     AppPreferencesStore.setRelayHost(context, setupRelayHost)
                                     AppPreferencesStore.setSelectedServerType(context, setupServerType.name)
                                     AppPreferencesStore.setServerVersion(context, selectedVersion)

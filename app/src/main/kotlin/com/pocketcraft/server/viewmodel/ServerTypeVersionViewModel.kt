@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pocketcraft.server.data.model.ServerType
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
+import com.pocketcraft.server.service.VersionCatalog
 import com.pocketcraft.server.server.ServerJarManager
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -51,7 +52,8 @@ class ServerTypeVersionViewModel @Inject constructor(
 
     private var initializedSelectionKey: Triple<ServerType, String?, String?>? = null
     private val quickVersionFallbacks = listOf(
-        "1.21.6", "1.21.4", "1.21.1", "1.20.6", "1.20.4", "1.20.1",
+        "26.1.2", "26.1.1", "26.1", "1.21.11", "1.21.10", "1.21.9",
+        "1.21.8", "1.21.7", "1.21.6", "1.21.4", "1.21.1", "1.20.6", "1.20.4", "1.20.1",
         "1.19.4", "1.19.2", "1.18.2", "1.17.1", "1.16.5"
     )
 
@@ -112,7 +114,7 @@ class ServerTypeVersionViewModel @Inject constructor(
     fun deleteDownloadedVersion(version: String) {
         viewModelScope.launch {
             runCatching {
-                val versionDir = File(getApplication<Application>().filesDir, "servers/$version")
+                val versionDir = File(getApplication<Application>().filesDir, "servers/binaries/$version")
                 val file = File(versionDir, jarNameForVersion(_selectedType.value, version))
                 if (file.exists()) {
                     file.delete()
@@ -152,7 +154,12 @@ class ServerTypeVersionViewModel @Inject constructor(
             _isOffline.value = !online
             if (!online) {
                 if (_availableVersions.value.isEmpty()) {
-                    _error.value = "No internet connection. Please check your network and try again."
+                    val fallback = quickFallbackVersions(type)
+                    if (fallback.isNotEmpty()) {
+                        updateVersionList(fallback, preferredVersion)
+                    } else {
+                        _error.value = "No internet connection. Please check your network and try again."
+                    }
                 }
                 _isLoading.value = false
                 return@launch
@@ -166,10 +173,20 @@ class ServerTypeVersionViewModel @Inject constructor(
                 
                 if (networkVersions.isNotEmpty()) {
                     updateVersionList(networkVersions, preferredVersion)
+                } else if (_availableVersions.value.isEmpty()) {
+                    val fallback = withContext(Dispatchers.IO) { quickFallbackVersions(type) }
+                    if (fallback.isNotEmpty()) {
+                        updateVersionList(fallback, preferredVersion)
+                    }
                 }
             } catch (e: Exception) {
                 if (_availableVersions.value.isEmpty()) {
-                    _error.value = "No internet connection. Please check your network and try again."
+                    val fallback = withContext(Dispatchers.IO) { quickFallbackVersions(type) }
+                    if (fallback.isNotEmpty()) {
+                        updateVersionList(fallback, preferredVersion)
+                    } else {
+                        _error.value = "No internet connection. Please check your network and try again."
+                    }
                 } else {
                     // Log but don't show error if we already have cached data
                     android.util.Log.w("ServerTypeVersionViewModel", "Background refresh failed: ${e.message}")
@@ -207,10 +224,18 @@ class ServerTypeVersionViewModel @Inject constructor(
         refreshDownloadedVersions()
     }
 
-    private fun quickFallbackVersions(type: ServerType): List<String> {
+    private suspend fun quickFallbackVersions(type: ServerType): List<String> {
         if (!type.supportsVersionSelect) return emptyList()
         val downloaded = listDownloadedVersionsForType(type)
-        return if (downloaded.isNotEmpty()) downloaded else quickVersionFallbacks
+        if (downloaded.isNotEmpty()) return downloaded
+
+        val catalogVersions = runCatching { VersionCatalog.fetchStableVersions(limit = 24) }
+            .getOrDefault(emptyList())
+        return if (catalogVersions.isNotEmpty()) {
+            catalogVersions
+        } else {
+            quickVersionFallbacks
+        }
     }
 
     private fun isPreReleaseVersion(version: String): Boolean {
@@ -226,7 +251,7 @@ class ServerTypeVersionViewModel @Inject constructor(
     }
 
     private fun listDownloadedVersionsForType(type: ServerType): List<String> {
-        val serversDir = File(getApplication<Application>().filesDir, "servers")
+        val serversDir = File(getApplication<Application>().filesDir, "servers/binaries")
         if (!serversDir.exists()) return emptyList()
         
         val typeLower = type.name.lowercase()

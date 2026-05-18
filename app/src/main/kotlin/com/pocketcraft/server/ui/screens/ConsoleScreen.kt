@@ -5,6 +5,11 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -170,7 +175,6 @@ fun ConsoleScreen(
     )
     val cardShadowColor = pocketCardShadowColor()
     val firstServerStartWarningDismissed by AppPreferencesStore.isFirstServerStartWarningDismissedFlow(context).collectAsState(initial = false)
-    val serverReady by ServerHostService.serverReadyState.collectAsStateWithLifecycle()
 
     LaunchedEffect(stateHolder.status) {
         if (stateHolder.status == ServerStatus.ONLINE && !firstServerStartWarningDismissed) {
@@ -180,6 +184,13 @@ fun ConsoleScreen(
 
     // RAM feature state
     val prefs = remember { AppPreferences(context) }
+    val eulaAccepted = remember(stateHolder.status, stateHolder.activeWorld, stateHolder.config.worldName) {
+        val acceptedByFile = ServerFileManager.isEulaAccepted(context, stateHolder.activeWorld)
+        if (acceptedByFile && !prefs.eulaAccepted) {
+            prefs.eulaAccepted = true
+        }
+        acceptedByFile || prefs.eulaAccepted
+    }
     val totalRamMb = remember { RamUtils.getTotalRamMb(context) }
     var ramMode by remember { mutableStateOf(prefs.ramMode) }
     var manualRamMb by remember { mutableStateOf(prefs.manualRamMb.coerceIn(512, totalRamMb)) }
@@ -273,7 +284,6 @@ fun ConsoleScreen(
         item {
             ServerIdentityCard(
                 stateHolder = stateHolder,
-                serverReady = serverReady,
                 onChangeVersion = onChangeVersion,
                 onOpenServerDetails = onOpenServerDetails,
                 onAddWorld = onAddWorld,
@@ -479,28 +489,90 @@ fun ConsoleScreen(
                     )
                 }
             } else {
-                DuoButton(
-                    text = if (stateHolder.isRestartingCycle) "RESTARTING..." else if (stateHolder.status == ServerStatus.STARTING) "STARTING..." else "START SERVER",
-                    onClick = {
-                        try {
-                            if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
-                                Toast.makeText(context, "No internet connection. Please check your network.", Toast.LENGTH_LONG).show()
-                                return@DuoButton
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (!eulaAccepted) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .shadow(
+                                    elevation = 8.dp,
+                                    shape = RoundedCornerShape(16.dp),
+                                    ambientColor = cardShadowColor,
+                                    spotColor = cardShadowColor,
+                                    clip = false
+                                ),
+                            shape = RoundedCornerShape(16.dp),
+                            color = pocketWarningSurfaceColor(),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, pocketWarningBorderColor()),
+                            shadowElevation = 4.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .background(pocketWarningIconChipColor(), RoundedCornerShape(10.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Warning,
+                                            contentDescription = null,
+                                            tint = pocketWarningAccentColor(),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Text(
+                                        "EULA required to start",
+                                        color = pocketWarningTitleColor(),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                                Text(
+                                    text = "Accept the Minecraft EULA before starting the server.",
+                                    color = pocketWarningBodyColor(),
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp
+                                )
+                                TextButton(
+                                    onClick = { stateHolder.startServer() },
+                                    modifier = Modifier.align(Alignment.End)
+                                ) {
+                                    Text("Review EULA", fontSize = 12.sp, color = pocketWarningAccentColor())
+                                }
                             }
-                            if (isVersionDownloaded) {
-                                stateHolder.startServer()
-                            } else {
-                                showDownloadRequiredDialog = true
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.e("ConsoleScreen", "Start error", e)
-                            Toast.makeText(context, "Error starting server: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
-                    },
-                    enabled = stateHolder.status != ServerStatus.STARTING && !stateHolder.isRestarting && !stateHolder.isStopping,
-                    isLoading = stateHolder.status == ServerStatus.STARTING || stateHolder.isRestarting,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    }
+
+                    DuoButton(
+                        text = if (stateHolder.isRestartingCycle) "RESTARTING..." else if (stateHolder.status == ServerStatus.STARTING) "STARTING..." else "START SERVER",
+                        onClick = {
+                            try {
+                                if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
+                                    Toast.makeText(context, "No internet connection. Please check your network.", Toast.LENGTH_LONG).show()
+                                    return@DuoButton
+                                }
+                                if (isVersionDownloaded) {
+                                    stateHolder.startServer()
+                                } else {
+                                    showDownloadRequiredDialog = true
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("ConsoleScreen", "Start error", e)
+                                Toast.makeText(context, "Error starting server: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        enabled = eulaAccepted && stateHolder.status != ServerStatus.STARTING && !stateHolder.isRestarting && !stateHolder.isStopping,
+                        isLoading = stateHolder.status == ServerStatus.STARTING || stateHolder.isRestarting,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
         // Startup Progress Bar (shown only when starting)
@@ -594,6 +666,7 @@ fun ConsoleScreen(
                 manualRamMb = manualRamMb,
                 totalRamMb = totalRamMb,
                 serverIsRunning = stateHolder.isNavigationLocked,
+                maxPowerEnabled = prefs.isMaxPowerMode,
                 onRamModeChange = { mode ->
                     ramMode = mode
                     prefs.ramMode = mode
@@ -894,7 +967,6 @@ fun ConsoleScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 private fun ServerIdentityCard(
     stateHolder: ServerStateHolder,
-    serverReady: Boolean,
     onChangeVersion: () -> Unit,
     onOpenServerDetails: () -> Unit,
     onAddWorld: () -> Unit,
@@ -904,6 +976,9 @@ private fun ServerIdentityCard(
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val serverRunning = stateHolder.status == ServerStatus.ONLINE
+    val serverProcessActive = stateHolder.status == ServerStatus.ONLINE ||
+        stateHolder.status == ServerStatus.STARTING ||
+        stateHolder.status == ServerStatus.RESTARTING
     val canChangeWorld = stateHolder.status == ServerStatus.OFFLINE
     var showWorldSheet by remember { mutableStateOf(false) }
     var showDeleteWorldDialog by remember { mutableStateOf<WorldEntry?>(null) }
@@ -1195,19 +1270,19 @@ private fun ServerIdentityCard(
         topContentBetweenServerAndAddress?.invoke()
 
         val publicAddress = stateHolder.publicAddress?.takeIf { it.isNotBlank() }
-        val internetRelayAddress = when {
-            publicAddress != null -> publicAddress
-            stateHolder.tunnelConnecting -> "Opening internet relay..."
-            else -> "Waiting for live internet relay address..."
-        }
+        val internetRelayAddress = publicAddress ?: "No relay address"
 
         val localWifiAddress = "${stateHolder.localIp}:${stateHolder.config.port}"
-        val canShareAddresses = stateHolder.serverJoinable &&
-            (stateHolder.publicAddress != null || stateHolder.tunnelConnecting)
+        val canShareAddresses = stateHolder.isServerFullyReady
+        val relayReady = !publicAddress.isNullOrBlank()
         val joinCardShadowColor = pocketCardShadowColor()
         val joinCardBorderColor = pocketHighContrastBorderColor()
 
-        if (canShareAddresses) {
+        AnimatedVisibility(
+            visible = canShareAddresses,
+            enter = fadeIn() + slideInVertically { it / 3 },
+            exit = fadeOut() + slideOutVertically { it / 3 }
+        ) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1239,53 +1314,27 @@ private fun ServerIdentityCard(
                             letterSpacing = 0.8.sp
                         )
 
-                        if (stateHolder.tunnelConnecting && publicAddress == null) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.padding(start = 8.dp)
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (relayReady) PocketColors.Online.copy(alpha = 0.15f) else PocketColors.Offline.copy(alpha = 0.15f),
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(10.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                    Text(
-                                        "Relay Connecting",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
-                            }
-                        } else if (publicAddress != null) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = PocketColors.Online.copy(alpha = 0.15f),
-                                modifier = Modifier.padding(start = 8.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(6.dp)
-                                            .background(PocketColors.Online, CircleShape)
-                                    )
-                                    Text(
-                                        "Relay Ready",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = PocketColors.Online
-                                    )
-                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .background(if (relayReady) PocketColors.Online else PocketColors.Offline, CircleShape)
+                                )
+                                Text(
+                                    if (relayReady) "Relay Ready" else "Relay Offline",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (relayReady) PocketColors.Online else PocketColors.Offline
+                                )
                             }
                         }
                     }
@@ -1293,7 +1342,7 @@ private fun ServerIdentityCard(
                     AddressValueRow(
                         label = "Java / Internet relay",
                         address = internetRelayAddress,
-                        emphasized = publicAddress != null
+                        emphasized = true
                     )
 
                     AddressValueRow(
@@ -1326,7 +1375,7 @@ private fun ServerIdentityCard(
                             shareServerAddresses(
                                 context = context,
                                 internetAddress = publicAddress,
-                                lanAddress = localWifiAddress.takeIf { serverRunning }
+                                lanAddress = localWifiAddress.takeIf { stateHolder.isServerFullyReady }
                             )
                         },
                         enabled = canShareAddresses,
@@ -1771,6 +1820,7 @@ private fun RamSettingsCard(
     manualRamMb: Int,
     totalRamMb: Int,
     serverIsRunning: Boolean,
+    maxPowerEnabled: Boolean,
     onRamModeChange: (String) -> Unit,
     onManualRamChange: (Int) -> Unit
 ) {
@@ -1781,16 +1831,20 @@ private fun RamSettingsCard(
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 15.sp
             )
+            
+            val isLocked = !maxPowerEnabled
+            val isEnabled = !serverIsRunning && !isLocked
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf("low" to "Low", "manual" to "Manual", "full" to "Full").forEach { (mode, label) ->
                     FilterChip(
-                        selected = ramMode == mode,
-                        onClick = { if (!serverIsRunning) onRamModeChange(mode) },
+                        selected = if (isLocked) false else ramMode == mode,
+                        onClick = { if (isEnabled) onRamModeChange(mode) },
                         label = { Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold) },
-                        enabled = !serverIsRunning,
+                        enabled = isEnabled,
                         modifier = Modifier.weight(1f),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = PocketColors.PrimaryMuted,
@@ -1800,10 +1854,15 @@ private fun RamSettingsCard(
                 }
             }
 
-            val summaryText = when (ramMode) {
-                "full" -> "High-performance preset"
-                "manual" -> "Custom RAM preset"
-                else -> "Low-memory preset"
+            val recommendedMb = (totalRamMb * 0.25).toLong().coerceIn(512L, 1024L).toInt()
+            val summaryText = if (isLocked) {
+                "Balanced preset — safe for most devices ($recommendedMb MB)"
+            } else {
+                when (ramMode) {
+                    "full" -> "High-performance preset — may cause overheating"
+                    "manual" -> "Custom: ${manualRamMb} MB"
+                    else -> "Balanced preset — safe for most devices"
+                }
             }
             Text(
                 text = summaryText,
@@ -1811,8 +1870,9 @@ private fun RamSettingsCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            if (ramMode == "manual") {
-                val stepsCount = ((totalRamMb - 512) / 256).coerceAtLeast(1)
+            if (!isLocked && ramMode == "manual") {
+                val maxManualMb = 2048
+                val stepsCount = ((maxManualMb - 512) / 256).coerceAtLeast(1)
                 val steps = (0..stepsCount).map { 512 + it * 256 }
                 val sliderIndex = steps.indexOfFirst { it >= manualRamMb }.takeIf { it >= 0 } ?: steps.lastIndex
 
@@ -1830,18 +1890,25 @@ private fun RamSettingsCard(
                     },
                     valueRange = 0f..(stepsCount.toFloat()),
                     steps = (stepsCount - 1).coerceAtLeast(0),
-                    enabled = !serverIsRunning
+                    enabled = isEnabled
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("512 MB", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("${totalRamMb} MB", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Recommended: ${recommendedMb} MB", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${maxManualMb} MB", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
-            if (serverIsRunning) {
+            if (isLocked) {
+                Text(
+                    text = "Enable Max Power Mode in Settings to alter RAM usage",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else if (serverIsRunning) {
                 Text(
                     text = "Stop the server to change RAM settings",
                     fontSize = 11.sp,

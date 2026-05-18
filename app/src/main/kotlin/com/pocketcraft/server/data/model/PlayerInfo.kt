@@ -6,7 +6,7 @@ package com.pocketcraft.server.data.model
 data class PlayerInfo(
     val name: String,
     val uuid: String = "",
-    val pingMs: Int = 0,
+    val pingMs: Int = -1,
     val ip: String = "",
     val isOp: Boolean = false
 ) {

@@ -1,5 +1,6 @@
 package com.pocketcraft.server.data.preferences
 
+import android.app.ActivityManager
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.datastore.core.DataStore
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.map
 
 private val Context.appPreferencesDataStore: DataStore<Preferences> by preferencesDataStore(name = "app_prefs")
 const val RELAY_SECRET = "e7f5fbdda85c265419e519454f8d54643930116b89a1b58dcb2b86f91889d3d3"
+const val KEY_MAX_POWER_MODE = "max_power_mode"
 
 object AppPreferencesKeys {
     val SETUP_COMPLETE = booleanPreferencesKey("setup_complete")
@@ -63,6 +65,14 @@ class AppPreferences(context: Context) {
         @Volatile
         private var relayPrefsInstance: SharedPreferences? = null
 
+        fun getDefaultRamMb(context: Context): Int {
+            val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val memInfo = ActivityManager.MemoryInfo()
+            activityManager.getMemoryInfo(memInfo)
+            val totalRamMb = (memInfo.totalMem / 1024 / 1024).toInt()
+            return (totalRamMb * 0.50).toInt().coerceIn(512, 4096)
+        }
+
         @Synchronized
         fun init(context: Context) {
             val appContext = context.applicationContext
@@ -100,12 +110,30 @@ class AppPreferences(context: Context) {
         }
 
     var ramMode: String
-        get() = prefs.getString("ram_mode", "full") ?: "full"
+        get() {
+            val stored = prefs.getString("ram_mode", null)
+            if (stored.isNullOrBlank()) {
+                prefs.edit().putString("ram_mode", "manual").apply()
+                return "manual"
+            }
+            return stored
+        }
         set(value) = prefs.edit().putString("ram_mode", value).apply()
 
     var manualRamMb: Int
-        get() = prefs.getInt("manual_ram_mb", 1024)
+        get() {
+            if (!prefs.contains("manual_ram_mb")) {
+                val defaultMb = getDefaultRamMb(appContext)
+                prefs.edit().putInt("manual_ram_mb", defaultMb).apply()
+                return defaultMb
+            }
+            return prefs.getInt("manual_ram_mb", 1024)
+        }
         set(value) = prefs.edit().putInt("manual_ram_mb", value).apply()
+
+    var isMaxPowerMode: Boolean
+        get() = prefs.getBoolean(KEY_MAX_POWER_MODE, false)
+        set(value) = prefs.edit().putBoolean(KEY_MAX_POWER_MODE, value).apply()
 
     var autoRestart: Boolean
         get() = prefs.getBoolean("auto_restart", false)
@@ -134,6 +162,10 @@ class AppPreferences(context: Context) {
             }.apply()
         }
 
+    var bedrockRelayRegion: String
+        get() = prefs.getString("bedrock_relay_region", "SINGAPORE").orEmpty()
+        set(value) = prefs.edit().putString("bedrock_relay_region", value).apply()
+
     var relayHost: String
         get() = prefs.getString("relay_host", null)
             ?: RelayServers.getBestForTimeZone(java.util.TimeZone.getDefault().id).host
@@ -142,6 +174,10 @@ class AppPreferences(context: Context) {
     var onboardingCompleted: Boolean
         get() = prefs.getBoolean("onboarding_completed", false)
         set(value) = prefs.edit().putBoolean("onboarding_completed", value).apply()
+
+    var eulaAccepted: Boolean
+        get() = prefs.getBoolean("eula_accepted", false)
+        set(value) = prefs.edit().putBoolean("eula_accepted", value).apply()
 
     var openWorldSetupNextLaunch: Boolean
         get() = prefs.getBoolean("open_world_setup_next_launch", false)

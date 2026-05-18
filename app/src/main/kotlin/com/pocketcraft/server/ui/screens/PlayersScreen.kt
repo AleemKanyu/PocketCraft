@@ -76,6 +76,7 @@ fun PlayersScreen(
 ) {
     val tabs = listOf("Online", "All Players", "Whitelist", "Ops", "Banned")
     var selected by remember { mutableIntStateOf(stateHolder.activePlayersTab) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(selected) {
         stateHolder.activePlayersTab = selected
@@ -192,6 +193,7 @@ fun PlayersOnlineTab(
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var visibleCount by remember { mutableIntStateOf(10) }
+    val scope = rememberCoroutineScope()
 
     val players = stateHolder.sessionPlayers
         .distinctBy { canonicalPlayerName(it.name) }
@@ -235,7 +237,7 @@ fun PlayersOnlineTab(
                 )
             }
             IconButton(
-                onClick = { stateHolder.refreshAll() },
+                onClick = { scope.launch { stateHolder.refreshAll() } },
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(10.dp))
@@ -356,113 +358,33 @@ fun PlayerOnlineCard(
     onBan: () -> Unit,
     onOp: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onOpenDetails)
-            .padding(16.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            // Avatar with online dot
-            Box {
-                AsyncImage(
-                    model = "https://mc-heads.net/avatar/${player.name}/64",
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentScale = ContentScale.Crop
-                )
-                if (isOnline) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .offset(x = 3.dp, y = 3.dp)
-                            .size(16.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(PocketColors.Primary)
-                            .border(width = 3.dp, color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(6.dp))
-                    )
-                }
-            }
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        player.name,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 18.sp
-                    )
-                    if (player.isBedrock) {
-                        Icon(
-                            Icons.Default.VideogameAsset,
-                            contentDescription = "Bedrock Player",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurface.copy(0.5f)
-                        )
-                    }
-                }
-                if (isOnline) {
-                    Text(
-                        "IP: ${player.ip.ifEmpty { "N/A" }} • Ping: ${player.pingMs}ms",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(0.5f)
-                    )
-                } else {
-                    Text(
-                        if (!isServerRunning) "Last session" else "Offline",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(0.5f)
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        // Action buttons
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedButton(onClick = onKick, shape = RoundedCornerShape(12.dp), modifier = Modifier.weight(1f)) {
-                Icon(Icons.AutoMirrored.Filled.ExitToApp, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.size(4.dp))
-                Text("Kick", fontWeight = FontWeight.Bold)
-            }
-            OutlinedButton(onClick = onBan, shape = RoundedCornerShape(12.dp), modifier = Modifier.weight(1f)) {
-                Icon(Icons.Default.Block, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.size(4.dp))
-                Text("Ban", fontWeight = FontWeight.Bold)
-            }
-            if (player.isOp) {
-                OutlinedButton(
-                    onClick = onOp,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = PocketColors.Primary)
-                ) {
-                    Text("OPED", fontWeight = FontWeight.ExtraBold)
-                }
-            } else {
-                Button(
-                    onClick = onOp,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = PocketColors.Primary,
-                        contentColor = Color.Black
-                    )
-                ) {
-                    Icon(Icons.Default.Shield, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.size(4.dp))
-                    Text("OP", fontWeight = FontWeight.ExtraBold)
-                }
-            }
-        }
+    val subtitle = if (isOnline) {
+        val pingText = player.pingMs.takeIf { it >= 0 }?.let { "${it}ms" } ?: "..."
+        "Ping: $pingText"
+    } else {
+        if (!isServerRunning) "Last session" else "Offline"
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(0.3f))
+
+    val actions = mutableListOf<PlayerCardAction>()
+    if (isOnline) {
+        actions.add(PlayerCardAction(label = "Kick", onClick = onKick))
+        actions.add(PlayerCardAction(label = "Ban", onClick = onBan, tint = PocketColors.Offline))
+    }
+    if (player.isOp) {
+        actions.add(PlayerCardAction(label = "Remove OP", onClick = onOp, tint = PocketColors.Offline))
+    } else {
+        actions.add(PlayerCardAction(label = "Make OP", onClick = onOp, tint = PocketColors.Primary))
+    }
+
+    PlayerCard(
+        username = player.name,
+        subtitle = subtitle,
+        avatarUrl = "https://mc-heads.net/avatar/${player.name}/64",
+        badgeText = if (player.isOp) "OPED" else if (isOnline) "ONLINE" else "OFFLINE",
+        badgeColor = if (player.isOp) PocketColors.PrimaryDark else if (isOnline) PocketColors.Primary else Color.Gray,
+        onClick = onOpenDetails,
+        actions = actions
+    )
 }
 
 @Composable

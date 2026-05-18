@@ -104,7 +104,6 @@ fun WorldSetupScreen(
     var photoChanged by remember(stateHolder.serverPhotoUrl) { mutableStateOf(false) }
     var worldSeed by remember(stateHolder.config.worldSeed) { mutableStateOf(stateHolder.config.worldSeed) }
     var maxPlayersValue by remember(stateHolder.config.maxPlayers) { mutableStateOf(stateHolder.config.maxPlayers.toFloat()) }
-    var onlineMode by remember(stateHolder.config.worldName) { mutableStateOf(stateHolder.readServerProperty("online-mode")?.toBoolean() ?: true) }
     var selectedVersion by remember(stateHolder.config.gameVersion) {
         mutableStateOf(if (createMode) "" else stateHolder.config.gameVersion)
     }
@@ -256,7 +255,6 @@ fun WorldSetupScreen(
             viewDistance = 6
         )
         stateHolder.saveSettings(updatedConfig)
-        stateHolder.writeServerProperty("online-mode", onlineMode.toString())
 
         if (updatedConfig.serverType.supportsVersionSelect) {
             isDownloadingVersion = true
@@ -472,19 +470,6 @@ fun WorldSetupScreen(
                     )
                 }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text("Offline Mode (Unauthenticated)", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        Text("Allow non-premium players to join", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    DuoToggle(checked = !onlineMode, onCheckedChange = { onlineMode = !it })
-                }
 
                 SurfaceInfoText()
 

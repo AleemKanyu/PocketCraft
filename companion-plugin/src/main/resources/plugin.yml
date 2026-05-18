@@ -1,0 +1,6 @@
+name: PocketCraftCompanion
+version: 1.0
+main: com.pocketcraft.companion.PocketCraftCompanion
+api-version: 1.13
+author: PocketCraft
+description: A companion plugin to send player pings to the Android host.
