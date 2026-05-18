@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
@@ -26,42 +27,53 @@ class BedrockUdpBridge(
         private const val GEYSER_LOCAL_PORT = 19132
         private const val MAX_UDP_SIZE = 65536
         private const val GEYSER_LOCAL_HOST = "127.0.0.1"
+        private const val INBOUND_CHANNEL_CAPACITY = 512
     }
 
     private var running = false
     private var bridgeJob: Job? = null
     private var scope: CoroutineScope? = null
     private val clientSockets = ConcurrentHashMap<String, DatagramSocket>()
+    private val inboundFrames = Channel<BedrockFrame>(capacity = INBOUND_CHANNEL_CAPACITY)
 
     fun start() {
         if (running) return
         running = true
         scope = CoroutineScope(SupervisorJob() + dispatcher)
-        bridgeJob = scope?.launch { }
+        bridgeJob = scope?.launch {
+            for (frame in inboundFrames) {
+                try {
+                    forwardFrameToGeyser(frame)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error forwarding to Geyser: ${e.message}")
+                }
+            }
+        }
         Log.i(TAG, "Bedrock UDP bridge started")
     }
 
     fun onIncomingFrame(data: ByteArray) {
         if (!running) return
         val frame = parseIncomingFrame(data) ?: return
-        val clientKey = "${frame.clientIp}:${frame.clientPort}"
+        val result = inboundFrames.trySend(frame)
+        if (result.isFailure) {
+            Log.w(TAG, "Dropping Bedrock frame for ${frame.clientIp}:${frame.clientPort} due to bridge backpressure")
+        }
+    }
 
-        scope?.launch {
-            try {
-                val socket = clientSockets.computeIfAbsent(clientKey) {
-                    DatagramSocket().also { datagramSocket ->
-                        datagramSocket.receiveBufferSize = 65_536
-                        datagramSocket.sendBufferSize = 65_536
-                        startListening(datagramSocket, frame.clientIp, frame.clientPort)
-                    }
-                }
-                val address = InetAddress.getByName(GEYSER_LOCAL_HOST)
-                val packet = DatagramPacket(frame.payload, frame.payload.size, address, GEYSER_LOCAL_PORT)
-                socket.send(packet)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error forwarding to Geyser: ${e.message}")
+    private fun forwardFrameToGeyser(frame: BedrockFrame) {
+        val clientKey = "${frame.clientIp}:${frame.clientPort}"
+        val socket = clientSockets.computeIfAbsent(clientKey) {
+            DatagramSocket().also { datagramSocket ->
+                datagramSocket.receiveBufferSize = 65_536
+                datagramSocket.sendBufferSize = 65_536
+                datagramSocket.connect(InetAddress.getByName(GEYSER_LOCAL_HOST), GEYSER_LOCAL_PORT)
+                startListening(datagramSocket, frame.clientIp, frame.clientPort)
             }
         }
+
+        val packet = DatagramPacket(frame.payload, frame.payload.size)
+        socket.send(packet)
     }
 
     private fun startListening(socket: DatagramSocket, clientIp: String, clientPort: Int) {
@@ -94,6 +106,7 @@ class BedrockUdpBridge(
         clientSockets.clear()
         scope?.cancel()
         scope = null
+        while (inboundFrames.tryReceive().isSuccess) {}
         Log.i(TAG, "Bedrock UDP bridge stopped")
     }
 

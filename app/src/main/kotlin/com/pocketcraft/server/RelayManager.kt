@@ -678,6 +678,10 @@ class RelayManager(private val context: Context) {
 
     private suspend fun bridgeBedrockConnection(relaySocket: Socket, firstByte: Int) {
         android.util.Log.i("RelayManager", "Bedrock UDP bridge ACTIVE via TCP tunnel.")
+        android.util.Log.d(
+            "RelayManager",
+            "Active Bedrock relay socket assigned: remote=${relaySocket.inetAddress?.hostAddress}:${relaySocket.port}, local=${relaySocket.localAddress?.hostAddress}:${relaySocket.localPort}"
+        )
         activeBedrockSocket = relaySocket
         var handedOffToJavaBridge = false
         
@@ -720,9 +724,13 @@ class RelayManager(private val context: Context) {
                 val type = relayInput.read()
                 if (type == -1) break
                 if (type != 0x02) {
-                    android.util.Log.i("RelayManager", "Switching TCP socket from Bedrock to Java bridge (firstByte=$type)")
+                    android.util.Log.i(
+                        "RelayManager",
+                        "Switching TCP socket from Bedrock to Java bridge (firstByte=$type, remote=${relaySocket.inetAddress?.hostAddress}:${relaySocket.port})"
+                    )
                     val localPort = activeTunnelLocalPort ?: 25565
                     if (activeBedrockSocket == relaySocket) {
+                        android.util.Log.d("RelayManager", "Clearing active Bedrock socket before Java handoff.")
                         activeBedrockSocket = null
                     }
                     handedOffToJavaBridge = true
@@ -758,10 +766,14 @@ class RelayManager(private val context: Context) {
             android.util.Log.e("RelayManager", "Bedrock bridge error: ${e.message}")
         } finally {
             if (activeBedrockSocket == relaySocket) {
-                android.util.Log.i("RelayManager", "Bedrock relay socket closed.")
+                android.util.Log.i(
+                    "RelayManager",
+                    "Bedrock relay socket closed: remote=${relaySocket.inetAddress?.hostAddress}:${relaySocket.port}, local=${relaySocket.localAddress?.hostAddress}:${relaySocket.localPort}"
+                )
                 activeBedrockSocket = null
             }
             if (!handedOffToJavaBridge) {
+                android.util.Log.d("RelayManager", "Closing Bedrock relay socket after bridge loop exit.")
                 runCatching { relaySocket.close() }
             }
         }

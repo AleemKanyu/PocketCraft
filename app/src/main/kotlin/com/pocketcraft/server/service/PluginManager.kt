@@ -400,17 +400,23 @@ object PluginManager {
         updated = ensureTopLevelYamlValue(updated, "async-motd", "false")
         updated = ensureTopLevelYamlValue(updated, "cache-chunks", "true")
         updated = ensureTopLevelYamlValue(updated, "max-auto-connect-attempts", "5")
-        updated = ensureTopLevelYamlValue(updated, "show-cooldown", "disabled")
         updated = ensureTopLevelYamlValue(updated, "forward-hostname", "false")
-        updated = ensureTopLevelYamlValue(updated, "floodgate-key-file", floodgateKeyPath)
-        updated = ensureYamlSectionValue(updated, "remote", "address", "127.0.0.1")
-        updated = ensureYamlSectionValue(updated, "remote", "port", "25565")
-        // Use Floodgate auth so Bedrock players are not asked for a Java account.
-        updated = ensureYamlSectionValue(updated, "remote", "auth-type", "floodgate")
-
-        // Handle newer Geyser config formats (ensure auth-type is floodgate)
-        updated = ensureYamlSectionValue(updated, "server", "auth-type", "floodgate")
+        updated = ensureYamlSectionValue(updated, "advanced", "floodgate-key-file", floodgateKeyPath)
         updated = ensureYamlSectionValue(updated, "java", "auth-type", "floodgate")
+
+        // Older Geyser configs use a dedicated remote section. Only patch it when
+        // it already exists so we don't append an obsolete block to newer configs.
+        if (updated.lines().any { it.trim() == "remote:" }) {
+            // Let Geyser resolve the active Paper bind target instead of forcing loopback.
+            updated = ensureYamlSectionValue(updated, "remote", "address", "auto")
+            updated = ensureYamlSectionValue(updated, "remote", "port", "25565")
+            updated = ensureYamlSectionValue(updated, "remote", "auth-type", "floodgate")
+        }
+
+        // Handle newer config variants that may expose auth in an additional server section.
+        if (updated.lines().any { it.trim() == "server:" }) {
+            updated = ensureYamlSectionValue(updated, "server", "auth-type", "floodgate")
+        }
 
         updated = ensureYamlSectionValue(updated, "motd", "passthrough-motd", "false")
         updated = ensureYamlSectionValue(updated, "motd", "passthrough-player-counts", "false")
@@ -557,11 +563,11 @@ object PluginManager {
             line.trimStart() == "$key: $value" || (!line.startsWith(" ") && !line.startsWith("\t") && line.trimStart().startsWith("$key:"))
         }
         if (keyIndex != -1) {
-            lines[keyIndex] = "$key: $value"
+            lines[keyIndex] = "$key: ${formatYamlScalar(value)}"
         } else {
             if (lines.size == 1 && lines[0].isBlank()) lines.clear()
             if (lines.isNotEmpty() && lines.last().isNotBlank()) lines += ""
-            lines += "$key: $value"
+            lines += "$key: ${formatYamlScalar(value)}"
         }
         return lines.joinToString("\n").trimEnd() + "\n"
     }
@@ -597,7 +603,7 @@ object PluginManager {
                 lines += ""
             }
             lines += "$section:"
-            lines += "  $key: $value"
+            lines += "  $key: ${formatYamlScalar(value)}"
             return lines.joinToString("\n").trimEnd() + "\n"
         }
 
@@ -618,9 +624,9 @@ object PluginManager {
         }
 
         if (keyIndex != null) {
-            lines[keyIndex] = "  $key: $value"
+            lines[keyIndex] = "  $key: ${formatYamlScalar(value)}"
         } else {
-            lines.add(sectionEnd, "  $key: $value")
+            lines.add(sectionEnd, "  $key: ${formatYamlScalar(value)}")
         }
 
         return lines.joinToString("\n").trimEnd() + "\n"
