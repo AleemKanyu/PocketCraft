@@ -19,6 +19,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 class BedrockUdpBridge(
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val geyserHostProvider: () -> String = { GEYSER_LOCAL_HOST },
     private val onResponse: (ByteArray) -> Unit
 ) {
 
@@ -27,14 +28,16 @@ class BedrockUdpBridge(
         private const val GEYSER_LOCAL_PORT = 19132
         private const val MAX_UDP_SIZE = 65536
         private const val GEYSER_LOCAL_HOST = "127.0.0.1"
-        private const val INBOUND_CHANNEL_CAPACITY = 512
+        private const val INBOUND_CHANNEL_CAPACITY = Channel.UNLIMITED
     }
 
     private var running = false
     private var bridgeJob: Job? = null
+    private var outboundJob: Job? = null
     private var scope: CoroutineScope? = null
     private val clientSockets = ConcurrentHashMap<String, DatagramSocket>()
     private val inboundFrames = Channel<BedrockFrame>(capacity = INBOUND_CHANNEL_CAPACITY)
+    private val outboundFrames = Channel<ByteArray>(capacity = INBOUND_CHANNEL_CAPACITY)
 
     fun start() {
         if (running) return
@@ -46,6 +49,16 @@ class BedrockUdpBridge(
                     forwardFrameToGeyser(frame)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error forwarding to Geyser: ${e.message}")
+                }
+            }
+        }
+        
+        outboundJob = scope?.launch {
+            for (frame in outboundFrames) {
+                try {
+                    onResponse(frame)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error writing outbound frame: ${e.message}")
                 }
             }
         }
@@ -64,10 +77,16 @@ class BedrockUdpBridge(
     private fun forwardFrameToGeyser(frame: BedrockFrame) {
         val clientKey = "${frame.clientIp}:${frame.clientPort}"
         val socket = clientSockets.computeIfAbsent(clientKey) {
+            val geyserHost = geyserHostProvider()
+                .trim()
+                .takeIf { it.isNotBlank() }
+                ?: GEYSER_LOCAL_HOST
             DatagramSocket().also { datagramSocket ->
-                datagramSocket.receiveBufferSize = 65_536
-                datagramSocket.sendBufferSize = 65_536
-                datagramSocket.connect(InetAddress.getByName(GEYSER_LOCAL_HOST), GEYSER_LOCAL_PORT)
+                // Large receive buffer so the OS can absorb Geyser's chunk burst
+                // without silently dropping datagrams before our receive() loop picks them up.
+                datagramSocket.receiveBufferSize = 4 * 1024 * 1024  // 4 MB
+                datagramSocket.sendBufferSize   = 1024 * 1024        // 1 MB
+                datagramSocket.connect(InetAddress.getByName(geyserHost), GEYSER_LOCAL_PORT)
                 startListening(datagramSocket, frame.clientIp, frame.clientPort)
             }
         }
@@ -77,16 +96,37 @@ class BedrockUdpBridge(
     }
 
     private fun startListening(socket: DatagramSocket, clientIp: String, clientPort: Int) {
+        val ipParts = clientIp.split(".").map { it.toIntOrNull() ?: 0 }
+        val ipBytes = byteArrayOf(ipParts[0].toByte(), ipParts[1].toByte(), ipParts[2].toByte(), ipParts[3].toByte())
+
         scope?.launch {
             try {
+                val buffer = ByteArray(MAX_UDP_SIZE)
+                val packet = DatagramPacket(buffer, buffer.size)
+
                 while (isActive) {
-                    val buffer = ByteArray(MAX_UDP_SIZE)
-                    val packet = DatagramPacket(buffer, buffer.size)
+                    packet.length = buffer.size
                     socket.receive(packet)
 
-                    val payload = packet.data.copyOfRange(0, packet.length)
-                    val responseFrame = buildResponseFrame(clientIp, clientPort, payload)
-                    onResponse(responseFrame)
+                    val payloadLen = packet.length
+
+                    val frameLen = 1 + 2 + 4 + 2 + payloadLen
+                    val frame = ByteArray(frameLen)
+                    frame[0] = 0x03
+                    frame[1] = (payloadLen shr 8).toByte()
+                    frame[2] = payloadLen.toByte()
+                    frame[3] = ipBytes[0]
+                    frame[4] = ipBytes[1]
+                    frame[5] = ipBytes[2]
+                    frame[6] = ipBytes[3]
+                    frame[7] = (clientPort shr 8).toByte()
+                    frame[8] = clientPort.toByte()
+                    System.arraycopy(buffer, 0, frame, 9, payloadLen)
+
+                    val result = outboundFrames.trySend(frame)
+                    if (result.isFailure) {
+                        Log.w(TAG, "Dropping outbound Bedrock frame due to TCP write backpressure")
+                    }
                 }
             } catch (e: Exception) {
                 if (isActive) Log.v(TAG, "Socket closed for $clientIp:$clientPort")
@@ -102,11 +142,14 @@ class BedrockUdpBridge(
         running = false
         bridgeJob?.cancel()
         bridgeJob = null
+        outboundJob?.cancel()
+        outboundJob = null
         clientSockets.values.forEach { it.close() }
         clientSockets.clear()
         scope?.cancel()
         scope = null
         while (inboundFrames.tryReceive().isSuccess) {}
+        while (outboundFrames.tryReceive().isSuccess) {}
         Log.i(TAG, "Bedrock UDP bridge stopped")
     }
 
@@ -129,29 +172,5 @@ class BedrockUdpBridge(
         if (data.size < 9 + payloadLen) return null
         val payload = data.copyOfRange(9, 9 + payloadLen)
         return BedrockFrame(ip, port, payload)
-    }
-
-    fun buildResponseFrame(clientIp: String, clientPort: Int, payload: ByteArray): ByteArray {
-        check(clientPort in 1..65_535) { "BedrockUdpBridge: invalid clientPort=$clientPort" }
-        require(payload.size <= 65_535) { "BedrockUdpBridge: payload too large=${payload.size}" }
-
-        val ipParts = clientIp.split(".").map { it.toIntOrNull() }
-        require(ipParts.size == 4 && ipParts.all { it != null && it in 0..255 }) {
-            "BedrockUdpBridge: invalid clientIp=$clientIp"
-        }
-        require(clientIp != "0.0.0.0") { "BedrockUdpBridge: invalid clientIp=$clientIp" }
-
-        Log.d(TAG, "Writing Bedrock response frame to $clientIp:$clientPort bytes=${payload.size}")
-
-        val out = ByteArrayOutputStream(1 + 2 + 4 + 2 + payload.size)
-        DataOutputStream(out).use { dos ->
-            dos.writeByte(0x03)
-            dos.writeShort(payload.size)
-            ipParts.forEach { dos.writeByte(it!!) }
-            dos.writeShort(clientPort)
-            dos.write(payload)
-            dos.flush()
-        }
-        return out.toByteArray()
     }
 }

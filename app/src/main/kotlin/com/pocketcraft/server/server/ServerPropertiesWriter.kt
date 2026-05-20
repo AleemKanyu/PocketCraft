@@ -92,7 +92,7 @@ object ServerPropertiesWriter {
         props["generate-structures"] = prefs.generateStructures.toString()
         props["level-type"] = prefs.levelType
         props["server-ip"] = "0.0.0.0"
-        props["network-compression-threshold"] = "256"
+        props["network-compression-threshold"] = "-1"
         props["sync-chunk-writes"] = "false"
         props["max-tick-time"] = "60000"
         props["enable-rcon"] = "true"

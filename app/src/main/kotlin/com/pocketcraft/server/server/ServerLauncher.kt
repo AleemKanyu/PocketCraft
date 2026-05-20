@@ -175,10 +175,8 @@ class ServerLauncher(private val context: Context) {
         Thread {
             var result = -1
             try {
-                result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    // Android 12+ introduces the Phantom Process Killer.
-                    // By running the JVM in-process via JNI, we hide it inside the Foreground Service.
-                    onOutput("[PocketCraft] Bypassing Phantom Process Killer: Launching in-process JVM on Android ${Build.VERSION.RELEASE}.")
+                result = runCatching {
+                    onOutput("[PocketCraft] Launching in-process JVM on Android ${Build.VERSION.RELEASE}.")
                     NativeLauncher.launchJVM(
                         jrePath = jrePath,
                         jarPath = jarPath,
@@ -191,59 +189,9 @@ class ServerLauncher(private val context: Context) {
                         serverType = serverType.name,
                         port = resolveServerPort(worldName)
                     )
-                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    val externalExit = runCatching {
-                        launchExternalJvm(
-                            javaBin = javaBin,
-                            jrePath = jrePath,
-                            jarPath = jarPath,
-                            serverDir = serverDir,
-                            tmpDir = tmpDir,
-                            shimDir = shimDir,
-                            minRamMb = minRamMb,
-                            maxRamMb = maxRamMb,
-                            worldName = worldName,
-                            onOutput = onOutput,
-                            onError = onError
-                        )
-                    }.getOrElse { error ->
-                        onOutput(
-                            "[PocketCraft] External JVM launch failed on Android ${Build.VERSION.RELEASE}: ${error.message}. Falling back to isolated bootstrap."
-                        )
-                        Int.MIN_VALUE
-                    }
-
-                    if (externalExit == Int.MIN_VALUE || externalExit == 126 || externalExit == 127) {
-                        onOutput("[PocketCraft] Launching isolated JVM bootstrap on Android ${Build.VERSION.RELEASE}.")
-                        NativeLauncher.launchJVM(
-                            jrePath = jrePath,
-                            jarPath = jarPath,
-                            serverDir = serverDir,
-                            tmpDir = tmpDir,
-                            nativeLibDir = context.applicationInfo.nativeLibraryDir,
-                            shimDir = shimDir.absolutePath,
-                            minRamMb = minRamMb,
-                            maxRamMb = maxRamMb,
-                            serverType = serverType.name,
-                            port = resolveServerPort(worldName)
-                        )
-                    } else {
-                        externalExit
-                    }
-                } else {
-                    launchExternalJvm(
-                        javaBin = javaBin,
-                        jrePath = jrePath,
-                        jarPath = jarPath,
-                        serverDir = serverDir,
-                        tmpDir = tmpDir,
-                        shimDir = shimDir,
-                        minRamMb = minRamMb,
-                        maxRamMb = maxRamMb,
-                        worldName = worldName,
-                        onOutput = onOutput,
-                        onError = onError
-                    )
+                }.getOrElse { 
+                    onOutput("[PocketCraft] Failed to launch in-process JVM: ${it.message}")
+                    -1
                 }
                 if (result != 0) {
                     reportHotspotCrash(serverDir, onError)
@@ -506,12 +454,7 @@ class ServerLauncher(private val context: Context) {
             onOutput("[PocketCraft] Flight Mode active: enabling allow-flight.")
         }
 
-        val tunedCompression = when {
-            currentCompression == null -> ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD
-            currentCompression < 0 -> ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD
-            currentCompression > 512 -> ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD
-            else -> currentCompression
-        }
+        val tunedCompression = -1
         val tunedEntityBroadcast = when {
             currentEntityBroadcast == null -> ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
             currentEntityBroadcast <= 0 -> ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
@@ -568,20 +511,9 @@ class ServerLauncher(private val context: Context) {
 
         var updated = original
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "auto-config-send-distance", "true")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-generates", "1")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", "4")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-loading-priority-override", "10")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-generate-rate", "10.0")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-load-rate", "100.0")
         updated = ensureYamlSectionValue(updated, "misc", "io-threads", "2")
         updated = ensureYamlSectionValue(updated, "misc", "worker-threads", "2")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "player-max-chunk-send-rate", "40.0")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-basic", "target-player-chunk-send-rate", "20.0")
         updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "2")
-        // Chunk system: dedicate minimal threads for IO and generation on mobile
-        updated = ensureYamlSectionValue(updated, "chunk-system", "gen-parallelism", "default")
-        updated = ensureYamlSectionValue(updated, "chunk-system", "io-threads", "1")
-        updated = ensureYamlSectionValue(updated, "chunk-system", "worker-threads", "1")
 
         // Disable bundled Spark profiler (fails to load native libraries on Android)
         updated = ensureYamlSectionValue(updated, "spark", "enabled", "false")

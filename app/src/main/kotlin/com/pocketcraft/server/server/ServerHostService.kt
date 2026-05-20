@@ -79,8 +79,6 @@ class ServerHostService : Service() {
     private val portProbeRunning = AtomicBoolean(false)
     private val tunnelStarted = AtomicBoolean(false)
     private val serverReadyHandled = AtomicBoolean(false)
-    private val chunkyRunning = AtomicBoolean(false)
-    private val chunkyPausedForPlayer = AtomicBoolean(false)
     private val stopInProgress = AtomicBoolean(false)
     private val logBuffer = ArrayDeque<String>(1000)
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -180,8 +178,6 @@ class ServerHostService : Service() {
         stopReason = "unknown"
         serverReadyNotificationShown = false
         serverReadyHandled.set(false)
-        chunkyRunning.set(false)
-        chunkyPausedForPlayer.set(false)
         setServerReadyState(false)
         relayStatusPlayerCount.set(0)
         synchronized(relayOnlinePlayers) { relayOnlinePlayers.clear() }
@@ -401,13 +397,13 @@ class ServerHostService : Service() {
                     ServerLauncher.sendCommand("stop")
                 }
 
-                // Wait max 45 seconds for the server to gracefully stop (chunk saving can take time)
-                val deadline = SystemClock.elapsedRealtime() + 45_000L
+                // Keep shutdown responsive; the app already requested a save before stopping.
+                val deadline = SystemClock.elapsedRealtime() + STOP_GRACE_PERIOD_MS
                 while (SystemClock.elapsedRealtime() < deadline) {
                     if (!isLaunching) { // isLaunching is set to false in onStopped
                         break
                     }
-                    delay(500)
+                    delay(250)
                 }
 
             } catch (e: Exception) {
@@ -452,7 +448,7 @@ class ServerHostService : Service() {
                 }
 
                 if (inProcessRuntime && isLaunching) {
-                    android.util.Log.e("PocketCraft", "Server JVM thread did not exit after 45s stop grace period. Force killing :server process.")
+                    android.util.Log.e("PocketCraft", "Server JVM thread did not exit after ${STOP_GRACE_PERIOD_MS}ms stop grace period. Force killing :server process.")
                     stopSelf()
                     android.os.Process.killProcess(android.os.Process.myPid())
                 } else {
@@ -1075,8 +1071,6 @@ class ServerHostService : Service() {
         stopReason = "unknown"
         serverReadyNotificationShown = false
         serverReadyHandled.set(false)
-        chunkyRunning.set(false)
-        chunkyPausedForPlayer.set(false)
         relayStatusPlayerCount.set(0)
         synchronized(relayOnlinePlayers) { relayOnlinePlayers.clear() }
         persistRuntimeState(applicationContext, versionId, worldName, RUNTIME_STATE_RUNNING)
@@ -1339,15 +1333,7 @@ class ServerHostService : Service() {
             serviceScope.launch(Dispatchers.IO) {
                 publishRelayStatus(versionId)
             }
-            if (chunkyRunning.get() && chunkyPausedForPlayer.compareAndSet(false, true)) {
-                ServerLauncher.sendCommand("chunky pause")
-                sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] Paused Chunky pre-generation to prioritize player join.")
-            }
-            // Force chunk resend after player joins to fix blank/wireframe chunks
-            serviceScope.launch {
-                delay(3000) // Give client time to fully connect
-                ServerLauncher.sendCommand("send-chunks $name")
-            }
+            scheduleChunkResendBurst(name)
         }
         ConsoleParser.parseLeave(line)?.let { name ->
             val remainingPlayers = synchronized(relayOnlinePlayers) {
@@ -1358,11 +1344,6 @@ class ServerHostService : Service() {
             }
             serviceScope.launch(Dispatchers.IO) {
                 publishRelayStatus(versionId)
-            }
-            if (remainingPlayers == 0 && chunkyPausedForPlayer.compareAndSet(true, false)) {
-                ServerLauncher.sendCommand("chunky continue")
-                chunkyRunning.set(true)
-                sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] Resuming Chunky pre-generation now that players are offline.")
             }
         }
         ConsoleParser.parseCommand(line)?.let { (name, cmd) ->
@@ -1385,23 +1366,17 @@ class ServerHostService : Service() {
         if (ConsoleParser.isPreparingStartRegion(line)) {
             sendEvent(versionId, EVENT_CHUNKS_LOADING, line)
         }
-        ConsoleParser.parseChunkyProgress(line)?.let { progress ->
-            chunkyRunning.set(true)
-            chunkyPausedForPlayer.set(false)
-            val intent = Intent(ACTION_SERVER_EVENT).apply {
-                putExtra(EXTRA_VERSION_ID, versionId)
-                putExtra(EXTRA_EVENT_TYPE, EVENT_CHUNKY_PROGRESS)
-                putExtra(EXTRA_CHUNKY_PERCENT, progress.percent)
+    }
+
+    private fun scheduleChunkResendBurst(name: String) {
+        // Bedrock/Geyser clients sometimes finish login before all chunks have
+        // been fully acknowledged over the relay. A few staggered resend passes
+        // recover most partial/wireframe chunk cases without needing a rejoin.
+        serviceScope.launch {
+            listOf(3_000L, 8_000L, 15_000L).forEach { delayMs ->
+                delay(delayMs)
+                ServerLauncher.sendCommand("send-chunks $name")
             }
-            sendBroadcast(intent)
-        }
-        if (line.contains("[Chunky]", ignoreCase = true) &&
-            (line.contains("Task finished", ignoreCase = true) ||
-                line.contains("paused", ignoreCase = true) ||
-                line.contains("stopped", ignoreCase = true))
-        ) {
-            chunkyRunning.set(false)
-            chunkyPausedForPlayer.set(false)
         }
     }
 

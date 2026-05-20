@@ -27,6 +27,7 @@ import java.net.Socket
 import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.random.Random
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -37,19 +38,21 @@ class RelayManager(private val context: Context) {
     companion object {
         const val CONTROL_PORT = 8080
         const val PHONE_TUNNEL_PORT = 9000
-        private const val SOCKET_BUFFER_SIZE = 64 * 1024
-        private const val PLAYER_BRIDGE_BUFFER_SIZE = 16 * 1024
+        private const val SOCKET_BUFFER_SIZE = 1024 * 1024
+        private const val PLAYER_BRIDGE_BUFFER_SIZE = 256 * 1024
         private const val LOW_LATENCY_WARMUP_BYTES = 128 * 1024L
         private const val LOW_LATENCY_WARMUP_NS = 4_000_000_000L
         private const val INITIAL_POOL_SIZE = 5
         private const val TARGET_POOL_SIZE = 5
         private const val POOL_REFRESH_FLOOR = 2
         private const val IDLE_REPLENISH_DELAY_MS = 1_500L
-        private const val SOCKET_OPEN_STAGGER_MS = 250L
+        private const val SOCKET_OPEN_STAGGER_MS = 100L
         private const val TUNNEL_HEARTBEAT_INTERVAL_MS = 15_000L
-        private const val IDLE_SOCKET_REFRESH_INTERVAL_MS = 120_000L
-        private const val SOCKET_IDLE_TIMEOUT_MS = 120_000L
-        private const val INITIAL_POOL_READY_TIMEOUT_MS = 12_000L
+        private const val IDLE_SOCKET_REFRESH_INTERVAL_MS = 5 * 60_000L
+        private const val SOCKET_IDLE_TIMEOUT_MS = 8 * 60_000L
+        private const val SOCKET_IDLE_TIMEOUT_JITTER_MS = 90_000L
+        private const val INITIAL_POOL_READY_TIMEOUT_MS = 8_000L
+        private const val READY_POOL_SIZE = 2
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
 
@@ -68,7 +71,7 @@ class RelayManager(private val context: Context) {
     private var bedrockUdpBridge: BedrockUdpBridge? = null
     @Volatile
     private var activeBedrockSocket: Socket? = null
-    private val bedrockTxChannel = Channel<ByteArray>(capacity = 512)
+    private val bedrockTxChannel = Channel<ByteArray>(capacity = Channel.UNLIMITED)
     private var bedrockTxJob: kotlinx.coroutines.Job? = null
 
     private val poolTargetSize = AtomicInteger(INITIAL_POOL_SIZE)
@@ -86,6 +89,9 @@ class RelayManager(private val context: Context) {
     private var activeTunnelLocalPort: Int? = null
     @Volatile
     private var resolvedRelayIp: String? = null
+    @Volatile
+    private var activeGeyserUdpHost: String = "127.0.0.1"
+    private val inboundBedrockFrameCount = AtomicInteger(0)
 
     private data class PooledSocket(
         val socket: Socket,
@@ -183,10 +189,19 @@ class RelayManager(private val context: Context) {
 
     fun startBedrockBridge() {
         if (bedrockUdpBridge != null) return
-        
+
         bedrockTxJob?.cancel()
         bedrockTxJob = poolScope.launch(Dispatchers.IO) {
-            for (frame in bedrockTxChannel) {
+            var currentSocket: java.net.Socket? = null
+            var outStream: java.io.BufferedOutputStream? = null
+
+            while (poolScope.isActive) {
+                val firstFrame = try {
+                    bedrockTxChannel.receive()
+                } catch (e: Exception) {
+                    break // Channel closed or job cancelled
+                }
+
                 var socket = activeBedrockSocket
                 var waitedMs = 0L
                 while ((socket == null || socket.isClosed) && waitedMs < 2_000L && poolScope.isActive) {
@@ -198,22 +213,49 @@ class RelayManager(private val context: Context) {
                 if (socket == null || socket.isClosed) {
                     android.util.Log.w(
                         "RelayManager",
-                        "Dropping Bedrock response frame (${frame.size} bytes) because no active Bedrock relay socket is available."
+                        "Dropping Bedrock response frame (${firstFrame.size} bytes): no active Bedrock relay socket."
                     )
                     continue
                 }
 
+                if (socket != currentSocket) {
+                    outStream = java.io.BufferedOutputStream(socket.getOutputStream(), 128 * 1024)
+                    currentSocket = socket
+                }
+
                 try {
-                    val output = socket.getOutputStream()
-                    output.write(frame)
-                    output.flush()
+                    outStream?.write(firstFrame)
+                    
+                    // Batch drain any other immediately available frames to reduce syscalls
+                    while (true) {
+                        val nextResult = bedrockTxChannel.tryReceive()
+                        if (nextResult.isSuccess) {
+                            val nextFrame = nextResult.getOrThrow()
+                            outStream?.write(nextFrame)
+                        } else {
+                            break
+                        }
+                    }
+                    
+                    // Flush the batched frames to the network
+                    outStream?.flush()
                 } catch (e: Exception) {
                     android.util.Log.e("RelayManager", "Failed to send Bedrock response: ${e.message}")
+                    currentSocket = null
+                    outStream = null
                 }
             }
         }
 
-        bedrockUdpBridge = BedrockUdpBridge { frame ->
+        // Always use 127.0.0.1 (loopback) for local Geyser UDP IPC.
+        // Using the WiFi IP (activeGeyserUdpHost) breaks the connected DatagramSocket:
+        // on Android, packets to your own IP route via loopback, so Geyser replies
+        // arrive *from* 127.0.0.1 — a connected socket silently drops replies from
+        // any address other than the one it connected to, causing socket.receive()
+        // to block forever and no outbound frames to flow back to the relay.
+        bedrockUdpBridge = BedrockUdpBridge(
+            geyserHostProvider = { "127.0.0.1" }
+        ) { frame ->
             val result = bedrockTxChannel.trySend(frame)
             if (result.isFailure) {
                 android.util.Log.w("RelayManager", "Dropped Bedrock UDP frame due to channel capacity")
@@ -263,6 +305,7 @@ class RelayManager(private val context: Context) {
         resetPoolSizing()
         android.util.Log.i("RelayManager", "Starting pool of ${poolTargetSize.get()} sockets...")
         activeTunnelLocalPort = localPort
+        updateActiveGeyserUdpHost()
         tunnelHeartbeatJob?.cancel()
         tunnelHeartbeatJob = poolScope.launch(Dispatchers.IO) {
             while (isActive) {
@@ -313,12 +356,12 @@ class RelayManager(private val context: Context) {
     private suspend fun waitForInitialPoolReady(): Boolean {
         val deadline = System.currentTimeMillis() + INITIAL_POOL_READY_TIMEOUT_MS
         while (poolScope.isActive && System.currentTimeMillis() < deadline) {
-            if (currentPoolSize() >= TARGET_POOL_SIZE) {
+            if (currentPoolSize() >= READY_POOL_SIZE) {
                 return true
             }
             delay(100)
         }
-        return currentPoolSize() >= TARGET_POOL_SIZE
+        return currentPoolSize() >= READY_POOL_SIZE
     }
 
     fun snapshotTunnelHealth(): TunnelHealth {
@@ -350,6 +393,10 @@ class RelayManager(private val context: Context) {
             .distinct()
 
         val localIp = localIpCandidates.firstOrNull()
+        if (localIp != null && localIp != activeGeyserUdpHost) {
+            activeGeyserUdpHost = localIp
+            android.util.Log.i("RelayManager", "Using local Geyser UDP host $activeGeyserUdpHost for Bedrock relay bridge.")
+        }
 
         android.util.Log.d("RelayManager", "Notifying relay phone-ready (userId=$userId, relay=$relayHost, local=$localIp:$localPort)")
 
@@ -476,6 +523,22 @@ class RelayManager(private val context: Context) {
             ?.takeIf { it.isNotBlank() }
     }
 
+    private fun updateActiveGeyserUdpHost() {
+        val relayHost = activeRelayHost ?: com.pocketcraft.server.data.preferences.AppPreferences(context).relayHost
+        val candidate = listOfNotNull(
+            com.pocketcraft.server.server.ServerAddressResolver.getLocalIpAddress(),
+            resolveRouteLocalIp(relayHost)
+        )
+            .map { it.trim() }
+            .firstOrNull { it.isNotBlank() && !it.startsWith("127.") && it != "0.0.0.0" }
+
+        val nextHost = candidate ?: "127.0.0.1"
+        if (nextHost != activeGeyserUdpHost) {
+            activeGeyserUdpHost = nextHost
+            android.util.Log.i("RelayManager", "Using local Geyser UDP host $activeGeyserUdpHost for Bedrock relay bridge.")
+        }
+    }
+
     private fun resolvePreferIPv4(host: String): InetAddress {
         return InetAddress.getAllByName(host)
             .firstOrNull { it is Inet4Address }
@@ -484,9 +547,13 @@ class RelayManager(private val context: Context) {
 
     private fun resolveRelayIp(relayHost: String): String? {
         val configuredFallback = RelayServers.getByHost(relayHost).fallbackIp
-        if (!configuredFallback.isNullOrBlank()) {
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+
+        if (configuredFallback != null) {
             return configuredFallback
         }
+
         return runBlocking(Dispatchers.IO) {
             runCatching {
                 withTimeoutOrNull(2_000L) {
@@ -517,6 +584,10 @@ class RelayManager(private val context: Context) {
     }
 
     private fun currentPoolSize(): Int = synchronized(socketPool) { socketPool.size }
+
+    private fun nextIdleSocketTimeoutMs(): Long {
+        return SOCKET_IDLE_TIMEOUT_MS + Random.nextLong(SOCKET_IDLE_TIMEOUT_JITTER_MS)
+    }
 
     private fun refreshOneIdlePoolSocketIfNeeded(localPort: Int) {
         val now = System.currentTimeMillis()
@@ -601,7 +672,7 @@ class RelayManager(private val context: Context) {
                 android.util.Log.v("RelayManager", "Socket added to pool. Size: ${socketPool.size}/${poolTargetSize.get()}")
 
                 // Keep idle pool sockets alive long enough to serve a join burst without churn.
-                socket!!.soTimeout = SOCKET_IDLE_TIMEOUT_MS.toInt()
+                socket!!.soTimeout = nextIdleSocketTimeoutMs().toInt()
 
                 val connectedAt = System.currentTimeMillis()
 
@@ -686,7 +757,7 @@ class RelayManager(private val context: Context) {
         var handedOffToJavaBridge = false
         
         try {
-            val relayInput = relaySocket.getInputStream()
+            val relayInput = java.io.BufferedInputStream(relaySocket.getInputStream(), 128 * 1024)
             
             // The first byte was already consumed (it was 0x02).
             // Header is 9 bytes total: type (1), len (2), ip (4), port (2).
@@ -712,9 +783,10 @@ class RelayManager(private val context: Context) {
                 pOffset += read
             }
             if (pOffset == payloadLen) {
+                val frameNo = inboundBedrockFrameCount.incrementAndGet()
                 android.util.Log.d(
                     "RelayManager",
-                    "Received first Bedrock relay frame (${firstFrame.size} bytes); forwarding to local Geyser."
+                    "Received first Bedrock relay frame #$frameNo (${firstFrame.size} bytes, payload=$payloadLen); forwarding to local Geyser."
                 )
                 bedrockUdpBridge?.onIncomingFrame(firstFrame)
             }
@@ -759,7 +831,14 @@ class RelayManager(private val context: Context) {
                     npOff += r
                 }
                 if (npOff < len) break
-                
+
+                val frameNo = inboundBedrockFrameCount.incrementAndGet()
+                if (frameNo <= 20 || frameNo % 25 == 0) {
+                    android.util.Log.d(
+                        "RelayManager",
+                        "Inbound Bedrock relay frame #$frameNo type=0x02 bytes=${frame.size} payload=$len client=${frame[3].toInt() and 0xFF}.${frame[4].toInt() and 0xFF}.${frame[5].toInt() and 0xFF}.${frame[6].toInt() and 0xFF}:${((frame[7].toInt() and 0xFF) shl 8) or (frame[8].toInt() and 0xFF)}"
+                    )
+                }
                 bedrockUdpBridge?.onIncomingFrame(frame)
             }
         } catch (e: Exception) {
@@ -807,14 +886,11 @@ class RelayManager(private val context: Context) {
 
                 // Manually push the first byte to the server
                 output.write(firstByte)
-                output.flush()
                 totalBytes += 1
 
                 // Continue streaming normally
                 val buffer = ByteArray(PLAYER_BRIDGE_BUFFER_SIZE)
                 var bytesRead: Int
-                var unflushedBytes = 0
-                var lastFlushTime = System.nanoTime()
                 android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
 
                 while (true) {
@@ -822,31 +898,17 @@ class RelayManager(private val context: Context) {
                     if (bytesRead <= 0) break
 
                     val startTime = System.nanoTime()
+                    // tcpNoDelay=true on the socket means every write() is sent immediately
+                    // by the kernel — an explicit flush() on an unbuffered OutputStream is
+                    // a no-op and only wastes a syscall round-trip.
                     output.write(buffer, 0, bytesRead)
-                    unflushedBytes += bytesRead
                     totalBytes += bytesRead
-
-                    // Keep the first moments of a connection ultra-low-latency so
-                    // Minecraft status pings and login handshakes answer immediately.
-                    val lowLatencyWarmup = totalBytes <= LOW_LATENCY_WARMUP_BYTES ||
-                        (System.nanoTime() - bridgeStartedAt) <= LOW_LATENCY_WARMUP_NS
-                    val shouldFlush = lowLatencyWarmup ||
-                        unflushedBytes >= 4_096 ||
-                        (unflushedBytes > 0 && (System.nanoTime() - lastFlushTime) > 8_000_000) // 8ms
-
-                    if (shouldFlush) {
-                        output.flush()
-                        unflushedBytes = 0
-                        lastFlushTime = System.nanoTime()
-                    }
 
                     val durationMicros = (System.nanoTime() - startTime) / 1000
                     if (durationMicros > 50_000) {
                          android.util.Log.w("RelayManager", "RelayToLocal stall! Wrote $bytesRead bytes in ${durationMicros}μs")
                     }
                 }
-                // Final flush
-                if (unflushedBytes > 0) output.flush()
                 android.util.Log.d("RelayManager", "RelayToLocal: End of stream. Total downstream: $totalBytes bytes")
             } catch (e: Exception) {
                 android.util.Log.e("RelayManager", "RelayToLocal error: ${e.message}")
@@ -863,8 +925,6 @@ class RelayManager(private val context: Context) {
                 val output = relaySocket.getOutputStream()
                 val buffer = ByteArray(PLAYER_BRIDGE_BUFFER_SIZE)
                 var bytesRead: Int
-                var unflushedBytes = 0
-                var lastFlushTime = System.nanoTime()
                 android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
 
                 while (true) {
@@ -872,29 +932,16 @@ class RelayManager(private val context: Context) {
                     if (bytesRead <= 0) break
 
                     val startTime = System.nanoTime()
+                    // Socket OutputStream is unbuffered; flush() is a no-op here.
+                    // tcpNoDelay=true ensures the kernel sends each write immediately.
                     output.write(buffer, 0, bytesRead)
-                    unflushedBytes += bytesRead
                     totalBytes += bytesRead
-
-                    val lowLatencyWarmup = totalBytes <= LOW_LATENCY_WARMUP_BYTES ||
-                        (System.nanoTime() - bridgeStartedAt) <= LOW_LATENCY_WARMUP_NS
-                    val shouldFlush = lowLatencyWarmup ||
-                        unflushedBytes >= 4_096 ||
-                        (unflushedBytes > 0 && (System.nanoTime() - lastFlushTime) > 8_000_000) // 8ms
-
-                    if (shouldFlush) {
-                        output.flush()
-                        unflushedBytes = 0
-                        lastFlushTime = System.nanoTime()
-                    }
 
                     val durationMicros = (System.nanoTime() - startTime) / 1000
                     if (durationMicros > 100_000) {
                         android.util.Log.d("RelayManager", "LocalToRelay write delay: ${durationMicros}μs for $bytesRead bytes")
                     }
                 }
-                // Final flush
-                if (unflushedBytes > 0) output.flush()
                 android.util.Log.d("RelayManager", "LocalToRelay: End of stream. Total upstream: $totalBytes bytes")
             } catch (e: Exception) {
                 android.util.Log.e("RelayManager", "LocalToRelay error: ${e.message}")
@@ -934,6 +981,7 @@ class RelayManager(private val context: Context) {
         tunnelHeartbeatJob?.cancel()
         tunnelHeartbeatJob = null
         activeTunnelLocalPort = null
+        activeGeyserUdpHost = "127.0.0.1"
         resetPoolSizing()
         poolJob.cancel()
         poolJob = SupervisorJob()

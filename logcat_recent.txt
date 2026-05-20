@@ -1,0 +1,1141 @@
+--------- beginning of main
+05-20 08:26:12.542  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.542  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.542  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+--------- beginning of system
+05-20 08:26:12.544  1948  1948 W NotificationHistory: Attempted to add notif for locked/gone/disabled user 0
+05-20 08:26:12.548  3714  4592 I AiAiEcho: SmartspaceNotificationPredictor no parser can handle this notification or notification is invalid
+05-20 08:26:12.550  1948  1948 I LineageHealth: Current time is 08:26:12 AM
+05-20 08:26:12.550  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:26:12.550  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:26:12.559  1948  3125 I Telecom : PhoneAccountRegistrar: getSimCallManager: SimCallManager for subId 2 queried, returning: null
+05-20 08:26:12.564  1377 14227 D NuPlayerDriver: NuPlayerDriver(0xed601870) created, clientPid(9652)
+05-20 08:26:12.574  1377  9249 D GenericSource: FileSource remote
+05-20 08:26:12.586  9652  9652 W ContrastColorUtil: Background should not be translucent: #0
+05-20 08:26:12.586  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.586  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.586  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.586  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.586  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.586  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.586  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.586  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.587  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.587  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.587  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.587  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.587  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.587  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.587  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.587  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.587  1948  7675 I MediaFocusControl: requestAudioFocus() from uid/pid 10463/9652 AA=USAGE_NOTIFICATION/CONTENT_TYPE_SONIFICATION clientId=android.media.AudioManager@bc2d21d callingPack=com.android.systemui req=3 flags=0x0 sdk=33
+05-20 08:26:12.587  1948  7675 I AudioService.FadeOutManager: unfadeOutUid() uid:10463
+05-20 08:26:12.597  2449  2454 I native  : I0000 00:00:1779245772.597103    2454 tf_lite_classifier.cc:400] Event stream classified as kNone
+05-20 08:26:12.599  9652  9652 W OnBackInvokedCallback: OnBackInvokedCallback is not enabled for the application.
+05-20 08:26:12.599  9652  9652 W OnBackInvokedCallback: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+05-20 08:26:12.605  1948  1948 D MediaRouter: onRestoreRoute() : route=RouteInfo{ name=Phone, description=null, status=null, category=RouteCategory{ name=System types=ROUTE_TYPE_LIVE_AUDIO ROUTE_TYPE_LIVE_VIDEO  groupable=false }, supportedTypes=ROUTE_TYPE_LIVE_AUDIO ROUTE_TYPE_LIVE_VIDEO , presentationDisplay=null }
+05-20 08:26:12.605  1948  1948 V MediaRouter: Selecting route: RouteInfo{ name=Phone, description=null, status=null, category=RouteCategory{ name=System types=ROUTE_TYPE_LIVE_AUDIO ROUTE_TYPE_LIVE_VIDEO  groupable=false }, supportedTypes=ROUTE_TYPE_LIVE_AUDIO ROUTE_TYPE_LIVE_VIDEO , presentationDisplay=null }
+05-20 08:26:12.627  9652  9690 D LocalImageResolver: Couldn't use ImageDecoder for drawable, falling back to non-resized load.
+05-20 08:26:12.642  9652  9690 D LocalImageResolver: Couldn't use ImageDecoder for drawable, falling back to non-resized load.
+05-20 08:26:12.649   987 17543 D android.hardware.audio.service: AcdbCmdSetOnlineData: Unable to set delta file data!
+05-20 08:26:12.649   987 17543 D android.hardware.audio.service: [ACDB Command]->[AcdbCmdSetAudProcInstanceData]->Unable to save delta file data
+05-20 08:26:12.649   987 17543 E ACDB-LOADER: [acdb_loader_store_set_audio_cal] ACDB settting parameters failed -1
+05-20 08:26:12.658  9652  9652 I FalsingManager: {context=DistanceClassifier reason={distanceVectors={dx=10.315430, vx=0.547430, dy=-77.734375, vy=-2.197762}, isHorizontal=false, velocityToDistanceMultiplier=30.000000, horizontalFlingThreshold=435.428009, verticalFlingThreshold=650.758484, horizontalSwipeThreshold=864.000000, verticalSwipeThreshold=1301.517}}
+05-20 08:26:12.658  9652  9652 I FalsingManager: {belief=0.05142670100152539 confidence=0.823228018748571}
+05-20 08:26:12.707  9652  9690 D LocalImageResolver: Couldn't use ImageDecoder for drawable, falling back to non-resized load.
+05-20 08:26:12.720  9652  9690 D LocalImageResolver: Couldn't use ImageDecoder for drawable, falling back to non-resized load.
+05-20 08:26:12.755  3714  4592 I AiAiEcho: SmartspaceNotificationPredictor no parser can handle this notification or notification is invalid
+05-20 08:26:12.762  3714  4592 I AiAiEcho: SmartspaceNotificationPredictor no parser can handle this notification or notification is invalid
+05-20 08:26:12.765  9652  9652 W ContrastColorUtil: Background should not be translucent: #0
+05-20 08:26:12.765  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.765  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.765  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.765  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.765  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.765  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.765  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.765  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.765  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.766  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.766  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.766  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.766  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.766  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.766  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.766  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.931  2449  2454 I native  : I0000 00:00:1779245772.931279    2454 tf_lite_classifier.cc:400] Event stream classified as kNone
+05-20 08:26:12.945  9652  9652 I KeyguardTransitionRepository: Transition still active: TransitionStep(from=LOCKSCREEN, to=PRIMARY_BOUNCER, value=0.0, transitionState=CANCELED, ownerName=FromLockscreenTransitionInteractor), canceling
+05-20 08:26:12.949  9652  9652 I FalsingManager: {belief=0.2853271077174383 confidence=0.698444864048463}
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #0
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.966  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:12.995  9652  9690 D LocalImageResolver: Couldn't use ImageDecoder for drawable, falling back to non-resized load.
+05-20 08:26:12.996  9652  9690 D LocalImageResolver: Couldn't use ImageDecoder for drawable, falling back to non-resized load.
+05-20 08:26:13.010  9652  9690 D LocalImageResolver: Couldn't use ImageDecoder for drawable, falling back to non-resized load.
+05-20 08:26:13.023  9652  9690 D LocalImageResolver: Couldn't use ImageDecoder for drawable, falling back to non-resized load.
+05-20 08:26:13.032  9652  9690 D LocalImageResolver: Couldn't use ImageDecoder for drawable, falling back to non-resized load.
+05-20 08:26:13.088  9652  9652 D MediaRouter: onRestoreRoute() : route=RouteInfo{ name=Phone, description=null, status=null, category=RouteCategory{ name=System types=ROUTE_TYPE_LIVE_AUDIO ROUTE_TYPE_LIVE_VIDEO  groupable=false }, supportedTypes=ROUTE_TYPE_LIVE_AUDIO ROUTE_TYPE_LIVE_VIDEO , presentationDisplay=null }
+05-20 08:26:13.089  9652  9652 V MediaRouter: Selecting route: RouteInfo{ name=Phone, description=null, status=null, category=RouteCategory{ name=System types=ROUTE_TYPE_LIVE_AUDIO ROUTE_TYPE_LIVE_VIDEO  groupable=false }, supportedTypes=ROUTE_TYPE_LIVE_AUDIO ROUTE_TYPE_LIVE_VIDEO , presentationDisplay=null }
+05-20 08:26:13.091  1948  7680 D CoreBackPreview: Window{4acd649 u0 Charging Animation}: Setting back callback null
+05-20 08:26:13.091  1377  9248 I GenericSource: start
+05-20 08:26:13.093  1948  7675 W InputManager-JNI: Input channel object '4acd649 Charging Animation (client)' was disposed without first being removed with the input manager!
+05-20 08:26:13.095  1377  9253 D CCodec  : allocate(c2.android.vorbis.decoder)
+05-20 08:26:13.097  1377  9253 I CCodec  : setting up 'default' as default (vendor) store
+05-20 08:26:13.099  1377  9253 I CCodec  : Created component [c2.android.vorbis.decoder]
+05-20 08:26:13.099  1377  9253 D CCodecConfig: read media type: audio/vorbis
+05-20 08:26:13.102  1377  9253 D ReflectedParamUpdater: extent() != 1 for single value type: algo.buffers.max-count.values
+05-20 08:26:13.102  1377  9253 D ReflectedParamUpdater: extent() != 1 for single value type: output.subscribed-indices.values
+05-20 08:26:13.102  1377  9253 D ReflectedParamUpdater: extent() != 1 for single value type: input.buffers.allocator-ids.values
+05-20 08:26:13.103  1377  9253 D ReflectedParamUpdater: extent() != 1 for single value type: output.buffers.allocator-ids.values
+05-20 08:26:13.103  1377  9253 D ReflectedParamUpdater: extent() != 1 for single value type: algo.buffers.allocator-ids.values
+05-20 08:26:13.103  1377  9253 D ReflectedParamUpdater: extent() != 1 for single value type: output.buffers.pool-ids.values
+05-20 08:26:13.103  1377  9253 D ReflectedParamUpdater: extent() != 1 for single value type: algo.buffers.pool-ids.values
+05-20 08:26:13.105  1377  9253 I CCodecConfig: query failed after returning 7 values (BAD_INDEX)
+05-20 08:26:13.105  1377  9253 D CCodecConfig: c2 config diff is Dict {
+05-20 08:26:13.105  1377  9253 D CCodecConfig:   c2::u32 coded.bitrate.value = 64000
+05-20 08:26:13.105  1377  9253 D CCodecConfig:   c2::u32 input.buffers.max-size.value = 32768
+05-20 08:26:13.105  1377  9253 D CCodecConfig:   c2::u32 input.delay.value = 0
+05-20 08:26:13.105  1377  9253 D CCodecConfig:   string input.media-type.value = "audio/vorbis"
+05-20 08:26:13.105  1377  9253 D CCodecConfig:   string output.media-type.value = "audio/raw"
+05-20 08:26:13.105  1377  9253 D CCodecConfig:   c2::u32 raw.channel-count.value = 1
+05-20 08:26:13.105  1377  9253 D CCodecConfig:   c2::u32 raw.sample-rate.value = 48000
+05-20 08:26:13.105  1377  9253 D CCodecConfig: }
+05-20 08:26:13.106  1377  9253 D MediaCodec: flushMediametrics
+05-20 08:26:13.106  1377  9253 D CCodec  : [c2.android.vorbis.decoder] buffers are bound to CCodec for this session
+05-20 08:26:13.106  1377  9253 D CCodecConfig: no c2 equivalents for durationUs
+05-20 08:26:13.106  1377  9253 D CCodecConfig: no c2 equivalents for csd-1
+05-20 08:26:13.106  1377  9253 D CCodecConfig: no c2 equivalents for flags
+05-20 08:26:13.106  1374  1374 E statsd_codec: Failed to write codec metrics to statsd (-19)
+05-20 08:26:13.107  1377  9253 D CCodecConfig: c2 config diff is   c2::u32 coded.bitrate.value = 112000
+05-20 08:26:13.107  1377  9253 D CCodecConfig:   c2::u32 raw.channel-count.value = 2
+05-20 08:26:13.107  1377  9253 D CCodecConfig:   c2::u32 raw.sample-rate.value = 44100
+05-20 08:26:13.107  1377  9253 W Codec2Client: query -- param skipped: index = 1107298332.
+05-20 08:26:13.107  1377  9253 D CCodec  : encoding statistics level = 0
+05-20 08:26:13.107  1377  9253 D CCodec  : setup formats input: AMessage(what = 0x00000000) = {
+05-20 08:26:13.107  1377  9253 D CCodec  :   int32_t bitrate = 112000
+05-20 08:26:13.107  1377  9253 D CCodec  :   int32_t channel-count = 2
+05-20 08:26:13.107  1377  9253 D CCodec  :   int32_t max-input-size = 32768
+05-20 08:26:13.107  1377  9253 D CCodec  :   string mime = "audio/vorbis"
+05-20 08:26:13.107  1377  9253 D CCodec  :   int32_t sample-rate = 44100
+05-20 08:26:13.107  1377  9253 D CCodec  : }
+05-20 08:26:13.108  1377  9253 D CCodec  : setup formats output: AMessage(what = 0x00000000) = {
+05-20 08:26:13.108  1377  9253 D CCodec  :   int32_t channel-count = 2
+05-20 08:26:13.108  1377  9253 D CCodec  :   string mime = "audio/raw"
+05-20 08:26:13.108  1377  9253 D CCodec  :   int32_t sample-rate = 44100
+05-20 08:26:13.108  1377  9253 D CCodec  :   int32_t channel-mask = 3
+05-20 08:26:13.108  1377  9253 D CCodec  :   int32_t android._config-pcm-encoding = 2
+05-20 08:26:13.108  1377  9253 D CCodec  : }
+05-20 08:26:13.108  1377  9253 I CCodecConfig: query failed after returning 7 values (BAD_INDEX)
+05-20 08:26:13.108  1377  9253 I MediaCodec: MediaCodec will operate in async mode
+05-20 08:26:13.108  1377  9252 D MediaCodec: keep callback message for reclaim
+05-20 08:26:13.108  1377  9253 W Codec2Client: query -- param skipped: index = 1342179345.
+05-20 08:26:13.108  1377  9253 W Codec2Client: query -- param skipped: index = 2415921170.
+05-20 08:26:13.110  1377  9253 D CCodecBufferChannel: [c2.android.vorbis.decoder#754] Created input block pool with allocatorID 16 => poolID 550 - OK (0)
+05-20 08:26:13.111  1377  9253 I CCodecBufferChannel: [c2.android.vorbis.decoder#754] Created output block pool with allocatorID 16 => poolID 604 - OK
+05-20 08:26:13.111  1377  9253 D CCodecBufferChannel: [c2.android.vorbis.decoder#754] Configured output block pool ids 604 => OK
+05-20 08:26:13.113  1421  9254 D SimpleC2Component: Using output block pool with poolID 604 => got 604 - 0
+05-20 08:26:13.125  1130  9528 D AudioFlinger: Client defaulted notificationFrames to 11025 for frameCount 22050
+05-20 08:26:13.130  1130  1130 W AudioFlinger: The package name(android) provided does not correspond to the uid 1041
+05-20 08:26:13.134   987 17543 I EffectsFactory: EffectCreate() create_effect
+05-20 08:26:13.145   987  1127 D ACDB-LOADER: ACDB -> send_audvoltable
+05-20 08:26:13.145   987  1127 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_INSTANCE_GAIN_DEP_STEP_TABLE_SIZE
+05-20 08:26:13.145   987  1127 D android.hardware.audio.service: Failed to fetch the lookup information of the device 00000201 
+05-20 08:26:13.145   987  1127 D ACDB-LOADER: Error: ACDB_CMD_GET_AUDPROC_INSTANCE_GAIN_DEP_STEP_TABLE_SIZE Returned = -19
+05-20 08:26:13.145   987  1127 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_INSTANCE_GAIN_DEP_STEP_TABLE, vol index 5
+05-20 08:26:13.145   987  1127 D android.hardware.audio.service: Failed to fetch the lookup information of the device 00000201 
+05-20 08:26:13.145   987  1127 D ACDB-LOADER: Error: ACDB AudProc vol returned = -19
+05-20 08:26:13.145   987  1127 D ACDB-LOADER: ACDB -> AUDIO_SET_VOL_CAL cal type = 40
+05-20 08:26:13.145   987  1127 W msm8974_platform: platform_send_gain_dep_cal: Usecase list is empty
+05-20 08:26:13.284   987 17543 D audio_hw_primary: adev_create_audio_patch: enter: num sources 1, num_sinks 1, handle 2
+05-20 08:26:13.284   987 17543 D audio_hw_primary: adev_create_audio_patch: Playback patch from mix handle 21 to device 400000
+05-20 08:26:13.284   987 17543 D audio_hw_primary: route_output_stream: enter: usecase(1: low-latency-playback) devices 400000
+05-20 08:26:13.285   987 17543 D audio_hw_primary: select_devices for use case (low-latency-playback)
+05-20 08:26:13.285   987 17543 D audio_hw_primary: select_devices: changing use case low-latency-playback output device from(2: speaker, acdb 513) to (6: speaker-safe, acdb 514)
+05-20 08:26:13.285   987 17543 D audio_hw_waves: ma_get_meters: (0,0.00)(1,0.07)(2,0.00)(3,0.07)(4,0.00)(96,1.00)(141,30.78)(142,30.80)(143,30.78)(144,30.78)(145,41.79)(148,1.00)(149,0.00)(150,0.00)(151,1.87)(152,42.00)
+05-20 08:26:13.285   987 17543 D audio_hw_primary: disable_audio_route: reset and update mixer path: low-latency-playback
+05-20 08:26:13.296   987 17543 D soundtrigger: audio_extn_sound_trigger_update_stream_status: uc_info->id 1 of type 0 for Event 2, with Raise=0
+05-20 08:26:13.296   987 17543 D hardware_info: hw_info_append_hw_type : device_name = speaker
+05-20 08:26:13.296   987 17543 D audio_hw_primary: disable_snd_device: snd_device(2: speaker)
+05-20 08:26:13.322   987 17543 D audio_hw_primary: disable_audio_route: reset and update mixer path: spkr-vi-record
+05-20 08:26:13.322   987 17543 D soundtrigger: audio_extn_sound_trigger_update_stream_status: uc_info->id 53 of type 1 for Event 2, with Raise=0
+05-20 08:26:13.322   987 17543 D hardware_info: hw_info_append_hw_type : device_name = vi-feedback
+05-20 08:26:13.322   987 17543 D audio_hw_primary: disable_snd_device: snd_device(222: vi-feedback)
+05-20 08:26:13.322   987 17543 I soundtrigger: audio_extn_sound_trigger_update_device_status: device 0xde of type 1 for Event 0, with Raise=0
+05-20 08:26:13.322   987 17543 W audio_hw_cirrus_playback: spkr_prot_stop_processing: state: 2, snd_device: 2
+05-20 08:26:13.322   987 17543 I soundtrigger: audio_extn_sound_trigger_update_device_status: device 0x2 of type 0 for Event 0, with Raise=0
+05-20 08:26:13.322   987 17543 I msm8974_platform: platform_check_and_set_codec_backend_cfg:becf: afe: bitwidth 24, samplerate 48000 channels 2, backend_idx 0 usecase = 1 device (speaker-safe)
+05-20 08:26:13.322   987 17543 I msm8974_platform: platform_check_and_set_codec_backend_cfg: new_snd_devices[0] is 6
+05-20 08:26:13.322   987 17543 I msm8974_platform: platform_check_codec_backend_cfg:becf: afe: bitwidth 24, samplerate 48000 channels 2, backend_idx 0 usecase = 1 device (speaker-safe)
+05-20 08:26:13.324   987 17543 D msm8974_platform: platform_check_codec_backend_cfg:becf: updated afe: bitwidth 24, samplerate 48000 channels 2,backend_idx 0 usecase = 1 device (speaker-safe)
+05-20 08:26:13.324   987 17543 I msm8974_platform: platform_check_codec_backend_cfg:becf: afe: Codec selected backend: 0 updated bit width: 24 and sample rate: 48000
+05-20 08:26:13.324   987 17543 I msm8974_platform: platform_check_codec_backend_cfg:becf: afe: Codec backend needs to be updated. new bit width: 24new sample rate: 48000 new channels: 2
+05-20 08:26:13.324   987 17543 I msm8974_platform: platform_set_codec_backend_cfg:becf: afe: bitwidth 24, samplerate 48000 channels 2 format 1, backend_idx 0 device (speaker-safe)
+05-20 08:26:13.325   987 17543 E msm8974_platform: platform_set_codec_backend_cfg:becf: afe: Could not get ctl for mixer command - SLIM_0_RX Format
+05-20 08:26:13.325   987 17543 D audio_hw_primary: check_usecases_codec_backend:becf: force routing 0
+05-20 08:26:13.325   987 17543 D audio_hw_primary: check_usecases_codec_backend:becf: (78) check_usecases curr device: speaker-safe, usecase device:speaker backends match 1
+05-20 08:26:13.325   987 17543 D audio_hw_primary: check_usecases_codec_backend:becf: check_usecases num.of Usecases to switch 0
+05-20 08:26:13.325   987 17543 D hardware_info: hw_info_append_hw_type : device_name = speaker-safe
+05-20 08:26:13.325   987 17543 D audio_route: Apply path: speaker-safe
+05-20 08:26:13.335   987 17543 D hardware_info: hw_info_append_hw_type : device_name = vi-feedback
+05-20 08:26:13.335   987 17543 D audio_hw_primary: enable_snd_device: snd_device(222: vi-feedback)
+05-20 08:26:13.335   987 17543 D msm8974_platform: platform_get_island_cfg_on_device:island cfg status on snd_device = (vi-feedback 0)
+05-20 08:26:13.335   987 17543 I soundtrigger: audio_extn_sound_trigger_update_device_status: device 0xde of type 1 for Event 1, with Raise=0
+05-20 08:26:13.335   987 17543 D audio_route: Apply path: vi-feedback
+05-20 08:26:13.336   987 17543 D soundtrigger: audio_extn_sound_trigger_update_stream_status: uc_info->id 53 of type 1 for Event 3, with Raise=0
+05-20 08:26:13.336   987 17543 D audio_hw_utils: audio_extn_utils_send_app_type_cfg: usecase->in_snd_device vi-feedback
+05-20 08:26:13.336   987 17543 E audio_hw_utils: send_app_type_cfg_for_device: Could not get ctl for mixer cmd - Audio Stream Capture 55 App Type Cfg
+05-20 08:26:13.336   987 17543 D audio_hw_waves: ma_set_device: 53 is not supported usecase
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> send_audio_cal, acdb_id = 512, path = 1, app id = 0x11132, sample rate = 8000, afe_sample_rate = 8000
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> send_asm_topology
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_STREAM_TOPOLOGY_ID
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> send_adm_topology
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_COMMON_TOPOLOGY_ID
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> send_audtable
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_INSTANCE_COMMON_TABLE_SIZE
+05-20 08:26:13.336   987 17543 D android.hardware.audio.service: Failed to fetch the lookup information of the device 00000200 
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: Error: ACDB_CMD_GET_AUDPROC_INSTANCE_COMMON_TABLE_SIZE Returned = -19
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_INSTANCE_COMMON_TABLE
+05-20 08:26:13.336   987 17543 D android.hardware.audio.service: Failed to fetch the lookup information of the device 00000200 
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: Error: ACDB audproc returned = -19
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> AUDIO_SET_AUDPROC_CAL cal_type[11] acdb_id[512] app_type[69938]
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_PERSISTENT_AUDPROC_INSTANCE_COMMON_TABLE_SIZE
+05-20 08:26:13.336   987 17543 D android.hardware.audio.service: Failed to fetch the lookup information of the device 00000200 
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: Error: ACDB_CMD_GET_PERSISTENT_AUDPROC_INSTANCE_COMMON_TABLE_SIZE returned -19
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> send_audproc_persist_table -19 
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: Error: Invalid Audproc persist size = -19
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_INSTANCE_STREAM_TABLE_SIZE
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> send_audstrmtable
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_INSTANCE_STREAM_TABLE
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> audstrm_cal->cal_type.cal_data.cal_size = 20
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> send_afe_topology
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AFE_TOPOLOGY_ID
+05-20 08:26:13.336   987 17543 D ACDB-LOADER: ACDB -> GET_AFE_TOPOLOGY_ID for adcd_id 512, Topology Id 112fb
+05-20 08:26:13.337   987 17543 D ACDB-LOADER: ACDB -> send_afe_cal
+05-20 08:26:13.337   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AFE_INSTANCE_COMMON_TABLE_SIZE
+05-20 08:26:13.337   987 17543 D android.hardware.audio.service: Failed to fetch the lookup information of the device 00000200 
+05-20 08:26:13.337   987 17543 D ACDB-LOADER: Error: ACDB_CMD_GET_AFE_INSTANCE_COMMON_TABLE_SIZE Returned = -19
+05-20 08:26:13.337   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AFE_INSTANCE_COMMON_TABLE
+05-20 08:26:13.337   987 17543 D android.hardware.audio.service: Failed to fetch the lookup information of the device 00000200 
+05-20 08:26:13.337   987 17543 D ACDB-LOADER: Error: ACDB AFE returned = -19
+05-20 08:26:13.337   987 17543 D ACDB-LOADER: ACDB -> AUDIO_SET_AFE_CAL cal_type[17] acdb_id[512]
+05-20 08:26:13.337   987 17543 D ACDB-LOADER: ACDB -> send_hw_delay : acdb_id = 512 path = 1
+05-20 08:26:13.337   987 17543 D ACDB-LOADER: ACDB -> ACDB_AVSYNC_INFO: ACDB_CMD_GET_DEVICE_PROPERTY
+05-20 08:26:13.337   987 17543 D audio_hw_primary: enable_audio_route: apply mixer and update path: spkr-vi-record
+05-20 08:26:13.337   987 17543 D audio_route: Apply path: spkr-vi-record
+05-20 08:26:13.349  1948  7680 D CoreBackPreview: Window{210db4a u0 Wired Charging Animation}: Setting back callback null
+05-20 08:26:13.350  1948  3172 W InputManager-JNI: Input channel object '210db4a Wired Charging Animation (client)' was disposed without first being removed with the input manager!
+05-20 08:26:13.351   987 17543 W audio_hw_cirrus_playback: spkr_prot_start_processing: ret: 0, state: 3, snd_device: 6
+05-20 08:26:13.351   987 17543 D soundtrigger: audio_extn_sound_trigger_update_stream_status: uc_info->id 1 of type 0 for Event 3, with Raise=0
+05-20 08:26:13.351   987 17543 D audio_hw_utils: audio_extn_utils_send_app_type_cfg: usecase->out_snd_device speaker-safe
+05-20 08:26:13.351   987 17543 I audio_hw_utils: send_app_type_cfg_for_device PLAYBACK app_type 69936, acdb_dev_id 514, sample_rate 48000, snd_device_be_idx 119
+05-20 08:26:13.354   987 17543 I audio_hw_waves: ma_set_output_mode_l: set mode 10 for app_type 69936, successed
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> send_audio_cal, acdb_id = 514, path = 0, app id = 0x11130, sample rate = 48000, afe_sample_rate = 48000
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> send_asm_topology
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_STREAM_TOPOLOGY_ID
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> send_adm_topology
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_COMMON_TOPOLOGY_ID
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> send_audtable
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_INSTANCE_COMMON_TABLE_SIZE
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_INSTANCE_COMMON_TABLE
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> AUDIO_SET_AUDPROC_CAL cal_type[11] acdb_id[514] app_type[69936]
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> send_audvoltable
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_INSTANCE_GAIN_DEP_STEP_TABLE_SIZE
+05-20 08:26:13.354   987 17543 D android.hardware.audio.service: Failed to fetch the lookup information of the device 00000202 
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: Error: ACDB_CMD_GET_AUDPROC_INSTANCE_GAIN_DEP_STEP_TABLE_SIZE Returned = -19
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_INSTANCE_GAIN_DEP_STEP_TABLE, vol index 0
+05-20 08:26:13.354   987 17543 D android.hardware.audio.service: Failed to fetch the lookup information of the device 00000202 
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: Error: ACDB AudProc vol returned = -19
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> AUDIO_SET_VOL_CAL cal type = 12
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_INSTANCE_STREAM_TABLE_SIZE
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> send_audstrmtable
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AUDPROC_INSTANCE_STREAM_TABLE
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> audstrm_cal->cal_type.cal_data.cal_size = 536
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> send_afe_topology
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AFE_TOPOLOGY_ID
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> GET_AFE_TOPOLOGY_ID for adcd_id 514, Topology Id 112fc
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> send_afe_cal
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AFE_INSTANCE_COMMON_TABLE_SIZE
+05-20 08:26:13.354   987 17543 D android.hardware.audio.service: Failed to fetch the lookup information of the device 00000202 
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: Error: ACDB_CMD_GET_AFE_INSTANCE_COMMON_TABLE_SIZE Returned = -19
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> ACDB_CMD_GET_AFE_INSTANCE_COMMON_TABLE
+05-20 08:26:13.354   987 17543 D android.hardware.audio.service: Failed to fetch the lookup information of the device 00000202 
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: Error: ACDB AFE returned = -19
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> AUDIO_SET_AFE_CAL cal_type[16] acdb_id[514]
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> send_hw_delay : acdb_id = 514 path = 0
+05-20 08:26:13.354   987 17543 D ACDB-LOADER: ACDB -> ACDB_AVSYNC_INFO: ACDB_CMD_GET_DEVICE_PROPERTY
+05-20 08:26:13.355   987 17543 D audio_hw_primary: enable_audio_route: apply mixer and update path: low-latency-playback speaker
+05-20 08:26:13.355   987 17543 D audio_route: Apply path: low-latency-playback speaker
+05-20 08:26:13.378   987 12193 W audio_hw_primary: out_write: underrun(154) frames_by_time(4498) > out->last_fifo_frames_remaining(480)
+05-20 08:26:13.418  1377 24943 D AudioTrack: getTimestamp_l(1123): device stall time corrected using current time 549340649844220
+05-20 08:26:13.443  1948  7680 W ContextImpl: Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcastMultiplePermissions:1222 com.android.server.TelephonyRegistry.broadcastServiceStateChanged:3112 com.android.server.TelephonyRegistry.notifyServiceStateForPhoneId:1618 com.android.internal.telephony.ITelephonyRegistry$Stub.onTransact:492 android.os.Binder.execTransactInternal:1288 
+05-20 08:26:13.443  1948  7680 W ContextImpl: Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcastMultiplePermissions:1272 android.content.Context.sendBroadcastMultiplePermissions:2282 com.android.server.TelephonyRegistry.broadcastServiceStateChanged:3115 com.android.server.TelephonyRegistry.notifyServiceStateForPhoneId:1618 com.android.internal.telephony.ITelephonyRegistry$Stub.onTransact:492 
+05-20 08:26:13.444  1948  7680 W ContextImpl: Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcastMultiplePermissions:1272 com.android.server.TelephonyRegistry.broadcastServiceStateChanged:3122 com.android.server.TelephonyRegistry.notifyServiceStateForPhoneId:1618 com.android.internal.telephony.ITelephonyRegistry$Stub.onTransact:492 android.os.Binder.execTransactInternal:1288 
+05-20 08:26:13.445  1948  7680 W ContextImpl: Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcastMultiplePermissions:1272 com.android.server.TelephonyRegistry.broadcastServiceStateChanged:3127 com.android.server.TelephonyRegistry.notifyServiceStateForPhoneId:1618 com.android.internal.telephony.ITelephonyRegistry$Stub.onTransact:492 android.os.Binder.execTransactInternal:1288 
+05-20 08:26:13.448  1948  2292 W BroadcastQueue: Appop Denial: receiving Intent { act=android.intent.action.SERVICE_STATE flg=0x1000010 (has extras) } to ProcessRecord{e1a1608 9652:com.android.systemui/u0a463} (pid=9652, uid=10463) excludes appop android:read_phone_state due to sender android (uid 1000)
+05-20 08:26:13.448  8622  8622 D CellBroadcastReceiver: onReceive Intent { act=android.intent.action.SERVICE_STATE flg=0x1000010 cmp=com.android.cellbroadcastreceiver.module/com.android.cellbroadcastreceiver.CellBroadcastReceiver (has extras) }
+05-20 08:26:13.448  2813  2813 D ServiceStateProvider: subId=2
+05-20 08:26:13.448  8622  8622 D CellBroadcastReceiver: onServiceStateChanged, ss: 0
+05-20 08:26:13.448  8622  8622 D CellBroadcastReceiver: networkOperator: 405860
+05-20 08:26:13.449  8622  8622 D CellBroadcastReceiver: update supported roaming operator as 
+05-20 08:26:13.459  2813  2813 I Telephony: isRttCurrentlySupported -- regular acct, hasVoiceAvailability: true
+05-20 08:26:13.459  2813  2813 I Telephony:  isRttSupported: false
+05-20 08:26:13.459  2813  2813 I Telephony:  alwaysAllowWhileRoaming: false
+05-20 08:26:13.459  2813  2813 I Telephony:  isRoaming: false
+05-20 08:26:13.459  2813  2813 I Telephony:  isOnWfc: false
+05-20 08:26:13.593   987  1855 W audio_hw_cirrus_playback: pixel_rtlogger_data_analysis: Left/Top amp is disabled or doesn't exist
+05-20 08:26:13.737  1021  1189 D VSC     : @ 758374.037: [WO] Proposed rotation: 4, flat angle threshold: 65
+05-20 08:26:13.737  1021  1189 D VSC     : @ 758374.037: [WO] orientation angle 330, orientation 4
+05-20 08:26:13.737  1021  1189 D VSC     : @ 758374.037: [WO] Gyro angle integrated: 29.038024
+05-20 08:26:13.737  1021  1189 D VSC     : @ 758374.037: [WO] Gyro angle integrated: 29.038024
+05-20 08:26:13.737  1021  1189 D VSC     : @ 758374.037: [WO] Rejected by settle_time and gyro finds no rotation 3
+05-20 08:26:13.774  3714  4592 I AiAiEcho: SmartspaceNotificationPredictor no parser can handle this notification or notification is invalid
+05-20 08:26:13.776  9652  9652 W ContrastColorUtil: Background should not be translucent: #0
+05-20 08:26:13.776  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.776  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.776  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.776  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.776  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.776  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.776  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.776  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.777  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.777  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.777  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.777  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.777  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.777  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.777  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.777  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:13.806   987  1855 W audio_hw_cirrus_playback: pixel_rtlogger_data_analysis: Left/Top amp is disabled or doesn't exist
+05-20 08:26:13.954  1377  9207 D AudioTrack: stop(1122): called with 132000 frames delivered
+05-20 08:26:14.017   987  1855 W audio_hw_cirrus_playback: pixel_rtlogger_data_analysis: Left/Top amp is disabled or doesn't exist
+05-20 08:26:14.155  1022  2498 I android.hardware.usb.aidl-service: partner added
+05-20 08:26:14.155  1022  2498 I android.hardware.usb.aidl-service: port0
+05-20 08:26:14.157  1022  2498 I android.hardware.usb.aidl-service: 0:port0 connected:1 canChangeMode:1 canChagedata:0 canChangePower:0 usbDataEnabled:1
+05-20 08:26:14.157  1022  2498 I android.hardware.usb.aidl-service: ContaminantDetectionStatus:2 ContaminantProtectionStatus:0
+05-20 08:26:14.157  1022  2498 I android.hardware.usb.aidl-service: powerTransferLimited:0
+05-20 08:26:14.158  1948  3125 I UsbPortManager: AIDL UsbDataStatus:1
+05-20 08:26:14.158  1948  3125 I UsbPortManager: ClientCallback AIDL V1: port0
+05-20 08:26:14.158  1948  2272 I UsbPortManager: USB port changed: port=UsbPort{id=port0, supportedModes=dualsupportedContaminantProtectionModes=4supportsEnableContaminantPresenceProtection=falsesupportsEnableContaminantPresenceDetection=true, status=UsbPortStatus{connected=true, currentMode=ufp, currentPowerRole=sink, currentDataRole=device, supportedRoleCombinations=[source:host, sink:device], contaminantDetectionStatus=2, contaminantProtectionStatus=0, usbDataStatus=enabled, isPowerTransferLimited=false, powerBrickConnectionStatus=unknown}, canChangeMode=true, canChangePowerRole=false, canChangeDataRole=false, connectedAtMillis=758361814, lastConnectDurationMillis=0
+05-20 08:26:14.181  1377  9253 D CCodecBufferChannel: [c2.android.vorbis.decoder#754] buffers after EOS ignored (0 us)
+05-20 08:26:14.182  1377  9253 D CCodecBufferChannel: [c2.android.vorbis.decoder#754] buffers after EOS ignored (0 us)
+05-20 08:26:14.182  1377  9251 D AudioTrack: stop(1123): called with 52920 frames delivered
+05-20 08:26:14.183  1948  1948 I LineageHealth: Current time is 08:26:14 AM
+05-20 08:26:14.183  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:26:14.183  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:26:14.223 20526 26187 I NearbyMediums: [UsbNcm]: USB broadcast received, isHost=false, isDevice=true, isDeviceConnected=false
+05-20 08:26:14.430  1948  2023 I system_server: Background young concurrent copying GC freed 1335776(95MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 319us,307us total 115.590ms
+05-20 08:26:14.496  9652  9652 D MediaRouter: onRestoreRoute() : route=RouteInfo{ name=Phone, description=null, status=null, category=RouteCategory{ name=System types=ROUTE_TYPE_LIVE_AUDIO ROUTE_TYPE_LIVE_VIDEO  groupable=false }, supportedTypes=ROUTE_TYPE_LIVE_AUDIO ROUTE_TYPE_LIVE_VIDEO , presentationDisplay=null }
+05-20 08:26:14.496  9652  9652 V MediaRouter: Selecting route: RouteInfo{ name=Phone, description=null, status=null, category=RouteCategory{ name=System types=ROUTE_TYPE_LIVE_AUDIO ROUTE_TYPE_LIVE_VIDEO  groupable=false }, supportedTypes=ROUTE_TYPE_LIVE_AUDIO ROUTE_TYPE_LIVE_VIDEO , presentationDisplay=null }
+05-20 08:26:14.518  1021  1189 D VSC     : @ 758374.817: [WO] Change detected: previous_rotation: 3, proposed_rotation: 0
+05-20 08:26:14.518  1021  1189 D VSC     : @ 758374.817: [WO] Last acceleration 1428 ms ago > threshold.
+05-20 08:26:14.518  1021  1189 D VSC     : @ 758374.817: [WO] z-axis rotation: 0
+05-20 08:26:14.518  1021  1189 D VSC     : @ 758374.817: [WO] Last flat 4481 ms ago > threshold.
+05-20 08:26:14.518  1021  1189 D VSC     : @ 758374.817: [WO] Last swinging 499 ms ago > threshold.
+05-20 08:26:14.518  1021  1189 D VSC     : @ 758374.817: [WO] Tilt angle 60 Orientation angle 354
+05-20 08:26:14.590  1421  2574 D BufferPoolAccessor2.0: evictor expired: 1, evicted: 0
+05-20 08:26:14.665  1948  7680 I MediaFocusControl: abandonAudioFocus() from uid/pid 10463/9652 clientId=android.media.AudioManager@bc2d21d
+05-20 08:26:14.666  9652  9246 V MediaPlayer: resetDrmState:  mDrmInfo=null mDrmProvisioningThread=null mPrepareDrmInProgress=false mActiveDrmScheme=false
+05-20 08:26:14.666  9652  9246 V MediaPlayer: cleanDrmObj: mDrmObj=null mDrmSessionId=null
+05-20 08:26:14.667  1377 24943 D NuPlayerDriver: reset(0xed601870) at state 6
+05-20 08:26:14.670  1377  9253 I hw-BpHwBinder: onLastStrongRef automatically unlinking death recipients
+05-20 08:26:14.670  1421  2641 I hw-BpHwBinder: onLastStrongRef automatically unlinking death recipients
+05-20 08:26:14.670  1377  9252 D MediaCodec: flushMediametrics
+05-20 08:26:14.671  1374  2495 E statsd_codec: Failed to write codec metrics to statsd (-19)
+05-20 08:26:14.672  1377  9248 D NuPlayerDriver: notifyResetComplete(0xed601870)
+05-20 08:26:14.672  1377 24943 W AMessage: failed to post message as target looper for handler 0 is gone.
+05-20 08:26:14.691   987 17543 D audio_hw_waves: ma_set_source_metadata_l: All tracks was removed from app_type(69936) device_type(4194304)
+05-20 08:26:14.692   987 17543 W msm8974_platform: platform_send_gain_dep_cal: Usecase list is empty
+05-20 08:26:14.692   987  1127 W msm8974_platform: platform_send_gain_dep_cal: Usecase list is empty
+05-20 08:26:15.064  1021  1021 I sensors-hal: [hal]activate_physical_sensor:251, android.sensor.light/51 en=0
+05-20 08:26:15.064  1021  1021 I sensors-hal: [hal]activate_physical_sensor:262, android.sensor.light/51 en=0 completed
+05-20 08:26:15.065  1021  1189 I ASH     : @ 758375.366: tcs3701: Client count (type)cur/new: (0)1/0
+05-20 08:26:15.065  1021  1189 I ASH     : @ 758375.366: tcs3701: Disabling sensor 0
+05-20 08:26:15.065  1021  1189 I ASH     : @ 758375.366: tcs3701: Disabling ALS
+05-20 08:26:15.065  1021  1189 D ASH     : @ 758375.366: tcs3701: start power rail timer, state:3
+05-20 08:26:15.065  1021  1189 I ASH     : @ 758375.366: tcs3701: Instance deinit
+05-20 08:26:15.066  1021  1021 I sensors-hal: [hal]batch_physical_sensor:314, android.sensor.proximity/82, period=20000000, max_latency=0
+05-20 08:26:15.066  1021  1021 I sensors-hal: [sensor]set_config:64, sample_period_ns is adjusted to 0 based on min/max delay_ns
+05-20 08:26:15.066  1021  1021 I sensors-hal: [hal]batch_physical_sensor:323, android.sensor.proximity/82, period=20000000, max_latency=0 request completed
+05-20 08:26:15.066  1021  1021 I sensors-hal: [hal]activate_physical_sensor:251, android.sensor.proximity/82 en=1
+05-20 08:26:15.066  1021  1021 I sensors-hal: [ssc_utils]get_qmi_debug_flag:243, support_qmi_debug : false
+05-20 08:26:15.069  1021  1021 I sensors-hal: [hal]activate_physical_sensor:262, android.sensor.proximity/82 en=1 completed
+05-20 08:26:15.069  1021  1189 I ASH     : @ 758375.370: tcs3701: Instance init
+05-20 08:26:15.070  1021  9262 I sensors-hal: [ssc_sensor]ssc_conn_resp_cb:686, resp_value = 0
+05-20 08:26:15.070  1021  1189 I ASH     : @ 758375.371: tcs3701: Slow filter size: 255
+05-20 08:26:15.070  1021  1189 I ASH     : @ 758375.371: tcs3701: Fast filter size: 10
+05-20 08:26:15.070  1021  1189 I ASH     : @ 758375.371: tcs3701: Client count (type)cur/new: (3)0/1
+05-20 08:26:15.070  1021  1189 I ASH     : @ 758375.371: tcs3701: Enabling sensor 3
+05-20 08:26:15.072  1021  1189 I ASH     : @ 758375.373: tcs3701: PCFG1: 00
+05-20 08:26:15.072  1021  1189 I ASH     : @ 758375.373: tcs3701: PCFG2: 07
+05-20 08:26:15.072  1021  1189 I ASH     : @ 758375.373: tcs3701: PCFG4: 03
+05-20 08:26:15.074  1021  1189 I ASH     : @ 758375.374: tcs3701: New TH: 110 0 200 0
+05-20 08:26:15.081  1021  1189 I ASH     : @ 758375.382: tcs3701: Recording lux = 0.000000 when prox NEAR
+05-20 08:26:15.081  1021  1189 I ASH     : @ 758375.382: tcs3701: PROX sample: NEAR (03ff), POFFSET: 0073, ORE: -1
+05-20 08:26:15.161  1948  2272 I UsbPortManager: USB HAL AIDL version: USB_HAL_V2_0
+05-20 08:26:15.589  1377 29386 D BufferPoolAccessor2.0: evictor expired: 1, evicted: 0
+05-20 08:26:15.730  1021  1189 D VSC     : @ 758376.030: [WO] Proposed rotation: 4, flat angle threshold: 65
+05-20 08:26:15.730  1021  1189 D VSC     : @ 758376.030: [WO] orientation angle 358, orientation 4
+05-20 08:26:15.730  1021  1189 D VSC     : @ 758376.030: [WO] Gyro angle integrated: 0.780635
+05-20 08:26:15.730  1021  1189 D VSC     : @ 758376.030: [WO] Gyro angle integrated: 0.780635
+05-20 08:26:16.065  1021  1189 D ASH     : @ 758376.366: tcs3701: TCS3701_POWER_RAIL_PENDING_OFF
+05-20 08:26:16.065  1021  1189 D ASH     : @ 758376.366: tcs3701: update_rail_vote: 2->0
+05-20 08:26:16.065  1021  1189 D ASH     : @ 758376.366: tcs3701: power vote set to 0
+05-20 08:26:16.065  1021  1189 D ASH     : @ 758376.366: tcs3701: TCS3701_POWER_RAIL_PENDING_NONE
+05-20 08:26:16.849  1948  2023 I system_server: Background young concurrent copying GC freed 1324591(95MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 294us,1.129ms total 139.396ms
+05-20 08:26:17.216  1021  1189 I CHRE    : @ 758377.517: [AR] inconsistent: 41.176471
+05-20 08:26:17.227  8714  8991 I RelayManager: Relay status POST mine.pocketcraft.online/bedrock-status -> HTTP 200, body={"ok":true}
+05-20 08:26:17.231 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:26:17.590  1377 29386 D BufferPoolAccessor2.0: bufferpool2 0xe9000da8 : 4(131072 size) total buffers - 4(131072 size) used buffers - 125/137 (recycle/alloc) - 16/266 (fetch/transfer)
+05-20 08:26:17.590  1377 29386 D BufferPoolAccessor2.0: evictor expired: 1, evicted: 1
+05-20 08:26:17.590  1421  2574 D BufferPoolAccessor2.0: bufferpool2 0xb400007538567a88 : 0(0 size) total buffers - 0(0 size) used buffers - 127/131 (recycle/alloc) - 4/130 (fetch/transfer)
+05-20 08:26:17.590  1421  2574 D BufferPoolAccessor2.0: evictor expired: 1, evicted: 1
+05-20 08:26:17.602   987  1127 D audio_hw_primary: out_standby: enter: stream (0xf0ac64c0) usecase(1: low-latency-playback)
+05-20 08:26:17.632   987  1127 D audio_hw_primary: disable_audio_route: reset and update mixer path: low-latency-playback speaker
+05-20 08:26:17.633   987  1127 D soundtrigger: audio_extn_sound_trigger_update_stream_status: uc_info->id 1 of type 0 for Event 2, with Raise=0
+05-20 08:26:17.633   987  1127 D hardware_info: hw_info_append_hw_type : device_name = speaker-safe
+05-20 08:26:17.633   987  1127 D audio_hw_primary: disable_snd_device: snd_device(6: speaker-safe)
+05-20 08:26:17.652   987  1127 D audio_hw_primary: disable_audio_route: reset and update mixer path: spkr-vi-record
+05-20 08:26:17.652   987  1127 D soundtrigger: audio_extn_sound_trigger_update_stream_status: uc_info->id 53 of type 1 for Event 2, with Raise=0
+05-20 08:26:17.652   987  1127 D hardware_info: hw_info_append_hw_type : device_name = vi-feedback
+05-20 08:26:17.652   987  1127 D audio_hw_primary: disable_snd_device: snd_device(222: vi-feedback)
+05-20 08:26:17.652   987  1127 I soundtrigger: audio_extn_sound_trigger_update_device_status: device 0xde of type 1 for Event 0, with Raise=0
+05-20 08:26:17.652   987  1127 W audio_hw_cirrus_playback: spkr_prot_stop_processing: state: 2, snd_device: 6
+05-20 08:26:17.652   987  1127 I soundtrigger: audio_extn_sound_trigger_update_device_status: device 0x6 of type 0 for Event 0, with Raise=0
+05-20 08:26:17.725  1021  1189 D VSC     : @ 758378.025: [WO] Proposed rotation: 0, flat angle threshold: 65
+05-20 08:26:17.725  1021  1189 D VSC     : @ 758378.025: [WO] orientation angle 4, orientation 0
+05-20 08:26:17.725  1021  1189 D VSC     : @ 758378.025: [WO] Gyro angle integrated: 18.701149
+05-20 08:26:17.725  1021  1189 D VSC     : @ 758378.025: [WO] Gyro angle integrated: 18.701149
+05-20 08:26:17.796  3714  4592 I AiAiEcho: SmartspaceNotificationPredictor no parser can handle this notification or notification is invalid
+05-20 08:26:17.796  9652  9652 W ContrastColorUtil: Background should not be translucent: #0
+05-20 08:26:17.796  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:17.796  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:17.797  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:17.797  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:17.797  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:17.797  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:17.797  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:17.797  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:17.797  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:17.797  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:17.797  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:17.797  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:17.797  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:17.797  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:17.797  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:17.797  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.802  3714  4592 I AiAiEcho: SmartspaceNotificationPredictor no parser can handle this notification or notification is invalid
+05-20 08:26:18.803  9652  9652 W ContrastColorUtil: Background should not be translucent: #0
+05-20 08:26:18.803  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.803  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.803  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.803  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.803  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.803  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.803  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.803  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.803  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.803  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.803  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.803  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.803  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.804  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.804  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:18.804  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.233  1948  2023 I system_server: Background young concurrent copying GC freed 1326846(95MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 245us,369us total 135.608ms
+05-20 08:26:19.590  1377 29386 D BufferPoolAccessor2.0: bufferpool2 0xe9007648 : 0(0 size) total buffers - 0(0 size) used buffers - 52/60 (recycle/alloc) - 8/112 (fetch/transfer)
+05-20 08:26:19.590  1377 29386 D BufferPoolAccessor2.0: bufferpool2 0xe9002308 : 8(262144 size) total buffers - 4(131072 size) used buffers - 123/135 (recycle/alloc) - 16/266 (fetch/transfer)
+05-20 08:26:19.591  1377 29386 D BufferPoolAccessor2.0: evictor expired: 2, evicted: 2
+05-20 08:26:19.591  1421  2574 D BufferPoolAccessor2.0: bufferpool2 0xb400007538567838 : 0(0 size) total buffers - 0(0 size) used buffers - 51/54 (recycle/alloc) - 3/53 (fetch/transfer)
+05-20 08:26:19.591  1421  2574 D BufferPoolAccessor2.0: bufferpool2 0xb4000075385606e8 : 3(49152 size) total buffers - 0(0 size) used buffers - 127/131 (recycle/alloc) - 4/130 (fetch/transfer)
+05-20 08:26:19.591  1421  2574 D BufferPoolAccessor2.0: evictor expired: 2, evicted: 2
+05-20 08:26:19.614  8714  8991 D RelayManager: Notifying relay phone-ready (userId=6ed76e1b-409d-4723-a11f-0b01e23b8699, relay=mine.pocketcraft.online, local=192.168.95.51:25565)
+05-20 08:26:19.618 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:26:19.718  1021  1189 D VSC     : @ 758380.019: [WO] Proposed rotation: 0, flat angle threshold: 65
+05-20 08:26:19.718  1021  1189 D VSC     : @ 758380.019: [WO] orientation angle 11, orientation 0
+05-20 08:26:19.718  1021  1189 D VSC     : @ 758380.019: [WO] Gyro angle integrated: 14.231532
+05-20 08:26:19.718  1021  1189 D VSC     : @ 758380.019: [WO] Gyro angle integrated: 14.231532
+05-20 08:26:19.757  8714  8991 D RelayManager: phone-ready endpoint /phone-ready result: HTTP 200
+05-20 08:26:19.760 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:26:19.820  9652  9652 W ContrastColorUtil: Background should not be translucent: #0
+05-20 08:26:19.820  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.820  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.820  3714  4592 I AiAiEcho: SmartspaceNotificationPredictor no parser can handle this notification or notification is invalid
+05-20 08:26:19.820  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.820  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.821  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.821  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.821  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.821  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.821  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.821  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.821  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.821  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.822  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.822  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.822  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:19.822  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.831  3714  4592 I AiAiEcho: SmartspaceNotificationPredictor no parser can handle this notification or notification is invalid
+05-20 08:26:20.832  9652  9652 W ContrastColorUtil: Background should not be translucent: #0
+05-20 08:26:20.832  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.832  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.832  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.832  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.832  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.832  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.832  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.832  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.832  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.833  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.833  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.833  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.833  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.833  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.833  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:20.833  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.593  1948  2023 I system_server: Background young concurrent copying GC freed 1327044(95MB) AllocSpace objects, 0(0B) LOS objects, 67% free, 45MB/136MB, paused 274us,302us total 108.693ms
+05-20 08:26:21.798  1021  1189 D VSC     : @ 758382.098: [WO] Proposed rotation: 0, flat angle threshold: 65
+05-20 08:26:21.798  1021  1189 D VSC     : @ 758382.098: [WO] orientation angle 11, orientation 0
+05-20 08:26:21.798  1021  1189 D VSC     : @ 758382.098: [WO] Gyro angle integrated: 1.805399
+05-20 08:26:21.798  1021  1189 D VSC     : @ 758382.098: [WO] Gyro angle integrated: 1.805399
+05-20 08:26:21.837  3714  4592 I AiAiEcho: SmartspaceNotificationPredictor no parser can handle this notification or notification is invalid
+05-20 08:26:21.838  9652  9652 W ContrastColorUtil: Background should not be translucent: #0
+05-20 08:26:21.838  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.839  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.839  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.839  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.839  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.839  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.839  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.839  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.839  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.839  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.839  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.839  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.839  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.840  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.840  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:21.840  9652  9652 W ContrastColorUtil: Background should not be translucent: #ffffff
+05-20 08:26:22.505  1021  1189 D CHRE    : @ 758382.805: StationaryDetect
+05-20 08:26:22.508  1021  1189 D CHRE    : @ 758382.809: MagGyroCal(0)=OFF
+05-20 08:26:22.588  1021  1189 D ASH     : @ 758382.888: SensorType 195 resampler quality 0
+05-20 08:26:22.588  1021  1189 D ASH     : @ 758382.889: SensorType 195 resampler quality 0
+05-20 08:26:22.929  1948  2356 I PowerGroup: Powering off display group due to timeout (groupId= 0, uid= 1000, millisSinceLastUserActivity=10002, lastUserActivityEvent=other)...
+05-20 08:26:22.929  1948  2356 I PowerManagerService: Going to sleep due to timeout (uid 1000, screenOffTimeout=1800000, activityTimeoutWM=10000, maxDimRatio=0.20000005, maxDimDur=7000)...
+05-20 08:26:22.932   641  4134 I SDM     : HWCDisplay::GetColorModeCount: Supported color mode count = 3
+05-20 08:26:22.933   641  4134 I SDM     : HWCDisplay::GetColorModes: Color mode = 0 is supported
+05-20 08:26:22.933   641  4134 I SDM     : HWCDisplay::GetColorModes: Color mode = 7 is supported
+05-20 08:26:22.933   641  4134 I SDM     : HWCDisplay::GetColorModes: Color mode = 9 is supported
+05-20 08:26:23.060  2758  2938 I Tethering: [OffloadController] notifyAlertReached
+05-20 08:26:23.357  1948  2356 I DisplayPowerController[0]: Blocking screen off
+05-20 08:26:23.358  1948  2356 I DisplayPowerController[0]: Unblocked screen off after 0 ms
+05-20 08:26:23.359  1948  2356 V DisplayPowerController[0]: Brightness [0.0] reason changing to: 'screen_off', previous reason: 'manual'.
+05-20 08:26:23.360  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.360  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.361  1021  1189 D VSC     : @ 758383.662: [Device Orientation] Stop accel
+05-20 08:26:23.362  1021  1189 D VSC     : @ 758383.663: [Device Orientation] Stop gyro
+05-20 08:26:23.363  1021  1021 I sensors-hal: [hal]activate_physical_sensor:251, android.sensor.proximity/82 en=0
+05-20 08:26:23.365  1021  1189 D ASH     : @ 758383.666: SensorType 195 resampler quality 0
+05-20 08:26:23.367  1021  1021 I sensors-hal: [hal]activate_physical_sensor:262, android.sensor.proximity/82 en=0 completed
+05-20 08:26:23.369   636   636 D SurfaceFlinger: Setting power mode 0 on display 4630946523002478721
+05-20 08:26:23.370   641  4134 I SDM     : DisplayBase::SetDisplayState: Set state = 0, display 29-0, teardown = 0
+05-20 08:26:23.370  1021  1189 I ASH     : @ 758383.670: tcs3701: Client count (type)cur/new: (3)1/0
+05-20 08:26:23.370  1021  1189 I ASH     : @ 758383.670: tcs3701: Disabling sensor 3
+05-20 08:26:23.370  1021  1189 I ASH     : @ 758383.670: tcs3701: Disabling PROX
+05-20 08:26:23.370  1021  1189 D ASH     : @ 758383.670: tcs3701: start power rail timer, state:3
+05-20 08:26:23.370  1021  1189 I ASH     : @ 758383.670: tcs3701: Instance deinit
+05-20 08:26:23.372  1948  2275 I InputManager-JNI: Viewport [0] to add: local:4630946523002478721, isActive: false
+05-20 08:26:23.373  1948  2444 I InputReader: Reconfiguring input devices, changes=DISPLAY_INFO | 
+05-20 08:26:23.373  1948  2444 I InputReader: Disabling sec_touchscreen (device 2) because the associated viewport is not active
+05-20 08:26:23.373  1948  2444 I InputReader: Device reconfigured: id=2, name='sec_touchscreen', size 1080x2340, orientation 0, mode 0, display id 0
+05-20 08:26:23.374  1021  1189 D CHRE    : @ 758383.675: Gyro(0)=Disabled
+05-20 08:26:23.381 16834 16834 I PkDeviceHelper: PkDeviceHelper.refreshDevices():87 refreshing devices
+05-20 08:26:23.382  1948  2276 W SurfaceControl: Invalid layer stack -1
+05-20 08:26:23.382  1948  2276 I DisplayDevice: [0] Layerstack set to -1 for local:4630946523002478721
+05-20 08:26:23.436  1021  1189 I ASH     : @ 758383.737: touch gesture: received SNS_TBN_RELEASE_BUS_REQ_V01: kernel releasing bus
+05-20 08:26:23.535  1021  2384 I sensors-hal: [DPInfo]file_contents_parse:176, _status = 0
+05-20 08:26:23.535  1021  2384 I sensors-hal: [ssc_utils]get_qmi_debug_flag:243, support_qmi_debug : false
+05-20 08:26:23.536   636   636 D SurfaceFlinger: Finished setting power mode 0 on display 4630946523002478721
+05-20 08:26:23.536  1948  2524 D SurfaceControl: Excessive delay in setPowerMode()
+05-20 08:26:23.539  1948  2356 I DreamManagerService: Entering dreamland.
+05-20 08:26:23.540  1021  1189 D ASH     : @ 758383.841: tcs3701: update_rail_vote: 0->2
+05-20 08:26:23.540  1021  1189 D ASH     : @ 758383.841: tcs3701: rail already ON
+05-20 08:26:23.540  1021  1189 D ASH     : @ 758383.841: tcs3701: power vote set to 1
+05-20 08:26:23.540  1021  1189 I ASH     : @ 758383.841: tcs3701: Instance init
+05-20 08:26:23.541  1021  1189 I ASH     : @ 758383.841: tcs3701: Slow filter size: 255
+05-20 08:26:23.541  1021  1189 I ASH     : @ 758383.842: tcs3701: Fast filter size: 10
+05-20 08:26:23.541  1021  1189 I ASH     : @ 758383.842: tcs3701: display status: 0
+05-20 08:26:23.541  1021  1189 I ASH     : @ 758383.842: tcs3701: display brightness: 93
+05-20 08:26:23.541  1021  1189 I ASH     : @ 758383.842: tcs3701: display refresh_rate: 0
+05-20 08:26:23.541  1948  2356 I PowerManagerService: Dozing...
+05-20 08:26:23.541  1021  1189 I ASH     : @ 758383.842: tcs3701: ALS trigger disabled!!
+05-20 08:26:23.542  1021  1189 I ASH     : @ 758383.843: tcs3701: PROX trigger disabled!!
+05-20 08:26:23.543  1021  1189 I ASH     : @ 758383.844: tcs3701: PERS: 40
+05-20 08:26:23.543  1021  1189 D ASH     : @ 758383.844: tcs3701: start power rail timer, state:3
+05-20 08:26:23.544  1948  2272 I DreamController: Starting dream: name=ComponentInfo{com.android.systemui/com.android.systemui.doze.DozeService}, isPreviewMode=false, canDoze=true, userId=0, reason='power manager request'
+05-20 08:26:23.544  1021  1189 I ASH     : @ 758383.845: tcs3701: Instance deinit
+05-20 08:26:23.544  1021  9272 E sensors-hal: [DPInfo]ssc_conn_event_cb:401, unexpected message id: 130
+05-20 08:26:23.552  9652  9652 D CentralSurfaces: updateQsExpansionEnabled - QS Expand enabled: false
+05-20 08:26:23.553  9652  9652 D CentralSurfaces: updateQsExpansionEnabled - QS Expand enabled: false
+05-20 08:26:23.558  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.559  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.559  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.559  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.561  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.561  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.561  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.562  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.563  3714  8265 I AiAiEcho: (REDACTED) Settings changed for uri: %s
+05-20 08:26:23.566  3714  4199 I AiAiEcho: (REDACTED) Predicting[%d]: %s
+05-20 08:26:23.568  3714  4199 I AiAiEcho: (REDACTED) EchoTargets: %s
+05-20 08:26:23.568  3714  4199 I AiAiEcho: Filtered by AiAi flag check: %s
+05-20 08:26:23.568  3714  4199 I AiAiEcho: (REDACTED) Ranked targets strategy: %s, count: %d, ranking metadata: %s
+05-20 08:26:23.569  3714  4199 I AiAiEcho: #remoteViewsTwiddler: feature disabled.
+05-20 08:26:23.569  3714  4199 I AiAiEcho: (REDACTED) Predicting[%d]: %s
+05-20 08:26:23.571  3714  4199 I AiAiEcho: (REDACTED) EchoTargets: %s
+05-20 08:26:23.571  3714  4199 I AiAiEcho: Filtered by AiAi flag check: %s
+05-20 08:26:23.571  3714  4199 I AiAiEcho: (REDACTED) Ranked targets strategy: %s, count: %d, ranking metadata: %s
+05-20 08:26:23.571  3714  4199 I AiAiEcho: #remoteViewsTwiddler: feature disabled.
+05-20 08:26:23.574  1021  1189 D VSC     : @ 758383.875: [Device Pickup Sensor] Request proximity, interval 66.6 ms, latency 0.0 ms
+05-20 08:26:23.574  1021  1189 I ASH     : @ 758383.875: tcs3701: stop power rail pending_off timer
+05-20 08:26:23.574  1021  1189 D VSC     : @ 758383.875: [Device Pickup Sensor] Stop proximity
+05-20 08:26:23.574  1021  1189 I ASH     : @ 758383.875: tcs3701: Instance init
+05-20 08:26:23.574  1021  1189 D VSC     : @ 758383.875: [Device Pickup Sensor] Request accel, interval 20.0 ms, latency 0.0 ms
+05-20 08:26:23.575  1021  1189 I ASH     : @ 758383.876: tcs3701: Slow filter size: 255
+05-20 08:26:23.575  1021  1189 I ASH     : @ 758383.876: tcs3701: Fast filter size: 10
+05-20 08:26:23.575  1021  1189 I ASH     : @ 758383.876: tcs3701: Client count (type)cur/new: (3)0/1
+05-20 08:26:23.575  1021  1189 I ASH     : @ 758383.876: tcs3701: Enabling sensor 3
+05-20 08:26:23.576  9652  9652 W View    : requestLayout() improperly called by com.android.keyguard.CarrierText{5a86fb3 V.ED..... ......ID 145,0-549,136 #7f0a037b app:id/keyguard_carrier_text} during layout: running second layout pass
+05-20 08:26:23.577  1021  1021 I sensors-hal: [hal]activate_physical_sensor:251, android.sensor.accelerometer/11 en=0
+05-20 08:26:23.578  1021  1189 I ASH     : @ 758383.879: tcs3701: PCFG1: 00
+05-20 08:26:23.578  1021  1189 I ASH     : @ 758383.879: tcs3701: PCFG2: 07
+05-20 08:26:23.578  1021  1189 I ASH     : @ 758383.879: tcs3701: PCFG4: 03
+05-20 08:26:23.579  1021  1021 D Diag_Lib: diag: Diag_LSM_DeInit: invoked for pid: 1021
+05-20 08:26:23.579  1021  1021 I sensors-hal: [hal]activate_physical_sensor:262, android.sensor.accelerometer/11 en=0 completed
+05-20 08:26:23.579  3714  4199 I AiAiEcho: (REDACTED) #postPredictionTargets: Sending updates to UISurface %s with targets# %s (types=[%s])
+05-20 08:26:23.579  1021  1189 D ASH     : @ 758383.880: SensorType 1 resampler quality 0
+05-20 08:26:23.580  1021  1189 I ASH     : @ 758383.881: tcs3701: New TH: 110 0 200 0
+05-20 08:26:23.580  1021  1189 I VSC     : @ 758383.881: [single-tap-prox-gated] configuring sensor with interval: 1000000, latency: 0
+05-20 08:26:23.580  1021  1189 D VSC     : @ 758383.881: [Proximity Gated Single Tap Gesture] Request proximity, interval 100.0 ms, latency 0.0 ms
+05-20 08:26:23.580  3714  4199 I AiAiEcho: (REDACTED) #postPredictionTargets: Sending updates to UISurface %s with targets# %s (types=[%s])
+05-20 08:26:23.581  2679  2679 D SsBaseTemplateCard: No text view can be set up
+05-20 08:26:23.581  2679  2679 D SsBaseTemplateCard: Passed-in item info is null
+05-20 08:26:23.581  2679  2679 I SsBaseTemplateCard: Secondary card pane is null
+05-20 08:26:23.581  1021  1189 D VSC     : @ 758383.882: [Proximity Gated Single Tap Gesture] Request touch_gesture, interval 18446744027136.0 ms, latency 0.0 ms
+05-20 08:26:23.581  1021  1189 I ASH     : @ 758383.882: tcs3701: PROX trigger disabled!!
+05-20 08:26:23.581  1948  1948 I PowerManagerService: onFlip(): Face up.
+05-20 08:26:23.582  1021  1189 W CHRE    : @ 758383.883: [AR] unknown event: 515
+05-20 08:26:23.583  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.583  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.583  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.583  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.584  1021  1189 I ASH     : @ 758383.885: tcs3701: ALS trigger disabled!!
+05-20 08:26:23.585  3798  3798 D com.crdroid.faceunlock.service.FaceAuthService: OnReceive intent = Intent { act=android.intent.action.SCREEN_OFF flg=0x50200010 }
+05-20 08:26:23.586  1021  1189 I ASH     : @ 758383.887: tcs3701: Client count (type)cur/new: (3)1/0
+05-20 08:26:23.586  1021  1189 I ASH     : @ 758383.887: tcs3701: Disabling sensor 3
+05-20 08:26:23.586  1021  1189 I ASH     : @ 758383.887: tcs3701: Disabling PROX
+05-20 08:26:23.586  1021  1189 D ASH     : @ 758383.887: tcs3701: start power rail timer, state:3
+05-20 08:26:23.586  1021  1189 I ASH     : @ 758383.887: tcs3701: Instance deinit
+05-20 08:26:23.587  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.587  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.587  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.587  9652  9652 D CentralSurfaces: Received new disable state: enaiHbcRso.qingr (unchanged)
+05-20 08:26:23.587  1021  1189 I ASH     : @ 758383.888: tcs3701: stop power rail pending_off timer
+05-20 08:26:23.587  1021  1189 I ASH     : @ 758383.888: tcs3701: Instance init
+05-20 08:26:23.587  9652  9652 D SbStateController: setIsDreaming:true
+05-20 08:26:23.588  1021  1189 I ASH     : @ 758383.888: tcs3701: Slow filter size: 255
+05-20 08:26:23.588  1021  1189 I ASH     : @ 758383.888: tcs3701: Fast filter size: 10
+05-20 08:26:23.588  1021  1189 I ASH     : @ 758383.888: tcs3701: Client count (type)cur/new: (3)0/1
+05-20 08:26:23.588  1021  1189 I ASH     : @ 758383.888: tcs3701: Enabling sensor 3
+05-20 08:26:23.590  1021  1189 I ASH     : @ 758383.891: tcs3701: PCFG1: 00
+05-20 08:26:23.590  1021  1189 I ASH     : @ 758383.891: tcs3701: PCFG2: 07
+05-20 08:26:23.590  1021  1189 I ASH     : @ 758383.891: tcs3701: PCFG4: 03
+05-20 08:26:23.592  1021  1189 I ASH     : @ 758383.893: tcs3701: New TH: 110 0 200 0
+05-20 08:26:23.593  9652  9652 D SsMediaDataProvider: Forwarding Smartspace updates []
+05-20 08:26:23.594  1021  1189 I ASH     : @ 758383.895: tcs3701: PROX trigger disabled!!
+05-20 08:26:23.597  1021  1189 I ASH     : @ 758383.897: tcs3701: ALS trigger disabled!!
+05-20 08:26:23.600   987  1127 D audio_hw_primary: adev_set_parameters: enter: screen_state=off
+05-20 08:26:23.601   987  1127 W sound_trigger_hw: sound_trigger_hw_call_back: Unknown event 17
+05-20 08:26:23.601   987  1127 D a2dp_offload: end of a2dp setparam
+05-20 08:26:23.623  3768  3768 D NfcService: MSG_APPLY_SCREEN_STATE 2
+05-20 08:26:23.628  3900  3900 E SUI_svcsock: svc_sock_send_message(suisvc): invalid remote socket suitch
+05-20 08:26:23.629  3900  3900 E SUI_svcsock: svc_sock_send_message(suisvc): invalid remote socket suilst
+05-20 08:26:23.650 16834  9274 I DeviceStatusMonitor: DeviceStatusMonitor.handleBroadcast():135 onReceive() : Action = android.intent.action.SCREEN_OFF
+05-20 08:26:23.650 16834  9274 I DeviceStatusMonitor: DeviceStatusMonitor.updateCountryInfo():151 updateCountryInfo(), notifyAnyway = false
+05-20 08:26:23.650 16834 16834 I Module  : DeviceLockedStatusModuleProvider$Module.updateDeviceLockedStatus():103 repeatCheckTimes = 0, locked = true
+05-20 08:26:23.650 16834 16834 I VoiceImeUtils: VoiceImeUtils.sendStopVoiceEventToInputBundle():529 dispatching STOP_VOICE_IME [RD]
+05-20 08:26:23.650 16834 16834 I InputBundle: InputBundle.consumeEvent():1052 Skip consuming an event as imeStatus is INACTIVE
+05-20 08:26:23.653  1021  1189 I ASH     : @ 758383.954: touch gesture: update charger mode: 0x02
+05-20 08:26:23.655 16834 16834 I InputBundle: InputBundle.switchToKeyboardDirectly():530 switchToKeyboardDirectly(): acfb[keyboardType=prime, payload=null]
+05-20 08:26:23.655 16834 16834 I InputBundle: InputBundle.switchToKeyboardDirectly():530 switchToKeyboardDirectly(): acfb[keyboardType=prime, payload=null]
+05-20 08:26:23.655 16834 16834 I InputBundle: InputBundle.switchToKeyboardDirectly():530 switchToKeyboardDirectly(): acfb[keyboardType=prime, payload=null]
+05-20 08:26:23.655 16834 16834 I InputBundle: InputBundle.switchToKeyboardDirectly():530 switchToKeyboardDirectly(): acfb[keyboardType=prime, payload=null]
+05-20 08:26:23.656 16834 16834 I InputBundle: InputBundle.switchToKeyboardDirectly():530 switchToKeyboardDirectly(): acfb[keyboardType=prime, payload=null]
+05-20 08:26:23.656 16834 16834 I InputBundle: InputBundle.switchToKeyboardDirectly():530 switchToKeyboardDirectly(): acfb[keyboardType=prime, payload=null]
+05-20 08:26:23.705  1021  1189 E ASH     : @ 758384.006: touch gesture: updating gesture: double_tap [x], single_tap [v]
+05-20 08:26:23.706  1021  1189 I ASH     : @ 758384.007: touch gesture: sttw params: max x/y 540 550, mi/max frame 2 26, tolerance 150, recess size 136
+05-20 08:26:23.706  1021  1189 I ASH     : @ 758384.007: touch gesture: [touch gesture] subscribed
+05-20 08:26:23.755  1021  1189 I ASH     : @ 758384.055: tcs3701: Recording lux = 2.314450 when prox NEAR
+05-20 08:26:23.755  1021  1189 I ASH     : @ 758384.056: tcs3701: PROX sample: NEAR (03ff), POFFSET: 0073, ORE: -1
+05-20 08:26:23.757  1021  1189 D VSC     : @ 758384.058: [Proximity Gated Single Tap Gesture] Stop touch_gesture
+05-20 08:26:23.757  1021  1189 I ASH     : @ 758384.058: touch gesture: [touch gesture] unsubscribed
+05-20 08:26:23.757  1021  1189 E ASH     : @ 758384.059: touch gesture: updating gesture: double_tap [x], single_tap [x]
+05-20 08:26:23.804  1948  2272 I UsbPortManager: USB HAL AIDL version: USB_HAL_V2_0
+05-20 08:26:23.982  1948  2023 I system_server: Background young concurrent copying GC freed 1319767(95MB) AllocSpace objects, 4(80KB) LOS objects, 66% free, 45MB/136MB, paused 246us,303us total 110.185ms
+05-20 08:26:23.984  1948  2025 W System  : A resource failed to call HardwareBuffer.close. 
+05-20 08:26:24.545  1021  1189 D ASH     : @ 758384.845: tcs3701: TCS3701_POWER_RAIL_PENDING_OFF
+05-20 08:26:24.545  1021  1189 D ASH     : @ 758384.845: tcs3701: update_rail_vote: 2->0
+05-20 08:26:24.545  1021  1189 D ASH     : @ 758384.845: tcs3701: power vote set to 0
+05-20 08:26:24.545  1021  1189 D ASH     : @ 758384.845: tcs3701: TCS3701_POWER_RAIL_PENDING_NONE
+05-20 08:26:25.406  1948  1948 I LineageHealth: Current time is 08:26:25 AM
+05-20 08:26:25.406  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:26:25.406  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:26:26.581   991  1008 D ContextHubHal: Got message from nanoapp: ID 0x476f6f676c001020
+05-20 08:26:26.582   987  2284 I CapoDetector: handleNanoappMessage, Id 5147455389092024352, type 200, size 2
+05-20 08:26:26.582   987  2284 D CapoDetector: handleNanoappMessage, get position event from capo nanoapp, type 2
+05-20 08:26:26.582   987  2284 D CapoDetector: handleNanoappMessage, sent position type 2 to callback function
+05-20 08:26:26.582   987  2284 I audio_hw_primary: adev_on_devicestate_changed: devicestate status changed to 2
+05-20 08:26:26.582  1948  2504 E ContextHubClientManager: Cannot send message to unregistered client (host endpoint ID = -28640)
+05-20 08:26:26.585  1021  1189 D VSC     : @ 758386.885: [Device Pickup Sensor] Request accel, interval 20.0 ms, latency 100.0 ms
+05-20 08:26:26.585  1021  1189 D ASH     : @ 758386.886: SensorType 1 resampler quality 0
+05-20 08:26:27.944  1028  1119 D rlsservice: MonitorDisplayStatus client num 0, display status 0, sensor status 0
+05-20 08:26:28.815 20526  9204 I AlarmManager: setExactAndAllowWhileIdle [name: GCM_HB_ALARM type: 2 triggerAtMillis: 760126471]
+05-20 08:26:28.815  1948  2916 D CompatibilityChangeReporter: Compat change id reported: 171306433; UID 10424; state: ENABLED
+05-20 08:26:28.816  1948  2916 D CompatibilityChangeReporter: Compat change id reported: 218533173; UID 10424; state: ENABLED
+05-20 08:26:28.817 20526  9204 I AlarmManager: setExactAndAllowWhileIdle [name: GCM_HB_ALARM type: 2 triggerAtMillis: 760126473]
+05-20 08:26:31.031  1021  1189 D VSC     : @ 758391.330: [Device Pickup Sensor] Stop accel
+05-20 08:26:31.031  1021  1189 D VSC     : @ 758391.331: [Device Pickup Sensor] Request motion_detect, interval 18446744027136.0 ms, latency 0.0 ms
+05-20 08:26:32.967  1021  1189 D VSC     : @ 758393.267: [Significant Motion] Request motion_detect, interval 18446744027136.0 ms, latency 0.0 ms
+05-20 08:26:32.967  1021  1189 D VSC     : @ 758393.267: [Significant Motion] Stop accel
+05-20 08:26:34.004 16794 16794 D BoundBrokerSvc: onBind: Intent { act=com.google.android.gms.measurement.START pkg=com.google.android.gms }
+05-20 08:26:34.004 16794 16794 D BoundBrokerSvc: Loading bound service for intent: Intent { act=com.google.android.gms.measurement.START pkg=com.google.android.gms }
+05-20 08:26:34.852  8714  8991 D RelayManager: Notifying relay phone-ready (userId=6ed76e1b-409d-4723-a11f-0b01e23b8699, relay=mine.pocketcraft.online, local=192.168.95.51:25565)
+05-20 08:26:34.857 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:26:34.994  8714  8991 D RelayManager: phone-ready endpoint /phone-ready result: HTTP 200
+05-20 08:26:34.998 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:26:37.399  1948  1948 I LineageHealth: Current time is 08:26:37 AM
+05-20 08:26:37.400  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:26:37.400  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:26:39.108  2758  2938 I Tethering: [OffloadController] notifyAlertReached
+05-20 08:26:40.124  1948  2465 W NetworkPolicy: shared quota unsupported; generating rule for each iface
+05-20 08:26:41.134  1948  2023 I system_server: Background young concurrent copying GC freed 1320228(95MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 1.089ms,260us total 119.292ms
+05-20 08:26:43.511  1948  2023 I system_server: Background young concurrent copying GC freed 1324000(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 250us,317us total 107.663ms
+05-20 08:26:44.030 16794 16794 D BoundBrokerSvc: onUnbind: Intent { act=com.google.android.gms.measurement.START pkg=com.google.android.gms }
+05-20 08:26:45.891  1948  2023 I system_server: Background young concurrent copying GC freed 1321764(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 243us,340us total 108.870ms
+05-20 08:26:47.411  8714  8991 I RelayManager: Relay status POST mine.pocketcraft.online/bedrock-status -> HTTP 200, body={"ok":true}
+05-20 08:26:47.414 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:26:48.279  1948  2023 I system_server: Background young concurrent copying GC freed 1322942(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 456us,309us total 109.224ms
+05-20 08:26:50.070  8714  8991 D RelayManager: Notifying relay phone-ready (userId=6ed76e1b-409d-4723-a11f-0b01e23b8699, relay=mine.pocketcraft.online, local=192.168.95.51:25565)
+05-20 08:26:50.077 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:26:50.143  2758  2938 I Tethering: [OffloadController] notifyAlertReached
+05-20 08:26:50.235  8714  8991 D RelayManager: phone-ready endpoint /phone-ready result: HTTP 200
+05-20 08:26:50.240 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:26:50.660  1948  2023 I system_server: Background young concurrent copying GC freed 1322918(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 266us,307us total 109.739ms
+05-20 08:26:51.806  1948  1948 I LineageHealth: Current time is 08:26:51 AM
+05-20 08:26:51.806  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:26:51.807  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:26:52.184  1021  1189 I CHRE    : @ 758412.484: [AR] still: 95.686271
+05-20 08:26:53.038  1948  2023 I system_server: Background young concurrent copying GC freed 1317822(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 246us,1.048ms total 110.269ms
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: Exception connecting to real-time RC backend. Retrying the connection...
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: java.io.IOException: com.google.firebase.remoteconfig.FirebaseRemoteConfigClientException: Failed to open HTTP stream connection
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.google.firebase.remoteconfig.internal.s.a(SourceFile:186)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.google.firebase.remoteconfig.internal.q.a(SourceFile:1)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.google.android.gms.tasks.u.run(SourceFile:27)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1137)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:637)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.google.firebase.concurrent.b.a(SourceFile:13)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.google.firebase.concurrent.a.run(SourceFile:1)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at java.lang.Thread.run(Thread.java:1012)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: Caused by: com.google.firebase.remoteconfig.FirebaseRemoteConfigClientException: Failed to open HTTP stream connection
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.google.firebase.remoteconfig.internal.s.b(SourceFile:87)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.google.firebase.remoteconfig.internal.r.a(SourceFile:1)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.google.android.gms.tasks.w.run(SourceFile:9)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	... 5 more
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: Caused by: java.net.ConnectException: Failed to connect to firebaseremoteconfigrealtime.googleapis.com/216.239.34.223:443
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.android.okhttp.internal.io.RealConnection.connectSocket(RealConnection.java:147)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.android.okhttp.internal.io.RealConnection.connect(RealConnection.java:116)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.android.okhttp.internal.http.StreamAllocation.findConnection(StreamAllocation.java:186)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.android.okhttp.internal.http.StreamAllocation.findHealthyConnection(StreamAllocation.java:128)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.android.okhttp.internal.http.StreamAllocation.newStream(StreamAllocation.java:97)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.android.okhttp.internal.http.HttpEngine.connect(HttpEngine.java:289)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.android.okhttp.internal.http.HttpEngine.sendRequest(HttpEngine.java:232)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.android.okhttp.internal.huc.HttpURLConnectionImpl.execute(HttpURLConnectionImpl.java:465)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.android.okhttp.internal.huc.HttpURLConnectionImpl.connect(HttpURLConnectionImpl.java:131)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.android.okhttp.internal.huc.HttpURLConnectionImpl.getOutputStream(HttpURLConnectionImpl.java:262)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.android.okhttp.internal.huc.DelegatingHttpsURLConnection.getOutputStream(DelegatingHttpsURLConnection.java:219)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.android.okhttp.internal.huc.HttpsURLConnectionImpl.getOutputStream(HttpsURLConnectionImpl.java:30)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.google.firebase.remoteconfig.internal.s.A(SourceFile:25)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	at com.google.firebase.remoteconfig.internal.s.b(SourceFile:74)
+05-20 08:26:55.178  7107  7199 D FirebaseRemoteConfig: 	... 7 more
+05-20 08:26:55.420  1948  2023 I system_server: Background young concurrent copying GC freed 1322616(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 258us,300us total 108.556ms
+05-20 08:26:56.171  2758  2938 I Tethering: [OffloadController] notifyAlertReached
+05-20 08:26:57.202  1948  2465 W NetworkPolicy: shared quota unsupported; generating rule for each iface
+05-20 08:26:57.789  1948  2023 I system_server: Background young concurrent copying GC freed 1317527(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 236us,327us total 111.908ms
+05-20 08:26:57.945  1028  1119 D rlsservice: MonitorDisplayStatus client num 0, display status 0, sensor status 0
+05-20 08:26:59.972 20526  9277 I AlarmManager: setExactAndAllowWhileIdle [name: GCM_HB_ALARM type: 2 triggerAtMillis: 760157628]
+05-20 08:26:59.980 20526  9275 I AlarmManager: setExactAndAllowWhileIdle [name: FcmRetry type: 2 triggerAtMillis: 758527635]
+05-20 08:26:59.982 20526  9277 I AlarmManager: setExactAndAllowWhileIdle [name: GCM_HB_ALARM type: 2 triggerAtMillis: 760157638]
+05-20 08:27:00.175  1948  2023 I system_server: Background young concurrent copying GC freed 1320005(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 380us,302us total 115.514ms
+05-20 08:27:02.549  1948  2023 I system_server: Background young concurrent copying GC freed 1321520(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 306us,308us total 107.934ms
+05-20 08:27:04.860  1948  1948 I LineageHealth: Current time is 08:27:04 AM
+05-20 08:27:04.860  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:27:04.860  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:27:04.931  1948  2023 I system_server: Background young concurrent copying GC freed 1321650(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 263us,329us total 108.825ms
+05-20 08:27:04.984  1021  1189 I CHRE    : @ 758425.284: [AR] ON => IDLE
+05-20 08:27:04.984  1021  1189 I CHRE    : @ 758425.285: [AR] audiofusion:HandleIdleStateChange: state = 1 
+05-20 08:27:05.318  8714  8991 D RelayManager: Notifying relay phone-ready (userId=6ed76e1b-409d-4723-a11f-0b01e23b8699, relay=mine.pocketcraft.online, local=192.168.95.51:25565)
+05-20 08:27:05.322 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:27:05.469  8714  8991 D RelayManager: phone-ready endpoint /phone-ready result: HTTP 200
+05-20 08:27:05.475 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:27:07.223  2758  2938 I Tethering: [OffloadController] notifyAlertReached
+05-20 08:27:07.313  1948  2023 I system_server: Background young concurrent copying GC freed 1319358(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 312us,307us total 112.323ms
+05-20 08:27:08.642  1021  1189 D VSC     : @ 758428.941: [Device Pickup Sensor] Request accel, interval 20.0 ms, latency 0.0 ms
+05-20 08:27:08.642  1021  1189 D CHRE    : @ 758428.942: InstantMotion
+05-20 08:27:08.642  1021  1189 I CHRE    : @ 758428.942: [AR] IDLE => ON
+05-20 08:27:08.643  1021  1189 D VSC     : @ 758428.943: [Device Pickup Sensor] Stop motion_detect
+05-20 08:27:08.643  1021  1189 D VSC     : @ 758428.943: [Significant Motion] Stop motion_detect
+05-20 08:27:08.643  1021  1189 D VSC     : @ 758428.943: [Significant Motion] Request accel, interval 20.0 ms, latency 3200.0 ms
+05-20 08:27:08.644   991  1008 D ContextHubHal: Got message from nanoapp: ID 0x476f6f676c001020
+05-20 08:27:08.644  1021  1189 W CHRE    : @ 758428.945: [AR] unknown event: 515
+05-20 08:27:08.644   987  2284 I CapoDetector: handleNanoappMessage, Id 5147455389092024352, type 200, size 2
+05-20 08:27:08.644   987  2284 D CapoDetector: handleNanoappMessage, get position event from capo nanoapp, type 1
+05-20 08:27:08.644   987  2284 D CapoDetector: handleNanoappMessage, sent position type 1 to callback function
+05-20 08:27:08.644   987  2284 I audio_hw_primary: adev_on_devicestate_changed: devicestate status changed to 1
+05-20 08:27:08.645  1948  2504 E ContextHubClientManager: Cannot send message to unregistered client (host endpoint ID = -28640)
+05-20 08:27:08.655  1021  1189 D ASH     : @ 758428.955: SensorType 1 resampler quality 0
+05-20 08:27:08.659  1021  1189 D ASH     : @ 758428.959: SensorType 195 resampler quality 0
+05-20 08:27:08.659  1021  1189 D ASH     : @ 758428.959: SensorType 195 resampler quality 0
+05-20 08:27:08.676  1021  1189 D CHRE    : @ 758428.976: MagGyroCal(0)=ON
+05-20 08:27:08.678  1021  1189 D CHRE    : @ 758428.979: Gyro(0)=Enabled
+05-20 08:27:08.700  1021  1189 D ASH     : @ 758429.000: SensorType 1 resampler quality 1
+05-20 08:27:09.403  1948  7680 W ActivityManager: Unable to start service Intent { cmp=com.google.android.turboadapter/.GoogleBatteryService } U=0: not found
+05-20 08:27:09.407  1948  3125 W ActivityManager: Unable to start service Intent { cmp=com.google.android.turboadapter/.GoogleBatteryService } U=0: not found
+05-20 08:27:09.408 13767 13767 E ActivityThread: Service com.google.android.apps.turbo.deadline.library.DeadlineUpdateJobService has leaked ServiceConnection aut@e726254 that was originally bound here
+05-20 08:27:09.408 13767 13767 E ActivityThread: android.app.ServiceConnectionLeaked: Service com.google.android.apps.turbo.deadline.library.DeadlineUpdateJobService has leaked ServiceConnection aut@e726254 that was originally bound here
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at android.app.LoadedApk$ServiceDispatcher.<init>(LoadedApk.java:2045)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at android.app.LoadedApk.getServiceDispatcherCommon(LoadedApk.java:1917)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at android.app.LoadedApk.getServiceDispatcher(LoadedApk.java:1896)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at android.app.ContextImpl.bindServiceCommon(ContextImpl.java:2021)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at android.app.ContextImpl.bindService(ContextImpl.java:1951)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at android.content.ContextWrapper.bindService(ContextWrapper.java:853)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at aup.a(PG:16)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at hu.b(PG:3)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at com.google.android.apps.turbo.deadline.library.DeadlineUpdateJobService.c(PG:2)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at atm.run(PG:68)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:463)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at dpi.a(PG:1)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at dor.run(PG:4)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at dpj.run(PG:1)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1137)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:637)
+05-20 08:27:09.408 13767 13767 E ActivityThread: 	at java.lang.Thread.run(Thread.java:1012)
+05-20 08:27:09.408  1948  7675 W ActivityManager: Unbind failed: could not find connection for android.os.BinderProxy@c151c71
+05-20 08:27:09.410 13767 13767 E ActivityThread: Service com.google.android.apps.turbo.deadline.library.BatteryFlagService has leaked ServiceConnection aut@114f2f2 that was originally bound here
+05-20 08:27:09.410 13767 13767 E ActivityThread: android.app.ServiceConnectionLeaked: Service com.google.android.apps.turbo.deadline.library.BatteryFlagService has leaked ServiceConnection aut@114f2f2 that was originally bound here
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at android.app.LoadedApk$ServiceDispatcher.<init>(LoadedApk.java:2045)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at android.app.LoadedApk.getServiceDispatcherCommon(LoadedApk.java:1917)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at android.app.LoadedApk.getServiceDispatcher(LoadedApk.java:1896)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at android.app.ContextImpl.bindServiceCommon(ContextImpl.java:2021)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at android.app.ContextImpl.bindService(ContextImpl.java:1951)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at android.content.ContextWrapper.bindService(ContextWrapper.java:853)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at aup.a(PG:9)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at hu.b(PG:3)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at com.google.android.apps.turbo.deadline.library.BatteryFlagService.c(PG:1)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at atm.run(PG:85)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:463)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at dpi.a(PG:1)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at dor.run(PG:4)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at dpj.run(PG:1)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1137)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:637)
+05-20 08:27:09.410 13767 13767 E ActivityThread: 	at java.lang.Thread.run(Thread.java:1012)
+05-20 08:27:09.411  1948  7680 W ActivityManager: Unbind failed: could not find connection for android.os.BinderProxy@40dba56
+05-20 08:27:09.690  1022  2498 I android.hardware.usb.aidl-service: port0
+05-20 08:27:09.691  1022  2498 I android.hardware.usb.aidl-service: 0:port0 connected:1 canChangeMode:1 canChagedata:0 canChangePower:0 usbDataEnabled:1
+05-20 08:27:09.691  1022  2498 I android.hardware.usb.aidl-service: ContaminantDetectionStatus:2 ContaminantProtectionStatus:0
+05-20 08:27:09.691  1022  2498 I android.hardware.usb.aidl-service: powerTransferLimited:0
+05-20 08:27:09.691  1948  2916 I UsbPortManager: AIDL UsbDataStatus:1
+05-20 08:27:09.691  1948  2916 I UsbPortManager: ClientCallback AIDL V1: port0
+05-20 08:27:09.703  1948  1948 I LineageHealth: Current time is 08:27:09 AM
+05-20 08:27:09.703  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:27:09.703  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:27:09.759  1948  2023 I system_server: Background young concurrent copying GC freed 1314923(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 251us,309us total 110.274ms
+05-20 08:27:09.990 20526 20526 D BoundBrokerSvc: onRebind: Intent { act=com.google.android.gms.libs.gmscorelogger.service.START dat=chimera-action:/... cmp=com.google.android.gms/.chimera.PersistentDirectBootAwareApiService }
+05-20 08:27:11.470  1948  1948 I LineageHealth: Current time is 08:27:11 AM
+05-20 08:27:11.470  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:27:11.470  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:27:11.497 16794 16794 D BoundBrokerSvc: onUnbind: Intent { act=com.google.android.gms.common.BIND_SHARED_PREFS pkg=com.google.android.gms }
+05-20 08:27:11.643  1021  1189 D VSC     : @ 758431.943: [Device Pickup Sensor] Request accel, interval 20.0 ms, latency 100.0 ms
+05-20 08:27:11.644  1021  1189 D ASH     : @ 758431.944: SensorType 1 resampler quality 0
+05-20 08:27:11.845  1021  1189 D ASH     : @ 758432.146: SensorType 195 resampler quality 1
+05-20 08:27:11.849  1021  1189 D ASH     : @ 758432.150: SensorType 195 resampler quality 0
+05-20 08:27:11.851  1021  1189 D ASH     : @ 758432.151: SensorType 195 resampler quality 1
+05-20 08:27:11.855  1021  1189 D ASH     : @ 758432.156: SensorType 195 resampler quality 0
+05-20 08:27:11.941  1948  2916 W BatteryExternalStatsWorker: error reading Bluetooth stats: 11
+05-20 08:27:11.950  1948  2916 D TelephonyManager: requestModemActivityInfo: Sending result to app: ModemActivityInfo{ mTimestamp=758419605 mSleepTimeMs=6143916 mIdleTimeMs=326712983 mActivityStatsTechSpecificInfo=[{mRat=UNKNOWN,mFrequencyRange=UNKNOWN,mTxTimeMs[]=[0, 0, 0, 0, 0],mRxTimeMs=407044352}]}
+05-20 08:27:12.133  1948  2023 I system_server: Background young concurrent copying GC freed 1315376(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 1.003ms,290us total 113.464ms
+05-20 08:27:13.647  1021  1189 D CHRE    : @ 758433.947: StationaryDetect
+05-20 08:27:13.653  1021  1189 D CHRE    : @ 758433.953: MagGyroCal(0)=OFF
+05-20 08:27:13.755  1021  1189 D ASH     : @ 758434.054: SensorType 1 resampler quality 0
+05-20 08:27:13.755  1021  1189 D CHRE    : @ 758434.056: Gyro(0)=Disabled
+05-20 08:27:14.512  1948  2023 I system_server: Background young concurrent copying GC freed 1319441(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 254us,310us total 111.397ms
+05-20 08:27:15.018  1948  2916 W ContextImpl: Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcastMultiplePermissions:1222 com.android.server.TelephonyRegistry.broadcastServiceStateChanged:3112 com.android.server.TelephonyRegistry.notifyServiceStateForPhoneId:1618 com.android.internal.telephony.ITelephonyRegistry$Stub.onTransact:492 android.os.Binder.execTransactInternal:1288 
+05-20 08:27:15.019  1948  2916 W ContextImpl: Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcastMultiplePermissions:1272 android.content.Context.sendBroadcastMultiplePermissions:2282 com.android.server.TelephonyRegistry.broadcastServiceStateChanged:3115 com.android.server.TelephonyRegistry.notifyServiceStateForPhoneId:1618 com.android.internal.telephony.ITelephonyRegistry$Stub.onTransact:492 
+05-20 08:27:15.020  1948  2916 W ContextImpl: Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcastMultiplePermissions:1272 com.android.server.TelephonyRegistry.broadcastServiceStateChanged:3122 com.android.server.TelephonyRegistry.notifyServiceStateForPhoneId:1618 com.android.internal.telephony.ITelephonyRegistry$Stub.onTransact:492 android.os.Binder.execTransactInternal:1288 
+05-20 08:27:15.021  1948  2916 W ContextImpl: Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcastMultiplePermissions:1272 com.android.server.TelephonyRegistry.broadcastServiceStateChanged:3127 com.android.server.TelephonyRegistry.notifyServiceStateForPhoneId:1618 com.android.internal.telephony.ITelephonyRegistry$Stub.onTransact:492 android.os.Binder.execTransactInternal:1288 
+05-20 08:27:15.024  1948  2292 W BroadcastQueue: Appop Denial: receiving Intent { act=android.intent.action.SERVICE_STATE flg=0x1000010 (has extras) } to ProcessRecord{e1a1608 9652:com.android.systemui/u0a463} (pid=9652, uid=10463) excludes appop android:read_phone_state due to sender android (uid 1000)
+05-20 08:27:15.024  8622  8622 D CellBroadcastReceiver: onReceive Intent { act=android.intent.action.SERVICE_STATE flg=0x1000010 cmp=com.android.cellbroadcastreceiver.module/com.android.cellbroadcastreceiver.CellBroadcastReceiver (has extras) }
+05-20 08:27:15.024  2813  2813 D ServiceStateProvider: subId=2
+05-20 08:27:15.024  8622  8622 D CellBroadcastReceiver: onServiceStateChanged, ss: 0
+05-20 08:27:15.024  8622  8622 D CellBroadcastReceiver: networkOperator: 405860
+05-20 08:27:15.025  8622  8622 D CellBroadcastReceiver: update supported roaming operator as 
+05-20 08:27:15.035  2813  2813 I Telephony: isRttCurrentlySupported -- regular acct, hasVoiceAvailability: true
+05-20 08:27:15.035  2813  2813 I Telephony:  isRttSupported: false
+05-20 08:27:15.035  2813  2813 I Telephony:  alwaysAllowWhileRoaming: false
+05-20 08:27:15.035  2813  2813 I Telephony:  isRoaming: false
+05-20 08:27:15.035  2813  2813 I Telephony:  isOnWfc: false
+05-20 08:27:15.048  1021  1189 D ASH     : @ 758435.348: SensorType 195 resampler quality 0
+05-20 08:27:15.053  1021  1189 D ASH     : @ 758435.354: SensorType 195 resampler quality 0
+05-20 08:27:15.064  1948  2621 W ContextImpl: Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcastMultiplePermissions:1222 com.android.server.TelephonyRegistry.broadcastServiceStateChanged:3112 com.android.server.TelephonyRegistry.notifyServiceStateForPhoneId:1618 com.android.internal.telephony.ITelephonyRegistry$Stub.onTransact:492 android.os.Binder.execTransactInternal:1288 
+05-20 08:27:15.065  1948  2621 W ContextImpl: Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcastMultiplePermissions:1272 android.content.Context.sendBroadcastMultiplePermissions:2282 com.android.server.TelephonyRegistry.broadcastServiceStateChanged:3115 com.android.server.TelephonyRegistry.notifyServiceStateForPhoneId:1618 com.android.internal.telephony.ITelephonyRegistry$Stub.onTransact:492 
+05-20 08:27:15.065  1948  2621 W ContextImpl: Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcastMultiplePermissions:1272 com.android.server.TelephonyRegistry.broadcastServiceStateChanged:3122 com.android.server.TelephonyRegistry.notifyServiceStateForPhoneId:1618 com.android.internal.telephony.ITelephonyRegistry$Stub.onTransact:492 android.os.Binder.execTransactInternal:1288 
+05-20 08:27:15.066  1948  2621 W ContextImpl: Calling a method in the system process without a qualified user: android.app.ContextImpl.sendBroadcastMultiplePermissions:1272 com.android.server.TelephonyRegistry.broadcastServiceStateChanged:3127 com.android.server.TelephonyRegistry.notifyServiceStateForPhoneId:1618 com.android.internal.telephony.ITelephonyRegistry$Stub.onTransact:492 android.os.Binder.execTransactInternal:1288 
+05-20 08:27:15.068  1021  1189 I CHRE    : @ 758435.369: [AR] inconsistent: 41.176471
+05-20 08:27:15.069  1948  2292 W BroadcastQueue: Appop Denial: receiving Intent { act=android.intent.action.SERVICE_STATE flg=0x1000010 (has extras) } to ProcessRecord{e1a1608 9652:com.android.systemui/u0a463} (pid=9652, uid=10463) excludes appop android:read_phone_state due to sender android (uid 1000)
+05-20 08:27:15.069  8622  8622 D CellBroadcastReceiver: onReceive Intent { act=android.intent.action.SERVICE_STATE flg=0x1000010 cmp=com.android.cellbroadcastreceiver.module/com.android.cellbroadcastreceiver.CellBroadcastReceiver (has extras) }
+05-20 08:27:15.069  8622  8622 D CellBroadcastReceiver: onServiceStateChanged, ss: 0
+05-20 08:27:15.069  8622  8622 D CellBroadcastReceiver: networkOperator: 405860
+05-20 08:27:15.069  2813  2813 D ServiceStateProvider: subId=2
+05-20 08:27:15.070  8622  8622 D CellBroadcastReceiver: update supported roaming operator as 
+05-20 08:27:15.081  2813  2813 I Telephony: isRttCurrentlySupported -- regular acct, hasVoiceAvailability: true
+05-20 08:27:15.081  2813  2813 I Telephony:  isRttSupported: false
+05-20 08:27:15.081  2813  2813 I Telephony:  alwaysAllowWhileRoaming: false
+05-20 08:27:15.081  2813  2813 I Telephony:  isRoaming: false
+05-20 08:27:15.081  2813  2813 I Telephony:  isOnWfc: false
+05-20 08:27:15.848 17279 17318 D WM-DelayedWorkTracker: Scheduling work 35e30a56-68d3-403c-9b04-5e3b1b21e5d7
+05-20 08:27:15.848 17279 17318 D WM-GreedyScheduler: Starting tracking for 35e30a56-68d3-403c-9b04-5e3b1b21e5d7
+05-20 08:27:15.849 17279 17303 D WM-GreedyScheduler: Constraints not met: Cancelling work ID WorkGenerationalId(workSpecId=35e30a56-68d3-403c-9b04-5e3b1b21e5d7, generation=317)
+05-20 08:27:16.887  1948  2023 I system_server: Background young concurrent copying GC freed 1318629(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 992us,280us total 113.582ms
+05-20 08:27:17.575  8714  8991 I RelayManager: Relay status POST mine.pocketcraft.online/bedrock-status -> HTTP 200, body={"ok":true}
+05-20 08:27:17.581 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:27:17.966  1948  1948 I LineageHealth: Current time is 08:27:17 AM
+05-20 08:27:17.966  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:27:17.966  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:27:18.290  2758  2938 I Tethering: [OffloadController] notifyAlertReached
+05-20 08:27:19.257  1948  2023 I system_server: Background young concurrent copying GC freed 1317381(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 255us,305us total 109.795ms
+05-20 08:27:19.325  1948  2465 W NetworkPolicy: shared quota unsupported; generating rule for each iface
+05-20 08:27:19.780  1021  1189 D VSC     : @ 758440.080: [Device Pickup Sensor] Stop accel
+05-20 08:27:19.780  1021  1189 D VSC     : @ 758440.081: [Device Pickup Sensor] Request motion_detect, interval 18446744027136.0 ms, latency 0.0 ms
+05-20 08:27:20.565  8714  8991 D RelayManager: Notifying relay phone-ready (userId=6ed76e1b-409d-4723-a11f-0b01e23b8699, relay=mine.pocketcraft.online, local=192.168.95.51:25565)
+05-20 08:27:20.569 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:27:20.693  8714  8991 D RelayManager: phone-ready endpoint /phone-ready result: HTTP 200
+05-20 08:27:20.698 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:27:21.456  1021  1189 D VSC     : @ 758441.757: [Significant Motion] Request motion_detect, interval 18446744027136.0 ms, latency 0.0 ms
+05-20 08:27:21.456  1021  1189 D VSC     : @ 758441.757: [Significant Motion] Stop accel
+05-20 08:27:21.472   991  1008 D ContextHubHal: Got message from nanoapp: ID 0x476f6f676c001020
+05-20 08:27:21.472   987  2284 I CapoDetector: handleNanoappMessage, Id 5147455389092024352, type 200, size 2
+05-20 08:27:21.472   987  2284 D CapoDetector: handleNanoappMessage, get position event from capo nanoapp, type 2
+05-20 08:27:21.472   987  2284 D CapoDetector: handleNanoappMessage, sent position type 2 to callback function
+05-20 08:27:21.472   987  2284 I audio_hw_primary: adev_on_devicestate_changed: devicestate status changed to 2
+05-20 08:27:21.473  1948  2504 E ContextHubClientManager: Cannot send message to unregistered client (host endpoint ID = -28640)
+05-20 08:27:21.619  1948  2023 I system_server: Background young concurrent copying GC freed 1314262(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 275us,409us total 114.827ms
+05-20 08:27:23.997  1948  2023 I system_server: Background young concurrent copying GC freed 1317520(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 254us,322us total 110.911ms
+05-20 08:27:24.347  2758  2938 I Tethering: [OffloadController] notifyAlertReached
+05-20 08:27:25.021 20526 20526 D BoundBrokerSvc: onUnbind: Intent { act=com.google.android.gms.libs.gmscorelogger.service.START dat=chimera-action:/... cmp=com.google.android.gms/.chimera.PersistentDirectBootAwareApiService }
+05-20 08:27:26.369  1948  2023 I system_server: Background young concurrent copying GC freed 1313319(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 1.018ms,310us total 121.551ms
+05-20 08:27:27.945  1028  1119 D rlsservice: MonitorDisplayStatus client num 0, display status 0, sensor status 0
+05-20 08:27:28.734  1948  2023 I system_server: Background young concurrent copying GC freed 1317819(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 272us,273us total 110.374ms
+05-20 08:27:32.340  1948  1948 I LineageHealth: Current time is 08:27:32 AM
+05-20 08:27:32.340  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:27:32.340  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:27:34.006 16794 16794 D BoundBrokerSvc: onBind: Intent { act=com.google.android.gms.measurement.START pkg=com.google.android.gms }
+05-20 08:27:34.006 16794 16794 D BoundBrokerSvc: Loading bound service for intent: Intent { act=com.google.android.gms.measurement.START pkg=com.google.android.gms }
+05-20 08:27:35.776  8714  8991 D RelayManager: Notifying relay phone-ready (userId=6ed76e1b-409d-4723-a11f-0b01e23b8699, relay=mine.pocketcraft.online, local=192.168.95.51:25565)
+05-20 08:27:35.782 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:27:35.916  8714  8991 D RelayManager: phone-ready endpoint /phone-ready result: HTTP 200
+05-20 08:27:35.930 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:27:35.952  1948  2023 I system_server: Background young concurrent copying GC freed 1315879(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 444us,260us total 110.304ms
+05-20 08:27:38.319  1948  2023 I system_server: Background young concurrent copying GC freed 1316793(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 263us,313us total 109.359ms
+05-20 08:27:40.413  2758  2938 I Tethering: [OffloadController] notifyAlertReached
+05-20 08:27:40.685  1948  2023 I system_server: Background young concurrent copying GC freed 1317553(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 249us,292us total 107.576ms
+05-20 08:27:40.931  9652  9660 I ndroid.systemui: Background young concurrent copying GC freed 2503194(46MB) AllocSpace objects, 19(380KB) LOS objects, 52% free, 43MB/90MB, paused 94us,100us total 133.171ms
+05-20 08:27:41.446  1948  2465 W NetworkPolicy: shared quota unsupported; generating rule for each iface
+05-20 08:27:43.051  1948  2023 I system_server: Background young concurrent copying GC freed 1312249(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 685us,323us total 117.233ms
+05-20 08:27:43.871  1021  1189 I CHRE    : @ 758464.171: [AR] still: 95.686271
+05-20 08:27:44.029 16794 16794 D BoundBrokerSvc: onUnbind: Intent { act=com.google.android.gms.measurement.START pkg=com.google.android.gms }
+05-20 08:27:45.416  1948  2023 I system_server: Background young concurrent copying GC freed 1314675(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 270us,337us total 111.100ms
+05-20 08:27:45.421  1948  1948 I LineageHealth: Current time is 08:27:45 AM
+05-20 08:27:45.421  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:27:45.421  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:27:47.747  8714  8991 I RelayManager: Relay status POST mine.pocketcraft.online/bedrock-status -> HTTP 200, body={"ok":true}
+05-20 08:27:47.758 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:27:47.781  1948  2023 I system_server: Background young concurrent copying GC freed 1315047(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 257us,311us total 110.156ms
+05-20 08:27:48.113  1948  1948 I LineageHealth: Current time is 08:27:48 AM
+05-20 08:27:48.114  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:27:48.114  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:27:50.144  1948  2023 I system_server: Background young concurrent copying GC freed 1314420(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 243us,294us total 108.841ms
+05-20 08:27:51.010  8714  8991 D RelayManager: Notifying relay phone-ready (userId=6ed76e1b-409d-4723-a11f-0b01e23b8699, relay=mine.pocketcraft.online, local=192.168.95.51:25565)
+05-20 08:27:51.015 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:27:51.164  8714  8991 D RelayManager: phone-ready endpoint /phone-ready result: HTTP 200
+05-20 08:27:51.167 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:27:53.475  1021  1189 I CHRE    : @ 758473.776: [AR] ON => IDLE
+05-20 08:27:53.476  1021  1189 I CHRE    : @ 758473.776: [AR] audiofusion:HandleIdleStateChange: state = 1 
+05-20 08:27:54.891  1948  2023 I system_server: Background young concurrent copying GC freed 1316544(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 1.017ms,258us total 112.534ms
+05-20 08:27:55.923  8714  8768 V RelayManager: Socket closed by relay or network, replenishing pool...
+05-20 08:27:55.927 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:27:57.257  1948  2023 I system_server: Background young concurrent copying GC freed 1315877(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 245us,308us total 109.777ms
+05-20 08:27:57.490  8714  8769 V RelayManager: Socket added to pool. Size: 5/5
+05-20 08:27:57.494 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:27:57.946  1028  1119 D rlsservice: MonitorDisplayStatus client num 0, display status 0, sensor status 0
+05-20 08:27:58.525  1948  1948 I LineageHealth: Current time is 08:27:58 AM
+05-20 08:27:58.525  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:27:58.525  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:28:01.477  2758  2938 I Tethering: [OffloadController] notifyAlertReached
+05-20 08:28:02.048  1948  2023 I system_server: Background young concurrent copying GC freed 1316288(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 282us,277us total 117.348ms
+05-20 08:28:02.967  8714  8961 V RelayManager: Socket closed by relay or network, replenishing pool...
+05-20 08:28:02.971 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:04.406  1948  2023 I system_server: Background young concurrent copying GC freed 1311109(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 1.100ms,326us total 114.613ms
+05-20 08:28:04.529  8714  8991 V RelayManager: Socket added to pool. Size: 5/5
+05-20 08:28:04.533 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:06.243  8714  8768 D RelayManager: Notifying relay phone-ready (userId=6ed76e1b-409d-4723-a11f-0b01e23b8699, relay=mine.pocketcraft.online, local=192.168.95.51:25565)
+05-20 08:28:06.247 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:06.373  8714  8768 D RelayManager: phone-ready endpoint /phone-ready result: HTTP 200
+05-20 08:28:06.379 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:06.766  1948  2023 I system_server: Background young concurrent copying GC freed 1314604(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 270us,297us total 111.716ms
+05-20 08:28:09.133  1948  2023 I system_server: Background young concurrent copying GC freed 1315190(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 45MB/136MB, paused 264us,304us total 110.019ms
+05-20 08:28:09.402  1948  7680 W ActivityManager: Unable to start service Intent { cmp=com.google.android.turboadapter/.GoogleBatteryService } U=0: not found
+05-20 08:28:09.403  1948  7675 W ActivityManager: Unable to start service Intent { cmp=com.google.android.turboadapter/.GoogleBatteryService } U=0: not found
+05-20 08:28:09.412 13767 13767 E ActivityThread: Service com.google.android.apps.turbo.deadline.library.BatteryFlagService has leaked ServiceConnection aut@e212e97 that was originally bound here
+05-20 08:28:09.412 13767 13767 E ActivityThread: android.app.ServiceConnectionLeaked: Service com.google.android.apps.turbo.deadline.library.BatteryFlagService has leaked ServiceConnection aut@e212e97 that was originally bound here
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at android.app.LoadedApk$ServiceDispatcher.<init>(LoadedApk.java:2045)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at android.app.LoadedApk.getServiceDispatcherCommon(LoadedApk.java:1917)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at android.app.LoadedApk.getServiceDispatcher(LoadedApk.java:1896)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at android.app.ContextImpl.bindServiceCommon(ContextImpl.java:2021)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at android.app.ContextImpl.bindService(ContextImpl.java:1951)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at android.content.ContextWrapper.bindService(ContextWrapper.java:853)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at aup.a(PG:9)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at hu.b(PG:3)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at com.google.android.apps.turbo.deadline.library.BatteryFlagService.c(PG:1)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at atm.run(PG:85)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:463)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at dpi.a(PG:1)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at dor.run(PG:4)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at dpj.run(PG:1)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1137)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:637)
+05-20 08:28:09.412 13767 13767 E ActivityThread: 	at java.lang.Thread.run(Thread.java:1012)
+05-20 08:28:09.415  1948  2733 W ActivityManager: Unbind failed: could not find connection for android.os.BinderProxy@34917c0
+05-20 08:28:09.416 13767 13767 E ActivityThread: Service com.google.android.apps.turbo.deadline.library.DeadlineUpdateJobService has leaked ServiceConnection aut@5febe69 that was originally bound here
+05-20 08:28:09.416 13767 13767 E ActivityThread: android.app.ServiceConnectionLeaked: Service com.google.android.apps.turbo.deadline.library.DeadlineUpdateJobService has leaked ServiceConnection aut@5febe69 that was originally bound here
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at android.app.LoadedApk$ServiceDispatcher.<init>(LoadedApk.java:2045)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at android.app.LoadedApk.getServiceDispatcherCommon(LoadedApk.java:1917)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at android.app.LoadedApk.getServiceDispatcher(LoadedApk.java:1896)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at android.app.ContextImpl.bindServiceCommon(ContextImpl.java:2021)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at android.app.ContextImpl.bindService(ContextImpl.java:1951)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at android.content.ContextWrapper.bindService(ContextWrapper.java:853)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at aup.a(PG:16)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at hu.b(PG:3)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at com.google.android.apps.turbo.deadline.library.DeadlineUpdateJobService.c(PG:2)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at atm.run(PG:68)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:463)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at dpi.a(PG:1)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at dor.run(PG:4)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at dpj.run(PG:1)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1137)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:637)
+05-20 08:28:09.416 13767 13767 E ActivityThread: 	at java.lang.Thread.run(Thread.java:1012)
+05-20 08:28:09.417  1948  7675 W ActivityManager: Unbind failed: could not find connection for android.os.BinderProxy@9dbccf9
+05-20 08:28:11.457  1948  1948 I LineageHealth: Current time is 08:28:11 AM
+05-20 08:28:11.457  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:28:11.457  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:28:11.502  1948  2023 I system_server: Background young concurrent copying GC freed 1312306(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 248us,282us total 110.186ms
+05-20 08:28:11.620  1948  1948 I LineageHealth: Current time is 08:28:11 AM
+05-20 08:28:11.620  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:28:11.620  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:28:12.534  2758  2938 I Tethering: [OffloadController] notifyAlertReached
+05-20 08:28:13.568  1948  2465 W NetworkPolicy: shared quota unsupported; generating rule for each iface
+05-20 08:28:13.853  1948  2023 I system_server: Background young concurrent copying GC freed 1308567(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 286us,323us total 112.060ms
+05-20 08:28:15.029  1948  2733 W BatteryExternalStatsWorker: error reading Bluetooth stats: 11
+05-20 08:28:15.037  1948  2733 D TelephonyManager: requestModemActivityInfo: Sending result to app: ModemActivityInfo{ mTimestamp=758482692 mSleepTimeMs=6143916 mIdleTimeMs=326719392 mActivityStatsTechSpecificInfo=[{mRat=UNKNOWN,mFrequencyRange=UNKNOWN,mTxTimeMs[]=[0, 0, 0, 0, 0],mRxTimeMs=407101029}]}
+05-20 08:28:16.220  1948  2023 I system_server: Background young concurrent copying GC freed 1310603(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 254us,300us total 112.218ms
+05-20 08:28:17.908  8714  8768 I RelayManager: Relay status POST mine.pocketcraft.online/bedrock-status -> HTTP 200, body={"ok":true}
+05-20 08:28:17.914 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:18.832  1948  2023 I system_server: Background young concurrent copying GC freed 1311874(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 535us,287us total 111.267ms
+05-20 08:28:21.196  1948  2023 I system_server: Background young concurrent copying GC freed 1313377(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 266us,319us total 110.340ms
+05-20 08:28:21.471  8714  8768 D RelayManager: Notifying relay phone-ready (userId=6ed76e1b-409d-4723-a11f-0b01e23b8699, relay=mine.pocketcraft.online, local=192.168.95.51:25565)
+05-20 08:28:21.477 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:21.617  8714  8768 D RelayManager: phone-ready endpoint /phone-ready result: HTTP 200
+05-20 08:28:21.621 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:23.567  1948  2023 I system_server: Background young concurrent copying GC freed 1312739(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 269us,304us total 111.860ms
+05-20 08:28:24.476  1948  2733 I ActivityManager: Killing 18398:com.google.android.settings.intelligence/u0a390 (adj 985): empty for 1807s
+05-20 08:28:24.477  1948  2733 I ActivityManager: Killing 21734:org.lineageos.lineageparts/1000 (adj 995): empty for 1807s
+05-20 08:28:24.477  1948  2733 I ActivityManager: Killing 21687:org.evolution.pixelparts/1000 (adj 995): empty for 1807s
+05-20 08:28:24.483  1948  2330 I libprocessgroup: Successfully killed process cgroup uid 10390 pid 18398 in 5ms
+05-20 08:28:24.494   982   982 I Zygote  : Process 21687 exited due to signal 9 (Killed)
+05-20 08:28:24.507   982   982 I Zygote  : Process 21734 exited due to signal 9 (Killed)
+05-20 08:28:24.518   982   982 I Zygote  : Process 18398 exited due to signal 9 (Killed)
+05-20 08:28:24.520  1948  2330 I libprocessgroup: Successfully killed process cgroup uid 1000 pid 21687 in 0ms
+05-20 08:28:24.520  1948  2330 I libprocessgroup: Successfully killed process cgroup uid 1000 pid 21734 in 0ms
+05-20 08:28:24.520  1948  2330 I libprocessgroup: Successfully killed process cgroup uid 1000 pid 21734 in 0ms
+05-20 08:28:24.521  1948  2330 I libprocessgroup: Successfully killed process cgroup uid 1000 pid 21687 in 0ms
+05-20 08:28:24.521  1948  2330 I libprocessgroup: Successfully killed process cgroup uid 10390 pid 18398 in 0ms
+05-20 08:28:24.708  1948  1948 I LineageHealth: Current time is 08:28:24 AM
+05-20 08:28:24.708  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:28:24.708  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:28:25.919  1948  2023 I system_server: Background young concurrent copying GC freed 1309263(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 236us,315us total 110.643ms
+05-20 08:28:27.947  1028  1119 D rlsservice: MonitorDisplayStatus client num 0, display status 0, sensor status 0
+05-20 08:28:28.278  1948  2023 I system_server: Background young concurrent copying GC freed 1313229(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 273us,320us total 113.369ms
+05-20 08:28:30.003  8714  8771 V RelayManager: Socket closed by relay or network, replenishing pool...
+05-20 08:28:30.008 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:30.635  1948  2023 I system_server: Background young concurrent copying GC freed 1313020(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 262us,311us total 110.386ms
+05-20 08:28:31.573  8714  8768 V RelayManager: Socket added to pool. Size: 5/5
+05-20 08:28:31.578 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:32.980  1948  2023 I system_server: Background young concurrent copying GC freed 1312461(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 272us,301us total 110.173ms
+05-20 08:28:33.797  8714  8960 V RelayManager: Socket closed by relay or network, replenishing pool...
+05-20 08:28:33.802 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:34.008 16794 16794 D BoundBrokerSvc: onBind: Intent { act=com.google.android.gms.measurement.START pkg=com.google.android.gms }
+05-20 08:28:34.008 16794 16794 D BoundBrokerSvc: Loading bound service for intent: Intent { act=com.google.android.gms.measurement.START pkg=com.google.android.gms }
+05-20 08:28:35.331  1948  2023 I system_server: Background young concurrent copying GC freed 1311908(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 268us,309us total 111.211ms
+05-20 08:28:35.365  8714  8771 V RelayManager: Socket added to pool. Size: 5/5
+05-20 08:28:35.370 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:36.706  8714  8960 D RelayManager: Notifying relay phone-ready (userId=6ed76e1b-409d-4723-a11f-0b01e23b8699, relay=mine.pocketcraft.online, local=192.168.95.51:25565)
+05-20 08:28:36.713 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:36.871  8714  8960 D RelayManager: phone-ready endpoint /phone-ready result: HTTP 200
+05-20 08:28:36.875 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:37.698  1948  2023 I system_server: Background young concurrent copying GC freed 1312839(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 294us,374us total 112.878ms
+05-20 08:28:37.774  1948  1948 I LineageHealth: Current time is 08:28:37 AM
+05-20 08:28:37.774  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:28:37.774  1948  1948 I LineageHealth: Canceling charge deadline
+05-20 08:28:40.044  1948  2023 I system_server: Background young concurrent copying GC freed 1311589(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 270us,307us total 111.613ms
+05-20 08:28:42.391  1948  2023 I system_server: Background young concurrent copying GC freed 1313041(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 240us,307us total 109.745ms
+05-20 08:28:44.052 16794 16794 D BoundBrokerSvc: onUnbind: Intent { act=com.google.android.gms.measurement.START pkg=com.google.android.gms }
+05-20 08:28:44.607  1466  1466 I adbd    : UsbFfs: already offline
+05-20 08:28:44.608  1466  1466 I adbd    : Calling send_auth_request...
+05-20 08:28:44.617  1466  1466 I adbd    : adbd_auth: loading keys from /data/misc/adb/adb_keys
+05-20 08:28:44.636  1466  1466 I adbd    : adb client authorized
+05-20 08:28:44.740  1948  2023 I system_server: Background young concurrent copying GC freed 1311165(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 277us,294us total 111.162ms
+05-20 08:28:47.091  1948  2023 I system_server: Background young concurrent copying GC freed 1313506(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 272us,314us total 111.519ms
+05-20 08:28:47.260  8714  8987 V RelayManager: Socket closed by relay or network, replenishing pool...
+05-20 08:28:47.265 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:48.082  8714  8987 I RelayManager: Relay status POST mine.pocketcraft.online/bedrock-status -> HTTP 200, body={"ok":true}
+05-20 08:28:48.086 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:48.830  8714  8961 V RelayManager: Socket added to pool. Size: 5/5
+05-20 08:28:48.835 14188 14188 D ServerStateHolder: onReceive: action=com.pocketcraft.server.action.SERVER_EVENT, type=output, versionId=1.21.11
+05-20 08:28:49.433  1948  2023 I system_server: Background young concurrent copying GC freed 1312587(94MB) AllocSpace objects, 0(0B) LOS objects, 66% free, 46MB/136MB, paused 263us,309us total 110.805ms
+05-20 08:28:50.873  1948  1948 I LineageHealth: Current time is 08:28:50 AM
+05-20 08:28:50.873  1948  1948 I LineageHealth: Target time is 05:20:00 AM
+05-20 08:28:50.873  1948  1948 I LineageHealth: Canceling charge deadline

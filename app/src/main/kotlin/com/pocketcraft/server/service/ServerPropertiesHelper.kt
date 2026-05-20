@@ -5,7 +5,7 @@ import java.util.Properties
 
 object ServerPropertiesHelper {
 
-    const val RELAY_READY_COMPRESSION_THRESHOLD = 256
+    const val RELAY_READY_COMPRESSION_THRESHOLD = -1
     const val DEFAULT_VIEW_DISTANCE = 6
     const val DEFAULT_SIMULATION_DISTANCE = 4
     const val RELAY_READY_ENTITY_BROADCAST_PERCENT = 50

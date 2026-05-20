@@ -58,7 +58,7 @@ public class PocketCraftCompanion extends JavaPlugin {
                 sb.append(" ").append(p.getName()).append(":").append(p.getPing());
             }
             getLogger().info(sb.toString());
-        }, 100L, 100L);
+        }, 20L, 20L);
     }
 
     /**

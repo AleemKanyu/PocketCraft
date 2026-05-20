@@ -233,7 +233,7 @@ advanced:
 
     # The internet supports a maximum MTU of 1492 but could cause issues with packet fragmentation.
     # 1400 is the default.
-    mtu: 1400
+    mtu: 1200
 
     # This option disables the auth step Geyser performs for connecting Bedrock players.
     # It can be used to allow connections from ProxyPass and WaterdogPE. In these cases, make sure that users

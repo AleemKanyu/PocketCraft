@@ -356,21 +356,17 @@ object PluginManager {
         Result.success(Unit)
     }
 
-    suspend fun ensureChunkyPlugin(
+    suspend fun removeChunkyPlugin(
         context: Context,
-        worldName: String,
-        onProgress: (String) -> Unit = {}
+        worldName: String
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        val chunky = RemoteCatalogItem(
-            source = MODRINTH_PROVIDER,
-            projectId = "chunky",
-            title = "Chunky",
-            slug = "chunky",
-            iconUrl = null,
-            description = "Chunk pre-generator",
-            downloads = 0L
-        )
-        installManagedPluginIfMissing(context, worldName, chunky, onProgress)
+        val pluginsDir = getPluginsDir(context, worldName)
+        pluginsDir.listFiles()?.forEach { file ->
+            if (file.name.contains("chunky", ignoreCase = true) && file.name.endsWith(".jar")) {
+                file.delete()
+            }
+        }
+        Result.success(Unit)
     }
 
     fun enforceBedrockBridgeLocalConfig(context: Context, worldName: String) {
@@ -401,6 +397,8 @@ object PluginManager {
         updated = ensureTopLevelYamlValue(updated, "cache-chunks", "true")
         updated = ensureTopLevelYamlValue(updated, "max-auto-connect-attempts", "5")
         updated = ensureTopLevelYamlValue(updated, "forward-hostname", "false")
+        updated = ensureYamlValueByKey(updated, "validate-bedrock-login", "false")
+        updated = ensureYamlValueByKey(updated, "mtu", "1200")
         updated = ensureYamlSectionValue(updated, "advanced", "floodgate-key-file", floodgateKeyPath)
         updated = ensureYamlSectionValue(updated, "java", "auth-type", "floodgate")
 
@@ -629,6 +627,30 @@ object PluginManager {
             lines.add(sectionEnd, "  $key: ${formatYamlScalar(value)}")
         }
 
+        return lines.joinToString("\n").trimEnd() + "\n"
+    }
+
+    private fun ensureYamlValueByKey(
+        original: String,
+        key: String,
+        value: String
+    ): String {
+        val lines = original
+            .ifBlank { "" }
+            .split('\n')
+            .toMutableList()
+
+        val keyIndex = lines.indexOfFirst { it.trimStart().startsWith("$key:") }
+        if (keyIndex != -1) {
+            val indent = lines[keyIndex].takeWhile { it == ' ' || it == '\t' }
+            lines[keyIndex] = "$indent$key: ${formatYamlScalar(value)}"
+        } else {
+            if (lines.size == 1 && lines[0].isBlank()) lines.clear()
+            if (lines.isNotEmpty() && lines.last().isNotBlank()) lines += ""
+            lines += "advanced:"
+            lines += "  bedrock:"
+            lines += "    $key: ${formatYamlScalar(value)}"
+        }
         return lines.joinToString("\n").trimEnd() + "\n"
     }
 

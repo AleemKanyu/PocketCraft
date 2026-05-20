@@ -116,6 +116,7 @@ class ServerStateHolder(
     private var startupStartedAtMillis: Long? = null
     private var startupProgressJob: Job? = null
     private var stopWatchdogJob: Job? = null
+    private var restartFallbackJob: Job? = null
     private var periodicWorldSaveJob: Job? = null
     private var periodicLocationJob: Job? = null
     private var pendingRestart by mutableStateOf(false)
@@ -124,6 +125,8 @@ class ServerStateHolder(
     private val worldRegistryKey = "pocketcraft-world-list"
     private val worldSetupRegistryKey = "pocketcraft-world-setup-list"
     private val singleServerPort = 25565
+    private val stopWatchdogTimeoutMs = 15_000L
+    private val restartFallbackDelayMs = 10_000L
     private val worldPluginProfilesDir = File(serverDir, "world_plugin_profiles").also { it.mkdirs() }
     private val totalRamGb by lazy {
         val manager = appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
@@ -206,6 +209,10 @@ class ServerStateHolder(
         private set
     var areSpawnChunksLoaded by mutableStateOf(false)
         private set
+    var isJavaServerDone by mutableStateOf(false)
+        private set
+    var isGeyserDone by mutableStateOf(false)
+        private set
     var serverJoinable by mutableStateOf(false)
         private set
     val isServerFullyReady: Boolean get() = serverJoinable
@@ -229,15 +236,18 @@ class ServerStateHolder(
 
     private fun attemptTransitionToOnline() {
         if (!isStarting) return
-        
-        val isRelayReady = !publicAddress.isNullOrBlank() || tunnelError != null || !tunnelConnecting
-        if (areSpawnChunksLoaded && isRelayReady) {
+
+        val bridgeEnabled = try { PluginManager.isBedrockBridgeEnabled(appContext, versionId) } catch (e: Exception) { false }
+        val canTransition = if (bridgeEnabled) {
+            isJavaServerDone && isGeyserDone
+        } else {
+            isJavaServerDone
+        }
+
+        if (canTransition) {
             markServerReady()
             markJoinable()
-            
-            bedrockBridgeEnabled = PluginManager.isBedrockBridgeEnabled(appContext, versionId)
-            
-            // Force a full refresh to pick up migrated player stats and world metadata
+            bedrockBridgeEnabled = bridgeEnabled
             refreshAll()
         }
     }
@@ -257,6 +267,8 @@ class ServerStateHolder(
                 scope.launch {
                     val shouldRestart = type == ServerHostService.EVENT_STOPPED && pendingRestart
                     pendingRestart = false
+                    restartFallbackJob?.cancel()
+                    restartFallbackJob = null
                     stopStartupProgressTracking(reset = !shouldRestart)
                     isStopping = false
                     isStarting = false
@@ -538,7 +550,7 @@ class ServerStateHolder(
         }
         // Ensure eula.txt is present in the active world dir (for new worlds or switched worlds)
         ServerFileManager.prepareEula(appContext, activeWorld)
-        if (isRunning || (!isRestart && isStarting) || isStopping) return
+        if (isRunning || (!isRestart && isStarting) || (isStopping && !isRestart)) return
         lastStartRequestedMillis = System.currentTimeMillis()
         stopWatchdogJob?.cancel()
         stopWatchdogJob = null
@@ -547,6 +559,8 @@ class ServerStateHolder(
         isStarting = true
         isRunning = false
         areSpawnChunksLoaded = false
+        isJavaServerDone = false
+        isGeyserDone = false
         resetJoinable()
         tps = 4f
         startedAtMillis = System.currentTimeMillis()
@@ -576,13 +590,6 @@ class ServerStateHolder(
             }
 
             appendLog("[PocketCraft] Checking optimization plugins...")
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    PluginManager.ensureChunkyPlugin(appContext, versionId)
-                }
-            }.onFailure { error ->
-                appendLog("[PocketCraft] Chunky setup warning: ${error.message ?: "unknown error"}")
-            }
 
             bedrockBridgeEnabled = withContext(Dispatchers.IO) {
                 runCatching { PluginManager.isBedrockBridgeEnabled(appContext, versionId) }
@@ -609,6 +616,8 @@ class ServerStateHolder(
     fun stopServer() {
         if (isStopping || (!isRunning && !isStarting)) return
         pendingRestart = false
+        restartFallbackJob?.cancel()
+        restartFallbackJob = null
         isStopping = true
         appendLog("[PocketCraft] Stopping server...")
         val durationSeconds = startedAtMillis
@@ -659,7 +668,23 @@ class ServerStateHolder(
             isStopping = false
             stopWatchdogJob?.cancel()
             stopWatchdogJob = null
+            restartFallbackJob?.cancel()
+            restartFallbackJob = null
             appendLog("[ERROR] Failed to restart server: ${error.message}")
+        }
+
+        restartFallbackJob?.cancel()
+        restartFallbackJob = scope.launch {
+            delay(restartFallbackDelayMs)
+            if (!pendingRestart) return@launch
+            if (isRunning || isStarting) return@launch
+            if (isServerProcessAlive()) return@launch
+
+            pendingRestart = false
+            isStopping = false
+            isRestartingCycle = false
+            appendLog("[PocketCraft] Starting server again...")
+            startServer(isRestart = true)
         }
     }
 
@@ -772,10 +797,21 @@ class ServerStateHolder(
         }
 
         if (cleanLine.contains("Preparing spawn area: 100%", ignoreCase = true) || 
-            cleanLine.contains("Preparing start region for level", ignoreCase = true) && cleanLine.contains("100%", ignoreCase = true) ||
-            ConsoleParser.isDone(cleanLine) ||
-            cleanLine.contains("Done (", ignoreCase = true)) {
+            cleanLine.contains("Preparing start region for level", ignoreCase = true) && cleanLine.contains("100%", ignoreCase = true)) {
             areSpawnChunksLoaded = true
+        }
+
+        if (ConsoleParser.isDone(cleanLine) || cleanLine.contains("Done (", ignoreCase = true)) {
+            areSpawnChunksLoaded = true
+            isJavaServerDone = true
+            if (isStarting) {
+                attemptTransitionToOnline()
+            }
+        }
+
+        if (cleanLine.contains("[Geyser-Spigot] Done (", ignoreCase = true) || 
+            cleanLine.contains("Started Geyser on UDP port", ignoreCase = true)) {
+            isGeyserDone = true
             if (isStarting) {
                 attemptTransitionToOnline()
             }
@@ -2133,6 +2169,8 @@ class ServerStateHolder(
         stopStartupProgressTracking(reset = false)
         stopWatchdogJob?.cancel()
         stopWatchdogJob = null
+        restartFallbackJob?.cancel()
+        restartFallbackJob = null
         if (receiverRegistered) {
             appContext.unregisterReceiver(receiver)
             receiverRegistered = false
@@ -2149,7 +2187,7 @@ class ServerStateHolder(
     private fun startStopWatchdog() {
         stopWatchdogJob?.cancel()
         stopWatchdogJob = scope.launch {
-            repeat(45) { // Wait up to 45 seconds for process to exit
+            repeat((stopWatchdogTimeoutMs / 1000L).toInt()) {
                 delay(1000)
                 // In addition to runtime state, strictly verify the :server process has actually died.
                 // If the process is dead, the JVM has successfully finished System.exit(0)
@@ -2179,7 +2217,7 @@ class ServerStateHolder(
                     cancel()
                 }
             }
-            // If it times out after 45 seconds, assume it failed to stop and reset UI
+            // If it times out, assume it failed to stop and reset UI.
             if (isStopping) {
                 pendingRestart = false
                 isRestartingCycle = false

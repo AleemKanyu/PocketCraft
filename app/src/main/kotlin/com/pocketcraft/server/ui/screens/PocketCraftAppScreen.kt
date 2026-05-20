@@ -921,6 +921,7 @@ fun PocketCraftApp(
                 )
                 DuoButton(
                     text = "YES, EXIT",
+                    variant = com.pocketcraft.server.ui.components.DuoButtonVariant.Danger,
                     onClick = {
                         scope.launch {
                             exitSheetState.hide()
@@ -930,7 +931,8 @@ fun PocketCraftApp(
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
-                TextButton(
+                DuoButton(
+                    text = "NO",
                     onClick = {
                         scope.launch {
                             exitSheetState.hide()
@@ -938,9 +940,7 @@ fun PocketCraftApp(
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("No", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-                }
+                )
             }
         }
     }

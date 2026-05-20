@@ -1273,8 +1273,8 @@ private fun ServerIdentityCard(
         val internetRelayAddress = publicAddress ?: "No relay address"
 
         val localWifiAddress = "${stateHolder.localIp}:${stateHolder.config.port}"
-        val canShareAddresses = stateHolder.isServerFullyReady
         val relayReady = !publicAddress.isNullOrBlank()
+        val canShareAddresses = stateHolder.isServerFullyReady && relayReady
         val joinCardShadowColor = pocketCardShadowColor()
         val joinCardBorderColor = pocketHighContrastBorderColor()
 

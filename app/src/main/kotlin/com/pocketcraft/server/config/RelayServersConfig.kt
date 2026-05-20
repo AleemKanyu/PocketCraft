@@ -22,7 +22,7 @@ object RelayServers {
         icon = "🌐",
         description = "Global CDN with worldwide coverage",
         bestFor = "Players worldwide, default option",
-        fallbackIp = "16.171.154.34"
+        fallbackIp = "13.212.218.219"
     )
 
     val MUMBAI = RelayServerConfig(
