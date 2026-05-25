@@ -283,6 +283,9 @@ function rewriteNewIncomingConnectionPacket(packet, publicIp, relayPort, clientI
 }
 
 function rewriteEncapsulatedRakNetPackets(payload, publicIp, relayPort, clientIp, clientPort) {
+  if (!payload || !payload.includes(0x10)) {
+    return payload;
+  }
   const out = Buffer.from(payload);
   let offset = 4; // FrameSet packet id (1) + sequence number (3)
   let rewroteAny = false;
@@ -322,6 +325,7 @@ function rewriteClientNewIncomingConnection(payload, localGeyserIp = '127.0.0.1'
   if (!Buffer.isBuffer(payload) || payload.length < 8) return payload;
   const packetId = payload.readUInt8(0);
   if (!isRakNetFrameSet(packetId)) return payload;
+  if (!payload.includes(0x13)) return payload;
 
   let out = Buffer.from(payload);
   let offset = 4;
@@ -439,80 +443,50 @@ function parseBedrockResponseFrame(data) {
 }
 
 function handlePhoneFrameData(userId, data) {
-  if (!data || data.length < 1) return false;
+  if (!data || data.length < 9) return false;
+  if (data[0] !== 0x03) return false;
 
-  let buffer = data;
-  let handledAny = false;
-  const relayPort = activeTunnels.get(userId)?.port || null;
+  const payloadLen = data.readUInt16BE(1);
+  if (payloadLen > MAX_UDP_PAYLOAD) return false;
+  if (data.length < 9 + payloadLen) return false;
 
-  while (buffer.length > 0) {
-    const opcodeIndex = buffer.indexOf(0x03);
-    if (opcodeIndex === -1) {
-      if (!handledAny) {
-        console.warn(`[bedrock] Dropping non-Bedrock phone data for ${userId}, len=${buffer.length}`);
-      }
-      return handledAny;
-    }
-    if (opcodeIndex > 0) {
-      console.warn(`[bedrock] Dropping ${opcodeIndex} desynced byte(s) before 0x03 for ${userId}`);
-      buffer = buffer.subarray(opcodeIndex);
-    }
+  const ip = `${data[3]}.${data[4]}.${data[5]}.${data[6]}`;
+  const port = data.readUInt16BE(7);
+  const payload = data.subarray(9, 9 + payloadLen);
 
-    if (buffer.length < 9) return handledAny || true;
-    const payloadLen = buffer.readUInt16BE(1);
-    if (payloadLen > MAX_UDP_PAYLOAD) {
-      console.warn(`[bedrock] Dropping frame with oversized payload ${payloadLen} for ${userId}`);
-      buffer = buffer.subarray(1);
-      handledAny = true;
-      continue;
-    }
-    
-    const frameLength = 9 + payloadLen;
-    if (buffer.length < frameLength) return handledAny || true;
-    
-    const parsed = parseBedrockResponseFrame(buffer.subarray(0, frameLength));
-    buffer = buffer.subarray(frameLength);
-    handledAny = true;
-    
-    if (!parsed) continue;
-    if (!isValidUdpPort(parsed.port)) {
-      console.warn(`[bedrock] Dropping frame with invalid port ${parsed.port} for ${userId}`);
-      continue;
-    }
-    if (!isValidIPv4(parsed.ip)) {
-      console.warn(`[bedrock] Dropping frame with invalid ip ${parsed.ip} for ${userId}`);
-      continue;
-    }
-    
-    const udpSock = userUdpSockets.get(userId);
-    if (!udpSock) {
-      console.warn(`[bedrock] No UDP socket for ${userId} while sending to ${parsed.ip}:${parsed.port}`);
-      continue;
-    }
-    
-    const rewrittenPayload = rewriteAdvertisedRelayAddress(
-      parsed.payload,
-      relayPort || parsed.port,
-      parsed.ip,
-      parsed.port
-    );
-    
-    // Only log the first few packets to avoid console.log blocking the event loop and causing high ping
-    if (!global.udpSendCount) global.udpSendCount = 0;
-    global.udpSendCount++;
-    if (global.udpSendCount <= 20 || global.udpSendCount % 500 === 0) {
-      console.log(`[bedrock] Sending UDP to client ${parsed.ip}:${parsed.port} len=${rewrittenPayload.length} (#${global.udpSendCount})`);
-    }
-    
-    udpSock.send(rewrittenPayload, parsed.port, parsed.ip, (err) => {
-      if (err) {
-        console.error(`[bedrock] UDP send error for ${userId}:`, err.message);
-      }
-    });
-
+  if (!isValidUdpPort(port) || !isValidIPv4(ip)) {
+    console.warn(`[bedrock] Dropping frame with invalid IP/port ${ip}:${port} for ${userId}`);
+    return false;
   }
 
-  return handledAny;
+  const udpSock = userUdpSockets.get(userId);
+  if (!udpSock) {
+    console.warn(`[bedrock] No UDP socket for ${userId} while sending to ${ip}:${port}`);
+    return false;
+  }
+
+  const relayPort = activeTunnels.get(userId)?.port || null;
+  const rewrittenPayload = rewriteAdvertisedRelayAddress(
+    payload,
+    relayPort || port,
+    ip,
+    port
+  );
+
+  // Only log the first few packets to avoid console.log blocking the event loop and causing high ping
+  if (!global.udpSendCount) global.udpSendCount = 0;
+  global.udpSendCount++;
+  if (global.udpSendCount <= 20 || global.udpSendCount % 500 === 0) {
+    console.log(`[bedrock] Sending UDP to client ${ip}:${port} len=${rewrittenPayload.length} (#${global.udpSendCount})`);
+  }
+
+  udpSock.send(rewrittenPayload, port, ip, (err) => {
+    if (err) {
+      console.error(`[bedrock] UDP send error for ${userId}:`, err.message);
+    }
+  });
+
+  return true;
 }
 
 // Tunnel socket helpers
@@ -544,9 +518,9 @@ function takeNextPhoneSocket(tunnel) {
 function clearBedrockPhoneSocket(tunnel) {
   if (!tunnel) return;
   tunnel.bedrockPhoneSocket = null;
-  tunnel.bedrockBuffer = Buffer.alloc(0);
-  tunnel.bedrockChunks = [];
-  tunnel.bedrockChunksLen = 0;
+  tunnel.bedrockBuffer = null;
+  tunnel.bedrockChunks = null;
+  tunnel.bedrockChunksLength = 0;
 }
 
 function attachBedrockPhoneSocket(tunnel, userId, phoneSocket) {
@@ -554,9 +528,9 @@ function attachBedrockPhoneSocket(tunnel, userId, phoneSocket) {
 
   clearBedrockPhoneSocket(tunnel);
   tunnel.bedrockPhoneSocket = phoneSocket;
-  tunnel.bedrockBuffer = Buffer.alloc(0);
+  tunnel.bedrockBuffer = null;
   tunnel.bedrockChunks = [];
-  tunnel.bedrockChunksLen = 0;
+  tunnel.bedrockChunksLength = 0;
 
   phoneSocket.setTimeout(0);
 
@@ -565,59 +539,108 @@ function attachBedrockPhoneSocket(tunnel, userId, phoneSocket) {
 
     if (!tunnel.bedrockChunks) {
       tunnel.bedrockChunks = [];
-      tunnel.bedrockChunksLen = 0;
+      tunnel.bedrockChunksLength = 0;
     }
 
     tunnel.bedrockChunks.push(chunk);
-    tunnel.bedrockChunksLen += chunk.length;
+    tunnel.bedrockChunksLength += chunk.length;
 
-    // Only flatten if we have multiple chunks to avoid O(n) allocations
-    let buf;
-    if (tunnel.bedrockChunks.length === 1) {
-      buf = tunnel.bedrockChunks[0];
-    } else {
-      buf = Buffer.concat(tunnel.bedrockChunks, tunnel.bedrockChunksLen);
-    }
+    while (true) {
+      // 1. Align to 0x03 start byte
+      let aligned = false;
+      while (tunnel.bedrockChunksLength > 0) {
+        const firstChunk = tunnel.bedrockChunks[0];
+        if (firstChunk[0] === 0x03) {
+          aligned = true;
+          break;
+        }
+        const idx = firstChunk.indexOf(0x03);
+        if (idx !== -1) {
+          tunnel.bedrockChunks[0] = firstChunk.subarray(idx);
+          tunnel.bedrockChunksLength -= idx;
+          console.warn(`[bedrock] Dropping ${idx} desynced dedicated byte(s) for ${userId}`);
+          aligned = true;
+          break;
+        } else {
+          tunnel.bedrockChunks.shift();
+          tunnel.bedrockChunksLength -= firstChunk.length;
+          console.warn(`[bedrock] Dropping ${firstChunk.length} desynced dedicated byte(s) for ${userId}`);
+        }
+      }
 
-    let offset = 0;
-    while (offset < buf.length) {
-      const opcodeIndex = buf.indexOf(0x03, offset);
-      if (opcodeIndex === -1) {
-        console.warn(`[bedrock] Dropping non-Bedrock dedicated data for ${userId}, len=${buf.length - offset}`);
-        offset = buf.length;
+      if (!aligned || tunnel.bedrockChunksLength < 9) {
         break;
       }
-      if (opcodeIndex > offset) {
-        console.warn(`[bedrock] Dropping ${opcodeIndex - offset} desynced dedicated byte(s) for ${userId}`);
-        offset = opcodeIndex;
-      }
-      if (buf.length - offset < 9) break;
 
-      const payloadLen = buf.readUInt16BE(offset + 1);
+      // 2. Read payloadLen safely across chunks if needed (usually 1st chunk is big enough)
+      let payloadLen;
+      if (tunnel.bedrockChunks[0].length >= 3) {
+        payloadLen = tunnel.bedrockChunks[0].readUInt16BE(1);
+      } else {
+        let b1, b2;
+        let totalRead = 0;
+        for (const ch of tunnel.bedrockChunks) {
+          if (totalRead <= 1 && totalRead + ch.length > 1) {
+            b1 = ch[1 - totalRead];
+          }
+          if (totalRead <= 2 && totalRead + ch.length > 2) {
+            b2 = ch[2 - totalRead];
+          }
+          totalRead += ch.length;
+          if (b1 !== undefined && b2 !== undefined) break;
+        }
+        payloadLen = (b1 << 8) | b2;
+      }
+
       if (payloadLen > MAX_UDP_PAYLOAD) {
         console.warn(`[bedrock] Dropping dedicated frame with oversized payload ${payloadLen} for ${userId}`);
-        offset += 1;
+        // Drop 1 byte (the 0x03 byte) to trigger re-alignment
+        const firstChunk = tunnel.bedrockChunks[0];
+        if (firstChunk.length > 1) {
+          tunnel.bedrockChunks[0] = firstChunk.subarray(1);
+        } else {
+          tunnel.bedrockChunks.shift();
+        }
+        tunnel.bedrockChunksLength -= 1;
         continue;
       }
 
       const frameLength = 9 + payloadLen;
-      if (buf.length - offset < frameLength) break;
-
-      const frame = buf.subarray(offset, offset + frameLength);
-      offset += frameLength;
-      handlePhoneFrameData(userId, frame);
-    }
-
-    // Keep the remainder
-    if (offset > 0) {
-      if (offset < buf.length) {
-        const remainder = buf.subarray(offset);
-        tunnel.bedrockChunks = [remainder];
-        tunnel.bedrockChunksLen = remainder.length;
-      } else {
-        tunnel.bedrockChunks = [];
-        tunnel.bedrockChunksLen = 0;
+      if (tunnel.bedrockChunksLength < frameLength) {
+        break;
       }
+
+      // 3. Extract the full frame
+      let frame;
+      if (tunnel.bedrockChunks[0].length >= frameLength) {
+        frame = Buffer.from(tunnel.bedrockChunks[0].subarray(0, frameLength));
+        if (tunnel.bedrockChunks[0].length === frameLength) {
+          tunnel.bedrockChunks.shift();
+        } else {
+          tunnel.bedrockChunks[0] = tunnel.bedrockChunks[0].subarray(frameLength);
+        }
+        tunnel.bedrockChunksLength -= frameLength;
+      } else {
+        const frameParts = [];
+        let accumulated = 0;
+        while (accumulated < frameLength) {
+          const ch = tunnel.bedrockChunks.shift();
+          const needed = frameLength - accumulated;
+          if (ch.length <= needed) {
+            frameParts.push(ch);
+            accumulated += ch.length;
+            tunnel.bedrockChunksLength -= ch.length;
+          } else {
+            frameParts.push(ch.subarray(0, needed));
+            tunnel.bedrockChunks.unshift(ch.subarray(needed));
+            accumulated += needed;
+            tunnel.bedrockChunksLength -= needed;
+          }
+        }
+        frame = Buffer.concat(frameParts, frameLength);
+      }
+
+      handlePhoneFrameData(userId, frame);
     }
   };
 

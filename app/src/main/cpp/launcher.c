@@ -471,6 +471,8 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   "-Dio.netty.allocator.type=unpooled",
                   "-XX:-UseContainerSupport",
                   error_file_opt,
+                  "-Xrs",
+                  "-XX:+DisableAttachMechanism",
                   "-jar",
                   (char *)jar_path,
                   "--nogui",
@@ -481,6 +483,13 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
   for (int i = 0; i < argc; i++) {
     LOGI("argv[%d] = %s", i, argv[i]);
   }
+
+  // On Android 12+ (especially 13), debuggerd holds signal handler locks during
+  // process startup. JLI_Launch internally installs SIGSEGV/SIGBUS/SIGILL/SIGFPE
+  // handlers which deadlock waiting for those same locks. We reset all signal
+  // handlers to SIG_DFL immediately before calling JLI_Launch so the JVM writes
+  // into a clean handler table without contention.
+  reset_signal_handlers();
 
   LOGI("Calling JLI_Launch...");
   result = launch(argc, argv, 0, NULL, 0, NULL, FULL_VERSION, DOT_VERSION,

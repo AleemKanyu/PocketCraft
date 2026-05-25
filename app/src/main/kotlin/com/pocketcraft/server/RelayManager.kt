@@ -8,7 +8,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -71,8 +70,8 @@ class RelayManager(private val context: Context) {
     private var bedrockUdpBridge: BedrockUdpBridge? = null
     @Volatile
     private var activeBedrockSocket: Socket? = null
-    private val bedrockTxChannel = Channel<ByteArray>(capacity = Channel.UNLIMITED)
-    private var bedrockTxJob: kotlinx.coroutines.Job? = null
+
+
 
     private val poolTargetSize = AtomicInteger(INITIAL_POOL_SIZE)
     private val socketPool = mutableListOf<PooledSocket>()
@@ -190,64 +189,6 @@ class RelayManager(private val context: Context) {
     fun startBedrockBridge() {
         if (bedrockUdpBridge != null) return
 
-        bedrockTxJob?.cancel()
-        bedrockTxJob = poolScope.launch(Dispatchers.IO) {
-            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
-            var currentSocket: java.net.Socket? = null
-            var outStream: java.io.BufferedOutputStream? = null
-
-            while (poolScope.isActive) {
-                val firstFrame = try {
-                    bedrockTxChannel.receive()
-                } catch (e: Exception) {
-                    break // Channel closed or job cancelled
-                }
-
-                var socket = activeBedrockSocket
-                var waitedMs = 0L
-                while ((socket == null || socket.isClosed) && waitedMs < 2_000L && poolScope.isActive) {
-                    delay(25)
-                    waitedMs += 25
-                    socket = activeBedrockSocket
-                }
-
-                if (socket == null || socket.isClosed) {
-                    android.util.Log.w(
-                        "RelayManager",
-                        "Dropping Bedrock response frame (${firstFrame.size} bytes): no active Bedrock relay socket."
-                    )
-                    continue
-                }
-
-                if (socket != currentSocket) {
-                    outStream = java.io.BufferedOutputStream(socket.getOutputStream(), 128 * 1024)
-                    currentSocket = socket
-                }
-
-                try {
-                    outStream?.write(firstFrame)
-                    
-                    // Batch drain any other immediately available frames to reduce syscalls
-                    while (true) {
-                        val nextResult = bedrockTxChannel.tryReceive()
-                        if (nextResult.isSuccess) {
-                            val nextFrame = nextResult.getOrThrow()
-                            outStream?.write(nextFrame)
-                        } else {
-                            break
-                        }
-                    }
-                    
-                    // Flush the batched frames to the network
-                    outStream?.flush()
-                } catch (e: Exception) {
-                    android.util.Log.e("RelayManager", "Failed to send Bedrock response: ${e.message}")
-                    currentSocket = null
-                    outStream = null
-                }
-            }
-        }
-
         // Always use 127.0.0.1 (loopback) for local Geyser UDP IPC.
         // Using the WiFi IP (activeGeyserUdpHost) breaks the connected DatagramSocket:
         // on Android, packets to your own IP route via loopback, so Geyser replies
@@ -257,17 +198,26 @@ class RelayManager(private val context: Context) {
         bedrockUdpBridge = BedrockUdpBridge(
             geyserHostProvider = { "127.0.0.1" }
         ) { frame ->
-            val result = bedrockTxChannel.trySend(frame)
-            if (result.isFailure) {
-                android.util.Log.w("RelayManager", "Dropped Bedrock UDP frame due to channel capacity")
+            val socket = activeBedrockSocket
+            if (socket != null && !socket.isClosed) {
+                try {
+                    val out = socket.getOutputStream()
+                    synchronized(out) {
+                        out.write(frame)
+                        out.flush()
+                    }
+                } catch (e: java.io.IOException) {
+                    // If socket write failed, we shouldn't log excessive stacktrace
+                    android.util.Log.e("RelayManager", "Bedrock socket write IO error: ${e.message}")
+                } catch (e: Exception) {
+                    android.util.Log.e("RelayManager", "Failed to send Bedrock response synchronously: ${e.message}")
+                }
             }
         }
         bedrockUdpBridge?.start()
     }
 
     fun stopBedrockBridge() {
-        bedrockTxJob?.cancel()
-        bedrockTxJob = null
         bedrockUdpBridge?.stop()
         bedrockUdpBridge = null
         activeBedrockSocket = null

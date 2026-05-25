@@ -195,7 +195,7 @@ class ServerLauncher(private val context: Context) {
                         serverType = serverType.name,
                         port = resolveServerPort(worldName)
                     )
-                }.getOrElse { 
+                }.getOrElse {
                     onOutput("[PocketCraft] Failed to launch in-process JVM: ${it.message}")
                     -1
                 }
@@ -326,20 +326,31 @@ class ServerLauncher(private val context: Context) {
             resolveServerPort(worldName).toString()
         )
 
-        // Ensure java binary is executable (Android 10 W^X fix)
-        if (javaBin.exists() && !javaBin.canExecute()) {
-            javaBin.setExecutable(true, false)
-            android.util.Log.d("ServerLauncher", "Set java executable: ${javaBin.absolutePath}")
+        // Use Os.chmod (real syscall) instead of File.setExecutable which silently fails under SELinux.
+        // 0x1ED = octal 0755 = rwxr-xr-x
+        runCatching { android.system.Os.chmod(javaBin.absolutePath, 0x1ED) }
+            .onFailure { android.util.Log.w("ServerLauncher", "chmod java failed: ${it.message}") }
+        // Also ensure the whole bin/ directory has correct execute bits.
+        javaBin.parentFile?.walkTopDown()?.filter { it.isFile }?.forEach { f ->
+            runCatching { android.system.Os.chmod(f.absolutePath, 0x1ED) }
         }
 
         val launcherName = if (wrapperBin.exists()) "serverwrap" else "java"
         onOutput("[PocketCraft] Launching dedicated Java process on Android ${Build.VERSION.RELEASE} via $launcherName.")
- 
-        val command = buildList {
+
+        // On Android 10+ some vendors block direct execve from code_cache via SELinux.
+        // Routing through /system/bin/sh bypasses this: the shell runs in a trusted domain
+        // that IS permitted to exec app-owned binaries.
+        val rawCommand = buildList<String> {
             if (wrapperBin.exists()) add(wrapperBin.absolutePath)
             add(javaBin.absolutePath)
             addAll(vmArgs)
         }
+        // Build a shell-quoted command string so we can pass it to sh -c.
+        val shellCmd = rawCommand.joinToString(" ") { arg ->
+            "'" + arg.replace("'", "'\\''" ) + "'"
+        }
+        val command = listOf("/system/bin/sh", "-c", shellCmd)
  
         val process = ProcessBuilder(command)
             .directory(File(serverDir))
@@ -435,22 +446,8 @@ class ServerLauncher(private val context: Context) {
         // The relay tuning below keeps the lower bound sane, but should not
         // force the slider back to the app default.
         val maxPowerEnabled = AppPreferences(context).isMaxPowerMode
-        val totalRam = getTotalRamMb(context)
-        val maxView = if (maxPowerEnabled) 32 else {
-            when {
-                totalRam >= 6144 -> 12
-                totalRam >= 4096 -> 10
-                totalRam >= 3072 -> 8
-                else -> 6
-            }
-        }
-        val maxSimulation = if (maxPowerEnabled) 16 else {
-            when {
-                totalRam >= 4096 -> 8
-                totalRam >= 3072 -> 6
-                else -> 4
-            }
-        }
+        val maxView = if (maxPowerEnabled) 32 else 16
+        val maxSimulation = if (maxPowerEnabled) 16 else 10
         var tunedView = currentView.coerceIn(3, maxView)
         var tunedSimulation = currentSimulation.coerceIn(3, maxSimulation)
         var tunedAllowFlight = currentAllowFlight
@@ -773,11 +770,13 @@ class ServerLauncher(private val context: Context) {
         val jreBinDir = File(jreDir, "bin")
         val jreLibDir = File(jreDir, "lib")
 
+        // 0x1ED = octal 0755 (rwxr-xr-x)  — use the real chmod(2) syscall via Os.chmod
+        // so that the execute bit is actually applied even under restrictive SELinux contexts.
         listOf(jreBinDir, jreLibDir).forEach { dir ->
             if (dir.exists()) {
                 dir.walkTopDown().forEach { file ->
-                    if (file.isFile && !file.canExecute()) {
-                        file.setExecutable(true, false)
+                    if (file.isFile) {
+                        runCatching { android.system.Os.chmod(file.absolutePath, 0x1ED) }
                     }
                 }
             }

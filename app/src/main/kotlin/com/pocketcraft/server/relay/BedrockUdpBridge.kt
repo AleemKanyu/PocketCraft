@@ -1,16 +1,6 @@
 package com.pocketcraft.server.relay
 
 import android.util.Log
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -19,7 +9,6 @@ import java.net.SocketTimeoutException
 import java.util.concurrent.ConcurrentHashMap
 
 class BedrockUdpBridge(
-    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val geyserHostProvider: () -> String = { GEYSER_LOCAL_HOST },
     private val onResponse: (ByteArray) -> Unit
 ) {
@@ -29,51 +18,25 @@ class BedrockUdpBridge(
         private const val GEYSER_LOCAL_PORT = 19132
         private const val MAX_UDP_SIZE = 65536
         private const val GEYSER_LOCAL_HOST = "127.0.0.1"
-        private const val INBOUND_CHANNEL_CAPACITY = Channel.UNLIMITED
     }
 
+    @Volatile
     private var running = false
-    private var bridgeJob: Job? = null
-    private var outboundJob: Job? = null
-    private var scope: CoroutineScope? = null
     private val clientSockets = ConcurrentHashMap<String, DatagramSocket>()
-    private val inboundFrames = Channel<BedrockFrame>(capacity = INBOUND_CHANNEL_CAPACITY)
-    private val outboundFrames = Channel<ByteArray>(capacity = INBOUND_CHANNEL_CAPACITY)
 
     fun start() {
         if (running) return
         running = true
-        scope = CoroutineScope(SupervisorJob() + dispatcher)
-        bridgeJob = scope?.launch {
-            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
-            for (frame in inboundFrames) {
-                try {
-                    forwardFrameToGeyser(frame)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error forwarding to Geyser: ${e.message}")
-                }
-            }
-        }
-        
-        outboundJob = scope?.launch {
-            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
-            for (frame in outboundFrames) {
-                try {
-                    onResponse(frame)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error writing outbound frame: ${e.message}")
-                }
-            }
-        }
-        Log.i(TAG, "Bedrock UDP bridge started")
+        Log.i(TAG, "Bedrock UDP bridge started (Ultra-Low Latency Direct Pipeline)")
     }
 
     fun onIncomingFrame(data: ByteArray) {
         if (!running) return
         val frame = parseIncomingFrame(data) ?: return
-        val result = inboundFrames.trySend(frame)
-        if (result.isFailure) {
-            Log.w(TAG, "Dropping Bedrock frame for ${frame.clientIp}:${frame.clientPort} due to bridge backpressure")
+        try {
+            forwardFrameToGeyser(frame)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error forwarding to Geyser: ${e.message}")
         }
     }
 
@@ -84,14 +47,17 @@ class BedrockUdpBridge(
                 .trim()
                 .takeIf { it.isNotBlank() }
                 ?: GEYSER_LOCAL_HOST
-            DatagramSocket().also { datagramSocket ->
-                // Large receive buffer so the OS can absorb Geyser's chunk burst
-                // without silently dropping datagrams before our receive() loop picks them up.
-                datagramSocket.receiveBufferSize = 4 * 1024 * 1024  // 4 MB
-                datagramSocket.sendBufferSize   = 1024 * 1024        // 1 MB
-                datagramSocket.soTimeout = 30000 // 30s timeout to check isActive
-                datagramSocket.connect(InetAddress.getByName(geyserHost), GEYSER_LOCAL_PORT)
-                startListening(datagramSocket, frame.clientIp, frame.clientPort)
+            try {
+                DatagramSocket().also { datagramSocket ->
+                    datagramSocket.receiveBufferSize = 4 * 1024 * 1024  // 4 MB
+                    datagramSocket.sendBufferSize   = 1024 * 1024        // 1 MB
+                    datagramSocket.soTimeout = 30000 // 30s timeout
+                    datagramSocket.connect(InetAddress.getByName(geyserHost), GEYSER_LOCAL_PORT)
+                    startListening(datagramSocket, frame.clientIp, frame.clientPort)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to create DatagramSocket for $clientKey: ${e.message}")
+                throw e
             }
         }
 
@@ -107,13 +73,13 @@ class BedrockUdpBridge(
         val ipParts = clientIp.split(".").map { it.toIntOrNull() ?: 0 }
         val ipBytes = byteArrayOf(ipParts[0].toByte(), ipParts[1].toByte(), ipParts[2].toByte(), ipParts[3].toByte())
 
-        scope?.launch {
+        val thread = Thread {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
             try {
                 val buffer = ByteArray(MAX_UDP_SIZE)
                 val packet = DatagramPacket(buffer, buffer.size)
 
-                while (isActive) {
+                while (running && !socket.isClosed) {
                     try {
                         packet.length = buffer.size
                         socket.receive(packet)
@@ -133,38 +99,32 @@ class BedrockUdpBridge(
                         frame[8] = clientPort.toByte()
                         System.arraycopy(buffer, 0, frame, 9, payloadLen)
 
-                        val result = outboundFrames.trySend(frame)
-                        if (result.isFailure) {
-                            Log.w(TAG, "Dropping outbound Bedrock frame due to TCP write backpressure")
-                        }
+                        onResponse(frame)
                     } catch (e: SocketTimeoutException) {
-                        // Loop back to check isActive
+                        // Loop back to check running
                     } catch (e: PortUnreachableException) {
-                        delay(1000) // Backoff before retrying
+                        try { Thread.sleep(1000) } catch (_: InterruptedException) { break }
+                    } catch (e: Exception) {
+                        break
                     }
                 }
             } catch (e: Exception) {
-                if (isActive) Log.v(TAG, "Socket closed for $clientIp:$clientPort")
+                // Ignore
             } finally {
                 clientSockets.remove("$clientIp:$clientPort")
-                socket.close()
+                runCatching { socket.close() }
             }
         }
+        thread.name = "BedrockUDP-$clientIp:$clientPort"
+        thread.priority = Thread.MAX_PRIORITY
+        thread.start()
     }
 
     fun stop() {
         if (!running) return
         running = false
-        bridgeJob?.cancel()
-        bridgeJob = null
-        outboundJob?.cancel()
-        outboundJob = null
-        clientSockets.values.forEach { it.close() }
+        clientSockets.values.forEach { runCatching { it.close() } }
         clientSockets.clear()
-        scope?.cancel()
-        scope = null
-        while (inboundFrames.tryReceive().isSuccess) {}
-        while (outboundFrames.tryReceive().isSuccess) {}
         Log.i(TAG, "Bedrock UDP bridge stopped")
     }
 
