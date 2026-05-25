@@ -106,7 +106,7 @@ fun WorldsScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let {
-            val activeWorld = stateHolder.config.worldName.ifBlank { "world" }
+            val activeWorld = stateHolder.activeWorld.ifBlank { "world" }
             val importFolder = activeWorld
             stateHolder.importWorldDimension(it, importFolder)
         }
@@ -139,7 +139,7 @@ fun WorldsScreen(
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = stateHolder.config.worldName,
+                            text = stateHolder.activeWorld,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 20.sp
                         )
@@ -250,7 +250,7 @@ fun WorldsScreen(
             Spacer(Modifier.height(8.dp))
         }
 
-        items(stateHolder.worlds) { world ->
+        items(stateHolder.worlds, key = { it.name }) { world ->
             SwipeableWorldSlotItem(
                 world = world,
                 canSwitch = stateHolder.status == ServerStatus.OFFLINE,
@@ -304,7 +304,7 @@ fun WorldsScreen(
             }
             Spacer(Modifier.height(8.dp))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                val activeWorld = stateHolder.config.worldName.ifBlank { "world" }
+                val activeWorld = stateHolder.activeWorld.ifBlank { "world" }
                 DimensionUploadRow(
                     title = "Upload Overworld",
                     subtitle = "Main world ($activeWorld)",
@@ -381,7 +381,7 @@ fun WorldsScreen(
                 }
             }
         } else {
-            items(stateHolder.backups) { backup ->
+            items(stateHolder.backups, key = { it.name }) { backup ->
                 BackupItem(
                     backup = backup,
                     onRestore = { showRestoreDialog = backup },

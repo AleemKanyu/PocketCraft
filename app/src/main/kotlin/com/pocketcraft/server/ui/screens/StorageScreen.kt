@@ -93,8 +93,8 @@ fun StorageScreen(
 private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val root = remember(stateHolder.versionLabel) {
-        ServerFileManager.getServerDir(context, stateHolder.versionLabel)
+    val root = remember(stateHolder.activeWorld) {
+        ServerFileManager.getServerDir(context, stateHolder.activeWorld)
     }
 
     var currentDir by remember(root) { mutableStateOf(root) }

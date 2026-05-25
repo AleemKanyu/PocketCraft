@@ -29,6 +29,7 @@ data class ServerPrefsSnapshot(
     val spawnNpcs: Boolean,
     val hardcore: Boolean,
     val maxRamMb: Int,
+    val ramMode: String,
     val entityBroadcastRangePercentage: Int,
     val maxWorldSize: Int,
     val useNativeTransport: Boolean,
@@ -85,6 +86,7 @@ object ServerPropertiesWriter {
         props["spawn-npcs"] = prefs.spawnNpcs.toString()
         props["hardcore"] = prefs.hardcore.toString()
         props["pocketcraft-max-ram-mb"] = prefs.maxRamMb.coerceAtLeast(512).toString()
+        props["pocketcraft-ram-mode"] = prefs.ramMode
         props["entity-broadcast-range-percentage"] = prefs.entityBroadcastRangePercentage.coerceIn(1, 100).toString()
         props["max-world-size"] = prefs.maxWorldSize.coerceAtLeast(1).toString()
         props["use-native-transport"] = prefs.useNativeTransport.toString()
@@ -140,6 +142,7 @@ object ServerPropertiesWriter {
             spawnNpcs = config.spawnNpcs,
             hardcore = config.hardcore,
             maxRamMb = config.maxRamMb,
+            ramMode = config.ramMode,
             entityBroadcastRangePercentage = config.entityBroadcastRangePercentage,
             maxWorldSize = config.maxWorldSize,
             useNativeTransport = config.useNativeTransport,

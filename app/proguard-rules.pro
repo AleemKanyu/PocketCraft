@@ -24,12 +24,49 @@
 -dontwarn okio.**
 -keepnames class okhttp3.internal.publicsuffix.PublicSuffixDatabase
 
-# PocketCraft
+# PocketCraft — Core models and services
 -keep class com.pocketcraft.server.data.model.** { *; }
 -keep class com.pocketcraft.server.service.** { *; }
 -keep class com.pocketcraft.server.NativeLauncher { *; }
+
+# Server lifecycle — keep entire classes so broadcast routing and StateFlow
+# field names survive R8 minification in release builds.
 -keep class com.pocketcraft.server.server.ServerLauncher { *; }
 -keep class com.pocketcraft.server.server.ServerHostService { *; }
+-keep class com.pocketcraft.server.server.ServerHostService$* { *; }
+-keep class com.pocketcraft.server.server.ServerHostService$Companion { *; }
+
+# Status detection — looksLikeServerReady, handleObservedOutputLine, onServerReady
+# must not be renamed; they are invoked by name via reflection in debug builds
+# and their string-match logic must survive intact in release.
+-keepclassmembers class com.pocketcraft.server.server.ServerHostService {
+    private *** looksLikeServerReady(java.lang.String);
+    private *** handleObservedOutputLine(java.lang.String, java.lang.String);
+    private *** onServerReady();
+    private *** setServerReadyState(boolean);
+    private *** scheduleServerReadyFallback(java.lang.String);
+}
+
+# ConsoleParser object — isDone(), parseTps(), parseJoin(), parseLeave() drive
+# all UI state transitions; the companion Regex fields must not be stripped.
+-keep class com.pocketcraft.server.service.ConsoleParser { *; }
+-keep class com.pocketcraft.server.service.ConsoleParser$* { *; }
+
+# ServerStateHolder outer class — Compose mutableStateOf fields (isRunning,
+# isStarting, serverJoinable, etc.) are accessed by Compose runtime via
+# reflection; keep all members of the outer class too.
+-keep class com.pocketcraft.server.ui.screens.ServerStateHolder { *; }
+-keep class com.pocketcraft.server.ui.screens.ServerStateHolder$* { *; }
+-keep class com.pocketcraft.server.ui.screens.ServerStatus { *; }
+
+# AppPreferences — eulaAccepted and other SharedPreferences wrappers are
+# accessed from both UI and service; ensure property names survive.
+-keep class com.pocketcraft.server.data.preferences.AppPreferences { *; }
+-keep class com.pocketcraft.server.data.preferences.AppPreferencesKeys { *; }
+-keep class com.pocketcraft.server.data.preferences.AppPreferencesStore { *; }
+
+# ServerFileManager — prepareEula / isEulaAccepted must not be inlined away.
+-keep class com.pocketcraft.server.service.ServerFileManager { *; }
 
 # Gson
 -keepattributes Signature
@@ -38,3 +75,20 @@
 -keepattributes InnerClasses
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken
+
+# Kotlin — preserve metadata so coroutines, StateFlow, and companion objects
+# function correctly in release builds.
+-keep class kotlin.Metadata { *; }
+-keepclassmembers class ** {
+    @kotlin.jvm.JvmStatic *;
+}
+-keepclassmembers class * extends java.lang.Enum {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
+
+# kotlinx.coroutines StateFlow / MutableStateFlow internals
+-keep class kotlinx.coroutines.flow.** { *; }
+-keepclassmembers class kotlinx.coroutines.** {
+    volatile <fields>;
+}

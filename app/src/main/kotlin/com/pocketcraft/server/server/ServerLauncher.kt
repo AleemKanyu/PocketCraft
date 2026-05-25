@@ -97,22 +97,28 @@ class ServerLauncher(private val context: Context) {
         applyRelayReadySpigotConfig(serverDirFile, onOutput)
         applyRelayReadyPaperWorldDefaults(serverDirFile, onOutput)
 
-        // Fix 1: Dynamic JVM heap allocation based on UI settings
-        val prefs = AppPreferences(context)
-        val maxRamMb = if (!prefs.isMaxPowerMode) {
-            // Safe defaults for non-max power mode, but allow up to 2GB on high-end devices
-            (totalRam * 0.35).toLong().coerceIn(768L, 2048L).toInt()
-        } else {
-            when (prefs.ramMode) {
-                "low"    -> (totalRam * 0.25).toLong().coerceIn(512L, 1024L).toInt()
-                "manual" -> prefs.manualRamMb.coerceIn(512, 6144)
-                "full"   -> (totalRam * 0.85).toLong().coerceIn(1024L, 6144L).toInt()
-                else     -> 1024
-            }
+        // Dynamic JVM heap allocation based on per-world UI settings in server.properties
+        val worldProps = ServerPropertiesHelper.readProperties(serverDirFile)
+        val ramModeFromProps = worldProps.getProperty("pocketcraft-ram-mode", "low")
+        val maxRamMbFromProps = worldProps.getProperty("pocketcraft-max-ram-mb", "1024").toIntOrNull() ?: 1024
+        
+        val availRam = com.pocketcraft.server.util.RamUtils.getAvailableRamMb(context)
+        val maxAllowedRam = (totalRam * 0.90).toInt().coerceAtLeast(1024)
+        
+        val maxRamMb = when (ramModeFromProps) {
+            "low" -> 512
+            "full" -> maxAllowedRam
+            "manual" -> maxRamMbFromProps.coerceIn(512, maxAllowedRam)
+            else -> 1024
         }
-        val minRamMb = (maxRamMb / 2).coerceAtLeast(512)
+        val minRamMb = when (ramModeFromProps) {
+            "low" -> 256
+            "full" -> maxAllowedRam
+            "manual" -> maxRamMbFromProps.coerceIn(512, maxAllowedRam)
+            else -> 512
+        }
 
-        onOutput("[PocketCraft] JVM memory: mode=${prefs.ramMode}, maxPower=${prefs.isMaxPowerMode}, heap=${minRamMb}MB..${maxRamMb}MB, total=${totalRam}MB")
+        onOutput("[PocketCraft] JVM memory: mode=$ramModeFromProps, heap=${minRamMb}MB..${maxRamMb}MB, available=${availRam}MB, total=${totalRam}MB")
 
         val javaBin = JreExtractor.getJavaBinary(context, runtime)
         val libjli = File(jrePath, "lib/libjli.so")
@@ -285,6 +291,7 @@ class ServerLauncher(private val context: Context) {
             "-Djna.nosys=false",
             "-Xshare:off",
             "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+UnlockDiagnosticVMOptions",
             "-XX:+AlwaysPreTouch",
             "-XX:+UseStringDeduplication",
             "-XX:+UseG1GC",
@@ -293,7 +300,7 @@ class ServerLauncher(private val context: Context) {
             "-XX:+DisableExplicitGC",
             "-XX:G1NewSizePercent=30",
             "-XX:G1MaxNewSizePercent=40",
-            "-XX:G1HeapRegionSize=4m",
+            "-XX:G1HeapRegionSize=8m",
             "-XX:G1ReservePercent=20",
             "-XX:G1HeapWastePercent=5",
             "-XX:G1MixedGCCountTarget=4",

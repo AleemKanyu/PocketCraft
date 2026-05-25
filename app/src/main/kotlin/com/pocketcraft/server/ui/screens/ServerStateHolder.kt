@@ -97,10 +97,10 @@ class ServerStateHolder(
     private val context: Context,
     val versionId: String,
     private val initialServerType: ServerType = ServerType.PAPER,
-    val activeWorld: String = "world"
+    var activeWorld: String = "world"
 ) {
     companion object {
-        const val DEFAULT_SERVER_DESCRIPTION = "hosted on Pocketcraft"
+        const val DEFAULT_SERVER_DESCRIPTION = "Hosted on Pocketcraft"
         private const val POCKETCRAFT_JOIN_MESSAGE_TEXT =
             "hosted on Pocketcraft"
         private const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/NGPzXFYp"
@@ -125,7 +125,7 @@ class ServerStateHolder(
     private val worldRegistryKey = "pocketcraft-world-list"
     private val worldSetupRegistryKey = "pocketcraft-world-setup-list"
     private val singleServerPort = 25565
-    private val stopWatchdogTimeoutMs = 15_000L
+    private val stopWatchdogTimeoutMs = 25_000L
     private val restartFallbackDelayMs = 10_000L
     private val worldPluginProfilesDir = File(serverDir, "world_plugin_profiles").also { it.mkdirs() }
     private val totalRamGb by lazy {
@@ -135,12 +135,36 @@ class ServerStateHolder(
         (info.totalMem / (1024L * 1024L * 1024L)).toInt().coerceAtLeast(1)
     }
 
-    var isRunning by mutableStateOf(false)
-        private set
-    var isStarting by mutableStateOf(false)
-        private set
-    var isRestartingCycle by mutableStateOf(false)
-        private set
+    private val _stateUpdateTrigger = MutableStateFlow(0)
+    val stateUpdateTrigger: StateFlow<Int> = _stateUpdateTrigger.asStateFlow()
+
+    fun notifyStateChanged() {
+        _stateUpdateTrigger.value = _stateUpdateTrigger.value + 1
+    }
+
+    private val _isRunning = mutableStateOf(false)
+    var isRunning: Boolean
+        get() = _isRunning.value
+        private set(value) {
+            _isRunning.value = value
+            notifyStateChanged()
+        }
+
+    private val _isStarting = mutableStateOf(false)
+    var isStarting: Boolean
+        get() = _isStarting.value
+        private set(value) {
+            _isStarting.value = value
+            notifyStateChanged()
+        }
+
+    private val _isRestartingCycle = mutableStateOf(false)
+    var isRestartingCycle: Boolean
+        get() = _isRestartingCycle.value
+        private set(value) {
+            _isRestartingCycle.value = value
+            notifyStateChanged()
+        }
     private var lastStartRequestedMillis: Long = 0L
     var config by mutableStateOf(ServerConfig())
         private set
@@ -158,18 +182,40 @@ class ServerStateHolder(
         private set
     var isRefreshing by mutableStateOf(false)
         private set
-    var publicAddress by mutableStateOf<String?>(null)
-        private set
-    var tunnelConnecting by mutableStateOf(false)
-        private set
-    var tunnelError by mutableStateOf<String?>(null)
-        private set
+    private val _publicAddress = mutableStateOf<String?>(null)
+    var publicAddress: String?
+        get() = _publicAddress.value
+        private set(value) {
+            _publicAddress.value = value
+            notifyStateChanged()
+        }
+    
+    private val _tunnelConnecting = mutableStateOf(false)
+    var tunnelConnecting: Boolean
+        get() = _tunnelConnecting.value
+        private set(value) {
+            _tunnelConnecting.value = value
+            notifyStateChanged()
+        }
+    
+    private val _tunnelError = mutableStateOf<String?>(null)
+    var tunnelError: String?
+        get() = _tunnelError.value
+        private set(value) {
+            _tunnelError.value = value
+            notifyStateChanged()
+        }
     var relayHost by mutableStateOf("play.pocketcraft.online")
         private set
     var relayFallbackActive by mutableStateOf(false)
         private set
-    var isStopping by mutableStateOf(false)
-        private set
+    private val _isStopping = mutableStateOf(false)
+    var isStopping: Boolean
+        get() = _isStopping.value
+        private set(value) {
+            _isStopping.value = value
+            notifyStateChanged()
+        }
     var isBackingUp by mutableStateOf(false)
         private set
     var backupProgressPercent by mutableStateOf(0)
@@ -213,8 +259,13 @@ class ServerStateHolder(
         private set
     var isGeyserDone by mutableStateOf(false)
         private set
-    var serverJoinable by mutableStateOf(false)
-        private set
+    private val _serverJoinable = mutableStateOf(false)
+    var serverJoinable: Boolean
+        get() = _serverJoinable.value
+        private set(value) {
+            _serverJoinable.value = value
+            notifyStateChanged()
+        }
     val isServerFullyReady: Boolean get() = serverJoinable
     var movedTooQuicklyCount by mutableStateOf(0)
         private set
@@ -237,7 +288,7 @@ class ServerStateHolder(
     private fun attemptTransitionToOnline() {
         if (!isStarting) return
 
-        val bridgeEnabled = try { PluginManager.isBedrockBridgeEnabled(appContext, versionId) } catch (e: Exception) { false }
+        val bridgeEnabled = try { PluginManager.isBedrockBridgeEnabled(appContext, activeWorld.ifBlank { "world" }) } catch (e: Exception) { false }
         val canTransition = if (bridgeEnabled) {
             isJavaServerDone && isGeyserDone
         } else {
@@ -301,6 +352,18 @@ class ServerStateHolder(
 
             scope.launch {
                 when (type) {
+                    ServerHostService.EVENT_SERVER_READY -> {
+                        // Authoritative signal from the service that the server process is ready.
+                        // This bypasses the log-parsing chain that can fail in release builds.
+                        android.util.Log.d("ServerStateHolder", "EVENT_SERVER_READY received — transitioning to ONLINE")
+                        isJavaServerDone = true
+                        isGeyserDone = true
+                        areSpawnChunksLoaded = true
+                        if (isStarting) {
+                            markServerReady()
+                            markJoinable()
+                        }
+                    }
                     ServerHostService.EVENT_OUTPUT -> appendLog(line)
                     ServerHostService.EVENT_TUNNEL_CONNECTING -> {
                         tunnelConnecting = true
@@ -412,11 +475,12 @@ class ServerStateHolder(
     }
 
     private fun ensureBedrockBridgeProvisioned() {
+        val world = activeWorld.ifBlank { "world" }
         scope.launch(Dispatchers.IO) {
             try {
-                PluginManager.ensureBedrockBridgePlugins(appContext, versionId)
+                PluginManager.ensureBedrockBridgePlugins(appContext, world)
                     .onSuccess {
-                        PluginManager.enforceBedrockBridgeLocalConfig(appContext, versionId)
+                        PluginManager.enforceBedrockBridgeLocalConfig(appContext, world)
                     }
                     .onFailure { error ->
                         android.util.Log.w("ServerStateHolder", "Failed to provision Bedrock bridge: ${error.message}")
@@ -426,7 +490,7 @@ class ServerStateHolder(
             }
             withContext(Dispatchers.Main) {
                 try {
-                    bedrockBridgeEnabled = PluginManager.isBedrockBridgeEnabled(appContext, versionId)
+                    bedrockBridgeEnabled = PluginManager.isBedrockBridgeEnabled(appContext, world)
                 } catch (e: Exception) {
                     android.util.Log.e("ServerStateHolder", "Failed to check Bedrock bridge status: ${e.message}")
                     bedrockBridgeEnabled = false
@@ -469,9 +533,8 @@ class ServerStateHolder(
     val isNavigationLocked: Boolean
         get() = isStarting || isRunning || isStopping
 
-    val isRestarting: Boolean by derivedStateOf {
-        isStopping && pendingRestart
-    }
+    val isRestarting: Boolean
+        get() = isStopping && pendingRestart
 
     val healthPercent: Float
         get() = when (status) {
@@ -524,7 +587,9 @@ class ServerStateHolder(
             AppPreferences(appContext).eulaAccepted = true
             ServerFileManager.acceptEula(appContext, activeWorld)
             withContext(Dispatchers.Main) {
-                appendLog("[PocketCraft] EULA accepted. Press Start Server to continue.")
+                appendLog("[PocketCraft] EULA accepted. Starting server...")
+                // Auto-start immediately — no second tap needed
+                startServer()
             }
         }
     }
@@ -581,8 +646,9 @@ class ServerStateHolder(
         appendLog("[PocketCraft] Checking Bedrock bridge plugins...")
 
         scope.launch {
+            val currentWorld = activeWorld.ifBlank { "world" }
             val bridgeProvisionResult = withContext(Dispatchers.IO) {
-                PluginManager.ensureBedrockBridgePlugins(appContext, versionId)
+                PluginManager.ensureBedrockBridgePlugins(appContext, currentWorld)
             }
 
             bridgeProvisionResult.onFailure { error ->
@@ -592,15 +658,15 @@ class ServerStateHolder(
             appendLog("[PocketCraft] Checking optimization plugins...")
 
             bedrockBridgeEnabled = withContext(Dispatchers.IO) {
-                runCatching { PluginManager.isBedrockBridgeEnabled(appContext, versionId) }
+                runCatching { PluginManager.isBedrockBridgeEnabled(appContext, currentWorld) }
                     .getOrDefault(false)
             }
 
             appendLog("[PocketCraft] Starting server - this may take 30-60 seconds...")
             
             withContext(Dispatchers.IO) {
-                val activeWorld = sanitizeWorldName(config.worldName.ifBlank { "world" })
-                PlayerDataManager.fixOfflineUuids(serverDir, activeWorld)
+                val currentActiveWorld = sanitizeWorldName(activeWorld.ifBlank { "world" })
+                PlayerDataManager.fixOfflineUuids(serverDir, currentActiveWorld)
             }
 
             markActiveWorldSetupCompleted()
@@ -746,7 +812,12 @@ class ServerStateHolder(
             onlinePlayers.replaceAll { player ->
                 val newPing = pings[player.name] ?: pings[player.name.lowercase()]
                 if (newPing != null) {
-                    player.copy(pingMs = newPing)
+                    val updated = player.copy(pingMs = newPing)
+                    val sessionIdx = sessionPlayers.indexOfFirst { canonicalPlayerName(it.name) == canonicalPlayerName(player.name) }
+                    if (sessionIdx >= 0) {
+                        sessionPlayers[sessionIdx] = updated
+                    }
+                    updated
                 } else {
                     player
                 }
@@ -758,12 +829,8 @@ class ServerStateHolder(
         }
 
         ConsoleParser.parseJoin(cleanLine)?.let { (name, uuid) ->
+            sendCommand("chunky pause")
             upsertOnlinePlayer(name = name, uuid = uuid)
-            val sessionIdx = sessionPlayers.indexOfFirst { it.name.equals(name, ignoreCase = true) }
-            val existingPlayer = onlinePlayers.find { it.name.equals(name, ignoreCase = true) }
-            if (existingPlayer != null && sessionIdx < 0) {
-                sessionPlayers.add(existingPlayer)
-            }
             
             // Send branded welcome message
             scope.launch {
@@ -783,6 +850,9 @@ class ServerStateHolder(
         }
         ConsoleParser.parseLeave(cleanLine)?.let { name ->
             onlinePlayers.removeAll { it.name.equals(name, ignoreCase = true) }
+            if (onlinePlayers.isEmpty()) {
+                sendCommand("chunky continue")
+            }
         }
 
         // Detect player death to store last dead location instantly
@@ -1073,6 +1143,13 @@ class ServerStateHolder(
             // Removed markServerReady() call to prevent premature transitions from offline to online status
             // Wait for proper startup progression handled by attemptTransitionToOnline
         }
+
+        val sessionIdx = sessionPlayers.indexOfFirst { canonicalPlayerName(it.name) == canonicalName }
+        if (sessionIdx >= 0) {
+            sessionPlayers[sessionIdx] = mergedPlayer
+        } else {
+            sessionPlayers.add(mergedPlayer)
+        }
     }
 
     private fun applyPersistedRuntimeState(state: PersistedRuntimeState) {
@@ -1160,8 +1237,7 @@ class ServerStateHolder(
             if (isServiceActive()) {
                 return PersistedRuntimeState(isRunning = true)
             }
-            // If both fail, it's a dead state
-            ServerHostService.persistRuntimeState(appContext, versionId, config.worldName, ServerHostService.RUNTIME_STATE_OFFLINE)
+            ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
             return PersistedRuntimeState()
         }
         
@@ -1171,7 +1247,7 @@ class ServerStateHolder(
                 return PersistedRuntimeState(isStarting = true)
             }
             // Dead state
-            ServerHostService.persistRuntimeState(appContext, versionId, config.worldName, ServerHostService.RUNTIME_STATE_OFFLINE)
+            ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
             return PersistedRuntimeState()
         }
         
@@ -1281,6 +1357,10 @@ class ServerStateHolder(
                         normalizedName = normalizedName,
                         uuid = normalizedUuid
                     ) { player -> player.copy(isOp = true) }
+                    sessionPlayers.replaceAllMatching(
+                        normalizedName = normalizedName,
+                        uuid = normalizedUuid
+                    ) { player -> player.copy(isOp = true) }
                 }
                 refreshAll()
             }
@@ -1310,6 +1390,10 @@ class ServerStateHolder(
                         uuid = normalizedUuid
                     ) { player -> player.copy(isOp = false) }
                     knownPlayers.replaceAllMatching(
+                        normalizedName = normalizedName,
+                        uuid = normalizedUuid
+                    ) { player -> player.copy(isOp = false) }
+                    sessionPlayers.replaceAllMatching(
                         normalizedName = normalizedName,
                         uuid = normalizedUuid
                     ) { player -> player.copy(isOp = false) }
@@ -1448,14 +1532,19 @@ class ServerStateHolder(
         }
     }
 
-    suspend fun saveSettings(next: ServerConfig): String = withContext(Dispatchers.IO) {
+    suspend fun saveSettings(next: ServerConfig, targetWorldName: String? = null): String = withContext(Dispatchers.IO) {
         val enforced = next.copy(
             port = singleServerPort,
             maxPlayers = next.maxPlayers.coerceIn(1, 20),
             viewDistance = next.viewDistance.coerceIn(3, 32),
             simulationDistance = next.simulationDistance.coerceIn(3, 32)
         )
-        saveConfig(enforced)
+        val targetDir = if (targetWorldName != null) {
+            ServerFileManager.getServerDir(appContext, targetWorldName)
+        } else {
+            serverDir
+        }
+        saveConfig(enforced, targetDir = targetDir)
         runCatching {
             ServerConfigRepository(appContext).saveConfig(enforced)
         }.onFailure { error ->
@@ -1495,22 +1584,23 @@ class ServerStateHolder(
         val trimmedName = displayName.trim().ifBlank { normalized }
         val trimmedPhoto = photoUrl.trim()
         val trimmedDescription = description.trim().ifBlank { DEFAULT_SERVER_DESCRIPTION }
-        val props = ServerPropertiesHelper.readProperties(serverDir)
+        val targetServerDir = ServerFileManager.getServerDir(appContext, normalized)
+        val props = ServerPropertiesHelper.readProperties(targetServerDir)
         props[worldDisplayNameKey(normalized)] = trimmedName
         props[worldPhotoKey(normalized)] = trimmedPhoto
         props[worldDescriptionKey(normalized)] = trimmedDescription
-        val activeWorld = sanitizeWorldName(config.worldName.ifBlank { "world" })
-        val activeMotd = if (activeWorld == normalized) buildServerMotd(trimmedName, trimmedDescription) else props.getProperty("motd", config.motd)
-        if (activeWorld == normalized) {
+        val activeWorldName = activeWorld.ifBlank { "world" }
+        val activeMotd = if (activeWorldName.equals(normalized, ignoreCase = true)) buildServerMotd(trimmedName, trimmedDescription) else props.getProperty("motd", config.motd)
+        if (activeWorldName.equals(normalized, ignoreCase = true)) {
             props["motd"] = activeMotd
         }
-        ServerPropertiesHelper.saveProperties(serverDir, props)
-        if (activeWorld == normalized) {
+        ServerPropertiesHelper.saveProperties(targetServerDir, props)
+        if (activeWorldName.equals(normalized, ignoreCase = true)) {
             writeServerIcon(trimmedPhoto)
         }
 
         withContext(Dispatchers.Main) {
-            if (sanitizeWorldName(config.worldName) == normalized) {
+            if (activeWorld.equals(normalized, ignoreCase = true)) {
                 serverName = trimmedName
                 serverPhotoUrl = trimmedPhoto
                 serverDescription = trimmedDescription
@@ -1571,13 +1661,24 @@ class ServerStateHolder(
             return@withContext "Enter a valid world name."
         }
 
-        val currentWorld = config.worldName.ifBlank { "world" }
-        if (normalized == currentWorld) {
-            return@withContext "${config.worldName} is already active."
+        val currentWorld = activeWorld.ifBlank { "world" }
+        if (normalized.equals(currentWorld, ignoreCase = true)) {
+            return@withContext "$worldName is already active."
         }
 
         ensureWorldDirectories(normalized)
-        registerWorldNames(setOf(currentWorld, normalized))
+        
+        val targetServerDir = ServerFileManager.getServerDir(appContext, normalized)
+
+        // Only enforce the shared server port on the target world.
+        // Do NOT copy game-play settings (difficulty, view-distance, etc.) from
+        // the current world — each world keeps its own independent configuration.
+        val targetProps = ServerPropertiesHelper.readProperties(targetServerDir)
+        val hadExistingSettings = targetProps.containsKey("level-name")
+        targetProps["level-name"] = normalized
+        targetProps["server-port"] = singleServerPort.toString()
+        ServerPropertiesHelper.saveProperties(targetServerDir, targetProps)
+
         if (syncPluginProfiles) {
             runCatching {
                 syncWorldPluginProfiles(fromWorld = currentWorld, toWorld = normalized)
@@ -1589,17 +1690,37 @@ class ServerStateHolder(
             syncProfileIntoActiveWorldContent(normalized)
         }
 
-        val next = config.copy(worldName = normalized, port = singleServerPort)
-        saveConfig(next)
+        // Load the target world's own stored config — never overwrite it with the
+        // current world's settings. The target world already persists its own
+        // server.properties and we just ensured port and level-name are correct.
+        // Only re-read and re-save if there were no existing settings (fresh world).
+        if (!hadExistingSettings) {
+            // Brand-new world with no prior settings — seed in sensible defaults
+            // by inheriting the current world's config as a one-time template,
+            // but do NOT carry over world-specific values like seed or level-type.
+            val templateConfig = config.copy(
+                worldName = normalized,
+                port = singleServerPort,
+                worldSeed = "",
+                levelType = "default"
+            )
+            saveConfig(templateConfig, targetDir = targetServerDir)
+        }
 
         // Ensure data is migrated for the new world
-        PlayerDataManager.fixOfflineUuids(serverDir, normalized)
+        PlayerDataManager.fixOfflineUuids(targetServerDir, normalized)
+
+        // Save to preferences so the app recomposes with the new world
+        AppPreferencesStore.setSelectedWorld(appContext, normalized)
+
+        // Sync registries to all world slots!
+        syncRegistriesAcrossAllWorlds(extraWorlds = setOf(currentWorld, normalized))
 
         withContext(Dispatchers.Main) {
             refreshAll()
         }
         "Active world switched to $normalized."
-        }
+    }
 
     suspend fun createWorld(worldName: String): String = withContext(Dispatchers.IO) {
         if (isRunning || isStarting || isStopping) {
@@ -1611,19 +1732,35 @@ class ServerStateHolder(
             return@withContext "Enter a valid world name."
         }
 
-        val currentWorld = config.worldName.ifBlank { "world" }
+        val currentWorld = activeWorld.ifBlank { "world" }
         val existingNames = listWorldEntries(currentWorld).map { it.name }
         val normalized = generateUniqueWorldName(requestedName, existingNames)
 
         ensureWorldDirectories(normalized)
-        registerWorldNames(setOf(currentWorld, normalized))
-        markWorldSetupPending(normalized)
+        
+        val targetServerDir = ServerFileManager.getServerDir(appContext, normalized)
+
+        // Seed the new world's server.properties using the current world's settings
+        // as a one-time template (so the user doesn't need to re-configure RAM,
+        // max-players, etc. for every new world). World-specific values are reset.
+        val templateConfig = config.copy(
+            worldName = normalized,
+            port = singleServerPort,
+            worldSeed = "",        // new world gets a random seed
+            levelType = "default"  // reset level-type; user can change it in setup
+        )
+        saveConfig(templateConfig, targetDir = targetServerDir)
+        
+        ServerFileManager.acceptEula(appContext, normalized)
 
         runCatching {
             initializeIsolatedWorldPluginProfile(normalized)
         }.onFailure { error ->
             return@withContext "Failed preparing world plugins: ${error.message ?: "unknown error"}"
         }
+
+        // Sync registries to all world slots and mark setup pending!
+        syncRegistriesAcrossAllWorlds(extraWorlds = setOf(currentWorld, normalized), completedToRemove = setOf(normalized))
 
         withContext(Dispatchers.Main) {
             refreshAll()
@@ -1634,65 +1771,52 @@ class ServerStateHolder(
             "World added as $normalized because $requestedName already existed."
         }
     }
-
     suspend fun deleteWorld(worldName: String): String = withContext(Dispatchers.IO) {
         val target = sanitizeWorldName(worldName)
         if (target.isBlank()) {
             return@withContext "Enter a valid world name."
         }
 
-        val knownWorlds = listWorldEntries(config.worldName).map { it.name }
-        val match = knownWorlds.firstOrNull { it.equals(target, ignoreCase = true) }
-            ?: return@withContext "$target was not found."
+        val knownWorlds = listWorldEntries(activeWorld).map { it.name }
+        val match = knownWorlds.firstOrNull { it.equals(worldName, ignoreCase = true) }
+            ?: knownWorlds.firstOrNull { it.equals(target, ignoreCase = true) }
+            ?: return@withContext "$worldName was not found."
 
-        val activeWorld = sanitizeWorldName(config.worldName.ifBlank { "world" })
-        if ((isRunning || isStarting || isStopping) && activeWorld.equals(match, ignoreCase = true)) {
+        val currentActive = activeWorld.ifBlank { "world" }
+        if ((isRunning || isStarting || isStopping) && currentActive.equals(match, ignoreCase = true)) {
             return@withContext "Stop the server before deleting the active world."
         }
         val remainingWorlds = knownWorlds.filterNot { it.equals(match, ignoreCase = true) }
-        val nextActive = if (activeWorld.equals(match, ignoreCase = true)) {
+        val nextActive = if (currentActive.equals(match, ignoreCase = true)) {
             remainingWorlds.firstOrNull()
         } else {
-            activeWorld
+            currentActive
         }
 
-        if (activeWorld.equals(match, ignoreCase = true)) {
+        if (currentActive.equals(match, ignoreCase = true)) {
             if (nextActive != null) {
                 runCatching {
-                    syncWorldPluginProfiles(fromWorld = activeWorld, toWorld = nextActive)
+                    syncWorldPluginProfiles(fromWorld = currentActive, toWorld = nextActive)
                 }.onFailure { error ->
                     return@withContext "Failed switching plugins before delete: ${error.message ?: "unknown error"}"
                 }
-            } else {
-                val props = ServerPropertiesHelper.readProperties(serverDir)
-                props["level-name"] = "world"
-                ServerPropertiesHelper.saveProperties(serverDir, props)
             }
         }
 
-        val deletedWorldData = worldDirectoryCandidates(match)
-            .filter(File::exists)
-            .onEach { it.deleteRecursively() }
-            .isNotEmpty()
+        val serverDirToDelete = ServerFileManager.getServerDirNoCreate(appContext, match)
+        val deletedWorldData = serverDirToDelete.deleteRecursively()
         pluginProfileDir(match).deleteRecursively()
         backupsDirForWorld(match).deleteRecursively()
 
-        val props = ServerPropertiesHelper.readProperties(serverDir)
-        val updatedWorlds = readKnownWorldsFromProperties(props, activeWorld)
-            .filterNot { it.equals(match, ignoreCase = true) }
-            .sortedBy { it.lowercase(Locale.getDefault()) }
-        props[worldRegistryKey] = updatedWorlds.joinToString(",")
-        props.remove(worldDisplayNameKey(match))
-        props.remove(worldPhotoKey(match))
-        props.remove(worldDescriptionKey(match))
-        if (activeWorld.equals(match, ignoreCase = true)) {
-            props["level-name"] = nextActive ?: "world"
-        }
-        ServerPropertiesHelper.saveProperties(serverDir, props)
+        // Sync registries to all world slots!
+        syncRegistriesAcrossAllWorlds(worldsToRemove = setOf(match))
 
-        if (activeWorld.equals(match, ignoreCase = true)) {
+        if (currentActive.equals(match, ignoreCase = true)) {
+            val newActive = nextActive ?: "world"
+            activeWorld = newActive
+            AppPreferencesStore.setSelectedWorld(appContext, newActive)
             withContext(Dispatchers.Main) {
-                val next = config.copy(worldName = nextActive ?: "world", port = singleServerPort)
+                val next = config.copy(worldName = newActive, port = singleServerPort)
                 config = next
                 refreshAll()
             }
@@ -1714,9 +1838,9 @@ class ServerStateHolder(
             return@withContext "Stop the server before creating a backup."
         }
         try {
-            val activeWorld = sanitizeWorldName(config.worldName.ifBlank { "world" })
-            syncActiveWorldContentIntoProfile(activeWorld)
-            val worldFolders = worldDirectoryCandidates(config.worldName).filter(File::exists)
+            val currentActiveWorld = sanitizeWorldName(activeWorld.ifBlank { "world" })
+            syncActiveWorldContentIntoProfile(currentActiveWorld)
+            val worldFolders = worldDirectoryCandidates(currentActiveWorld).filter(File::exists)
             if (worldFolders.isEmpty()) {
                 return@withContext "No world folders found to back up."
             }
@@ -1729,7 +1853,7 @@ class ServerStateHolder(
             kotlinx.coroutines.delay(100)
 
             val backupName = buildString {
-                append(config.worldName.ifBlank { "world" })
+                append(activeWorld.ifBlank { "world" })
                 append("-")
                 append(SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date()))
                 append(".zip")
@@ -1800,7 +1924,7 @@ class ServerStateHolder(
                 refreshAll()
             }
             kotlinx.coroutines.delay(500)
-            FirebaseAnalyticsManager.logBackupCreated(config.worldName, backupFile.length())
+            FirebaseAnalyticsManager.logBackupCreated(activeWorld, backupFile.length())
 
             return@withContext "Backup created: $backupName\nIncluded: $includedText\nSaved to Downloads folder"
         } catch (e: Exception) {
@@ -1819,7 +1943,7 @@ class ServerStateHolder(
             return@withContext "Stop active backup or server actions before importing a backup."
         }
 
-        val targetWorld = sanitizeWorldName(config.worldName.ifBlank { "world" })
+        val targetWorld = sanitizeWorldName(activeWorld.ifBlank { "world" })
         val tempFile = File(appContext.cacheDir, "backup_import_${System.currentTimeMillis()}.zip")
 
         try {
@@ -1904,7 +2028,7 @@ class ServerStateHolder(
         }
 
         try {
-            val targetWorld = sanitizeWorldName(config.worldName.ifBlank { "world" })
+            val targetWorld = sanitizeWorldName(activeWorld.ifBlank { "world" })
             withContext(Dispatchers.Main) {
                 isRestoringBackup = true
                 restoreProgressPercent = 0
@@ -1962,7 +2086,7 @@ class ServerStateHolder(
                 restoreProgressPercent = 0
                 restoreStatusMessage = ""
             }
-            FirebaseAnalyticsManager.logBackupRestored(config.worldName, entry.name)
+            FirebaseAnalyticsManager.logBackupRestored(activeWorld, entry.name)
 
             return@withContext "Backup restored successfully. Start the server to load it."
         } catch (e: Exception) {
@@ -2012,7 +2136,7 @@ class ServerStateHolder(
             saveToPersistentBackups(
                 source = entry.file,
                 displayName = entry.file.name,
-                worldName = config.worldName,
+                worldName = activeWorld,
                 onProgress = { percent ->
                     withContext(Dispatchers.Main) {
                         downloadBackupProgressPercent = percent.coerceIn(0, 100)
@@ -2050,10 +2174,10 @@ class ServerStateHolder(
         if (isRunning || isStarting) {
             return@withContext "Stop the server before resetting the world."
         }
-        val activeWorld = sanitizeWorldName(config.worldName.ifBlank { "world" })
+        val activeWorldCopy = sanitizeWorldName(activeWorld.ifBlank { "world" })
         val worldTargets = linkedSetOf(
             "world",
-            activeWorld
+            activeWorldCopy
         ).filter { it.isNotBlank() }.distinct()
 
         var deletedAnything = false
@@ -2181,7 +2305,8 @@ class ServerStateHolder(
     private fun isServerProcessAlive(): Boolean {
         val pid = ServerHostService.getServerPid(appContext)
         if (pid <= 0) return false
-        return java.io.File("/proc/$pid").exists()
+        val am = appContext.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        return am.runningAppProcesses?.any { it.pid == pid } == true
     }
 
     private fun startStopWatchdog() {
@@ -2336,8 +2461,7 @@ class ServerStateHolder(
     private fun readSnapshot(): DashboardSnapshot {
         val loadedConfig = loadConfig()
         val properties = ServerPropertiesHelper.readProperties(serverDir)
-        // activeWorldName in properties is the level-name, but we must use activeWorld (slot name) for file lookups
-        val levelName = sanitizeWorldName(loadedConfig.worldName.ifBlank { "world" })
+        val levelName = sanitizeWorldName(loadedConfig.worldName.ifBlank { activeWorld })
         val worldDetails = readWorldServerDetails(properties, levelName)
         
         val knownPlayers = readKnownPlayers(activeWorld)
@@ -2358,14 +2482,14 @@ class ServerStateHolder(
             backups = listBackupsForWorld(activeWorld),
             relayHost = com.pocketcraft.server.data.preferences.AppPreferences(appContext).relayHost,
             activeWorldNeedsSetup = !readWorldsWithCompletedSetup(properties).contains(levelName),
-            bedrockBridgeEnabled = PluginManager.isBedrockBridgeEnabled(appContext, versionId)
+            bedrockBridgeEnabled = PluginManager.isBedrockBridgeEnabled(appContext, activeWorld.ifBlank { "world" })
         )
     }
 
     private fun loadConfig(): ServerConfig {
         val props = ServerPropertiesHelper.readProperties(serverDir)
         var loaded = ServerConfig(
-            worldName = props.getProperty("level-name", "world"),
+            worldName = props.getProperty("level-name", activeWorld),
             worldSeed = props.getProperty("level-seed", ""),
             maxPlayers = (props.getProperty("max-players", adaptiveMaxPlayers().toString()).toIntOrNull() ?: adaptiveMaxPlayers()).coerceIn(1, 20),
             port = singleServerPort,
@@ -2400,17 +2524,19 @@ class ServerStateHolder(
         )
     }
 
-    private fun saveConfig(config: ServerConfig) {
+    private fun saveConfig(config: ServerConfig, targetDir: File = serverDir) {
         val enforcedConfig = config.copy(
             maxPlayers = config.maxPlayers.coerceIn(1, 20),
             viewDistance = config.viewDistance.coerceIn(3, 32),
             simulationDistance = config.simulationDistance.coerceIn(3, 32)
         )
-        val props = ServerPropertiesHelper.readProperties(serverDir)
+        val props = ServerPropertiesHelper.readProperties(targetDir)
         ServerPropertiesWriter.overlayManagedValues(props, ServerPropertiesWriter.toSnapshot(enforcedConfig))
-        val knownWorlds = readKnownWorldsFromProperties(props, enforcedConfig.worldName) + sanitizeWorldName(enforcedConfig.worldName)
-        props[worldRegistryKey] = knownWorlds.joinToString(",")
-        ServerPropertiesHelper.saveProperties(serverDir, props)
+        ServerPropertiesHelper.saveProperties(targetDir, props)
+
+        // Sync registries to all worlds to keep them updated
+        val active = sanitizeWorldName(enforcedConfig.worldName)
+        syncRegistriesAcrossAllWorlds(extraWorlds = setOf(active))
     }
 
     private fun adaptiveViewDistance(): Int = 6
@@ -2486,7 +2612,7 @@ class ServerStateHolder(
 
     /** Reads the actual world seed from level.dat (NBT) after the world has been generated. */
     fun readActualWorldSeed(): Long? {
-        val worldName = sanitizeWorldName(config.worldName.ifBlank { "world" })
+        val worldName = sanitizeWorldName(activeWorld.ifBlank { "world" })
         val levelDat = File(serverDir, "$worldName/level.dat")
         if (!levelDat.exists()) return null
         return runCatching {
@@ -2876,7 +3002,7 @@ class ServerStateHolder(
         if (!wDir.exists()) return emptyList()
 
         val props = ServerPropertiesHelper.readProperties(wDir)
-        val explicit = props.getProperty("level-name")?.trim().orEmpty().ifBlank { "world" }
+        val explicit = props.getProperty("level-name")?.trim().orEmpty().ifBlank { worldName }
         val sanitized = sanitizeWorldName(explicit)
 
         // Non-world directories inside the server dir that should not count toward world size
@@ -2926,34 +3052,42 @@ class ServerStateHolder(
 
     private fun listWorldEntries(activeWorld: String): List<WorldEntry> {
         val active = activeWorld.ifBlank { "world" }
-        val ignoredDirectories = setOf(
-            "logs",
-            "plugins",
-            "cache",
-            "config",
-            "libraries"
+        val worldsBaseDir = File(appContext.filesDir, "servers/worlds").also { it.mkdirs() }
+
+        val systemFolderNames = setOf(
+            "plugins", "jre", "jre-21", "jre-runtime", "logs", "cache", "config", "libraries", 
+            "binaries", "backups", "crash-reports", "bundler", "versions"
         )
 
-        val discovered = serverDir.listFiles()
+        // Matches version strings like "1.21", "1.21.1", "1.8.9" — never valid world names
+        val versionPattern = Regex("""^\d+\.\d+(\.\d+)?$""")
+
+        val discovered = worldsBaseDir.listFiles()
             .orEmpty()
             .asSequence()
             .filter { it.isDirectory }
-            .filterNot { it.name in ignoredDirectories }
-            .filter { directoryLooksLikeWorldDimension(it) }
-            .mapNotNull { extractWorldBaseName(it.name) }
+            .map { it.name }
+            .filterNot { it.lowercase(Locale.getDefault()) in systemFolderNames }
+            .filterNot { versionPattern.matches(it) }
             .toMutableSet()
 
-        val props = ServerPropertiesHelper.readProperties(serverDir)
-        discovered.addAll(readKnownWorldsFromProperties(props, active))
+        // Ensure active world is always recognized if it exists, or if no worlds exist yet
+        if (File(worldsBaseDir, "world").exists()) {
+            discovered.add("world")
+        }
+        if (File(worldsBaseDir, active).exists() || discovered.isEmpty()) {
+            discovered.add(active)
+        }
 
         return discovered
-            .asSequence()
             .map { worldName ->
-                val worldDetails = readWorldServerDetails(props, worldName)
+                val targetServerDir = ServerFileManager.getServerDirNoCreate(appContext, worldName)
+                val targetProps = ServerPropertiesHelper.readProperties(targetServerDir, persistDefaults = false)
+                val worldDetails = readWorldServerDetails(targetProps, worldName)
                 WorldEntry(
                     name = worldName,
                     sizeMb = bytesToDisplayMb(worldDirectoryCandidates(worldName).sumOf(::directorySize)),
-                    isActive = worldName == active,
+                    isActive = worldName.equals(active, ignoreCase = true),
                     photoUrl = worldDetails.second
                 )
             }
@@ -2980,12 +3114,16 @@ class ServerStateHolder(
     }
 
     private fun sanitizeWorldName(input: String): String {
-        val cleaned = input.trim().replace(Regex("[^A-Za-z0-9_-]"), "_")
-        return cleaned.replace(Regex("_+"), "_").trim('_').ifBlank { "world" }
+        val cleaned = input.trim().replace(Regex("[^A-Za-z0-9_.-]"), "_")
+        return cleaned.replace(Regex("_+"), "_")
+            .replace(Regex("\\.+"), ".")
+            .trim('_', '.')
+            .ifBlank { "world" }
     }
 
     private fun ensureWorldDirectories(worldName: String) {
-        val base = File(serverDir, sanitizeWorldName(worldName))
+        val targetServerDir = ServerFileManager.getServerDir(appContext, worldName)
+        val base = File(targetServerDir, sanitizeWorldName(worldName))
         if (!base.exists()) {
             base.mkdirs()
         }
@@ -3015,15 +3153,72 @@ class ServerStateHolder(
         }
     }
 
-    private fun registerWorldNames(worldNames: Set<String>) {
-        val props = ServerPropertiesHelper.readProperties(serverDir)
-        val merged = (readKnownWorldsFromProperties(props, config.worldName) + worldNames.map(::sanitizeWorldName))
+    private fun syncRegistriesAcrossAllWorlds(
+        extraWorlds: Set<String> = emptySet(),
+        worldsToRemove: Set<String> = emptySet(),
+        completedToAdd: Set<String> = emptySet(),
+        completedToRemove: Set<String> = emptySet()
+    ) {
+        val worldsBaseDir = File(appContext.filesDir, "servers/worlds").also { it.mkdirs() }
+        val systemFolderNames = setOf(
+            "plugins", "jre", "jre-21", "jre-runtime", "logs", "cache", "config", "libraries", 
+            "binaries", "backups", "crash-reports", "bundler", "versions"
+        )
+        val allDirs = worldsBaseDir.listFiles()?.filter { 
+            it.isDirectory && it.name.lowercase(Locale.getDefault()) !in systemFolderNames 
+        }.orEmpty()
+
+        val accumulatedWorlds = mutableSetOf<String>()
+        accumulatedWorlds.addAll(extraWorlds.map(::sanitizeWorldName))
+        accumulatedWorlds.addAll(allDirs.map { it.name })
+
+        val accumulatedCompleted = mutableSetOf<String>()
+
+        // Read current values from all properties
+        allDirs.forEach { dir ->
+            val p = ServerPropertiesHelper.readProperties(dir)
+            accumulatedWorlds.addAll(readKnownWorldsFromProperties(p, dir.name))
+            accumulatedCompleted.addAll(readWorldsWithCompletedSetup(p))
+        }
+
+        accumulatedWorlds.removeAll(worldsToRemove.map(::sanitizeWorldName).toSet())
+        accumulatedCompleted.removeAll(worldsToRemove.map(::sanitizeWorldName).toSet())
+
+        accumulatedCompleted.addAll(completedToAdd.map(::sanitizeWorldName))
+        accumulatedCompleted.removeAll(completedToRemove.map(::sanitizeWorldName).toSet())
+
+        val mergedWorldsStr = accumulatedWorlds
             .filter { it.isNotBlank() }
             .distinctBy { it.lowercase(Locale.getDefault()) }
             .sortedBy { it.lowercase(Locale.getDefault()) }
-        props[worldRegistryKey] = merged.joinToString(",")
-        props["server-port"] = singleServerPort.toString()
-        ServerPropertiesHelper.saveProperties(serverDir, props)
+            .joinToString(",")
+
+        val mergedCompletedStr = accumulatedCompleted
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.getDefault()) }
+            .sortedBy { it.lowercase(Locale.getDefault()) }
+            .joinToString(",")
+
+        allDirs.forEach { dir ->
+            val p = ServerPropertiesHelper.readProperties(dir)
+            p[worldRegistryKey] = mergedWorldsStr
+            p[worldSetupRegistryKey] = mergedCompletedStr
+            p["server-port"] = singleServerPort.toString()
+
+            // Clean up deleted worlds metadata if any
+            worldsToRemove.forEach { r ->
+                val targetName = sanitizeWorldName(r)
+                p.remove(worldDisplayNameKey(targetName))
+                p.remove(worldPhotoKey(targetName))
+                p.remove(worldDescriptionKey(targetName))
+            }
+
+            ServerPropertiesHelper.saveProperties(dir, p)
+        }
+    }
+
+    private fun registerWorldNames(worldNames: Set<String>) {
+        syncRegistriesAcrossAllWorlds(extraWorlds = worldNames)
     }
 
     fun importWorldDimension(uri: Uri, targetWorld: String) {
@@ -3055,13 +3250,8 @@ class ServerStateHolder(
 
     fun markActiveWorldSetupCompleted() {
         scope.launch(Dispatchers.IO) {
-            val props = ServerPropertiesHelper.readProperties(serverDir)
-            val world = sanitizeWorldName(config.worldName.ifBlank { "world" })
-            val completed = (readWorldsWithCompletedSetup(props) + world)
-                .distinctBy { it.lowercase(Locale.getDefault()) }
-                .sortedBy { it.lowercase(Locale.getDefault()) }
-            props[worldSetupRegistryKey] = completed.joinToString(",")
-            ServerPropertiesHelper.saveProperties(serverDir, props)
+            val world = sanitizeWorldName(activeWorld.ifBlank { "world" })
+            syncRegistriesAcrossAllWorlds(completedToAdd = setOf(world))
             withContext(Dispatchers.Main) {
                 activeWorldNeedsSetup = false
             }
@@ -3069,13 +3259,8 @@ class ServerStateHolder(
     }
 
     private fun markWorldSetupPending(worldName: String) {
-        val props = ServerPropertiesHelper.readProperties(serverDir)
         val world = sanitizeWorldName(worldName)
-        val next = readWorldsWithCompletedSetup(props)
-            .filterNot { it.equals(world, ignoreCase = true) }
-            .sortedBy { it.lowercase(Locale.getDefault()) }
-        props[worldSetupRegistryKey] = next.joinToString(",")
-        ServerPropertiesHelper.saveProperties(serverDir, props)
+        syncRegistriesAcrossAllWorlds(completedToRemove = setOf(world))
     }
 
     private fun readWorldsWithCompletedSetup(props: Properties): Set<String> {
@@ -3168,11 +3353,16 @@ class ServerStateHolder(
             .map { sanitizeWorldName(it) }
             .filter { it.isNotBlank() }
             .toMutableSet()
+        val active = sanitizeWorldName(activeWorld)
+        if (active.isNotBlank()) {
+            fromProps.add(active)
+        }
         return fromProps
     }
 
     private fun pluginProfileDir(worldName: String): File {
-        return File(worldPluginProfilesDir, sanitizeWorldName(worldName))
+        val targetServerDir = ServerFileManager.getServerDirNoCreate(appContext, worldName)
+        return File(File(targetServerDir, "world_plugin_profiles"), sanitizeWorldName(worldName))
     }
 
     private fun cloneWorldPluginProfile(fromWorld: String, toWorld: String) {
@@ -3473,7 +3663,7 @@ class ServerStateHolder(
 
     private fun flattenWorldStructure(specificWorld: String? = null) {
         val worldsToFix = if (specificWorld != null) listOf(specificWorld) else {
-            (worlds.map { it.name } + config.worldName).filter { it.isNotBlank() }.distinct()
+            (worlds.map { it.name } + activeWorld).filter { it.isNotBlank() }.distinct()
         }
 
         worldsToFix.forEach { worldName ->

@@ -41,7 +41,14 @@ fun duoTextFieldColors(): TextFieldColors {
         disabledLeadingIconColor = hintColor.copy(alpha = 0.66f),
         focusedTrailingIconColor = hintColor,
         unfocusedTrailingIconColor = hintColor,
-        disabledTrailingIconColor = hintColor.copy(alpha = 0.66f)
+        disabledTrailingIconColor = hintColor.copy(alpha = 0.66f),
+        errorTextColor = MaterialTheme.colorScheme.onErrorContainer,
+        errorContainerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
+        errorIndicatorColor = MaterialTheme.colorScheme.error,
+        errorLeadingIconColor = MaterialTheme.colorScheme.error,
+        errorTrailingIconColor = MaterialTheme.colorScheme.error,
+        errorLabelColor = MaterialTheme.colorScheme.error,
+        errorCursorColor = MaterialTheme.colorScheme.error
     )
 }
 
@@ -73,6 +80,13 @@ fun duoOutlinedTextFieldColors(): TextFieldColors {
         disabledLeadingIconColor = hintColor.copy(alpha = 0.66f),
         focusedTrailingIconColor = hintColor,
         unfocusedTrailingIconColor = hintColor,
-        disabledTrailingIconColor = hintColor.copy(alpha = 0.66f)
+        disabledTrailingIconColor = hintColor.copy(alpha = 0.66f),
+        errorTextColor = MaterialTheme.colorScheme.onErrorContainer,
+        errorContainerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
+        errorBorderColor = MaterialTheme.colorScheme.error,
+        errorLeadingIconColor = MaterialTheme.colorScheme.error,
+        errorTrailingIconColor = MaterialTheme.colorScheme.error,
+        errorLabelColor = MaterialTheme.colorScheme.error,
+        errorCursorColor = MaterialTheme.colorScheme.error
     )
 }

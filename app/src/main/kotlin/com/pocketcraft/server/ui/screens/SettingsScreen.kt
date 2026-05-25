@@ -58,6 +58,36 @@ private val levelTypeOptions = listOf(
     LevelTypeOption("Single Biome",  "minecraft:single_biome_surface")
 )
 
+enum class SaveStatus {
+    IDLE,
+    DIRTY,
+    SAVING,
+    SAVED,
+    FAILED
+}
+
+data class SettingsState(
+    val config: com.pocketcraft.server.data.model.ServerConfig = com.pocketcraft.server.data.model.ServerConfig(),
+    val forceGamemode: Boolean = false,
+    val broadcastConsoleToOps: Boolean = false,
+    val hideOnlinePlayers: Boolean = false,
+    val levelType: String = "minecraft:normal",
+    val autoRestartEnabled: Boolean = false,
+    val maxPowerEnabled: Boolean = false,
+    val optimizationPreset: String = "none"
+) {
+    fun isDifferentFrom(other: SettingsState): Boolean {
+        return config != other.config ||
+               forceGamemode != other.forceGamemode ||
+               broadcastConsoleToOps != other.broadcastConsoleToOps ||
+               hideOnlinePlayers != other.hideOnlinePlayers ||
+               normalizeWorldType(levelType) != normalizeWorldType(other.levelType) ||
+               autoRestartEnabled != other.autoRestartEnabled ||
+               maxPowerEnabled != other.maxPowerEnabled ||
+               optimizationPreset != other.optimizationPreset
+    }
+}
+
 @Composable
 fun SettingsScreen(
     stateHolder: ServerStateHolder,
@@ -75,32 +105,11 @@ fun SettingsScreen(
     var activeTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Server", "App", "About")
 
-    var autoRestartEnabled by remember { mutableStateOf(preferences.autoRestart) }
-    var maxPowerEnabled by remember { mutableStateOf(preferences.isMaxPowerMode) }
-    var savedAutoRestart by remember { mutableStateOf(preferences.autoRestart) }
-    var savedMaxPower by remember { mutableStateOf(preferences.isMaxPowerMode) }
-
-    var config by remember(stateHolder.config) {
-        mutableStateOf(stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, 20)))
-    }
-    var savedConfig by remember(stateHolder.config) {
-        mutableStateOf(stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, 20)))
-    }
+    var currentState by remember { mutableStateOf(SettingsState()) }
+    var savedState by remember { mutableStateOf(SettingsState()) }
+    var hasLoadedInitial by remember { mutableStateOf(false) }
+    var saveStatus by remember { mutableStateOf(SaveStatus.IDLE) }
     
-    var forceGamemode by remember { mutableStateOf(false) }
-    var broadcastConsoleToOps by remember { mutableStateOf(false) }
-    var hideOnlinePlayers by remember { mutableStateOf(false) }
-    var levelType by remember { mutableStateOf("minecraft:normal") }
-    
-    var savedForceGamemode by remember { mutableStateOf(false) }
-    var savedBroadcastConsoleToOps by remember { mutableStateOf(false) }
-    var savedHideOnlinePlayers by remember { mutableStateOf(false) }
-    var savedLevelType by remember { mutableStateOf("minecraft:normal") }
-    
-    var optimizationPreset by remember { mutableStateOf("none") }
-    var savedOptimizationPreset by remember { mutableStateOf("none") }
-    
-    var savingSettings by remember { mutableStateOf(false) }
     var feedbackText by remember { mutableStateOf("") }
     var submittingFeedback by remember { mutableStateOf(false) }
     var showUnsavedDialog by remember { mutableStateOf(false) }
@@ -110,16 +119,21 @@ fun SettingsScreen(
     var selectedForDeletion by remember { mutableStateOf<Set<String>>(emptySet()) }
     var isDeletingVersions by remember { mutableStateOf(false) }
 
-    val hasUnsavedChanges by remember {
+    val hasUnsavedChanges by remember(currentState, savedState) {
         derivedStateOf {
-            config != savedConfig ||
-                forceGamemode != savedForceGamemode ||
-                broadcastConsoleToOps != savedBroadcastConsoleToOps ||
-                hideOnlinePlayers != savedHideOnlinePlayers ||
-                normalizeWorldType(levelType) != normalizeWorldType(savedLevelType) ||
-                autoRestartEnabled != savedAutoRestart ||
-                maxPowerEnabled != savedMaxPower ||
-                optimizationPreset != savedOptimizationPreset
+            currentState.isDifferentFrom(savedState)
+        }
+    }
+
+    LaunchedEffect(hasUnsavedChanges) {
+        if (hasUnsavedChanges) {
+            if (saveStatus != SaveStatus.SAVING) {
+                saveStatus = SaveStatus.DIRTY
+            }
+        } else {
+            if (saveStatus == SaveStatus.DIRTY || saveStatus == SaveStatus.FAILED) {
+                saveStatus = SaveStatus.IDLE
+            }
         }
     }
 
@@ -135,19 +149,23 @@ fun SettingsScreen(
     }
 
     LaunchedEffect(stateHolder.config) {
-        config = stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, 20))
-        forceGamemode = stateHolder.readServerProperty("force-gamemode")?.toBoolean() ?: false
-        broadcastConsoleToOps = stateHolder.readServerProperty("broadcast-console-to-ops")?.toBoolean() ?: false
-        hideOnlinePlayers = stateHolder.readServerProperty("hide-online-players")?.toBoolean() ?: false
-        levelType = normalizeWorldType(stateHolder.readServerProperty("level-type"))
-        optimizationPreset = stateHolder.readOptimizationPreset()
-        
-        savedConfig = config
-        savedForceGamemode = forceGamemode
-        savedBroadcastConsoleToOps = broadcastConsoleToOps
-        savedHideOnlinePlayers = hideOnlinePlayers
-        savedLevelType = levelType
-        savedOptimizationPreset = optimizationPreset
+        val loadedState = SettingsState(
+            config = stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, 20)),
+            forceGamemode = stateHolder.readServerProperty("force-gamemode")?.toBoolean() ?: false,
+            broadcastConsoleToOps = stateHolder.readServerProperty("broadcast-console-to-ops")?.toBoolean() ?: false,
+            hideOnlinePlayers = stateHolder.readServerProperty("hide-online-players")?.toBoolean() ?: false,
+            levelType = normalizeWorldType(stateHolder.readServerProperty("level-type")),
+            autoRestartEnabled = preferences.autoRestart,
+            maxPowerEnabled = preferences.isMaxPowerMode,
+            optimizationPreset = stateHolder.readOptimizationPreset()
+        )
+        if (!hasLoadedInitial || !hasUnsavedChanges) {
+            currentState = loadedState
+            savedState = loadedState
+            hasLoadedInitial = true
+        } else {
+            savedState = loadedState
+        }
     }
 
     BackHandler(enabled = hasUnsavedChanges) {
@@ -158,12 +176,12 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showUnsavedDialog = false },
             title = { Text("Unsaved Changes") },
-            text = { Text("You have unsaved settings. Leave without saving?") },
+            text = { Text("You have unsaved settings. Revert back to original state?") },
             confirmButton = {
                 TextButton(onClick = {
                     showUnsavedDialog = false
-                    // navController.popBackStack() would go here
-                }) { Text("Leave") }
+                    currentState = savedState
+                }) { Text("Revert") }
             },
             dismissButton = {
                 TextButton(onClick = { showUnsavedDialog = false }) {
@@ -181,7 +199,7 @@ fun SettingsScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showMaxPowerWarning = false
-                    maxPowerEnabled = true
+                    currentState = currentState.copy(maxPowerEnabled = true)
                 }) { Text("Enable") }
             },
             dismissButton = {
@@ -195,7 +213,7 @@ fun SettingsScreen(
     Scaffold(
         bottomBar = {
             AnimatedVisibility(
-                visible = hasUnsavedChanges,
+                visible = saveStatus != SaveStatus.IDLE,
                 enter = fadeIn() + slideInVertically { it },
                 exit = fadeOut() + slideOutVertically { it }
             ) {
@@ -211,49 +229,126 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Unsaved changes", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        Button(
-                            onClick = {
-                                playHaptic(doublePulse = true)
-                                scope.launch {
-                                    savingSettings = true
-                                    val normalizedLevelType = normalizeWorldType(levelType)
-                                    val nextConfig = config.copy(
-                                        viewDistance = config.viewDistance.coerceAtMost(if (maxPowerEnabled) 32 else 16),
-                                        simulationDistance = config.simulationDistance.coerceAtMost(if (maxPowerEnabled) 16 else 10),
-                                        levelType = normalizedLevelType
-                                    )
-                                    val result = runCatching {
-                                        stateHolder.saveSettings(nextConfig)
-                                    }
-                                    if (result.isSuccess) {
-                                        withContext(Dispatchers.IO) {
-                                            stateHolder.writeServerProperty("force-gamemode", forceGamemode.toString())
-                                            stateHolder.writeServerProperty("broadcast-console-to-ops", broadcastConsoleToOps.toString())
-                                            stateHolder.writeServerProperty("hide-online-players", hideOnlinePlayers.toString())
-                                            stateHolder.applyOptimizationPreset(optimizationPreset)
-                                        }
-                                        preferences.autoRestart = autoRestartEnabled
-                                        preferences.isMaxPowerMode = maxPowerEnabled
-                                        
-                                        config = nextConfig
-                                        savedConfig = nextConfig
-                                        savedForceGamemode = forceGamemode
-                                        savedBroadcastConsoleToOps = broadcastConsoleToOps
-                                        savedHideOnlinePlayers = hideOnlinePlayers
-                                        savedLevelType = normalizedLevelType
-                                        savedAutoRestart = autoRestartEnabled
-                                        savedMaxPower = maxPowerEnabled
-                                        savedOptimizationPreset = optimizationPreset
-                                    }
-                                    savingSettings = false
-                                    onMessage(result.getOrElse { "Failed to save: ${it.message}" })
-                                }
-                            },
-                            enabled = !savingSettings,
-                            shape = RoundedCornerShape(12.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(if (savingSettings) "Saving..." else "Save")
+                            when (saveStatus) {
+                                SaveStatus.DIRTY -> {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = PocketColors.PrimaryDark,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = "Unsaved Changes",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                SaveStatus.SAVING -> {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = PocketColors.Primary
+                                    )
+                                    Text(
+                                        text = "Saving...",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                SaveStatus.SAVED -> {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = Color(0xFF2ED573),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = "Saved",
+                                        color = Color(0xFF2ED573),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                SaveStatus.FAILED -> {
+                                    Icon(
+                                        imageVector = Icons.Default.Error,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFF4757),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = "Failed to Save",
+                                        color = Color(0xFFFF4757),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                else -> {}
+                            }
+                        }
+                        
+                        if (saveStatus == SaveStatus.DIRTY || saveStatus == SaveStatus.SAVING || saveStatus == SaveStatus.FAILED) {
+                            Button(
+                                onClick = {
+                                    playHaptic(doublePulse = true)
+                                    scope.launch {
+                                        saveStatus = SaveStatus.SAVING
+                                        val normalizedLevelType = normalizeWorldType(currentState.levelType)
+                                        val nextConfig = currentState.config.copy(
+                                            viewDistance = currentState.config.viewDistance.coerceAtMost(if (currentState.maxPowerEnabled) 32 else 16),
+                                            simulationDistance = currentState.config.simulationDistance.coerceAtMost(if (currentState.maxPowerEnabled) 16 else 10),
+                                            levelType = normalizedLevelType
+                                        )
+                                        val result = runCatching {
+                                            stateHolder.saveSettings(nextConfig)
+                                        }
+                                        if (result.isSuccess) {
+                                            withContext(Dispatchers.IO) {
+                                                stateHolder.writeServerProperty("force-gamemode", currentState.forceGamemode.toString())
+                                                stateHolder.writeServerProperty("broadcast-console-to-ops", currentState.broadcastConsoleToOps.toString())
+                                                stateHolder.writeServerProperty("hide-online-players", currentState.hideOnlinePlayers.toString())
+                                                stateHolder.applyOptimizationPreset(currentState.optimizationPreset)
+                                            }
+                                            preferences.autoRestart = currentState.autoRestartEnabled
+                                            preferences.isMaxPowerMode = currentState.maxPowerEnabled
+                                            
+                                            val savedStateSnapshot = currentState.copy(
+                                                config = nextConfig,
+                                                levelType = normalizedLevelType,
+                                                autoRestartEnabled = currentState.autoRestartEnabled,
+                                                maxPowerEnabled = currentState.maxPowerEnabled
+                                            )
+                                            currentState = savedStateSnapshot
+                                            savedState = savedStateSnapshot
+                                            saveStatus = SaveStatus.SAVED
+                                            delay(1500)
+                                            if (saveStatus == SaveStatus.SAVED) {
+                                                saveStatus = SaveStatus.IDLE
+                                            }
+                                        } else {
+                                            saveStatus = SaveStatus.FAILED
+                                            onMessage(result.exceptionOrNull()?.message ?: "Failed to save settings")
+                                        }
+                                    }
+                                },
+                                enabled = saveStatus != SaveStatus.SAVING,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (saveStatus == SaveStatus.FAILED) Color(0xFFFF4757) else PocketColors.Primary
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = when (saveStatus) {
+                                        SaveStatus.SAVING -> "Saving..."
+                                        SaveStatus.FAILED -> "Retry"
+                                        else -> "Save"
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -311,9 +406,9 @@ fun SettingsScreen(
                         description = "How far chunks are loaded",
                         hint = "Lower values recommended for low-end devices",
                         min = 3,
-                        max = if (maxPowerEnabled) 32 else 16,
-                        value = config.viewDistance,
-                        onValueChange = { config = config.copy(viewDistance = it) }
+                        max = if (currentState.maxPowerEnabled) 32 else 16,
+                        value = currentState.config.viewDistance,
+                        onValueChange = { currentState = currentState.copy(config = currentState.config.copy(viewDistance = it)) }
                     )
                 }
                 item {
@@ -322,9 +417,9 @@ fun SettingsScreen(
                         label = "Simulation Distance",
                         description = "Tick distance for mobs/crops",
                         min = 3,
-                        max = if (maxPowerEnabled) 16 else 10,
-                        value = config.simulationDistance,
-                        onValueChange = { config = config.copy(simulationDistance = it) }
+                        max = if (currentState.maxPowerEnabled) 16 else 10,
+                        value = currentState.config.simulationDistance,
+                        onValueChange = { currentState = currentState.copy(config = currentState.config.copy(simulationDistance = it)) }
                     )
                 }
                 item {
@@ -332,12 +427,12 @@ fun SettingsScreen(
                         icon = "⚡",
                         label = "Max Power Mode",
                         description = "Uses full RAM and max render distance. May cause overheating.",
-                        checked = maxPowerEnabled,
+                        checked = currentState.maxPowerEnabled,
                         onToggle = { 
                             if (it) {
                                 showMaxPowerWarning = true
                             } else {
-                                maxPowerEnabled = false
+                                currentState = currentState.copy(maxPowerEnabled = false)
                             }
                             playHaptic() 
                         }
@@ -355,21 +450,21 @@ fun SettingsScreen(
                             "balanced" to "Balanced",
                             "performance" to "Aggressive"
                         ),
-                        selected = optimizationPreset,
-                        onSelected = { optimizationPreset = it }
+                        selected = currentState.optimizationPreset,
+                        onSelected = { currentState = currentState.copy(optimizationPreset = it) }
                     )
                 }
 
                 item { SettingsSection("WORLD SETTINGS", Icons.Default.Public) }
                 item {
-                    val currentLevelType = sanitizeLevelType(levelType)
+                    val currentLevelType = sanitizeLevelType(currentState.levelType)
                     SettingsDropdownRow(
                         icon = Icons.Default.Terrain,
                         label = "World Type",
                         options = levelTypeOptions.map { it.propertyValue },
                         optionLabels = levelTypeOptions.associate { it.propertyValue to it.displayName },
                         selected = currentLevelType,
-                        onSelected = { levelType = it }
+                        onSelected = { currentState = currentState.copy(levelType = it) }
                     )
                 }
                 item {
@@ -377,8 +472,8 @@ fun SettingsScreen(
                         icon = Icons.Default.SignalCellularAlt,
                         label = "Difficulty",
                         options = listOf("peaceful", "easy", "normal", "hard"),
-                        selected = config.difficulty,
-                        onSelected = { config = config.copy(difficulty = it) }
+                        selected = currentState.config.difficulty,
+                        onSelected = { currentState = currentState.copy(config = currentState.config.copy(difficulty = it)) }
                     )
                 }
                 item {
@@ -386,8 +481,8 @@ fun SettingsScreen(
                         icon = Icons.Default.VideogameAsset,
                         label = "Game Mode",
                         options = listOf("survival", "creative", "adventure", "spectator"),
-                        selected = config.gameMode,
-                        onSelected = { config = config.copy(gameMode = it) }
+                        selected = currentState.config.gameMode,
+                        onSelected = { currentState = currentState.copy(config = currentState.config.copy(gameMode = it)) }
                     )
                 }
                 item {
@@ -395,8 +490,8 @@ fun SettingsScreen(
                         icon = Icons.Default.Height,
                         label = "Max Build Height",
                         min = 64, max = 320, step = 16,
-                        value = config.maxBuildHeight,
-                        onValueChange = { config = config.copy(maxBuildHeight = it) }
+                        value = currentState.config.maxBuildHeight,
+                        onValueChange = { currentState = currentState.copy(config = currentState.config.copy(maxBuildHeight = it)) }
                     )
                 }
                 item {
@@ -404,40 +499,40 @@ fun SettingsScreen(
                         icon = "💀",
                         label = "Hardcore Mode",
                         description = "Players are banned upon death",
-                        checked = config.hardcore,
-                        onToggle = { config = config.copy(hardcore = it) }
+                        checked = currentState.config.hardcore,
+                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(hardcore = it)) }
                     )
                 }
                 item {
                     SettingsToggleRow(
                         icon = "🔥",
                         label = "Nether Enabled",
-                        checked = config.netherEnabled,
-                        onToggle = { config = config.copy(netherEnabled = it) }
+                        checked = currentState.config.netherEnabled,
+                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(netherEnabled = it)) }
                     )
                 }
                 item {
                     SettingsToggleRow(
                         icon = "👻",
                         label = "Spawn Monsters",
-                        checked = config.spawnMonsters,
-                        onToggle = { config = config.copy(spawnMonsters = it) }
+                        checked = currentState.config.spawnMonsters,
+                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(spawnMonsters = it)) }
                     )
                 }
                 item {
                     SettingsToggleRow(
                         icon = "🐷",
                         label = "Spawn Animals",
-                        checked = config.spawnAnimals,
-                        onToggle = { config = config.copy(spawnAnimals = it) }
+                        checked = currentState.config.spawnAnimals,
+                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(spawnAnimals = it)) }
                     )
                 }
                 item {
                     SettingsToggleRow(
                         icon = "🧑‍🌾",
                         label = "Spawn NPCs (Villagers)",
-                        checked = config.spawnNpcs,
-                        onToggle = { config = config.copy(spawnNpcs = it) }
+                        checked = currentState.config.spawnNpcs,
+                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(spawnNpcs = it)) }
                     )
                 }
                 item {
@@ -445,8 +540,8 @@ fun SettingsScreen(
                         icon = "📜",
                         label = "Whitelist",
                         description = "Only allowed players can join",
-                        checked = config.whiteList,
-                        onToggle = { config = config.copy(whiteList = it) }
+                        checked = currentState.config.whiteList,
+                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(whiteList = it)) }
                     )
                 }
                 item {
@@ -454,16 +549,16 @@ fun SettingsScreen(
                         icon = "🚫",
                         label = "Enforce Whitelist",
                         description = "Kick players not on whitelist upon reload",
-                        checked = config.enforceWhitelist,
-                        onToggle = { config = config.copy(enforceWhitelist = it) }
+                        checked = currentState.config.enforceWhitelist,
+                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(enforceWhitelist = it)) }
                     )
                 }
                 item {
                     SettingsToggleRow(
                         icon = "🏠",
                         label = "Generate Structures",
-                        checked = config.generateStructures,
-                        onToggle = { config = config.copy(generateStructures = it) }
+                        checked = currentState.config.generateStructures,
+                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(generateStructures = it)) }
                     )
                 }
 
@@ -490,40 +585,40 @@ fun SettingsScreen(
                         icon = Icons.Default.Groups,
                         label = "Max Players",
                         min = 1, max = 20,
-                        value = config.maxPlayers,
-                        onValueChange = { config = config.copy(maxPlayers = it) }
+                        value = currentState.config.maxPlayers,
+                        onValueChange = { currentState = currentState.copy(config = currentState.config.copy(maxPlayers = it)) }
                     )
                 }
                 item {
                     SettingsToggleRow(
                         icon = "⚔️",
                         label = "Player vs Player (PVP)",
-                        checked = config.pvp,
-                        onToggle = { config = config.copy(pvp = it) }
+                        checked = currentState.config.pvp,
+                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(pvp = it)) }
                     )
                 }
                 item {
                     SettingsToggleRow(
                         icon = "✈️",
                         label = "Allow Flight",
-                        checked = config.allowFlight,
-                        onToggle = { config = config.copy(allowFlight = it) }
+                        checked = currentState.config.allowFlight,
+                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(allowFlight = it)) }
                     )
                 }
                 item {
                     SettingsToggleRow(
                         icon = "⚙️",
                         label = "Command Blocks",
-                        checked = config.commandBlocks,
-                        onToggle = { config = config.copy(commandBlocks = it) }
+                        checked = currentState.config.commandBlocks,
+                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(commandBlocks = it)) }
                     )
                 }
                 item {
                     SettingsToggleRow(
                         icon = "📣",
                         label = "Broadcast Console To Ops",
-                        checked = broadcastConsoleToOps,
-                        onToggle = { broadcastConsoleToOps = it }
+                        checked = currentState.broadcastConsoleToOps,
+                        onToggle = { currentState = currentState.copy(broadcastConsoleToOps = it) }
                     )
                 }
 
@@ -534,8 +629,8 @@ fun SettingsScreen(
                         label = "Spawn Protection",
                         description = "Radius of protected blocks at spawn",
                         min = 0, max = 100,
-                        value = config.spawnProtection,
-                        onValueChange = { config = config.copy(spawnProtection = it) }
+                        value = currentState.config.spawnProtection,
+                        onValueChange = { currentState = currentState.copy(config = currentState.config.copy(spawnProtection = it)) }
                     )
                 }
                 item {
@@ -544,8 +639,8 @@ fun SettingsScreen(
                         label = "Player Idle Timeout",
                         description = "Minutes before kicking idle players",
                         min = 0, max = 120,
-                        value = config.playerIdleTimeout,
-                        onValueChange = { config = config.copy(playerIdleTimeout = it) }
+                        value = currentState.config.playerIdleTimeout,
+                        onValueChange = { currentState = currentState.copy(config = currentState.config.copy(playerIdleTimeout = it)) }
                     )
                 }
                 item {
@@ -554,8 +649,8 @@ fun SettingsScreen(
                         label = "Entity Broadcast Range",
                         description = "How far entities are visible (%)",
                         min = 10, max = 100, step = 10,
-                        value = config.entityBroadcastRangePercentage,
-                        onValueChange = { config = config.copy(entityBroadcastRangePercentage = it) }
+                        value = currentState.config.entityBroadcastRangePercentage,
+                        onValueChange = { currentState = currentState.copy(config = currentState.config.copy(entityBroadcastRangePercentage = it)) }
                     )
                 }
                 item {
@@ -564,8 +659,8 @@ fun SettingsScreen(
                         label = "Op Permission Level",
                         options = listOf("1", "2", "3", "4"),
                         optionLabels = mapOf("1" to "Level 1 (Bypass)", "2" to "Level 2 (Commands)", "3" to "Level 3 (Management)", "4" to "Level 4 (Owner)"),
-                        selected = config.opPermissionLevel.toString(),
-                        onSelected = { config = config.copy(opPermissionLevel = it.toInt()) }
+                        selected = currentState.config.opPermissionLevel.toString(),
+                        onSelected = { currentState = currentState.copy(config = currentState.config.copy(opPermissionLevel = it.toInt())) }
                     )
                 }
                 item {
@@ -573,8 +668,8 @@ fun SettingsScreen(
                         icon = "🔒",
                         label = "Online Mode",
                         description = "Verify players with Mojang (Auth)",
-                        checked = config.onlineMode,
-                        onToggle = { config = config.copy(onlineMode = it) }
+                        checked = currentState.config.onlineMode,
+                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(onlineMode = it)) }
                     )
                 }
                 item {
@@ -582,8 +677,8 @@ fun SettingsScreen(
                         icon = "🌐",
                         label = "Native Transport",
                         description = "Optimized Linux networking",
-                        checked = config.useNativeTransport,
-                        onToggle = { config = config.copy(useNativeTransport = it) }
+                        checked = currentState.config.useNativeTransport,
+                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(useNativeTransport = it)) }
                     )
                 }
             }
@@ -617,15 +712,7 @@ fun SettingsScreen(
                         }
                     )
                 }
-                item {
-                    SettingsToggleRow(
-                        icon = "🔄",
-                        label = "Auto-Restart",
-                        description = "Restart server automatically if it crashes",
-                        checked = autoRestartEnabled,
-                        onToggle = { autoRestartEnabled = it; playHaptic() }
-                    )
-                }
+
 
                 item { SettingsSection("DEVICE STORAGE", Icons.Default.Storage) }
                 item {
@@ -1142,8 +1229,14 @@ private fun SettingsSliderRow(
             }
             Slider(
                 value = internalValue.toFloat(),
-                onValueChange = { internalValue = it.toInt().coerceIn(min, max) },
-                onValueChangeFinished = { onValueChange(internalValue) },
+                onValueChange = { newValue ->
+                    val steps = kotlin.math.round((newValue - min) / step).toInt()
+                    val nextVal = (min + steps * step).coerceIn(min, max)
+                    if (nextVal != internalValue) {
+                        internalValue = nextVal
+                        onValueChange(nextVal)
+                    }
+                },
                 valueRange = min.toFloat()..max.toFloat(),
                 enabled = enabled
             )

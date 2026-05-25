@@ -20,12 +20,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Forest
 import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -89,14 +91,14 @@ fun WorldSetupScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val activeWorld = stateHolder.config.worldName.ifBlank { "world" }
+    val activeWorld = stateHolder.activeWorld.ifBlank { "world" }
 
     var worldNameInput by remember(createMode) { mutableStateOf("") }
     var serverName by remember(stateHolder.serverName, activeWorld, createMode) {
         mutableStateOf(if (createMode) "" else stateHolder.serverName.ifBlank { activeWorld })
     }
-    var serverDescription by remember(stateHolder.serverDescription) {
-        mutableStateOf(stateHolder.serverDescription)
+    var serverDescription by remember(stateHolder.serverDescription, createMode) {
+        mutableStateOf(if (createMode) "" else stateHolder.serverDescription)
     }
     var serverPhotoUri by remember(stateHolder.serverPhotoUrl) {
         mutableStateOf(if (stateHolder.serverPhotoUrl.isNotBlank()) Uri.parse(stateHolder.serverPhotoUrl) else null)
@@ -114,6 +116,8 @@ fun WorldSetupScreen(
         mutableStateOf(stateHolder.config.customJarPath)
     }
     var showVersionDialog by remember { mutableStateOf(false) }
+    var showServerNameError by remember { mutableStateOf(false) }
+    var showVersionError by remember { mutableStateOf(false) }
     val versionFieldInteractionSource = remember { MutableInteractionSource() }
 
     var pendingImportSlot by remember { mutableStateOf(WorldImportSlot.MAIN) }
@@ -162,17 +166,20 @@ fun WorldSetupScreen(
     suspend fun finishSetup() {
         val versionId = selectedVersion.trim()
         val trimmedServerName = serverName.trim()
-        val trimmedDescription = serverDescription.trim()
-        if (trimmedServerName.isBlank()) {
-            onMessage("Server name is required.")
-            return
+        val trimmedDescription = if (serverDescription.trim().isBlank()) "Hosted on Pocketcraft" else serverDescription.trim()
+
+        val isNameBlank = trimmedServerName.isBlank()
+        val isVersionBlank = if (selectedServerType.supportsVersionSelect) {
+            versionId.isBlank()
+        } else {
+            selectedCustomJarPath.isNullOrBlank()
         }
-        if (selectedServerType.supportsVersionSelect && versionId.isBlank()) {
-            onMessage("Game version is required.")
-            return
-        }
-        if (!selectedServerType.supportsVersionSelect && selectedCustomJarPath.isNullOrBlank()) {
-            onMessage("Select a custom server JAR.")
+
+        showServerNameError = isNameBlank
+        showVersionError = isVersionBlank
+
+        if (isNameBlank || isVersionBlank) {
+            onMessage("Please fill all mandatory fields.")
             return
         }
 
@@ -254,7 +261,7 @@ fun WorldSetupScreen(
             maxPlayers = maxPlayersValue.roundToInt(),
             viewDistance = 6
         )
-        stateHolder.saveSettings(updatedConfig)
+        stateHolder.saveSettings(updatedConfig, targetWorldName = targetWorld)
 
         if (updatedConfig.serverType.supportsVersionSelect) {
             isDownloadingVersion = true
@@ -287,7 +294,7 @@ fun WorldSetupScreen(
             }
         }
 
-        val existingPhoto = stateHolder.serverPhotoUrl.trim()
+        val existingPhoto = if (createMode) "" else stateHolder.serverPhotoUrl.trim()
         val photoUrlToSave = when {
             photoChanged && serverPhotoUri != null ->
                 stateHolder.importWorldServerPhoto(
@@ -319,12 +326,7 @@ fun WorldSetupScreen(
         onComplete()
     }
 
-    val hasValidRuntimeSelection = if (selectedServerType.supportsVersionSelect) {
-        selectedVersion.isNotBlank()
-    } else {
-        !selectedCustomJarPath.isNullOrBlank()
-    }
-    val canFinish = serverName.isNotBlank() && hasValidRuntimeSelection && !isDownloadingVersion
+    val canFinish = !isDownloadingVersion
 
     Column(
         modifier = Modifier
@@ -403,24 +405,58 @@ fun WorldSetupScreen(
             ) {
                 OutlinedTextField(
                     value = serverName,
-                    onValueChange = { serverName = it },
+                    onValueChange = { 
+                        serverName = it
+                        if (it.isNotBlank()) showServerNameError = false
+                    },
                     singleLine = true,
+                    isError = showServerNameError,
                     label = { Text("Server name (required)") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = duoTextFieldShape(),
                     colors = duoOutlinedTextFieldColors()
                 )
+                if (showServerNameError) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Warning,
+                                contentDescription = "Error",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = "Server name is required",
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
 
-                ServerDescriptionField(
-                    description = serverDescription,
-                    onDescriptionChange = { serverDescription = it },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                if (!createMode) {
+                    ServerDescriptionField(
+                        description = serverDescription,
+                        onDescriptionChange = { serverDescription = it },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
                 val hasSelectedVersion = selectedVersion.isNotBlank()
                 OutlinedTextField(
                     value = if (selectedServerType.supportsVersionSelect) {
-                        if (hasSelectedVersion) "${selectedServerType.displayName} $selectedVersion" else "Select server type + version"
+                        if (hasSelectedVersion) "${selectedServerType.displayName} $selectedVersion" else ""
                     } else {
                         "${selectedServerType.displayName} (Custom JAR)"
                     },
@@ -428,19 +464,48 @@ fun WorldSetupScreen(
                     singleLine = true,
                     readOnly = true,
                     enabled = true,
+                    isError = showVersionError,
                     interactionSource = versionFieldInteractionSource,
                     label = { Text("Game version (required)") },
                     trailingIcon = {
                         Icon(
                             imageVector = Icons.Filled.Dns,
                             contentDescription = null,
-                            tint = PocketColors.PrimaryDark
+                            tint = if (showVersionError) MaterialTheme.colorScheme.error else PocketColors.PrimaryDark
                         )
                     },
                     colors = duoOutlinedTextFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                     shape = duoTextFieldShape()
                 )
+                if (showVersionError) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Warning,
+                                contentDescription = "Error",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = "Game version or custom JAR is required",
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
 
                 OutlinedTextField(
                     value = worldSeed,
@@ -621,6 +686,14 @@ fun WorldSetupScreen(
                             selectedVersion = version ?: selectedVersion
                         } else {
                             selectedVersion = stateHolder.config.gameVersion.ifBlank { selectedVersion }
+                        }
+                        val valid = if (type.supportsVersionSelect) {
+                            (version ?: selectedVersion).isNotBlank()
+                        } else {
+                            !customJar.isNullOrBlank()
+                        }
+                        if (valid) {
+                            showVersionError = false
                         }
                         versionSheetState.hide()
                         showVersionDialog = false

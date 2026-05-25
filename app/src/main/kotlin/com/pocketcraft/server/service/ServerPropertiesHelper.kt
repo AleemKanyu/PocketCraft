@@ -16,7 +16,7 @@ object ServerPropertiesHelper {
         return File(serverDir, "server.properties")
     }
 
-    fun readProperties(serverDir: File): Properties {
+    fun readProperties(serverDir: File, persistDefaults: Boolean = true): Properties {
         val props = Properties()
         val file = getServerPropertiesFile(serverDir)
         var needsPersist = false
@@ -74,7 +74,7 @@ object ServerPropertiesHelper {
             props["rcon.password"] = "pocketcraft-internal-rcon"
             needsPersist = true
         }
-        if (needsPersist) {
+        if (needsPersist && persistDefaults) {
             saveProperties(serverDir, props)
         }
         return props

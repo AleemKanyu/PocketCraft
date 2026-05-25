@@ -40,6 +40,10 @@ object PluginManager {
     private const val HANGAR_PROVIDER = "hangar"
     private val builtInBridgeProjectIds = setOf("geyser", "viaversion", "chunky")
     private val builtInBridgeKeywords = setOf("geyser", "viaversion", "chunky")
+    // Managed bridge plugins that MUST be real JARs — any file smaller than this threshold
+    // is treated as a corrupted/truncated download and will be re-downloaded automatically.
+    private val managedBridgePluginIds = setOf("geyser", "floodgate", "viaversion")
+    private const val MANAGED_PLUGIN_MIN_VALID_BYTES = 512 * 1024L // 512 KB minimum for real bridge jars
     private val incompatiblePluginTokens = listOf("fastleafdecay", "inventoryprofiles")
     private val BLOCKED_PLUGINS = setOf("spark", "spark-bukkit")
     private val paperCompatibleLoaders = setOf("paper", "spigot", "purpur", "bukkit", "folia")
@@ -1447,6 +1451,19 @@ object PluginManager {
     private fun validateInstalledFile(file: File, type: ContentType, runtimeKey: String = ""): String? {
         return when (type) {
             ContentType.PLUGINS -> {
+                // Managed bridge plugins (Geyser, Floodgate, ViaVersion) are known-valid but
+                // may use non-standard plugin descriptors or platform-specific loaders.
+                // Reject only obvious stubs (< 512 KB) rather than validating their internals.
+                val fileName = file.name.lowercase()
+                val isBridgePlugin = managedBridgePluginIds.any { fileName.contains(it) }
+                if (isBridgePlugin) {
+                    return if (file.length() < MANAGED_PLUGIN_MIN_VALID_BYTES) {
+                        "Downloaded $fileName is too small (${file.length()} bytes) — download was likely truncated. Will retry."
+                    } else {
+                        null // Accept without further inspection
+                    }
+                }
+
                 val metadata = readArchiveMetadata(file)
                 when (metadata.kind) {
                     ArchiveKind.FABRIC_MOD,
@@ -1744,10 +1761,28 @@ object PluginManager {
 
     private fun isManagedPluginInstalled(context: Context, worldName: String, projectId: String): Boolean {
         val pluginsDir = getPluginsDir(context, worldName)
-        return pluginsDir.listFiles()?.any {
-            val n = it.name.lowercase()
-            n.contains(projectId.lowercase()) && (n.endsWith(".jar") || n.endsWith(".jar.disabled"))
-        } ?: false
+        val normalizedId = projectId.lowercase()
+        val files = pluginsDir.listFiles() ?: return false
+        return files.any { file ->
+            val n = file.name.lowercase()
+            val nameMatches = n.contains(normalizedId) && (n.endsWith(".jar") || n.endsWith(".jar.disabled"))
+            if (!nameMatches) return@any false
+
+            // For known managed bridge plugins, a jar smaller than MANAGED_PLUGIN_MIN_VALID_BYTES
+            // is a corrupted/truncated download stub. Treat it as "not installed" so the
+            // real jar gets re-downloaded automatically on the next server start.
+            if (managedBridgePluginIds.contains(normalizedId) && file.length() < MANAGED_PLUGIN_MIN_VALID_BYTES) {
+                android.util.Log.w(
+                    "PluginManager",
+                    "Detected corrupt/truncated $projectId jar (${file.length()} bytes < $MANAGED_PLUGIN_MIN_VALID_BYTES min). " +
+                    "Deleting stub and scheduling re-download."
+                )
+                runCatching { file.delete() }
+                return@any false
+            }
+
+            true
+        }
     }
 
     private fun isManagedPluginEnabled(context: Context, worldName: String, projectId: String): Boolean {

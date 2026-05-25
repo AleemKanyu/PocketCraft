@@ -26,8 +26,8 @@ data class BroadcastMessage(
 )
 
 object BroadcastManager {
-    private val db = FirebaseFirestore.getInstance()
-    private val remoteConfig = FirebaseRemoteConfig.getInstance()
+    private val db by lazy { FirebaseFirestore.getInstance() }
+    private val remoteConfig by lazy { FirebaseRemoteConfig.getInstance() }
     private const val BROADCAST_REMOTE_CONFIG_KEY = "broadcast_banner"
     private const val BROADCAST_CACHE_PREFS = "broadcast_cache"
     private const val BROADCAST_CACHE_KEY = "cached_broadcasts_json"
@@ -52,17 +52,55 @@ object BroadcastManager {
                         Log.i("BroadcastManager", "Using ${cached.size} cached broadcast(s) while Firestore is unavailable.")
                         trySend(cached)
                     }
-                    // No cache = show nothing; don't show a fake maintenance banner
                     return@addSnapshotListener
                 }
 
+                Log.d("BroadcastManager", "Fetched broadcasts snapshot from Firestore. Document count: ${snapshot.documents.size}")
+
                 val messages = snapshot.documents.mapNotNull { doc ->
-                    doc.toObject(BroadcastMessage::class.java)?.copy(id = doc.id)
-                }.filter { it.active && appVersionCode >= it.targetMinVersion }
-                .sortedByDescending { it.createdAt?.seconds ?: 0 }
+                    try {
+                        val active = doc.firstBoolean("active") ?: false
+                        val title = doc.firstString("title") ?: ""
+                        val body = doc.firstString("body") ?: ""
+                        val type = (doc.firstString("type") ?: "info").normalizeType()
+                        val dismissible = doc.firstBoolean("dismissible") ?: true
+                        val targetMinVersion = doc.firstInt("targetMinVersion")
+                        val createdAtDate = doc.firstDate("createdAt")
+                        val createdAt = createdAtDate?.let { Timestamp(it) }
+
+                        val msg = BroadcastMessage(
+                            id = doc.id,
+                            active = active,
+                            title = title,
+                            body = body,
+                            type = type,
+                            dismissible = dismissible,
+                            createdAt = createdAt,
+                            targetMinVersion = targetMinVersion
+                        )
+                        Log.d("BroadcastManager", "Parsed broadcast document: id=${doc.id}, active=$active, title='$title', type='$type', dismissible=$dismissible, targetMinVersion=$targetMinVersion")
+                        msg
+                    } catch (e: Exception) {
+                        Log.e("BroadcastManager", "Failed parsing broadcast document ${doc.id}: ${e.message}", e)
+                        null
+                    }
+                }.filter { msg ->
+                    val matchesVersion = appVersionCode >= msg.targetMinVersion
+                    val isToShow = msg.active && matchesVersion
+
+                    Log.d("BroadcastManager", "Broadcast decision for ${msg.id}: active=${msg.active}, appVersionCode=$appVersionCode, targetMinVersion=${msg.targetMinVersion}, matchesVersion=$matchesVersion -> show=$isToShow")
+                    if (!msg.active) {
+                        Log.d("BroadcastManager", "Skipped broadcast ${msg.id}: active flag is false.")
+                    } else if (!matchesVersion) {
+                        Log.d("BroadcastManager", "Skipped broadcast ${msg.id}: appVersionCode $appVersionCode < targetMinVersion ${msg.targetMinVersion}.")
+                    } else {
+                        Log.d("BroadcastManager", "Showing broadcast ${msg.id} now...")
+                    }
+                    isToShow
+                }.sortedByDescending { it.createdAt?.seconds ?: 0 }
 
                 cacheBroadcasts(appContext, messages)
-                Log.i("BroadcastManager", "Loaded ${messages.size} active broadcast(s) from Firestore.")
+                Log.i("BroadcastManager", "Loaded ${messages.size} active broadcast(s) from Firestore after filtering.")
                 trySend(messages)
             }
 
@@ -153,7 +191,8 @@ object BroadcastManager {
                         val json = array.optJSONObject(index) ?: continue
                         val createdAt = json.optLongOrNull("createdAt")?.let { Timestamp(it, 0) }
                         val targetMinVersion = json.optInt("targetMinVersion", 0)
-                        if (targetMinVersion > appVersionCode) continue
+                        val active = json.optBoolean("active", true)
+                        if (!active || targetMinVersion > appVersionCode) continue
 
                         add(
                             BroadcastMessage(

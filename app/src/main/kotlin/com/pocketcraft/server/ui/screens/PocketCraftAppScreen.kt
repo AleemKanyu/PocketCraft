@@ -143,7 +143,7 @@ fun PocketCraftApp(
     val scope = rememberCoroutineScope()
     val selectedWorld by AppPreferencesStore.getSelectedWorldFlow(context).collectAsState(initial = "world")
     val stateHolder = remember(versionId, selectedWorld) {
-        ServerStateHolder(context.applicationContext, versionId, selectedServerType, "world") // Forced to 'world' for debugging
+        ServerStateHolder(context.applicationContext, versionId, selectedServerType, selectedWorld)
     }
     val broadcastViewModel: BroadcastViewModel = hiltViewModel()
     val configBanner by broadcastViewModel.configBanner.collectAsState()
@@ -894,6 +894,8 @@ fun PocketCraftApp(
             }
         }
     }
+
+
 
     if (showExitDialog) {
         val exitSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)

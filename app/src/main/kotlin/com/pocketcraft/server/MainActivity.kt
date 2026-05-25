@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import android.net.Uri
 import android.content.Intent
+import android.util.Log
 import com.pocketcraft.server.update.UpdateConfig
 import com.pocketcraft.server.update.UpdateManager
 import com.pocketcraft.server.ui.components.UpdatePopup
@@ -101,15 +102,28 @@ class MainActivity : ComponentActivity() {
             val darkTheme = themePreference.resolve(systemDark = systemDarkTheme)
 
             var updateConfig by remember { mutableStateOf<UpdateConfig?>(null) }
-            var hasCheckedForUpdate by remember { mutableStateOf(false) }
+            var dismissedUpdateVersion by remember { mutableStateOf<Int?>(null) }
+            var dismissedUpdateShowFlag by remember { mutableStateOf(false) }
 
-            LaunchedEffect(Unit) {
-                if (!hasCheckedForUpdate) {
-                    val config = UpdateManager.fetchUpdateConfig()
+            val updateConfigFlow = remember { UpdateManager.getUpdateConfigFlow(this@MainActivity) }
+            LaunchedEffect(updateConfigFlow) {
+                updateConfigFlow.collect { config ->
+                    Log.d("MainActivity", "Received update config from flow: $config")
                     if (config != null && config.showUpdatePopup) {
-                        updateConfig = config
+                        val alreadyDismissed = !config.isForced && 
+                            dismissedUpdateShowFlag && 
+                            dismissedUpdateVersion == config.versionCode
+                        
+                        if (alreadyDismissed) {
+                            Log.d("MainActivity", "Update popup skipped: already dismissed this version/flag in this session.")
+                        } else {
+                            Log.d("MainActivity", "Showing update popup: $config")
+                            updateConfig = config
+                        }
+                    } else {
+                        Log.d("MainActivity", "Hiding update popup: config is null or showUpdatePopup is false.")
+                        updateConfig = null
                     }
-                    hasCheckedForUpdate = true
                 }
             }
 
@@ -208,6 +222,9 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onDismiss = {
+                            Log.d("MainActivity", "Update popup dismissed by user.")
+                            dismissedUpdateShowFlag = true
+                            dismissedUpdateVersion = config.versionCode
                             updateConfig = null
                         }
                     )

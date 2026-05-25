@@ -244,19 +244,20 @@ fun ServerTypeVersionBottomSheet(
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
-                val isCustomJarSelected = selectedType == ServerType.CUSTOM_JAR
+                var showCustomJarSoonDialog by remember { mutableStateOf(false) }
                 OutlinedCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp)
-                        .clickable { viewModel.setServerType(ServerType.CUSTOM_JAR) },
+                        .alpha(0.6f)
+                        .clickable { showCustomJarSoonDialog = true },
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.outlinedCardColors(
-                        containerColor = if (isCustomJarSelected) PocketColors.PrimaryMuted else MaterialTheme.colorScheme.surface
+                        containerColor = MaterialTheme.colorScheme.surface
                     ),
                     border = androidx.compose.foundation.BorderStroke(
-                        width = if (isCustomJarSelected) 2.dp else 1.dp,
-                        color = if (isCustomJarSelected) PocketColors.Primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
                     )
                 ) {
                     Row(
@@ -266,23 +267,48 @@ fun ServerTypeVersionBottomSheet(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (isCustomJarSelected) {
-                            Icon(
-                                Icons.Default.Check,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = PocketColors.PrimaryDark
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                        }
+                        Text(
+                            text = "🔒 ",
+                            fontSize = 16.sp
+                        )
                         Text(
                             text = ServerType.CUSTOM_JAR.displayName,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             fontWeight = FontWeight.Bold,
-                            color = if (isCustomJarSelected) PocketColors.PrimaryDark else MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = PocketColors.Warning.copy(alpha = 0.2f)
+                        ) {
+                            Text(
+                                "SOON",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = PocketColors.Warning
+                            )
+                        }
                     }
+                }
+
+                if (showCustomJarSoonDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showCustomJarSoonDialog = false },
+                        title = { Text("Coming Soon! 🛠️", fontWeight = FontWeight.Bold) },
+                        text = {
+                            Text("Uploading custom server JAR files will be available in a future update!")
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showCustomJarSoonDialog = false }) {
+                                Text("AWESOME", fontWeight = FontWeight.Bold, color = PocketColors.Primary)
+                            }
+                        },
+                        shape = RoundedCornerShape(24.dp),
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))

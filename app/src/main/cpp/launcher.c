@@ -323,6 +323,7 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
   setenv("TMPDIR", tmp_dir, 1);
   setenv("LD_LIBRARY_PATH", base_ld_library_path, 1);
   setenv("PATH", path_env, 1);
+  setenv("BIONIC_DISABLE_PTR_TAGGING", "1", 1);
 
   update_ld_library_path(internal_ld_library_path);
   disable_heap_tagging();
@@ -444,15 +445,16 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   "-Djline.terminal=none",
                   "-Xshare:off",
                   "-XX:+UnlockExperimentalVMOptions",
+                  "-XX:+UnlockDiagnosticVMOptions",
                   "-XX:+AlwaysPreTouch",
                   "-XX:+UseStringDeduplication",
                   "-XX:+UseG1GC",
                   "-XX:+ParallelRefProcEnabled",
-                  "-XX:MaxGCPauseMillis=50",
+                  "-XX:MaxGCPauseMillis=200",
                   "-XX:+DisableExplicitGC",
                   "-XX:G1NewSizePercent=30",
                   "-XX:G1MaxNewSizePercent=40",
-                  "-XX:G1HeapRegionSize=4m",
+                  "-XX:G1HeapRegionSize=8m",
                   "-XX:G1ReservePercent=20",
                   "-XX:G1HeapWastePercent=5",
                   "-XX:G1MixedGCCountTarget=4",

@@ -1,7 +1,12 @@
 package com.pocketcraft.server.update
 
+import android.content.Context
 import android.util.Log
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 data class UpdateConfig(
@@ -13,35 +18,104 @@ data class UpdateConfig(
 
 object UpdateManager {
     private const val TAG = "UpdateManager"
-    private val db = FirebaseFirestore.getInstance()
+    private val db by lazy { FirebaseFirestore.getInstance() }
 
-    suspend fun fetchUpdateConfig(): UpdateConfig? {
+    fun getUpdateConfigFlow(context: Context): Flow<UpdateConfig?> = callbackFlow {
+        val listener = db.collection("app_config").document("update")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e(TAG, "Update config snapshot listener error: ${error.message}", error)
+                    trySend(null)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null && snapshot.exists()) {
+                    val config = parseUpdateConfig(context, snapshot)
+                    trySend(config)
+                } else {
+                    Log.d(TAG, "Update config document does not exist.")
+                    trySend(null)
+                }
+            }
+        awaitClose { listener.remove() }
+    }
+
+    suspend fun fetchUpdateConfig(context: Context): UpdateConfig? {
         return try {
             val document = db.collection("app_config").document("update").get().await()
             if (document.exists()) {
-                val showUpdatePopup = document.getBoolean("showUpdatePopup") ?: false
-                val playStoreUrl = document.getString("playStoreUrl") ?: ""
-                val versionCode = document.getLong("versionCode")?.toInt()
-                val isForced = document.getBoolean("isForced") ?: false
-
-                if (playStoreUrl.isBlank()) {
-                    Log.w(TAG, "playStoreUrl is empty, skipping update popup.")
-                    return null
-                }
-
-                UpdateConfig(
-                    showUpdatePopup = showUpdatePopup,
-                    playStoreUrl = playStoreUrl,
-                    versionCode = versionCode,
-                    isForced = isForced
-                )
+                parseUpdateConfig(context, document)
             } else {
-                Log.d(TAG, "Update config document does not exist.")
+                Log.d(TAG, "Update config document does not exist (fetched).")
                 null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to fetch update config: ${e.message}")
+            Log.e(TAG, "Failed to fetch update config: ${e.message}", e)
             null
         }
+    }
+
+    private fun parseUpdateConfig(context: Context, document: DocumentSnapshot): UpdateConfig? {
+        val showUpdatePopupRaw = document.get("showUpdatePopup")
+        val isForcedRaw = document.get("isForced")
+        val playStoreUrlRaw = document.get("playStoreUrl")
+        val versionCodeRaw = document.get("versionCode")
+
+        val showUpdatePopup = showUpdatePopupRaw.toBooleanOrNull() ?: false
+        val isForced = isForcedRaw.toBooleanOrNull() ?: false
+        val playStoreUrl = playStoreUrlRaw?.toString()?.trim() ?: ""
+        val versionCode = versionCodeRaw.toIntOrNull()
+
+        Log.d(TAG, "Fetched app_config/update values: showUpdatePopupRaw=$showUpdatePopupRaw, isForcedRaw=$isForcedRaw, playStoreUrlRaw=$playStoreUrlRaw, versionCodeRaw=$versionCodeRaw")
+
+        if (!showUpdatePopup) {
+            Log.d(TAG, "Update config parsed: showUpdatePopup is false/null. Skipping update popup.")
+            return null
+        }
+
+        // Check version condition
+        val currentVersionCode = runCatching {
+            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            packageInfo.longVersionCode.toInt()
+        }.getOrDefault(0)
+
+        if (versionCode != null && currentVersionCode >= versionCode) {
+            Log.d(TAG, "Update config parsed: currentVersionCode ($currentVersionCode) >= target versionCode ($versionCode). Skipping update popup.")
+            return null
+        }
+
+        if (playStoreUrl.isBlank()) {
+            // Treat blank URL as invalid data and skip, or use a default
+            Log.w(TAG, "Update config parsed: playStoreUrl is empty/blank (invalid data). Skipping update popup.")
+            return null
+        }
+
+        Log.d(TAG, "Update config decision: SHOW popup. isForced=$isForced, playStoreUrl='$playStoreUrl', targetVersionCode=$versionCode")
+        return UpdateConfig(
+            showUpdatePopup = showUpdatePopup,
+            playStoreUrl = playStoreUrl,
+            versionCode = versionCode,
+            isForced = isForced
+        )
+    }
+
+    private fun Any?.toBooleanOrNull(): Boolean? {
+        if (this == null) return null
+        if (this is Boolean) return this
+        if (this is Number) return this.toInt() != 0
+        if (this is String) {
+            return when (this.trim().lowercase()) {
+                "true", "1", "yes", "on" -> true
+                "false", "0", "no", "off" -> false
+                else -> null
+            }
+        }
+        return null
+    }
+
+    private fun Any?.toIntOrNull(): Int? {
+        if (this == null) return null
+        if (this is Number) return this.toInt()
+        if (this is String) return this.trim().toIntOrNull()
+        return null
     }
 }

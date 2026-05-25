@@ -19,4 +19,11 @@ object RamUtils {
         val availMb = (memInfo.availMem / 1024 / 1024).toInt()
         return totalMb - availMb
     }
+
+    fun getAvailableRamMb(context: Context): Int {
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val memInfo = ActivityManager.MemoryInfo()
+        activityManager.getMemoryInfo(memInfo)
+        return (memInfo.availMem / 1024 / 1024).toInt()
+    }
 }

@@ -231,7 +231,7 @@ fun PlayersOnlineTab(
                     fontSize = 22.sp
                 )
                 Text(
-                    "${stateHolder.serverName} • ${players.size}/${stateHolder.config.maxPlayers} Online",
+                    "${stateHolder.serverName} • ${stateHolder.onlinePlayers.size}/${stateHolder.config.maxPlayers} Online",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurface.copy(0.5f)
                 )

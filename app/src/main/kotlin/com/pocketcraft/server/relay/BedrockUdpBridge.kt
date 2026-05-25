@@ -8,13 +8,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.io.ByteArrayOutputStream
-import java.io.DataOutputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import java.net.PortUnreachableException
+import java.net.SocketTimeoutException
 import java.util.concurrent.ConcurrentHashMap
 
 class BedrockUdpBridge(
@@ -44,6 +45,7 @@ class BedrockUdpBridge(
         running = true
         scope = CoroutineScope(SupervisorJob() + dispatcher)
         bridgeJob = scope?.launch {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
             for (frame in inboundFrames) {
                 try {
                     forwardFrameToGeyser(frame)
@@ -54,6 +56,7 @@ class BedrockUdpBridge(
         }
         
         outboundJob = scope?.launch {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
             for (frame in outboundFrames) {
                 try {
                     onResponse(frame)
@@ -86,13 +89,18 @@ class BedrockUdpBridge(
                 // without silently dropping datagrams before our receive() loop picks them up.
                 datagramSocket.receiveBufferSize = 4 * 1024 * 1024  // 4 MB
                 datagramSocket.sendBufferSize   = 1024 * 1024        // 1 MB
+                datagramSocket.soTimeout = 30000 // 30s timeout to check isActive
                 datagramSocket.connect(InetAddress.getByName(geyserHost), GEYSER_LOCAL_PORT)
                 startListening(datagramSocket, frame.clientIp, frame.clientPort)
             }
         }
 
-        val packet = DatagramPacket(frame.payload, frame.payload.size)
-        socket.send(packet)
+        try {
+            val packet = DatagramPacket(frame.payload, frame.payload.size)
+            socket.send(packet)
+        } catch (e: PortUnreachableException) {
+            Log.w(TAG, "Geyser port unreachable, frame dropped for ${frame.clientIp}")
+        }
     }
 
     private fun startListening(socket: DatagramSocket, clientIp: String, clientPort: Int) {
@@ -100,32 +108,39 @@ class BedrockUdpBridge(
         val ipBytes = byteArrayOf(ipParts[0].toByte(), ipParts[1].toByte(), ipParts[2].toByte(), ipParts[3].toByte())
 
         scope?.launch {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
             try {
                 val buffer = ByteArray(MAX_UDP_SIZE)
                 val packet = DatagramPacket(buffer, buffer.size)
 
                 while (isActive) {
-                    packet.length = buffer.size
-                    socket.receive(packet)
+                    try {
+                        packet.length = buffer.size
+                        socket.receive(packet)
 
-                    val payloadLen = packet.length
+                        val payloadLen = packet.length
 
-                    val frameLen = 1 + 2 + 4 + 2 + payloadLen
-                    val frame = ByteArray(frameLen)
-                    frame[0] = 0x03
-                    frame[1] = (payloadLen shr 8).toByte()
-                    frame[2] = payloadLen.toByte()
-                    frame[3] = ipBytes[0]
-                    frame[4] = ipBytes[1]
-                    frame[5] = ipBytes[2]
-                    frame[6] = ipBytes[3]
-                    frame[7] = (clientPort shr 8).toByte()
-                    frame[8] = clientPort.toByte()
-                    System.arraycopy(buffer, 0, frame, 9, payloadLen)
+                        val frameLen = 1 + 2 + 4 + 2 + payloadLen
+                        val frame = ByteArray(frameLen)
+                        frame[0] = 0x03
+                        frame[1] = (payloadLen shr 8).toByte()
+                        frame[2] = payloadLen.toByte()
+                        frame[3] = ipBytes[0]
+                        frame[4] = ipBytes[1]
+                        frame[5] = ipBytes[2]
+                        frame[6] = ipBytes[3]
+                        frame[7] = (clientPort shr 8).toByte()
+                        frame[8] = clientPort.toByte()
+                        System.arraycopy(buffer, 0, frame, 9, payloadLen)
 
-                    val result = outboundFrames.trySend(frame)
-                    if (result.isFailure) {
-                        Log.w(TAG, "Dropping outbound Bedrock frame due to TCP write backpressure")
+                        val result = outboundFrames.trySend(frame)
+                        if (result.isFailure) {
+                            Log.w(TAG, "Dropping outbound Bedrock frame due to TCP write backpressure")
+                        }
+                    } catch (e: SocketTimeoutException) {
+                        // Loop back to check isActive
+                    } catch (e: PortUnreachableException) {
+                        delay(1000) // Backoff before retrying
                     }
                 }
             } catch (e: Exception) {

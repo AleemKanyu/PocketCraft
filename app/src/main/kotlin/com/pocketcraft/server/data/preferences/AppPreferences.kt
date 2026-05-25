@@ -385,7 +385,7 @@ object AppPreferencesStore {
 
     fun getSelectedWorldFlow(context: Context): Flow<String> =
         context.appPreferencesDataStore.data.map { prefs ->
-            prefs[AppPreferencesKeys.SELECTED_WORLD] ?: "default"
+            prefs[AppPreferencesKeys.SELECTED_WORLD] ?: "world"
         }
 
     suspend fun setSelectedWorld(context: Context, worldName: String) {

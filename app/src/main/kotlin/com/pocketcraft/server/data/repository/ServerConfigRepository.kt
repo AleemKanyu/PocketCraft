@@ -235,8 +235,15 @@ class ServerConfigRepository @Inject constructor(
                 val idx = it.indexOf('=')
                 it.substring(0, idx).trim() to it.substring(idx + 1).trim()
             }
+        val fallbackName = if (file.name == "server.properties") {
+            file.parentFile?.name?.takeIf { it != "worlds" && it != "servers" } ?: "world"
+        } else {
+            file.nameWithoutExtension
+        }
+        val defaultName = if (fallbackName == "server") "world" else fallbackName
+
         return ServerConfig(
-            worldName = props["level-name"] ?: "world",
+            worldName = props["level-name"] ?: defaultName,
             worldSeed = props["level-seed"] ?: "",
             maxPlayers = (props["max-players"]?.toIntOrNull() ?: 10).coerceIn(1, 20),
             port = 25565,
@@ -258,6 +265,7 @@ class ServerConfigRepository @Inject constructor(
             spawnNpcs = props["spawn-npcs"]?.toBoolean() ?: true,
             hardcore = props["hardcore"]?.toBoolean() ?: false,
             maxRamMb = props["pocketcraft-max-ram-mb"]?.toIntOrNull() ?: 1024,
+            ramMode = props["pocketcraft-ram-mode"] ?: "low",
             entityBroadcastRangePercentage = props["entity-broadcast-range-percentage"]?.toIntOrNull() ?: 50,
             enableRcon = props["enable-rcon"]?.toBoolean() ?: true,
             generateStructures = props["generate-structures"]?.toBoolean() ?: true,

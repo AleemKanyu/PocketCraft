@@ -56,9 +56,9 @@ fun ServerDetailsScreen(
     onMessage: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    val activeWorld = stateHolder.config.worldName
-    var serverName by remember(stateHolder.serverName, stateHolder.config.worldName) {
-        mutableStateOf(stateHolder.serverName.ifBlank { stateHolder.config.worldName.ifBlank { "world" } })
+    val activeWorld = stateHolder.activeWorld
+    var serverName by remember(stateHolder.serverName, stateHolder.activeWorld) {
+        mutableStateOf(stateHolder.serverName.ifBlank { stateHolder.activeWorld.ifBlank { "world" } })
     }
     var serverDescription by remember(stateHolder.serverDescription) {
         mutableStateOf(stateHolder.serverDescription)
@@ -204,7 +204,7 @@ fun ServerDetailsScreen(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "World: ${stateHolder.config.worldName}",
+                        text = "World: ${stateHolder.activeWorld}",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold

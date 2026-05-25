@@ -155,6 +155,12 @@ fun ConsoleScreen(
     onAddWorld: () -> Unit = {},
     topContentBelowServerCard: (@Composable () -> Unit)? = null
 ) {
+    val stateTrigger by stateHolder.stateUpdateTrigger.collectAsStateWithLifecycle()
+    
+    // Explicitly read stateTrigger so Compose tracks it as a dependency, 
+    // ensuring this screen recomposes when the ServerStateHolder state changes.
+    remember(stateTrigger) { stateTrigger }
+    
     val logListState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var command by remember { mutableStateOf("") }
@@ -184,7 +190,7 @@ fun ConsoleScreen(
 
     // RAM feature state
     val prefs = remember { AppPreferences(context) }
-    val eulaAccepted = remember(stateHolder.status, stateHolder.activeWorld, stateHolder.config.worldName) {
+    val eulaAccepted = remember(stateHolder.status, stateHolder.activeWorld) {
         val acceptedByFile = ServerFileManager.isEulaAccepted(context, stateHolder.activeWorld)
         if (acceptedByFile && !prefs.eulaAccepted) {
             prefs.eulaAccepted = true
@@ -455,7 +461,7 @@ fun ConsoleScreen(
         }
 
         item {
-            if (stateHolder.status == ServerStatus.ONLINE || stateHolder.isRestarting) {
+            if (stateHolder.status == ServerStatus.ONLINE || stateHolder.isRestarting || stateHolder.status == ServerStatus.STARTING) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -468,88 +474,38 @@ fun ConsoleScreen(
                         modifier = Modifier.weight(1f)
                     )
 
-                    DuoButton(
-                        text = if (stateHolder.isRestarting) "RESTARTING..." else "RESTART",
-                        onClick = {
-                            try {
-                                if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
-                                    Toast.makeText(context, "No internet connection. Please check your network.", Toast.LENGTH_LONG).show()
-                                    return@DuoButton
+                    if (stateHolder.status == ServerStatus.STARTING) {
+                        DuoButton(
+                            text = "STARTING...",
+                            onClick = {},
+                            enabled = false,
+                            isLoading = true,
+                            variant = DuoButtonVariant.Primary,
+                            modifier = Modifier.weight(1f)
+                        )
+                    } else {
+                        DuoButton(
+                            text = if (stateHolder.isRestarting) "RESTARTING..." else "RESTART",
+                            onClick = {
+                                try {
+                                    if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
+                                        Toast.makeText(context, "No internet connection. Please check your network.", Toast.LENGTH_LONG).show()
+                                        return@DuoButton
+                                    }
+                                    stateHolder.restartServer()
+                                } catch (e: Exception) {
+                                    android.util.Log.e("ConsoleScreen", "Restart error", e)
+                                    Toast.makeText(context, "Error during restart: ${e.message}", Toast.LENGTH_SHORT).show()
                                 }
-                                stateHolder.restartServer()
-                            } catch (e: Exception) {
-                                android.util.Log.e("ConsoleScreen", "Restart error", e)
-                                Toast.makeText(context, "Error during restart: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        enabled = !stateHolder.isRestarting,
-                        isLoading = stateHolder.isRestarting,
-                        variant = DuoButtonVariant.Primary,
-                        modifier = Modifier.weight(1f)
-                    )
+                            },
+                            enabled = !stateHolder.isRestarting,
+                            isLoading = stateHolder.isRestarting,
+                            variant = DuoButtonVariant.Primary,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             } else {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (!eulaAccepted) {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .shadow(
-                                    elevation = 8.dp,
-                                    shape = RoundedCornerShape(16.dp),
-                                    ambientColor = cardShadowColor,
-                                    spotColor = cardShadowColor,
-                                    clip = false
-                                ),
-                            shape = RoundedCornerShape(16.dp),
-                            color = pocketWarningSurfaceColor(),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, pocketWarningBorderColor()),
-                            shadowElevation = 4.dp
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(28.dp)
-                                            .background(pocketWarningIconChipColor(), RoundedCornerShape(10.dp)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Warning,
-                                            contentDescription = null,
-                                            tint = pocketWarningAccentColor(),
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                    Text(
-                                        "EULA required to start",
-                                        color = pocketWarningTitleColor(),
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp
-                                    )
-                                }
-                                Text(
-                                    text = "Accept the Minecraft EULA before starting the server.",
-                                    color = pocketWarningBodyColor(),
-                                    fontSize = 12.sp,
-                                    lineHeight = 16.sp
-                                )
-                                TextButton(
-                                    onClick = { stateHolder.startServer() },
-                                    modifier = Modifier.align(Alignment.End)
-                                ) {
-                                    Text("Review EULA", fontSize = 12.sp, color = pocketWarningAccentColor())
-                                }
-                            }
-                        }
-                    }
-
                     DuoButton(
                         text = if (stateHolder.isRestartingCycle) "RESTARTING..." else if (stateHolder.status == ServerStatus.STARTING) "STARTING..." else "START SERVER",
                         onClick = {
@@ -568,12 +524,11 @@ fun ConsoleScreen(
                                 Toast.makeText(context, "Error starting server: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
                         },
-                        enabled = eulaAccepted && stateHolder.status != ServerStatus.STARTING && !stateHolder.isRestarting && !stateHolder.isStopping,
+                        enabled = stateHolder.status != ServerStatus.STARTING && !stateHolder.isRestarting && !stateHolder.isStopping,
                         isLoading = stateHolder.status == ServerStatus.STARTING || stateHolder.isRestarting,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-            }
         }
         // Startup Progress Bar (shown only when starting)
         if (stateHolder.isStarting) {
@@ -1052,7 +1007,7 @@ private fun ServerIdentityCard(
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = stateHolder.serverName.ifBlank { stateHolder.config.worldName.ifBlank { "world" } },
+                                text = stateHolder.serverName.ifBlank { stateHolder.activeWorld.ifBlank { "world" } },
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 22.sp,
                                 lineHeight = 24.sp
@@ -1082,7 +1037,7 @@ private fun ServerIdentityCard(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = stateHolder.config.worldName.ifBlank { "world" },
+                                    text = stateHolder.activeWorld.ifBlank { "world" },
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontWeight = FontWeight.SemiBold

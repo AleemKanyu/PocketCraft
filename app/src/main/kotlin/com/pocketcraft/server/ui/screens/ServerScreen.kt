@@ -32,6 +32,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -70,6 +71,12 @@ fun ServerScreen(
     onDarkThemeChange: (Boolean) -> Unit,
     homeTopContent: (@Composable () -> Unit)? = null
 ) {
+    val stateTrigger by stateHolder.stateUpdateTrigger.collectAsState(initial = 0)
+    
+    // Explicitly read stateTrigger so Compose tracks it as a dependency,
+    // ensuring this screen recomposes when the ServerStateHolder state changes.
+    remember(stateTrigger) { stateTrigger }
+    
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -330,7 +337,7 @@ fun ServerScreen(
                     }
                     if (showConfigEditor) {
                         ConfigEditorScreen(
-                            serverDir = ServerFileManager.getServerDir(context, stateHolder.versionLabel),
+                            serverDir = ServerFileManager.getServerDir(context, stateHolder.activeWorld),
                             isReadOnly = stateHolder.status != ServerStatus.OFFLINE,
                             onClose = { showConfigEditor = false }
                         )
@@ -355,7 +362,8 @@ fun ServerScreen(
 fun EulaDialog(onAccept: () -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
     AlertDialog(
-        onDismissRequest = onDismiss,
+        // Non-dismissable: tapping outside or pressing back does nothing.
+        onDismissRequest = { /* mandatory — cannot be dismissed */ },
         containerColor = MaterialTheme.colorScheme.surface,
         title = { Text("Accept Minecraft EULA", fontWeight = FontWeight.Bold) },
         text = {
@@ -378,11 +386,6 @@ fun EulaDialog(onAccept: () -> Unit, onDismiss: () -> Unit) {
         confirmButton = {
             TextButton(onClick = onAccept) {
                 Text("ACCEPT", fontWeight = FontWeight.ExtraBold, color = PocketColors.Primary)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("CANCEL")
             }
         }
     )

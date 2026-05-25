@@ -192,6 +192,7 @@ class RelayManager(private val context: Context) {
 
         bedrockTxJob?.cancel()
         bedrockTxJob = poolScope.launch(Dispatchers.IO) {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
             var currentSocket: java.net.Socket? = null
             var outStream: java.io.BufferedOutputStream? = null
 
@@ -748,6 +749,7 @@ class RelayManager(private val context: Context) {
     }
 
     private suspend fun bridgeBedrockConnection(relaySocket: Socket, firstByte: Int) {
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
         android.util.Log.i("RelayManager", "Bedrock UDP bridge ACTIVE via TCP tunnel.")
         android.util.Log.d(
             "RelayManager",

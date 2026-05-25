@@ -86,7 +86,7 @@ fun FilesScreen(
                     Text(text = "\uD83C\uDF0D", fontSize = 36.sp)
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = stateHolder.config.worldName,
+                            text = stateHolder.activeWorld,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 18.sp
                         )
@@ -294,13 +294,13 @@ fun FilesScreen(
             ) {
                 Text(text = "Delete Active World?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                 Text(
-                    text = "This will permanently delete ${stateHolder.config.worldName} and switch to another saved world if one exists.",
+                    text = "This will permanently delete ${stateHolder.activeWorld} and switch to another saved world if one exists.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 TextButton(
                     onClick = {
                         scope.launch {
-                            onMessage(stateHolder.deleteWorld(stateHolder.config.worldName))
+                            onMessage(stateHolder.deleteWorld(stateHolder.activeWorld))
                             deleteWorldSheetState.hide()
                             showDeleteWorldDialog = false
                         }

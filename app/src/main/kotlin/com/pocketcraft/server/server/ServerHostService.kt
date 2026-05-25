@@ -54,6 +54,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
+import androidx.annotation.Keep
 
 class ServerHostService : Service() {
 
@@ -70,6 +71,7 @@ class ServerHostService : Service() {
     private var currentWorldName: String? = null
     private var serverProcess: java.lang.Process? = null
     private var isLaunching = false
+    private var launchJob: kotlinx.coroutines.Job? = null
     private var isNewWorld = false
     private var logcatThread: Thread? = null
     private var logTailThread: Thread? = null
@@ -217,7 +219,7 @@ class ServerHostService : Service() {
 
 
 
-        serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        launchJob = serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             migrateLegacyStorageIfNeeded(versionId, worldName)
             val configRepo = com.pocketcraft.server.data.repository.ServerConfigRepository(applicationContext)
             val config = configRepo.loadConfig()
@@ -374,11 +376,16 @@ class ServerHostService : Service() {
 
     private fun stopServer() {
         if (!stopInProgress.compareAndSet(false, true)) return
+        launchJob?.cancel()
+        launchJob = null
         serverReadyFallbackJob?.cancel()
         serverReadyFallbackJob = null
         CoroutineScope(Dispatchers.IO).launch {
             val inProcessRuntime = !ServerLauncher.hasActiveExternalProcess()
             try {
+                // Start the grace period timer before we attempt any blocking RCON commands.
+                val deadline = SystemClock.elapsedRealtime() + STOP_GRACE_PERIOD_MS
+
                 if (inProcessRuntime) {
                     // Native in-process JVM has no Process handle.
                     // Signal the companion plugin to perform graceful shutdown first.
@@ -398,7 +405,6 @@ class ServerHostService : Service() {
                 }
 
                 // Keep shutdown responsive; the app already requested a save before stopping.
-                val deadline = SystemClock.elapsedRealtime() + STOP_GRACE_PERIOD_MS
                 while (SystemClock.elapsedRealtime() < deadline) {
                     if (!isLaunching) { // isLaunching is set to false in onStopped
                         break
@@ -447,8 +453,8 @@ class ServerHostService : Service() {
                     android.util.Log.e("PocketCraft", "Error stopping foreground: ${e.message}")
                 }
 
-                if (inProcessRuntime && isLaunching) {
-                    android.util.Log.e("PocketCraft", "Server JVM thread did not exit after ${STOP_GRACE_PERIOD_MS}ms stop grace period. Force killing :server process.")
+                if (inProcessRuntime) {
+                    android.util.Log.d("PocketCraft", "In-process runtime stopped. Killing :server process to ensure clean resource release.")
                     stopSelf()
                     android.os.Process.killProcess(android.os.Process.myPid())
                 } else {
@@ -810,6 +816,7 @@ class ServerHostService : Service() {
         }.getOrDefault("world")
     }
 
+    @Keep
     private fun looksLikeServerReady(line: String): Boolean {
         val normalized = line.lowercase()
         return normalized.contains("done (") &&
@@ -948,20 +955,34 @@ class ServerHostService : Service() {
         }
     }
 
+    @Keep
     private fun onServerReady() {
-        currentVersionId?.let(::onRelayReadyToStart)
-        setServerReadyState(true)
-        serverReadyFallbackJob?.cancel()
-        serverReadyFallbackJob = null
-
         if (serverReadyHandled.getAndSet(true)) {
             android.util.Log.d("ServerHostService", "onServerReady: Ready state already handled, skipping.")
             return
         }
 
+        currentVersionId?.let(::onRelayReadyToStart)
+        setServerReadyState(true)
+        serverReadyFallbackJob?.cancel()
+        serverReadyFallbackJob = null
+
         val versionId = currentVersionId ?: return
-        
-        // Show "Server is Online" notification once with sound
+
+        // 1. Update disk state FIRST so UI refreshes read the correct value BEFORE the broadcast is received
+        persistRuntimeState(applicationContext, versionId, activeWorldNameOrDefault(), RUNTIME_STATE_RUNNING)
+
+        // 2. Broadcast a direct server-ready event so the UI can transition to ONLINE
+        // without depending on log-parsing, which may be affected by R8 in release builds.
+        val readyIntent = Intent(ACTION_SERVER_EVENT).apply {
+            setPackage(packageName)
+            putExtra(EXTRA_VERSION_ID, versionId)
+            putExtra(EXTRA_EVENT_TYPE, EVENT_SERVER_READY)
+        }
+        sendBroadcast(readyIntent)
+        android.util.Log.d("ServerHostService", "onServerReady: Sent EVENT_SERVER_READY broadcast for $versionId")
+
+        // 3. Show "Server is Online" notification once with sound
         if (!serverReadyNotificationShown) {
             serverReadyNotificationShown = true
             val notificationText = ServerStage.RUNNING.notificationText
@@ -975,7 +996,6 @@ class ServerHostService : Service() {
 
         autoRecoverAttempts = 0
         autoRecoverWindowStartMs = 0L
-        currentVersionId?.let { persistRuntimeState(applicationContext, it, activeWorldNameOrDefault(), RUNTIME_STATE_RUNNING) }
     }
 
     private fun scheduleServerReadyFallback(versionId: String) {
@@ -998,6 +1018,7 @@ class ServerHostService : Service() {
         }
     }
 
+    @Keep
     private fun setServerReadyState(ready: Boolean) {
         serviceScope.launch {
             _serverReadyState.value = ready
@@ -1005,27 +1026,7 @@ class ServerHostService : Service() {
     }
 
     private fun shouldScheduleAutoRecover(versionId: String): Boolean {
-        if (!autoRestartEnabled) return false
-        if (stopReason == "user") return false
-        if (versionId.isBlank()) return false
-
-        val now = System.currentTimeMillis()
-        if (autoRecoverWindowStartMs == 0L || (now - autoRecoverWindowStartMs) > AUTO_RECOVER_WINDOW_MS) {
-            autoRecoverWindowStartMs = now
-            autoRecoverAttempts = 0
-        }
-
-        if (autoRecoverAttempts >= AUTO_RECOVER_MAX_ATTEMPTS) {
-            sendEvent(
-                versionId,
-                EVENT_ERROR,
-                "[PocketCraft] Auto-recovery limit reached. Please reduce plugins/load before restarting again."
-            )
-            return false
-        }
-
-        autoRecoverAttempts += 1
-        return true
+        return false
     }
 
     private fun acquireWakeLock() {
@@ -1116,9 +1117,16 @@ class ServerHostService : Service() {
 
     private fun isEulaAccepted(worldName: String): Boolean {
         val prefs = AppPreferences(applicationContext)
-        ServerFileManager.prepareEula(applicationContext, worldName)
+        // If the user has already accepted the EULA globally, write the file for
+        // this world (if missing) and proceed without asking again.
+        if (prefs.eulaAccepted) {
+            ServerFileManager.prepareEula(applicationContext, worldName)
+            return true
+        }
+        // First-time check: see if the file was accepted externally (e.g. manual import).
         val accepted = ServerFileManager.isEulaAccepted(applicationContext, worldName)
-        if (accepted && !prefs.eulaAccepted) {
+        if (accepted) {
+            // Promote the file acceptance to the preference so we never ask again.
             prefs.eulaAccepted = true
         }
         return accepted
@@ -1184,7 +1192,7 @@ class ServerHostService : Service() {
         val worldDir = java.io.File(serverDirPre, resolveConfiguredLevelName(serverDirPre))
         isNewWorld = !worldDir.exists()
 
-        serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        launchJob = serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             migrateLegacyStorageIfNeeded(versionId, worldName)
             val configRepo = com.pocketcraft.server.data.repository.ServerConfigRepository(applicationContext)
             val config = configRepo.loadConfig()
@@ -1511,7 +1519,7 @@ class ServerHostService : Service() {
         private const val NOTIFICATION_ID = 1111
         private const val NOTIFICATION_UPDATE_INTERVAL_MS = 2500L
         private const val IMPORTANT_NOTIFICATION_UPDATE_INTERVAL_MS = 750L
-        private const val STOP_GRACE_PERIOD_MS = 8_000L
+        private const val STOP_GRACE_PERIOD_MS = 15_000L
 
         const val ACTION_START = "com.pocketcraft.server.action.START_SERVER"
         const val ACTION_STOP = "com.pocketcraft.server.action.STOP_SERVER"
@@ -1535,6 +1543,7 @@ class ServerHostService : Service() {
         const val EVENT_CHUNKS_LOADING = "chunks_loading"
         const val EVENT_CHUNKY_PROGRESS = "chunky_progress"
         const val EXTRA_CHUNKY_PERCENT = "chunky_percent"
+        const val EVENT_SERVER_READY = "server_ready"
         private const val PREFS_NAME = "pocketcraft_runtime_state"
         private const val KEY_ACTIVE_VERSION = "active_version"
         private const val KEY_ACTIVE_WORLD = "active_world"
@@ -1545,7 +1554,9 @@ class ServerHostService : Service() {
         const val RUNTIME_STATE_OFFLINE = "offline"
         const val RUNTIME_STATE_STARTING = "starting"
         const val RUNTIME_STATE_RUNNING = "running"
+        @Keep
         private val _serverReadyState = MutableStateFlow(false)
+        @Keep
         val serverReadyState: StateFlow<Boolean> = _serverReadyState.asStateFlow()
 
         fun start(context: Context, versionId: String, worldName: String) {

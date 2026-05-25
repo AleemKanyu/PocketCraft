@@ -29,6 +29,7 @@ data class ServerConfig(
     val spawnNpcs: Boolean = true,
     val hardcore: Boolean = false,
     val maxRamMb: Int = 1024,
+    val ramMode: String = "low",
     // Network settings
     val serverIp: String = "",
     val queryPort: Int = 25565,
