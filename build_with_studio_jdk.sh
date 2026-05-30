@@ -26,8 +26,11 @@ case "$MODE" in
   release)
     TASK=":app:assembleRelease"
     ;;
+  install-release)
+    TASK=":app:installRelease"
+    ;;
   *)
-    echo "Usage: ./build_with_studio_jdk.sh [apk|install|release] [extra gradle args...]"
+    echo "Usage: ./build_with_studio_jdk.sh [apk|install|release|install-release] [extra gradle args...]"
     exit 1
     ;;
 esac

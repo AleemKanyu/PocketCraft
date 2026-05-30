@@ -106,13 +106,13 @@ class ServerLauncher(private val context: Context) {
         val maxAllowedRam = (totalRam * 0.90).toInt().coerceAtLeast(1024)
         
         val maxRamMb = when (ramModeFromProps) {
-            "low" -> 512
+            "low" -> if (totalRam >= 6000) 2048 else if (totalRam >= 4000) 1536 else 1024
             "full" -> maxAllowedRam
             "manual" -> maxRamMbFromProps.coerceIn(512, maxAllowedRam)
             else -> 1024
         }
         val minRamMb = when (ramModeFromProps) {
-            "low" -> 256
+            "low" -> if (totalRam >= 6000) 1024 else if (totalRam >= 4000) 768 else 512
             "full" -> maxAllowedRam
             "manual" -> maxRamMbFromProps.coerceIn(512, maxAllowedRam)
             else -> 512
@@ -458,7 +458,7 @@ class ServerLauncher(private val context: Context) {
             onOutput("[PocketCraft] Flight Mode active: enabling allow-flight.")
         }
 
-        val tunedCompression = -1
+        val tunedCompression = ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD
         val tunedEntityBroadcast = when {
             currentEntityBroadcast == null -> ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
             currentEntityBroadcast <= 0 -> ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT

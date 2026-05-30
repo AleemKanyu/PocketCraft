@@ -1,11 +1,12 @@
 #!/bin/bash
 cd "$(dirname "$0")" || exit 1
-echo "Building PocketCraft..."
-./gradlew :app:installDebug --no-daemon --console=plain
-if [ $? -eq 0 ]; then
-    echo "✓ Build and install successful!"
-    adb shell dumpsys package com.pocketcraft.server | grep -E "versionName|lastUpdateTime"
+
+MODE="${1:-debug}"
+
+if [ "$MODE" = "release" ]; then
+    echo "Building and installing PocketCraft Release (optimized)..."
+    ./build_with_studio_jdk.sh install-release
 else
-    echo "✗ Build failed"
-    exit 1
+    echo "Building and installing PocketCraft Debug..."
+    ./build_with_studio_jdk.sh install
 fi

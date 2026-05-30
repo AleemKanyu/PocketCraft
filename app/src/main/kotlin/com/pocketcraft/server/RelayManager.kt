@@ -70,7 +70,9 @@ class RelayManager(private val context: Context) {
     private var bedrockUdpBridge: BedrockUdpBridge? = null
     @Volatile
     private var activeBedrockSocket: Socket? = null
-
+    @Volatile
+    private var activeBedrockOutputStream: java.io.OutputStream? = null
+    private val bedrockWriteLock = Any()
 
 
     private val poolTargetSize = AtomicInteger(INITIAL_POOL_SIZE)
@@ -198,19 +200,20 @@ class RelayManager(private val context: Context) {
         bedrockUdpBridge = BedrockUdpBridge(
             geyserHostProvider = { "127.0.0.1" }
         ) { frame ->
-            val socket = activeBedrockSocket
-            if (socket != null && !socket.isClosed) {
-                try {
-                    val out = socket.getOutputStream()
-                    synchronized(out) {
+            // Synchronize on the stable bedrockWriteLock — NOT on getOutputStream() which
+            // returns a new reference object each call, making synchronized() a no-op and
+            // allowing multiple BedrockUDP-* threads to interleave writes and corrupt framing.
+            synchronized(bedrockWriteLock) {
+                val out = activeBedrockOutputStream
+                if (out != null) {
+                    try {
                         out.write(frame)
                         out.flush()
+                    } catch (e: java.io.IOException) {
+                        android.util.Log.e("RelayManager", "Bedrock socket write IO error: ${e.message}")
+                    } catch (e: Exception) {
+                        android.util.Log.e("RelayManager", "Failed to send Bedrock response synchronously: ${e.message}")
                     }
-                } catch (e: java.io.IOException) {
-                    // If socket write failed, we shouldn't log excessive stacktrace
-                    android.util.Log.e("RelayManager", "Bedrock socket write IO error: ${e.message}")
-                } catch (e: Exception) {
-                    android.util.Log.e("RelayManager", "Failed to send Bedrock response synchronously: ${e.message}")
                 }
             }
         }
@@ -221,6 +224,7 @@ class RelayManager(private val context: Context) {
         bedrockUdpBridge?.stop()
         bedrockUdpBridge = null
         activeBedrockSocket = null
+        synchronized(bedrockWriteLock) { activeBedrockOutputStream = null }
     }
 
     /**
@@ -706,6 +710,7 @@ class RelayManager(private val context: Context) {
             "Active Bedrock relay socket assigned: remote=${relaySocket.inetAddress?.hostAddress}:${relaySocket.port}, local=${relaySocket.localAddress?.hostAddress}:${relaySocket.localPort}"
         )
         activeBedrockSocket = relaySocket
+        activeBedrockOutputStream = relaySocket.getOutputStream()
         var handedOffToJavaBridge = false
         
         try {
@@ -802,6 +807,7 @@ class RelayManager(private val context: Context) {
                     "Bedrock relay socket closed: remote=${relaySocket.inetAddress?.hostAddress}:${relaySocket.port}, local=${relaySocket.localAddress?.hostAddress}:${relaySocket.localPort}"
                 )
                 activeBedrockSocket = null
+                synchronized(bedrockWriteLock) { activeBedrockOutputStream = null }
             }
             if (!handedOffToJavaBridge) {
                 android.util.Log.d("RelayManager", "Closing Bedrock relay socket after bridge loop exit.")
@@ -830,7 +836,8 @@ class RelayManager(private val context: Context) {
 
         android.util.Log.i("RelayManager", "Bridge ACTIVE: Relay <-> Local:$localPort")
 
-        val relayToLocal = poolScope.launch(Dispatchers.IO) {
+        val relayToLocalThread = Thread {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
             var totalBytes = 0L
             try {
                 val output = localSocket.getOutputStream()
@@ -843,7 +850,6 @@ class RelayManager(private val context: Context) {
                 // Continue streaming normally
                 val buffer = ByteArray(PLAYER_BRIDGE_BUFFER_SIZE)
                 var bytesRead: Int
-                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
 
                 while (true) {
                     bytesRead = try { relayInput.read(buffer) } catch (e: Exception) { -1 }
@@ -865,19 +871,21 @@ class RelayManager(private val context: Context) {
             } catch (e: Exception) {
                 android.util.Log.e("RelayManager", "RelayToLocal error: ${e.message}")
             } finally {
-                // Graceful half-close to allow pending data to finish
-                runCatching { localSocket.shutdownOutput() }
+                runCatching { localSocket.close() }
+                runCatching { relaySocket.close() }
             }
         }
+        relayToLocalThread.name = "JavaRelayToLocal"
+        relayToLocalThread.priority = Thread.MAX_PRIORITY
 
-        val localToRelay = poolScope.launch(Dispatchers.IO) {
+        val localToRelayThread = Thread {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
             var totalBytes = 0L
             try {
                 val input = localSocket.getInputStream()
                 val output = relaySocket.getOutputStream()
                 val buffer = ByteArray(PLAYER_BRIDGE_BUFFER_SIZE)
                 var bytesRead: Int
-                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
 
                 while (true) {
                     bytesRead = try { input.read(buffer) } catch (e: Exception) { -1 }
@@ -898,14 +906,23 @@ class RelayManager(private val context: Context) {
             } catch (e: Exception) {
                 android.util.Log.e("RelayManager", "LocalToRelay error: ${e.message}")
             } finally {
-                // Graceful half-close so the relay proxy flushes completely to client
-                runCatching { relaySocket.shutdownOutput() }
+                runCatching { localSocket.close() }
+                runCatching { relaySocket.close() }
             }
         }
+        localToRelayThread.name = "JavaLocalToRelay"
+        localToRelayThread.priority = Thread.MAX_PRIORITY
+
+        relayToLocalThread.start()
+        localToRelayThread.start()
 
         poolScope.launch(Dispatchers.IO) {
-            relayToLocal.join()
-            localToRelay.join()
+            try {
+                relayToLocalThread.join()
+            } catch (_: Exception) {}
+            try {
+                localToRelayThread.join()
+            } catch (_: Exception) {}
             runCatching { localSocket.close() }
             runCatching { relaySocket.close() }
         }

@@ -763,10 +763,10 @@ function startUserUdpSocket(userId, assignedPort, getPhoneSocket) {
   const udpSock = dgram.createSocket('udp4');
   const clientMap = new Map();
   bedrockClientMap.set(userId, clientMap);
-  const { buildPong, getMotd } = require('./bedrock-ping');
+  const { buildPong, getMotd, isRakNetPing } = require('./bedrock-ping');
 
   udpSock.on('message', (msg, rinfo) => {
-    if (msg[0] === 1) {
+    if (isRakNetPing(msg)) {
       try {
         const pingTime = msg.readBigUInt64BE(1);
         const pong = buildPong(pingTime, getMotd(assignedPort));

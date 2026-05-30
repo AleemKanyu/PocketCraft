@@ -101,7 +101,7 @@ class BedrockUdpBridge(
 
                         onResponse(frame)
                     } catch (e: SocketTimeoutException) {
-                        // Loop back to check running
+                        break
                     } catch (e: PortUnreachableException) {
                         try { Thread.sleep(1000) } catch (_: InterruptedException) { break }
                     } catch (e: Exception) {

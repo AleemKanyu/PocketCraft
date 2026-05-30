@@ -2,6 +2,7 @@ package com.pocketcraft.server.server
 
 import android.util.Log
 import com.pocketcraft.server.data.model.ServerConfig
+import com.pocketcraft.server.service.ServerPropertiesHelper
 import java.io.File
 import java.util.Properties
 
@@ -94,7 +95,7 @@ object ServerPropertiesWriter {
         props["generate-structures"] = prefs.generateStructures.toString()
         props["level-type"] = prefs.levelType
         props["server-ip"] = "0.0.0.0"
-        props["network-compression-threshold"] = "-1"
+        props["network-compression-threshold"] = ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD.toString()
         props["sync-chunk-writes"] = "false"
         props["max-tick-time"] = "60000"
         props["enable-rcon"] = "true"

@@ -122,6 +122,11 @@ static void reset_signal_handlers(void) {
   memset(&clean_action, 0, sizeof(clean_action));
 
   for (int signal_id = SIGHUP; signal_id < NSIG; signal_id++) {
+    // Skip real-time signals (signals >= 32, like 34, 35) used by Android ART for GC and thread suspension.
+    // Resetting them causes Dalvik/ART GC pauses or thread suspensions to kill the process with signal 34.
+    if (signal_id >= 32) continue;
+    if (signal_id == SIGKILL || signal_id == SIGSTOP) continue;
+
     clean_action.sa_handler = (signal_id == SIGSEGV) ? SIG_IGN : SIG_DFL;
     sigaction(signal_id, &clean_action, NULL);
   }
