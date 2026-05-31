@@ -57,6 +57,9 @@ import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import androidx.annotation.Keep
 
 class ServerHostService : Service() {
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(com.pocketcraft.server.util.LocaleUtils.wrapContext(newBase))
+    }
 
     private enum class ServerStage(val notificationText: String) {
         DOWNLOADING_SERVER("Downloading server..."),

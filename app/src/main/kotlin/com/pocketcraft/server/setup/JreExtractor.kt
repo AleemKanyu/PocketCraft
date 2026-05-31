@@ -35,14 +35,27 @@ object JreExtractor {
         displayName = "Java 25"
     )
 
+    /** Last-resort fallback used in internal error paths. */
     private val DEFAULT_RUNTIME = RUNTIME_JAVA_21
+
+    /** Returns the best available runtime for the current device ABI. */
+    fun defaultRuntimeForDevice(): RuntimeSpec {
+        val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
+        return if (abi.contains("arm64") || abi.contains("aarch64")) {
+            // JRE 25 is 16 KB page-aligned — use it on all modern arm64 devices.
+            RUNTIME_JAVA_25
+        } else {
+            // JRE 25 only ships arm64 binaries; fall back to JRE 21 for 32-bit.
+            RUNTIME_JAVA_21
+        }
+    }
 
     fun runtimeForVersion(versionId: String): RuntimeSpec {
         val major = parseMajorVersion(versionId)
         return if (major != null && major >= 26) {
             RUNTIME_JAVA_25
         } else {
-            DEFAULT_RUNTIME
+            defaultRuntimeForDevice()
         }
     }
 
@@ -51,7 +64,7 @@ object JreExtractor {
             .firstOrNull { isExtracted(context, it) }
     }
 
-    fun getJreDir(context: Context, runtime: RuntimeSpec = DEFAULT_RUNTIME): File {
+    fun getJreDir(context: Context, runtime: RuntimeSpec = defaultRuntimeForDevice()): File {
         val base = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             context.codeCacheDir
         } else {
@@ -60,10 +73,10 @@ object JreExtractor {
         return File(base, runtime.extractedDirName)
     }
 
-    fun getJavaBinary(context: Context, runtime: RuntimeSpec = DEFAULT_RUNTIME): File =
+    fun getJavaBinary(context: Context, runtime: RuntimeSpec = defaultRuntimeForDevice()): File =
         File(getJreDir(context, runtime), "bin/java")
 
-    fun isExtracted(context: Context, runtime: RuntimeSpec = DEFAULT_RUNTIME): Boolean {
+    fun isExtracted(context: Context, runtime: RuntimeSpec = defaultRuntimeForDevice()): Boolean {
         val jreDir = getJreDir(context, runtime)
         val marker = File(context.filesDir, runtime.markerName)
         return marker.exists() && hasRequiredRuntimeFiles(jreDir)
@@ -71,7 +84,7 @@ object JreExtractor {
 
     fun extractIfNeeded(
         context: Context,
-        runtime: RuntimeSpec = DEFAULT_RUNTIME,
+        runtime: RuntimeSpec = defaultRuntimeForDevice(),
         onProgress: (Int, String) -> Unit = { _, _ -> }
     ) {
         val jreDir = getJreDir(context, runtime)

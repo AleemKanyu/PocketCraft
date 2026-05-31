@@ -139,6 +139,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean("auto_restart", false)
         set(value) = prefs.edit().putBoolean("auto_restart", value).apply()
 
+    var forceExternalJvm: Boolean
+        get() = prefs.getBoolean("force_external_jvm", false)
+        set(value) = prefs.edit().putBoolean("force_external_jvm", value).apply()
+
     var selectedWorldPath: String?
         get() = prefs.getString("selected_world_path", null)
         set(value) = prefs.edit().putString("selected_world_path", value).apply()
@@ -214,6 +218,11 @@ class AppPreferences(context: Context) {
     var lastLaunchedAppVersion: String
         get() = prefs.getString("last_launched_app_version", "").orEmpty()
         set(value) = prefs.edit().putString("last_launched_app_version", value).apply()
+
+    var appLanguage: String
+        get() = prefs.getString("app_language", "system").orEmpty()
+        set(value) = prefs.edit().putString("app_language", value).apply()
+
 
     var pendingFeedbackPromptTitle: String
         get() = prefs.getString("pending_feedback_prompt_title", "").orEmpty()

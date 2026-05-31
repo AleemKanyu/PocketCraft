@@ -43,6 +43,10 @@ import com.pocketcraft.server.ui.components.UpdatePopup
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(com.pocketcraft.server.util.LocaleUtils.wrapContext(newBase))
+    }
+
     companion object {
         var isAppInForeground = false
     }

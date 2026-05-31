@@ -441,6 +441,7 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   "-Dorg.jline.terminal.jni=false",
                   "-Dorg.jline.terminal.dumb=true",
                   "-Djava.awt.headless=true",
+                  "-Djdk.lang.Process.launchMechanism=FORK",
                   lib_path_opt,
                   "-DPaper.IgnoreJavaVersion=true",
                   "-Dsun.zip.disableMemoryMapping=true",

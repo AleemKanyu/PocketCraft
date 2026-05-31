@@ -242,6 +242,10 @@ private fun onboardingPhoneInnerBrush(): Brush = if (pocketIsDarkTheme()) {
 
 @AndroidEntryPoint
 class OnboardingActivity : ComponentActivity() {
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(com.pocketcraft.server.util.LocaleUtils.wrapContext(newBase))
+    }
+
     private val preferences by lazy { AppPreferences(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {

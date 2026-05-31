@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">服务器正在运行</string>
+    <string name="server_stopped">服务器已停止</string>
+    <string name="server_starting">服务器正在启动…</string>
+    <string name="start_server">启动服务器</string>
+    <string name="stop_server">停止服务器</string>
+    <string name="notification_channel_name">服务器状态</string>
+    <string name="notification_channel_desc">显示服务器运行状态和控制选项</string>
+    <string name="tap_to_copy">点击复制 IP</string>
+    <string name="copied">IP已复制到剪贴板</string>
+    <string name="how_to_connect">如何连接</string>
+    <string name="send_command">发送命令</string>
+    <string name="clear_log">清除日志</string>
+    <string name="apply_restart">应用并重启</string>
+    <string name="delete_world">删除世界数据</string>
+    <string name="delete_world_confirm">这将永久删除世界。您确定吗？</string>
+    <string name="thermal_warning">警告：设备正在过热 — 请考虑停止服务器</string>
+    <string name="ram_warning">警告：检测到内存不足 — 性能可能会下降</string>
+    <string name="players_online">%1$d/%2$d 玩家</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">运行时间: %1$s</string>
+</resources>

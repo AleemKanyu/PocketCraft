@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Сервер запущен</string>
+    <string name="server_stopped">Сервер остановлен</string>
+    <string name="server_starting">Запуск сервера…</string>
+    <string name="start_server">Запустить сервер</string>
+    <string name="stop_server">Остановить сервер</string>
+    <string name="notification_channel_name">Статус сервера</string>
+    <string name="notification_channel_desc">Показывает статус работающего сервера и управление</string>
+    <string name="tap_to_copy">Нажмите для копирования IP</string>
+    <string name="copied">IP скопирован в буфер обмена</string>
+    <string name="how_to_connect">Как подключиться</string>
+    <string name="send_command">Отправить команду</string>
+    <string name="clear_log">Очистить лог</string>
+    <string name="apply_restart">Применить и перезапустить</string>
+    <string name="delete_world">Удалить данные мира</string>
+    <string name="delete_world_confirm">Это навсегда удалит мир. Вы уверены?</string>
+    <string name="thermal_warning">Предупреждение: Устройство перегревается — рекомендуется остановить сервер</string>
+    <string name="ram_warning">Предупреждение: Недостаточно оперативной памяти — производительность может быть снижена</string>
+    <string name="players_online">Игроков: %1$d/%2$d</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Время работы: %1$s</string>
+</resources>

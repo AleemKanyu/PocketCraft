@@ -181,24 +181,69 @@ class ServerLauncher(private val context: Context) {
         Thread {
             var result = -1
             try {
-                result = runCatching {
-                    onOutput("[PocketCraft] Launching in-process JVM on Android ${Build.VERSION.RELEASE}.")
-                    NativeLauncher.launchJVM(
+                val forceExternal = AppPreferences(context).forceExternalJvm
+                val isRedmiXiaomiAndroid16 = run {
+                    val brand = Build.BRAND.orEmpty().lowercase()
+                    val manufacturer = Build.MANUFACTURER.orEmpty().lowercase()
+                    val isRedmi = brand.contains("redmi") || brand.contains("xiaomi") || brand.contains("poco") ||
+                                  manufacturer.contains("redmi") || manufacturer.contains("xiaomi") || manufacturer.contains("poco")
+                    isRedmi && Build.VERSION.SDK_INT >= 36
+                }
+
+                if (forceExternal || isRedmiXiaomiAndroid16) {
+                    onOutput("[PocketCraft] Routing to out-of-process JVM execution (ForceExternal=$forceExternal, RedmiAndroid16=$isRedmiXiaomiAndroid16)")
+                    result = launchExternalJvm(
+                        javaBin = javaBin,
                         jrePath = jrePath,
                         jarPath = jarPath,
                         serverDir = serverDir,
                         tmpDir = tmpDir,
-                        nativeLibDir = context.applicationInfo.nativeLibraryDir,
-                        shimDir = shimDir.absolutePath,
+                        shimDir = shimDir,
                         minRamMb = minRamMb,
                         maxRamMb = maxRamMb,
-                        serverType = serverType.name,
-                        port = resolveServerPort(worldName)
+                        worldName = worldName,
+                        onOutput = onOutput,
+                        onError = onError
                     )
-                }.getOrElse {
-                    onOutput("[PocketCraft] Failed to launch in-process JVM: ${it.message}")
-                    -1
+                } else {
+                    result = runCatching {
+                        onOutput("[PocketCraft] Launching in-process JVM on Android ${Build.VERSION.RELEASE}.")
+                        NativeLauncher.launchJVM(
+                            jrePath = jrePath,
+                            jarPath = jarPath,
+                            serverDir = serverDir,
+                            tmpDir = tmpDir,
+                            nativeLibDir = context.applicationInfo.nativeLibraryDir,
+                            shimDir = shimDir.absolutePath,
+                            minRamMb = minRamMb,
+                            maxRamMb = maxRamMb,
+                            serverType = serverType.name,
+                            port = resolveServerPort(worldName)
+                        )
+                    }.getOrElse {
+                        onOutput("[PocketCraft] Failed to launch in-process JVM: ${it.message}")
+                        -1
+                    }
+
+                    // Fallback to external JVM if JNI returns failure (but didn't hard-segfault/terminate the app)
+                    if (result != 0) {
+                        onOutput("[PocketCraft] In-process JVM failed with code $result. Trying out-of-process JVM fallback...")
+                        result = launchExternalJvm(
+                            javaBin = javaBin,
+                            jrePath = jrePath,
+                            jarPath = jarPath,
+                            serverDir = serverDir,
+                            tmpDir = tmpDir,
+                            shimDir = shimDir,
+                            minRamMb = minRamMb,
+                            maxRamMb = maxRamMb,
+                            worldName = worldName,
+                            onOutput = onOutput,
+                            onError = onError
+                        )
+                    }
                 }
+
                 if (result != 0) {
                     reportHotspotCrash(serverDir, onError)
                     onError("[PocketCraft] JVM exited with code $result")

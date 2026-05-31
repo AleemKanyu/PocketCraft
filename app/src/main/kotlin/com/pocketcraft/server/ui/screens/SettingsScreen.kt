@@ -74,7 +74,8 @@ data class SettingsState(
     val levelType: String = "minecraft:normal",
     val autoRestartEnabled: Boolean = false,
     val maxPowerEnabled: Boolean = false,
-    val optimizationPreset: String = "none"
+    val optimizationPreset: String = "none",
+    val forceExternalJvm: Boolean = false
 ) {
     fun isDifferentFrom(other: SettingsState): Boolean {
         return config != other.config ||
@@ -84,7 +85,8 @@ data class SettingsState(
                normalizeWorldType(levelType) != normalizeWorldType(other.levelType) ||
                autoRestartEnabled != other.autoRestartEnabled ||
                maxPowerEnabled != other.maxPowerEnabled ||
-               optimizationPreset != other.optimizationPreset
+               optimizationPreset != other.optimizationPreset ||
+               forceExternalJvm != other.forceExternalJvm
     }
 }
 
@@ -157,7 +159,8 @@ fun SettingsScreen(
             levelType = normalizeWorldType(stateHolder.readServerProperty("level-type")),
             autoRestartEnabled = preferences.autoRestart,
             maxPowerEnabled = preferences.isMaxPowerMode,
-            optimizationPreset = stateHolder.readOptimizationPreset()
+            optimizationPreset = stateHolder.readOptimizationPreset(),
+            forceExternalJvm = preferences.forceExternalJvm
         )
         if (!hasLoadedInitial || !hasUnsavedChanges) {
             currentState = loadedState
@@ -315,12 +318,14 @@ fun SettingsScreen(
                                             }
                                             preferences.autoRestart = currentState.autoRestartEnabled
                                             preferences.isMaxPowerMode = currentState.maxPowerEnabled
+                                            preferences.forceExternalJvm = currentState.forceExternalJvm
                                             
                                             val savedStateSnapshot = currentState.copy(
                                                 config = nextConfig,
                                                 levelType = normalizedLevelType,
                                                 autoRestartEnabled = currentState.autoRestartEnabled,
-                                                maxPowerEnabled = currentState.maxPowerEnabled
+                                                maxPowerEnabled = currentState.maxPowerEnabled,
+                                                forceExternalJvm = currentState.forceExternalJvm
                                             )
                                             currentState = savedStateSnapshot
                                             savedState = savedStateSnapshot
@@ -712,6 +717,31 @@ fun SettingsScreen(
                         }
                     )
                 }
+                item {
+                    var currentLanguage by remember { mutableStateOf(preferences.appLanguage) }
+                    SettingsDropdownRow(
+                        icon = Icons.Default.Translate,
+                        label = "App Language",
+                        description = "Choose your preferred language",
+                        options = listOf("system", "en", "de", "es", "ru", "zh"),
+                        optionLabels = mapOf(
+                            "system" to "System Default",
+                            "en" to "English (US)",
+                            "de" to "Deutsch (German)",
+                            "es" to "Español (Spanish)",
+                            "ru" to "Русский (Russian)",
+                            "zh" to "简体中文 (Chinese)"
+                        ),
+                        selected = currentLanguage,
+                        onSelected = { selectedLang ->
+                            currentLanguage = selectedLang
+                            preferences.appLanguage = selectedLang
+                            playHaptic()
+                            context.findActivity()?.recreate()
+                        }
+                    )
+                }
+
 
 
                 item { SettingsSection("DEVICE STORAGE", Icons.Default.Storage) }
@@ -819,7 +849,6 @@ fun SettingsScreen(
                 item { SettingsSection("HELP & LINKS", Icons.Default.Help) }
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SettingsLinkRow(icon = Icons.Default.Translate, label = "App Language", description = "Current: English (US)", onClick = { onMessage("More languages coming soon!") })
                         SettingsLinkRow(icon = Icons.Default.Policy, label = "Legal Center", description = "Privacy Policy & Licenses", onClick = onOpenLegalPage)
                         SettingsLinkRow(icon = Icons.Default.BugReport, label = "Report a Bug", description = "Report on our Discord server", onClick = {
                             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.gg/nc7ceYWVfT"))) }
@@ -1345,4 +1374,10 @@ private fun deleteInstalledVersions(
         }
     }
     return deleted
+}
+
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

@@ -63,13 +63,14 @@ android {
     namespace = "com.pocketcraft.server"
     compileSdk = 35
     buildToolsVersion = "35.0.0"
+    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "com.pocketcraft.server"
         minSdk = 26
         targetSdk = 35
         versionCode = autoVersionCode
-        versionName = "1.1.0"
+        versionName = "1.2.0"
 
         buildConfigField("String", "RELAY_PUBLIC_DOMAIN", "\"joinmc.link\"")
         buildConfigField("String", "GITHUB_REPO_OWNER", "\"$githubRepoOwner\"")
@@ -83,6 +84,7 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags += ""
+                arguments += "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
             }
         }
 
@@ -215,4 +217,5 @@ dependencies {
     implementation("com.google.firebase:firebase-inappmessaging-display-ktx")
 
     implementation("com.google.zxing:core:3.5.3")
+    implementation("androidx.graphics:graphics-path:1.0.1")
 }
