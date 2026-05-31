@@ -53,6 +53,7 @@ import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.Monocraft
+import com.pocketcraft.server.util.LocalAppStrings
 import kotlinx.coroutines.launch
 
 @Composable
@@ -62,6 +63,7 @@ fun FilesScreen(
     onChangeVersion: () -> Unit,
     onMessage: (String) -> Unit
 ) {
+    val s = LocalAppStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showSeedDialog by remember { mutableStateOf(false) }
@@ -76,7 +78,7 @@ fun FilesScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            SectionLabel("CURRENT WORLD")
+            SectionLabel(s.filesSectionCurrentWorld)
             Spacer(Modifier.height(4.dp))
             GameCard(modifier = Modifier.fillMaxWidth()) {
                 Row(
@@ -91,7 +93,7 @@ fun FilesScreen(
                             fontSize = 18.sp
                         )
                         Text(
-                            text = "Active folder • ${stateHolder.worldSizeMb}MB",
+                            text = String.format(s.filesActiveFolder, stateHolder.worldSizeMb),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -99,7 +101,7 @@ fun FilesScreen(
                 }
                 Spacer(Modifier.height(14.dp))
                 DuoButton(
-                    text = "DELETE ACTIVE WORLD",
+                    text = s.filesDeleteActiveWorld,
                     onClick = { showDeleteWorldDialog = true },
                     enabled = stateHolder.status == ServerStatus.OFFLINE && stateHolder.worlds.size > 1,
                     variant = DuoButtonVariant.Danger,
@@ -107,7 +109,7 @@ fun FilesScreen(
                 )
                 if (stateHolder.worlds.size <= 1) {
                     Text(
-                        text = "Add another world before deleting this one.",
+                        text = s.filesAddAnotherWorld,
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp)
@@ -115,9 +117,9 @@ fun FilesScreen(
                 }
             }
         }
-        
+
         item {
-            SectionLabel("WORLD SEED")
+            SectionLabel(s.filesSectionSeed)
             Spacer(Modifier.height(4.dp))
             GameCard(modifier = Modifier.fillMaxWidth()) {
                 Row(
@@ -127,21 +129,21 @@ fun FilesScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = stateHolder.config.worldSeed.ifBlank { "Random" },
+                            text = stateHolder.config.worldSeed.ifBlank { s.filesSeedRandom },
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 18.sp
                         )
-                        Text("Seed used for generation", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(s.filesSeedUsedFor, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Row {
                         IconButton(onClick = {
                             stateHolder.copySeedToClipboard()
-                            onMessage("Seed copied to clipboard.")
+                            onMessage(s.filesSeedCopied)
                         }) {
                             Icon(Icons.Filled.ContentCopy, "Copy", tint = PocketColors.PrimaryDark)
                         }
                         IconButton(onClick = { showSeedDialog = true }) {
-                            Text("EDIT", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PocketColors.Primary)
+                            Text(s.filesSeedEdit, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PocketColors.Primary)
                         }
                     }
                 }
@@ -149,7 +151,7 @@ fun FilesScreen(
         }
 
         item {
-            SectionLabel("SERVER CORE")
+            SectionLabel(s.filesSectionCore)
             Spacer(Modifier.height(4.dp))
             GameCard(modifier = Modifier.fillMaxWidth()) {
                 Row(
@@ -166,11 +168,11 @@ fun FilesScreen(
                         Text(text = "\uD83C\uDFAE", fontSize = 28.sp)
                         Column {
                             Text(
-                                text = "Minecraft Java ${stateHolder.runtimeVersionLabel}",
+                                text = String.format(s.filesMinecraftJava, stateHolder.runtimeVersionLabel),
                                 fontWeight = FontWeight.ExtraBold
                             )
                             Text(
-                                text = "Switch or upgrade",
+                                text = s.filesSwitchOrUpgrade,
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -181,7 +183,7 @@ fun FilesScreen(
                         color = PocketColors.PrimaryMuted
                     ) {
                         Text(
-                            text = "CHANGE",
+                            text = s.filesChange,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
                             color = PocketColors.PrimaryDark,
                             fontWeight = FontWeight.ExtraBold,
@@ -194,12 +196,12 @@ fun FilesScreen(
         }
 
         item {
-            SectionLabel("BACKUP & MAINTENANCE")
+            SectionLabel(s.filesSectionBackup)
             Spacer(Modifier.height(4.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionTile(
                     modifier = Modifier.weight(1f),
-                    label = "Quick Backup",
+                    label = s.filesQuickBackup,
                     emoji = "💾",
                     onClick = {
                         scope.launch { onMessage(stateHolder.createBackup()) }
@@ -207,7 +209,7 @@ fun FilesScreen(
                 )
                 ActionTile(
                     modifier = Modifier.weight(1f),
-                    label = "Advanced...",
+                    label = s.filesAdvanced,
                     emoji = "📂",
                     onClick = { /* Could navigate to Worlds page if we passed navigation function */ }
                 )
@@ -233,23 +235,23 @@ fun FilesScreen(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(text = "Set World Seed", fontFamily = Monocraft, fontWeight = FontWeight.ExtraBold)
+                Text(text = s.filesSeedDialogTitle, fontFamily = Monocraft, fontWeight = FontWeight.ExtraBold)
                 Text(
-                    text = "Enter a seed for your world. Leave it empty for a random world.",
+                    text = s.filesSeedDialogDesc,
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 OutlinedTextField(
                     value = seedDraft,
                     onValueChange = { seedDraft = it },
-                    label = { Text("World Seed (optional)") },
+                    label = { Text(s.filesSeedDialogLabel) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = duoTextFieldShape(),
                     colors = duoOutlinedTextFieldColors()
                 )
                 DuoButton(
-                    text = "CONFIRM",
+                    text = s.filesSeedDialogConfirm,
                     onClick = {
                         scope.launch {
                             onMessage(stateHolder.updateSeed(seedDraft))
@@ -268,7 +270,7 @@ fun FilesScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("CANCEL")
+                    Text(s.filesSeedDialogCancel)
                 }
             }
         }
@@ -292,9 +294,9 @@ fun FilesScreen(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(text = "Delete Active World?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text(text = s.filesDeleteWorldTitle, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                 Text(
-                    text = "This will permanently delete ${stateHolder.activeWorld} and switch to another saved world if one exists.",
+                    text = String.format(s.filesDeleteWorldDesc, stateHolder.activeWorld),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 TextButton(
@@ -307,7 +309,7 @@ fun FilesScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("DELETE", color = PocketColors.Offline, fontWeight = FontWeight.Bold)
+                    Text(s.filesDeleteAction, color = PocketColors.Offline, fontWeight = FontWeight.Bold)
                 }
                 TextButton(
                     onClick = {
@@ -318,7 +320,7 @@ fun FilesScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("CANCEL")
+                    Text(s.filesDeleteCancel)
                 }
             }
         }

@@ -139,6 +139,7 @@ import com.pocketcraft.server.ui.theme.pocketWarningIconChipColor
 import com.pocketcraft.server.ui.theme.pocketWarningSurfaceColor
 import com.pocketcraft.server.ui.theme.pocketWarningTitleColor
 import com.pocketcraft.server.util.RamUtils
+import com.pocketcraft.server.util.LocalAppStrings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -467,7 +468,7 @@ fun ConsoleScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     DuoButton(
-                        text = if (stateHolder.isStopping && !stateHolder.isRestarting) "STOPPING..." else "STOP",
+                        text = run { val s = LocalAppStrings.current; if (stateHolder.isStopping && !stateHolder.isRestarting) s.stopping else s.stopServer },
                         onClick = { stateHolder.stopServer() },
                         enabled = !stateHolder.isStopping,
                         variant = DuoButtonVariant.Danger,
@@ -476,7 +477,7 @@ fun ConsoleScreen(
 
                     if (stateHolder.status == ServerStatus.STARTING) {
                         DuoButton(
-                            text = "STARTING...",
+                            text = LocalAppStrings.current.starting,
                             onClick = {},
                             enabled = false,
                             isLoading = true,
@@ -485,7 +486,7 @@ fun ConsoleScreen(
                         )
                     } else {
                         DuoButton(
-                            text = if (stateHolder.isRestarting) "RESTARTING..." else "RESTART",
+                            text = run { val s = LocalAppStrings.current; if (stateHolder.isRestarting) s.restarting else s.restartServer },
                             onClick = {
                                 try {
                                     if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
@@ -507,7 +508,7 @@ fun ConsoleScreen(
                 }
             } else {
                     DuoButton(
-                        text = if (stateHolder.isRestartingCycle) "RESTARTING..." else if (stateHolder.status == ServerStatus.STARTING) "STARTING..." else "START SERVER",
+                        text = run { val s = LocalAppStrings.current; if (stateHolder.isRestartingCycle) s.restarting else if (stateHolder.status == ServerStatus.STARTING) s.starting else s.startServer },
                         onClick = {
                             try {
                                 if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
@@ -581,14 +582,14 @@ fun ConsoleScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "PLAYERS JOINED (${stateHolder.onlinePlayers.size}/${stateHolder.config.maxPlayers})",
+                        text = "${LocalAppStrings.current.players} (${stateHolder.onlinePlayers.size}/${stateHolder.config.maxPlayers})",
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 15.sp,
                         letterSpacing = 0.5.sp
                     )
                     TextButton(onClick = onViewAllPlayers) {
                         Text(
-                            text = "View All",
+                            text = LocalAppStrings.current.tabAllPlayers,
                             color = PocketColors.PrimaryDark,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
@@ -959,7 +960,7 @@ private fun ServerIdentityCard(
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
                             Text(
-                                text = "YOUR SERVER",
+                                text = LocalAppStrings.current.yourServer,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = PocketColors.PrimaryDark,
@@ -1060,7 +1061,7 @@ private fun ServerIdentityCard(
                         )
                         Spacer(modifier = Modifier.width(3.dp))
                                 Text(
-                                    text = if (canChangeWorld) "One tap to swap your world or edit details" else "Stop the server to switch worlds",
+                                    text = if (canChangeWorld) LocalAppStrings.current.tapToSwap else LocalAppStrings.current.stopToSwitch,
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
                             fontWeight = FontWeight.SemiBold
@@ -1665,7 +1666,7 @@ private fun ConsoleCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "CONSOLE",
+                text = LocalAppStrings.current.console,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 12.sp,
                 letterSpacing = 2.sp,
@@ -1690,7 +1691,7 @@ private fun ConsoleCard(
                 }
                 TextButton(onClick = stateHolder::clearLogs) {
                     Text(
-                        text = "Clear",
+                        text = LocalAppStrings.current.clearLog,
                         fontSize = 12.sp,
                         color = PocketColors.PrimaryDark
                     )
@@ -1781,8 +1782,9 @@ private fun RamSettingsCard(
 ) {
     GameCard(modifier = Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            val ramStrings = LocalAppStrings.current
             Text(
-                text = "RAM Allocation",
+                text = ramStrings.ramAllocation,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 15.sp
             )
@@ -1794,7 +1796,7 @@ private fun RamSettingsCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf("low" to "Low", "manual" to "Manual", "full" to "Full").forEach { (mode, label) ->
+                listOf("low" to ramStrings.ramLow, "manual" to ramStrings.ramManual, "full" to ramStrings.ramFull).forEach { (mode, label) ->
                     FilterChip(
                         selected = if (isLocked) false else ramMode == mode,
                         onClick = { if (isEnabled) onRamModeChange(mode) },
@@ -1814,7 +1816,7 @@ private fun RamSettingsCard(
                 "Balanced preset — safe for most devices ($recommendedMb MB)"
             } else {
                 when (ramMode) {
-                    "full" -> "High-performance preset — may cause overheating"
+                    "full" -> ramStrings.ramHighPerf
                     "manual" -> "Custom: ${manualRamMb} MB"
                     else -> "Balanced preset — safe for most devices"
                 }

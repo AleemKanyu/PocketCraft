@@ -64,17 +64,45 @@ import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.R
 import com.pocketcraft.server.ui.theme.PocketColors
 
-enum class PocketTab(
-    val label: String,
-    val icon: ImageVector,
-    val selectedIcon: ImageVector
-) {
-    HOME("Home", Icons.Outlined.Home, Icons.Filled.Home),
-    CONSOLE("Console", Icons.Outlined.Terminal, Icons.Filled.Terminal),
-    PLAYERS("Players", Icons.Outlined.Group, Icons.Filled.Group),
-    STORAGE("Storage", Icons.Outlined.FolderOpen, Icons.Filled.Folder),
-    MODS("Mods", Icons.Outlined.GridView, Icons.Filled.GridView),
-    SETTINGS("Settings", Icons.Outlined.Settings, Icons.Filled.Settings)
+import com.pocketcraft.server.util.LocalAppStrings
+
+enum class PocketTab { HOME, CONSOLE, PLAYERS, STORAGE, MODS, SETTINGS }
+
+val allTabs = listOf(
+    PocketTab.HOME,
+    PocketTab.PLAYERS,
+    PocketTab.STORAGE,
+    PocketTab.MODS,
+    PocketTab.SETTINGS
+)
+
+@Composable
+fun PocketTab.label(): String {
+    val s = LocalAppStrings.current
+    return when (this) {
+        PocketTab.HOME -> s.tabHome
+        PocketTab.CONSOLE -> s.tabHome
+        PocketTab.PLAYERS -> s.tabPlayers
+        PocketTab.STORAGE -> s.tabStorage
+        PocketTab.MODS -> s.tabMods
+        PocketTab.SETTINGS -> s.tabSettings
+    }
+}
+
+fun PocketTab.icon() = when (this) {
+    PocketTab.HOME, PocketTab.CONSOLE -> Icons.Outlined.Home
+    PocketTab.PLAYERS -> Icons.Outlined.Group
+    PocketTab.STORAGE -> Icons.Outlined.FolderOpen
+    PocketTab.MODS -> Icons.Outlined.GridView
+    PocketTab.SETTINGS -> Icons.Outlined.Settings
+}
+
+fun PocketTab.selectedIcon() = when (this) {
+    PocketTab.HOME, PocketTab.CONSOLE -> Icons.Filled.Home
+    PocketTab.PLAYERS -> Icons.Filled.Group
+    PocketTab.STORAGE -> Icons.Filled.Folder
+    PocketTab.MODS -> Icons.Filled.GridView
+    PocketTab.SETTINGS -> Icons.Filled.Settings
 }
 
 val bottomNavTabs = listOf(
@@ -269,14 +297,14 @@ fun PocketBottomNav(
                     onClick = { onTabSelected(tab) },
                     icon = {
                         Icon(
-                            imageVector = if (selected) tab.selectedIcon else tab.icon,
-                            contentDescription = tab.label,
+                            imageVector = if (selected) tab.selectedIcon() else tab.icon(),
+                            contentDescription = tab.label(),
                             modifier = Modifier.size(24.dp)
                         )
                     },
                     label = {
                         Text(
-                            text = tab.label,
+                            text = tab.label(),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Medium
                         )

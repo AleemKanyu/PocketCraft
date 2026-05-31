@@ -64,26 +64,32 @@ import com.pocketcraft.server.ui.theme.pocketCardShadowColor
 import com.pocketcraft.server.ui.theme.pocketHighContrastBorderColor
 import kotlinx.coroutines.launch
 import com.pocketcraft.server.ui.components.PocketCraftCard
+import com.pocketcraft.server.util.LocalAppStrings
+import com.pocketcraft.server.util.AppStrings
 import java.util.Locale
 
 private enum class DownloadedContentTab(
-    val label: String,
-    val emptyLabel: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val type: PluginManager.ContentType
 ) {
     MODS(
-        label = "Mods",
-        emptyLabel = "No mods installed yet",
         icon = Icons.Default.Extension,
         type = PluginManager.ContentType.PLUGINS
     ),
     RESOURCE_PACKS(
-        label = "Resource Packs",
-        emptyLabel = "No resource packs installed yet",
         icon = Icons.Default.FolderZip,
         type = PluginManager.ContentType.RESOURCE_PACKS
     )
+}
+
+private fun DownloadedContentTab.label(s: AppStrings) = when (this) {
+    DownloadedContentTab.MODS -> s.mods
+    DownloadedContentTab.RESOURCE_PACKS -> s.resourcePacks
+}
+
+private fun DownloadedContentTab.emptyLabel(s: AppStrings) = when (this) {
+    DownloadedContentTab.MODS -> s.noModsInstalled
+    DownloadedContentTab.RESOURCE_PACKS -> s.noResourcePacksInstalled
 }
 
 @Composable
@@ -96,6 +102,7 @@ fun DownloadedPluginsScreen(
     val cardShadowColor = pocketCardShadowColor()
     val cardBorderColor = pocketHighContrastBorderColor()
     val context = LocalContext.current
+    val s = LocalAppStrings.current
     val scope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) }
     var deleteTarget by remember { mutableStateOf<Plugin?>(null) }
@@ -136,7 +143,7 @@ fun DownloadedPluginsScreen(
             isUploading = false
             result.onSuccess {
                 refresh()
-                onMessage("${currentTab().label.dropLastWhile { it == 's' }} added. Restart the server to apply changes.")
+                onMessage("${currentTab().label(s).dropLastWhile { it == 's' }} added. Restart the server to apply changes.")
             }.onFailure {
                 onMessage(it.message ?: "Could not add file.")
             }
@@ -164,12 +171,12 @@ fun DownloadedPluginsScreen(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Downloaded",
+                    text = s.downloaded,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 20.sp
                 )
                 Text(
-                    text = "Manage installed plugins and resource packs",
+                    text = s.managePluginsDesc,
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -177,7 +184,7 @@ fun DownloadedPluginsScreen(
             Button(onClick = { showAddDialog = true }) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                 Text(
-                    text = "Add",
+                    text = s.add,
                     modifier = Modifier.padding(start = 6.dp),
                     fontWeight = FontWeight.Bold
                 )
@@ -189,7 +196,7 @@ fun DownloadedPluginsScreen(
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },
-                    text = { Text(tab.label) }
+                    text = { Text(tab.label(s)) }
                 )
             }
         }
@@ -197,9 +204,9 @@ fun DownloadedPluginsScreen(
         if (isUploading || isDownloading) {
             Text(
                 text = if (isUploading) {
-                    "Uploading ${currentTab().label.lowercase()}: $uploadProgress%"
+                    "${s.uploading.trimEnd('.')} ${currentTab().label(s).lowercase()}: $uploadProgress%"
                 } else {
-                    "Downloading ${currentTab().label.lowercase()}: $downloadProgress%"
+                    "${s.download} ${currentTab().label(s).lowercase()}: $downloadProgress%"
                 },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                 fontSize = 12.sp,
@@ -237,9 +244,9 @@ fun DownloadedPluginsScreen(
                             tint = PocketColors.Primary,
                             modifier = Modifier.size(40.dp)
                         )
-                        Text(currentTab().emptyLabel, fontWeight = FontWeight.Bold)
+                        Text(currentTab().emptyLabel(s), fontWeight = FontWeight.Bold)
                         Text(
-                            "Use the Add button to import a file, or install one from the discover screen.",
+                            s.useAddButton,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp
                         )
@@ -267,7 +274,7 @@ fun DownloadedPluginsScreen(
                             )
                             if (success) {
                                 refresh()
-                                onMessage("${item.name} ${if (item.enabled) "disabled" else "enabled"}. Restart the server to apply changes.")
+                                onMessage("${item.name} ${if (item.enabled) s.disabled.lowercase() else s.enabled.lowercase()}. Restart the server to apply changes.")
                             } else {
                                 onMessage("Could not update ${item.name}.")
                             }
@@ -297,8 +304,8 @@ fun DownloadedPluginsScreen(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("Delete ${item.name}?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
-                Text("This removes the file from the current server version.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${s.delete} ${item.name}?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text(s.deleteConfirmDesc, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 TextButton(
                     onClick = {
                         val deleted = PluginManager.deleteContent(
@@ -320,7 +327,7 @@ fun DownloadedPluginsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Delete", color = PocketColors.Danger)
+                    Text(s.delete, color = PocketColors.Danger)
                 }
                 TextButton(
                     onClick = {
@@ -331,7 +338,7 @@ fun DownloadedPluginsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Cancel")
+                    Text(s.cancel)
                 }
             }
         }
@@ -355,7 +362,7 @@ fun DownloadedPluginsScreen(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("Add ${currentTab().label}", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text("${s.add} ${currentTab().label(s)}", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                 TextButton(
                     onClick = {
                         scope.launch {
@@ -366,13 +373,13 @@ fun DownloadedPluginsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Upload from device")
+                    Text(s.uploadFromDevice)
                 }
                 TextField(
                     value = urlInput,
                     onValueChange = { urlInput = it },
                     singleLine = true,
-                    placeholder = { Text("Paste direct download URL") },
+                    placeholder = { Text(s.pasteUrl) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = duoTextFieldShape(),
                     colors = duoTextFieldColors()
@@ -402,7 +409,7 @@ fun DownloadedPluginsScreen(
                             addSheetState.hide()
                             result.onSuccess {
                                 refresh()
-                                onMessage("${currentTab().label.dropLastWhile { it == 's' }} downloaded. Restart the server to apply changes.")
+                                onMessage("${currentTab().label(s).dropLastWhile { it == 's' }} downloaded. Restart the server to apply changes.")
                             }.onFailure {
                                 onMessage(it.message ?: "Download failed.")
                             }
@@ -410,7 +417,7 @@ fun DownloadedPluginsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Download")
+                    Text(s.download)
                 }
                 TextButton(
                     onClick = {
@@ -422,7 +429,7 @@ fun DownloadedPluginsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Cancel")
+                    Text(s.cancel)
                 }
             }
         }
@@ -438,6 +445,7 @@ private fun DownloadedItemRow(
     onToggle: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val s = LocalAppStrings.current
     PocketCraftCard(
         modifier = Modifier.shadow(
             elevation = 10.dp,
@@ -482,7 +490,7 @@ private fun DownloadedItemRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = if (plugin.enabled) "Enabled" else "Disabled",
+                    text = if (plugin.enabled) s.enabled else s.disabled,
                     fontSize = 12.sp,
                     color = if (plugin.enabled) PocketColors.Online else PocketColors.Offline
                 )

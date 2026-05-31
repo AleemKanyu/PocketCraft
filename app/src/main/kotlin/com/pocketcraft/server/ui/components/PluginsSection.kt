@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.data.model.Plugin
 import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.util.LocalAppStrings
 
 @Composable
 fun PluginsSection(
@@ -40,6 +41,7 @@ fun PluginsSection(
     onAddPlugin: () -> Unit,
     onDeletePlugin: (Plugin) -> Unit
 ) {
+    val s = LocalAppStrings.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -65,7 +67,7 @@ fun PluginsSection(
             ) {
                 Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Add Plugin", fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
+                Text(s.addPlugin, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
             }
         }
 
@@ -82,8 +84,7 @@ fun PluginsSection(
             ) {
                 FlatEmojiIcon("💡", modifier = Modifier.size(16.dp), tint = PocketColors.PrimaryDark)
                 Text(
-                    "Upload Bukkit/Spigot/Paper compatible .jar plugins. " +
-                            "Find plugins at spigotmc.org or hangar.papermc.io",
+                    s.pluginsTip,
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurface.copy(0.7f)
                 )
@@ -101,12 +102,12 @@ fun PluginsSection(
                     FlatEmojiIcon("🧩", modifier = Modifier.size(40.dp), tint = PocketColors.PrimaryDark)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "No plugins installed",
+                        s.noPluginsInstalled,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface.copy(0.4f)
                     )
                     Text(
-                        "Tap 'Add Plugin' to upload a .jar file",
+                        s.tapToAddPlugin,
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurface.copy(0.3f)
                     )

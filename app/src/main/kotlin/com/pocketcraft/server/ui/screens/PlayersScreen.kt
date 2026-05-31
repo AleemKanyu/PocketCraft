@@ -67,6 +67,7 @@ import com.pocketcraft.server.ui.components.PlayerCardAction
 import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.util.LocalAppStrings
 import kotlinx.coroutines.launch
 
 @Composable
@@ -74,7 +75,8 @@ fun PlayersScreen(
     stateHolder: ServerStateHolder,
     onPlayerSelected: (PlayerInfo) -> Unit = {}
 ) {
-    val tabs = listOf("Online", "All Players", "Whitelist", "Ops", "Banned")
+    val s = LocalAppStrings.current
+    val tabs = listOf(s.tabOnline, s.tabAllPlayers, s.tabWhitelist, s.tabOps, s.tabBanned)
     var selected by remember { mutableIntStateOf(stateHolder.activePlayersTab) }
     val scope = rememberCoroutineScope()
 
@@ -226,7 +228,7 @@ fun PlayersOnlineTab(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "Players",
+                    LocalAppStrings.current.players,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 22.sp
                 )
@@ -367,13 +369,13 @@ fun PlayerOnlineCard(
 
     val actions = mutableListOf<PlayerCardAction>()
     if (isOnline) {
-        actions.add(PlayerCardAction(label = "Kick", onClick = onKick))
-        actions.add(PlayerCardAction(label = "Ban", onClick = onBan, tint = PocketColors.Offline))
+        actions.add(PlayerCardAction(label = LocalAppStrings.current.kick, onClick = onKick))
+        actions.add(PlayerCardAction(label = LocalAppStrings.current.ban, onClick = onBan, tint = PocketColors.Offline))
     }
     if (player.isOp) {
-        actions.add(PlayerCardAction(label = "Remove OP", onClick = onOp, tint = PocketColors.Offline))
+        actions.add(PlayerCardAction(label = LocalAppStrings.current.removeOp, onClick = onOp, tint = PocketColors.Offline))
     } else {
-        actions.add(PlayerCardAction(label = "Make OP", onClick = onOp, tint = PocketColors.Primary))
+        actions.add(PlayerCardAction(label = LocalAppStrings.current.makeOp, onClick = onOp, tint = PocketColors.Primary))
     }
 
     PlayerCard(
@@ -442,7 +444,7 @@ fun WhitelistTab(
                 ) {
                     Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(4.dp))
-                    Text("Add Player", fontWeight = FontWeight.Bold)
+                    Text(LocalAppStrings.current.addPlayer, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -554,7 +556,7 @@ fun AddPlayerDialog(
                     disabledContainerColor = PocketColors.Primary.copy(0.5f)
                 )
             ) {
-                Text("Add", fontWeight = FontWeight.Bold)
+                Text(LocalAppStrings.current.addPlayer, fontWeight = FontWeight.Bold)
             }
             TextButton(
                 onClick = {
@@ -565,7 +567,7 @@ fun AddPlayerDialog(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Cancel")
+                Text(LocalAppStrings.current.cancel)
             }
         }
     }

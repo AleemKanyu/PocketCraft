@@ -47,6 +47,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import com.pocketcraft.server.util.LocalAppStrings
 
 data class LevelTypeOption(val displayName: String, val propertyValue: String)
 
@@ -104,8 +105,9 @@ fun SettingsScreen(
     val hapticFeedback = LocalHapticFeedback.current
     val appFeedbackEnabled by AppPreferencesStore.isSoundEnabledFlow(context).collectAsState(initial = true)
     
+    val activeS = LocalAppStrings.current
     var activeTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Server", "App", "About")
+    val tabs = listOf(activeS.settingsServer, activeS.settingsApp, activeS.settingsAbout)
 
     var currentState by remember { mutableStateOf(SettingsState()) }
     var savedState by remember { mutableStateOf(SettingsState()) }
@@ -257,7 +259,7 @@ fun SettingsScreen(
                                         color = PocketColors.Primary
                                     )
                                     Text(
-                                        text = "Saving...",
+                                        text = LocalAppStrings.current.saving,
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -270,7 +272,7 @@ fun SettingsScreen(
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Text(
-                                        text = "Saved",
+                                        text = LocalAppStrings.current.saved,
                                         color = Color(0xFF2ED573),
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Bold
@@ -348,9 +350,9 @@ fun SettingsScreen(
                             ) {
                                 Text(
                                     text = when (saveStatus) {
-                                        SaveStatus.SAVING -> "Saving..."
+                                        SaveStatus.SAVING -> LocalAppStrings.current.saving
                                         SaveStatus.FAILED -> "Retry"
-                                        else -> "Save"
+                                        else -> LocalAppStrings.current.save
                                     }
                                 )
                             }
@@ -403,13 +405,13 @@ fun SettingsScreen(
 
             // --- TAB 0: SERVER ---
             if (activeTab == 0) {
-                item { SettingsSection("PERFORMANCE & OPTIMIZATION", Icons.Default.Memory) }
+                item { SettingsSection(activeS.performance, Icons.Default.Memory) }
                 item {
                     SettingsSliderRow(
                         icon = Icons.Default.Visibility,
-                        label = "View Distance",
-                        description = "How far chunks are loaded",
-                        hint = "Lower values recommended for low-end devices",
+                        label = activeS.viewDistance,
+                        description = activeS.viewDistanceDesc,
+                        hint = activeS.viewDistanceHint,
                         min = 3,
                         max = if (currentState.maxPowerEnabled) 32 else 16,
                         value = currentState.config.viewDistance,
@@ -419,8 +421,8 @@ fun SettingsScreen(
                 item {
                     SettingsSliderRow(
                         icon = Icons.Default.Speed,
-                        label = "Simulation Distance",
-                        description = "Tick distance for mobs/crops",
+                        label = activeS.simulationDistance,
+                        description = activeS.simulationDistanceDesc,
                         min = 3,
                         max = if (currentState.maxPowerEnabled) 16 else 10,
                         value = currentState.config.simulationDistance,
@@ -430,8 +432,8 @@ fun SettingsScreen(
                 item {
                     SettingsToggleRow(
                         icon = "⚡",
-                        label = "Max Power Mode",
-                        description = "Uses full RAM and max render distance. May cause overheating.",
+                        label = activeS.maxPowerMode,
+                        description = activeS.maxPowerModeDesc,
                         checked = currentState.maxPowerEnabled,
                         onToggle = { 
                             if (it) {
@@ -446,11 +448,11 @@ fun SettingsScreen(
                 item {
                     SettingsDropdownRow(
                         icon = Icons.Default.AutoGraph,
-                        label = "Mob Spawning Optimization",
-                        description = "Reduces entity count for better performance",
+                        label = activeS.mobSpawning,
+                        description = activeS.mobSpawningDesc,
                         options = listOf("none", "lite", "balanced", "performance"),
                         optionLabels = mapOf(
-                            "none" to "Standard (Vanilla)",
+                            "none" to activeS.mobSpawningStandard,
                             "lite" to "Lite (Recommended)",
                             "balanced" to "Balanced",
                             "performance" to "Aggressive"
@@ -460,7 +462,7 @@ fun SettingsScreen(
                     )
                 }
 
-                item { SettingsSection("WORLD SETTINGS", Icons.Default.Public) }
+                item { SettingsSection(activeS.worldSettings, Icons.Default.Public) }
                 item {
                     val currentLevelType = sanitizeLevelType(currentState.levelType)
                     SettingsDropdownRow(
@@ -475,7 +477,7 @@ fun SettingsScreen(
                 item {
                     SettingsDropdownRow(
                         icon = Icons.Default.SignalCellularAlt,
-                        label = "Difficulty",
+                        label = activeS.difficulty,
                         options = listOf("peaceful", "easy", "normal", "hard"),
                         selected = currentState.config.difficulty,
                         onSelected = { currentState = currentState.copy(config = currentState.config.copy(difficulty = it)) }
@@ -567,7 +569,7 @@ fun SettingsScreen(
                     )
                 }
 
-                item { SettingsSection("NETWORKING", Icons.Default.VpnLock) }
+                item { SettingsSection(activeS.networking, Icons.Default.VpnLock) }
                 item {
                     val relayOptions = mapOf(
                         "play.pocketcraft.online" to "Global (Standard)",
@@ -588,7 +590,7 @@ fun SettingsScreen(
                 item {
                     SettingsSliderRow(
                         icon = Icons.Default.Groups,
-                        label = "Max Players",
+                        label = activeS.maxPlayers,
                         min = 1, max = 20,
                         value = currentState.config.maxPlayers,
                         onValueChange = { currentState = currentState.copy(config = currentState.config.copy(maxPlayers = it)) }
@@ -621,7 +623,7 @@ fun SettingsScreen(
                 item {
                     SettingsToggleRow(
                         icon = "📣",
-                        label = "Broadcast Console To Ops",
+                        label = activeS.broadcastConsole,
                         checked = currentState.broadcastConsoleToOps,
                         onToggle = { currentState = currentState.copy(broadcastConsoleToOps = it) }
                     )
@@ -671,7 +673,7 @@ fun SettingsScreen(
                 item {
                     SettingsToggleRow(
                         icon = "🔒",
-                        label = "Online Mode",
+                        label = activeS.onlineMode,
                         description = "Verify players with Mojang (Auth)",
                         checked = currentState.config.onlineMode,
                         onToggle = { currentState = currentState.copy(config = currentState.config.copy(onlineMode = it)) }
@@ -690,7 +692,7 @@ fun SettingsScreen(
 
             // --- TAB 1: APP ---
             if (activeTab == 1) {
-                item { SettingsSection("APP PREFERENCES", Icons.Default.Tune) }
+                item { SettingsSection(activeS.appPreferences, Icons.Default.Tune) }
                 item {
                     var isDark by remember { mutableStateOf(ThemePreferenceStore.load(context) == ThemePreference.DARK) }
                     SettingsToggleRow(
@@ -719,10 +721,20 @@ fun SettingsScreen(
                 }
                 item {
                     var currentLanguage by remember { mutableStateOf(preferences.appLanguage) }
+                    var pendingRecreate by remember { mutableStateOf(false) }
+
+                    LaunchedEffect(pendingRecreate) {
+                        if (pendingRecreate) {
+                            // Wait for the DropdownMenu dismiss animation to finish
+                            kotlinx.coroutines.delay(180)
+                            context.findActivity()?.recreate()
+                        }
+                    }
+
                     SettingsDropdownRow(
                         icon = Icons.Default.Translate,
-                        label = "App Language",
-                        description = "Choose your preferred language",
+                        label = activeS.appLanguage,
+                        description = activeS.chooseLanguage,
                         options = listOf("system", "en", "de", "es", "ru", "zh"),
                         optionLabels = mapOf(
                             "system" to "System Default",
@@ -737,14 +749,14 @@ fun SettingsScreen(
                             currentLanguage = selectedLang
                             preferences.appLanguage = selectedLang
                             playHaptic()
-                            context.findActivity()?.recreate()
+                            pendingRecreate = true
                         }
                     )
                 }
 
 
 
-                item { SettingsSection("DEVICE STORAGE", Icons.Default.Storage) }
+                item { SettingsSection(activeS.sectionDeviceStorage, Icons.Default.Storage) }
                 item {
                     GameCard(modifier = Modifier.fillMaxWidth()) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -849,7 +861,7 @@ fun SettingsScreen(
                 item { SettingsSection("HELP & LINKS", Icons.Default.Help) }
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SettingsLinkRow(icon = Icons.Default.Policy, label = "Legal Center", description = "Privacy Policy & Licenses", onClick = onOpenLegalPage)
+                        SettingsLinkRow(icon = Icons.Default.Policy, label = activeS.legalCenter, description = activeS.legalCenterDesc, onClick = onOpenLegalPage)
                         SettingsLinkRow(icon = Icons.Default.BugReport, label = "Report a Bug", description = "Report on our Discord server", onClick = {
                             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.gg/nc7ceYWVfT"))) }
                                 .onFailure { onMessage("Could not open Discord link.") }
@@ -857,7 +869,7 @@ fun SettingsScreen(
                     }
                 }
 
-                item { SettingsSection("ABOUT", Icons.Default.Info) }
+                item { SettingsSection(activeS.sectionAbout, Icons.Default.Info) }
                 item {
                     GameCard(modifier = Modifier.fillMaxWidth()) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

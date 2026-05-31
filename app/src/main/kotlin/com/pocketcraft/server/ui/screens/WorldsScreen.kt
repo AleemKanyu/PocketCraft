@@ -76,6 +76,7 @@ import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.components.PocketWorldIcon
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.util.LocalAppStrings
 import kotlinx.coroutines.launch
 
 @Composable
@@ -86,6 +87,7 @@ fun WorldsScreen(
     onChangeVersion: () -> Unit = {},
     onMessage: (String) -> Unit = {}
 ) {
+    val s = LocalAppStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val animatedBackupProgress by animateFloatAsState(
@@ -121,7 +123,7 @@ fun WorldsScreen(
     ) {
         // Current World Card
         item {
-            SectionLabel("CURRENT WORLD")
+            SectionLabel(s.worldsSectionCurrentWorld)
             Spacer(Modifier.height(8.dp))
             GameCard(modifier = Modifier.fillMaxWidth()) {
                 Row(
@@ -152,7 +154,7 @@ fun WorldsScreen(
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
-                                text = "${stateHolder.worldSizeMb} MB on disk",
+                                text = String.format(s.worldsMbOnDisk, stateHolder.worldSizeMb),
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -181,14 +183,14 @@ fun WorldsScreen(
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = PocketColors.Primary)
                     ) {
                         Text(
-                            text = if (stateHolder.isBackingUp) "BACKING UP..." else "BACKUP",
+                            text = if (stateHolder.isBackingUp) s.worldsBackingUp else s.worldsBackup,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     OutlinedButton(
                         onClick = {
                             if (stateHolder.status != ServerStatus.OFFLINE) {
-                                onMessage("Stop the server before resetting the world.")
+                                onMessage(s.worldsStopBeforeReset)
                             } else {
                                 deletePlayerData = false
                                 deleteDatapacks = false
@@ -200,7 +202,7 @@ fun WorldsScreen(
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = PocketColors.Offline)
                     ) {
-                        Text("RESET", fontWeight = FontWeight.Bold)
+                        Text(s.worldsReset, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -227,7 +229,7 @@ fun WorldsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SectionLabel("WORLD SLOTS")
+                SectionLabel(s.worldsSectionSlots)
                 Spacer(Modifier.weight(1f))
                 OutlinedButton(
                     onClick = { onOpenWorldSetup(true) },
@@ -237,12 +239,12 @@ fun WorldsScreen(
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("ADD", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    Text(s.worldsAdd, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 }
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Slide left to delete. Active worlds can only be deleted when the server is stopped.",
+                text = s.worldsSlotHint,
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 4.dp)
@@ -269,7 +271,7 @@ fun WorldsScreen(
 
         // Upload Dimension Cards
         item {
-            SectionLabel("IMPORT DIMENSIONS")
+            SectionLabel(s.worldsSectionImport)
             Spacer(Modifier.height(8.dp))
             GameCard(
                 modifier = Modifier
@@ -283,14 +285,14 @@ fun WorldsScreen(
                     val isDark = com.pocketcraft.server.ui.theme.pocketIsDarkTheme()
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Import guide",
+                            text = s.worldsImportGuideTitle,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 14.sp,
                             color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "Tap to see how world and dimension imports work.",
+                            text = s.worldsImportGuideDesc,
                             fontSize = 12.sp,
                             color = if (isDark) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -306,8 +308,8 @@ fun WorldsScreen(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 val activeWorld = stateHolder.activeWorld.ifBlank { "world" }
                 DimensionUploadRow(
-                    title = "Upload Overworld",
-                    subtitle = "Main world ($activeWorld)",
+                    title = s.worldsUploadOverworld,
+                    subtitle = String.format(s.worldsOverworldSub, activeWorld),
                     icon = "🌍",
                     isImporting = stateHolder.isImportingWorld && importDimension == "overworld",
                     importProgress = stateHolder.importProgressPercent,
@@ -318,8 +320,8 @@ fun WorldsScreen(
                     }
                 )
                 DimensionUploadRow(
-                    title = "Upload Nether",
-                    subtitle = "Nether dimension (${activeWorld}_nether)",
+                    title = s.worldsUploadNether,
+                    subtitle = String.format(s.worldsNetherSub, activeWorld),
                     icon = "🔥",
                     isImporting = stateHolder.isImportingWorld && importDimension == "nether",
                     importProgress = stateHolder.importProgressPercent,
@@ -330,8 +332,8 @@ fun WorldsScreen(
                     }
                 )
                 DimensionUploadRow(
-                    title = "Upload The End",
-                    subtitle = "End dimension (${activeWorld}_the_end)",
+                    title = s.worldsUploadEnd,
+                    subtitle = String.format(s.worldsEndSub, activeWorld),
                     icon = "🌑",
                     isImporting = stateHolder.isImportingWorld && importDimension == "end",
                     importProgress = stateHolder.importProgressPercent,
@@ -350,10 +352,10 @@ fun WorldsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SectionLabel("BACKUP HISTORY")
+                SectionLabel(s.worldsSectionBackupHistory)
                 Spacer(Modifier.weight(1f))
                 Text(
-                    "${stateHolder.backups.size} files",
+                    String.format(s.worldsFiles, stateHolder.backups.size),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -376,7 +378,7 @@ fun WorldsScreen(
                             tint = MaterialTheme.colorScheme.outline
                         )
                         Spacer(Modifier.height(8.dp))
-                        Text("No backups found", color = MaterialTheme.colorScheme.outline, fontWeight = FontWeight.Medium)
+                        Text(s.worldsNoBackups, color = MaterialTheme.colorScheme.outline, fontWeight = FontWeight.Medium)
                     }
                 }
             }
@@ -417,39 +419,39 @@ fun WorldsScreen(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("⚠️ Reset World", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text(s.worldsResetTitle, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                 Text(
-                    "Choose what to delete. Plugins, mods, config files, and server.properties will be preserved.",
+                    s.worldsResetDesc,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     ResetDeleteRow(
-                        label = "World folders (world, world_nether, world_the_end)",
+                        label = s.worldsResetRowWorld,
                         checked = true,
                         enabled = false,
                         onCheckedChange = {}
                     )
                     ResetDeleteRow(
-                        label = "Player data (playerdata, stats, advancements)",
+                        label = s.worldsResetRowPlayers,
                         checked = deletePlayerData,
                         enabled = true,
                         onCheckedChange = { deletePlayerData = it }
                     )
                     ResetDeleteRow(
-                        label = "Datapacks",
+                        label = s.worldsResetRowDatapacks,
                         checked = deleteDatapacks,
                         enabled = true,
                         onCheckedChange = { deleteDatapacks = it }
                     )
                     ResetDeleteRow(
-                        label = "Logs",
+                        label = s.worldsResetRowLogs,
                         checked = deleteLogs,
                         enabled = true,
                         onCheckedChange = { deleteLogs = it }
                     )
                 }
                 Text(
-                    "Always preserved: plugins/, mods/, config/, server.properties, and config files.",
+                    s.worldsResetPreserved,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
@@ -457,7 +459,7 @@ fun WorldsScreen(
                     onClick = {
                         scope.launch {
                             if (stateHolder.status != ServerStatus.OFFLINE) {
-                                onMessage("Stop the server before resetting the world.")
+                                onMessage(s.worldsStopBeforeReset)
                             } else {
                                 val msg = stateHolder.resetWorld(
                                     deletePlayerData = deletePlayerData,
@@ -472,7 +474,7 @@ fun WorldsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("DELETE SELECTED", color = PocketColors.Offline, fontWeight = FontWeight.Bold)
+                    Text(s.worldsResetDeleteSelected, color = PocketColors.Offline, fontWeight = FontWeight.Bold)
                 }
                 TextButton(
                     onClick = {
@@ -483,7 +485,7 @@ fun WorldsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("CANCEL")
+                    Text(s.worldsCancel)
                 }
             }
         }
@@ -504,14 +506,9 @@ fun WorldsScreen(
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ) {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Restore Backup?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text(s.worldsRestoreTitle, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                 Text(
-                    "This will restore:\n" +
-                        "- Worlds and dimension data\n" +
-                        "- Plugins, mods, and resource packs\n" +
-                        "- Server configs and settings\n\n" +
-                        "Your current server files will be overwritten.\n" +
-                        "Make sure the server is stopped before restoring.",
+                    s.worldsRestoreDesc,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 TextButton(
@@ -525,7 +522,7 @@ fun WorldsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("RESTORE", color = PocketColors.Primary, fontWeight = FontWeight.Bold)
+                    Text(s.worldsRestoreAction, color = PocketColors.Primary, fontWeight = FontWeight.Bold)
                 }
                 TextButton(
                     onClick = {
@@ -536,7 +533,7 @@ fun WorldsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("CANCEL")
+                    Text(s.worldsCancel)
                 }
             }
         }
@@ -557,8 +554,8 @@ fun WorldsScreen(
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ) {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Delete Backup?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
-                Text("Are you sure you want to delete ${backup.name}?", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(s.worldsDeleteBackupTitle, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text(String.format(s.worldsDeleteBackupDesc, backup.name), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 TextButton(
                     onClick = {
                         scope.launch {
@@ -570,7 +567,7 @@ fun WorldsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("DELETE", color = PocketColors.Offline, fontWeight = FontWeight.Bold)
+                    Text(s.worldsDeleteAction, color = PocketColors.Offline, fontWeight = FontWeight.Bold)
                 }
                 TextButton(
                     onClick = {
@@ -581,7 +578,7 @@ fun WorldsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("CANCEL")
+                    Text(s.worldsCancel)
                 }
             }
         }
@@ -602,12 +599,12 @@ fun WorldsScreen(
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ) {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Delete World?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text(s.worldsDeleteWorldTitle, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                 Text(
                     if (world.isActive) {
-                        "Delete ${world.name}? PocketCraft will switch to another saved world first."
+                        String.format(s.worldsDeleteWorldActive, world.name)
                     } else {
-                        "Delete ${world.name}? This removes the world from storage."
+                        String.format(s.worldsDeleteWorldInactive, world.name)
                     },
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -622,7 +619,7 @@ fun WorldsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("DELETE", color = PocketColors.Offline, fontWeight = FontWeight.Bold)
+                    Text(s.worldsDeleteAction, color = PocketColors.Offline, fontWeight = FontWeight.Bold)
                 }
                 TextButton(
                     onClick = {
@@ -633,7 +630,7 @@ fun WorldsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("CANCEL")
+                    Text(s.worldsCancel)
                 }
             }
         }
@@ -657,13 +654,13 @@ fun WorldsScreen(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("Import Guide", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text(s.worldsImportGuideSheetTitle, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                 Text(
-                    "Aternos exports can be uploaded as 3 separate ZIPs: Overworld, Nether, and The End.",
+                    s.worldsImportGuideText1,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "Most other world backups already include all dimensions in one archive, so a single world backup import is enough.",
+                    s.worldsImportGuideText2,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 TextButton(
@@ -675,7 +672,7 @@ fun WorldsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("CLOSE")
+                    Text(s.worldsImportGuideClose)
                 }
             }
         }
@@ -692,6 +689,7 @@ private fun SwipeableWorldSlotItem(
     onActivate: () -> Unit,
     onRequestDelete: () -> Unit
 ) {
+    val s = LocalAppStrings.current
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { target ->
             if (target == SwipeToDismissBoxValue.EndToStart && canDelete) {
@@ -720,7 +718,7 @@ private fun SwipeableWorldSlotItem(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Delete",
+                        text = s.worldsDelete,
                         color = PocketColors.Offline,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp
@@ -766,7 +764,7 @@ private fun SwipeableWorldSlotItem(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(world.name, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     Text(
-                        text = "${world.sizeMb} MB on disk",
+                        text = String.format(s.worldsMbOnDisk, world.sizeMb),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -778,7 +776,7 @@ private fun SwipeableWorldSlotItem(
                         color = PocketColors.Primary.copy(alpha = 0.14f)
                     ) {
                         Text(
-                            "ACTIVE",
+                            s.worldsActive,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -796,7 +794,7 @@ private fun SwipeableWorldSlotItem(
 
             if (!canSwitch && !world.isActive) {
                 Text(
-                    "Stop server to switch worlds",
+                    s.worldsStopToSwitch,
                     fontSize = 11.sp,
                     color = PocketColors.Offline,
                     modifier = Modifier.padding(top = 8.dp)
@@ -886,6 +884,7 @@ private fun DimensionUploadRow(
     serverOffline: Boolean,
     onUpload: () -> Unit
 ) {
+    val s = LocalAppStrings.current
     val isDark = com.pocketcraft.server.ui.theme.pocketIsDarkTheme()
     GameCard(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -915,7 +914,7 @@ private fun DimensionUploadRow(
                     colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Primary, contentColor = Color.White),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                 ) {
-                    Text("UPLOAD", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(s.worldsUpload, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                 }
             }
         }
@@ -936,7 +935,7 @@ private fun DimensionUploadRow(
                 color = PocketColors.Primary
             )
             Text(
-                text = "${(importProgress * 100).toInt()}% extracted",
+                text = String.format(s.worldsExtracted, (importProgress * 100).toInt()),
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp)
@@ -945,7 +944,7 @@ private fun DimensionUploadRow(
 
         if (!serverOffline && !isImporting) {
             Text(
-                "Stop server to upload",
+                s.worldsStopToUpload,
                 fontSize = 11.sp,
                 color = PocketColors.Offline,
                 modifier = Modifier.padding(top = 8.dp)

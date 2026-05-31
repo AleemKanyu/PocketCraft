@@ -40,6 +40,9 @@ import android.util.Log
 import com.pocketcraft.server.update.UpdateConfig
 import com.pocketcraft.server.update.UpdateManager
 import com.pocketcraft.server.ui.components.UpdatePopup
+import androidx.compose.runtime.CompositionLocalProvider
+import com.pocketcraft.server.util.LocalAppStrings
+import com.pocketcraft.server.util.appStringsFor
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -140,6 +143,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            val appStrings = appStringsFor(AppPreferences(this@MainActivity).appLanguage)
+            CompositionLocalProvider(LocalAppStrings provides appStrings) {
             PocketCraftTheme(darkTheme = darkTheme) {
                 var jreReady by remember { mutableStateOf(false) }
                 var jreError by remember { mutableStateOf<String?>(null) }
@@ -242,6 +247,7 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
+            }
             }
         }
     }

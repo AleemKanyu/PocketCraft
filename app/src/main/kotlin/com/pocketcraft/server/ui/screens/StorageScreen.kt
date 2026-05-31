@@ -56,6 +56,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.pocketcraft.server.util.LocalAppStrings
 
 @Composable
 fun StorageScreen(
@@ -72,8 +73,8 @@ fun StorageScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         TabRow(selectedTabIndex = selectedTab) {
-            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Worlds") })
-            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Files") })
+                    Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text(LocalAppStrings.current.worlds) })
+            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text(LocalAppStrings.current.files) })
         }
 
         when (selectedTab) {
@@ -242,7 +243,7 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = if (uploadIndeterminate) "Uploading..." else "$uploadProgress%",
+                        text = if (uploadIndeterminate) LocalAppStrings.current.uploading else "$uploadProgress%",
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 16.sp,
                         color = MaterialTheme.colorScheme.primary
@@ -299,7 +300,7 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = if (file.isDirectory) "Folder" else "${file.length() / 1024} KB",
+                            text = if (file.isDirectory) LocalAppStrings.current.folder else "${file.length() / 1024} KB",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -336,7 +337,7 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(file.name, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
-                Text("Choose an action", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(LocalAppStrings.current.chooseAction, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 TextButton(
                     onClick = {
                         scope.launch {
@@ -349,7 +350,7 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("View")
+                    Text(LocalAppStrings.current.view)
                 }
                 TextButton(
                     onClick = {
@@ -375,7 +376,7 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Share")
+                    Text(LocalAppStrings.current.share)
                 }
                 TextButton(
                     onClick = {
@@ -387,7 +388,7 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(LocalAppStrings.current.delete, color = MaterialTheme.colorScheme.error)
                 }
             }
         }
@@ -414,7 +415,7 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
             ) {
                 Text(file.name, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
                 Text(
-                    text = runCatching { file.readText() }.getOrDefault("Unable to open file."),
+                    text = runCatching { file.readText() }.getOrDefault(LocalAppStrings.current.unableToOpen),
                     style = MaterialTheme.typography.bodySmall
                 )
                 TextButton(
@@ -426,7 +427,7 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Close")
+                    Text(LocalAppStrings.current.close)
                 }
             }
         }

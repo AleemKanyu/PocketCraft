@@ -91,14 +91,20 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.pocketcraft.server.ui.components.PocketCraftCard
+import com.pocketcraft.server.util.LocalAppStrings
 
 private enum class ContentTab(
-    val label: String,
     val type: PluginManager.ContentType
 ) {
-    PLUGINS("Plugins", PluginManager.ContentType.PLUGINS),
-    MODS("Mods", PluginManager.ContentType.MODS),
-    PACKS("Resource Packs", PluginManager.ContentType.RESOURCE_PACKS)
+    PLUGINS(PluginManager.ContentType.PLUGINS),
+    MODS(PluginManager.ContentType.MODS),
+    PACKS(PluginManager.ContentType.RESOURCE_PACKS)
+}
+
+private fun ContentTab.label(s: com.pocketcraft.server.util.AppStrings): String = when (this) {
+    ContentTab.PLUGINS -> s.hubTabPlugins
+    ContentTab.MODS    -> s.hubTabMods
+    ContentTab.PACKS   -> s.hubTabResourcePacks
 }
 
 @Composable
@@ -109,6 +115,7 @@ fun PluginsHubScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
+    val s = LocalAppStrings.current
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var query by remember { mutableStateOf("") }
@@ -173,7 +180,7 @@ fun PluginsHubScreen(
             isUploading = false
             result.onSuccess {
                 refreshDownloadedItems()
-                Toast.makeText(context, "Added ${currentTab().label.dropLastWhile { it == 's' }}.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, s.hubInstalled + ": " + currentTab().label(s), Toast.LENGTH_SHORT).show()
             }.onFailure {
                 onMessage(it.message ?: "Could not add file.")
             }
@@ -220,7 +227,7 @@ fun PluginsHubScreen(
             }
         }.onFailure { error ->
             discoveredItems = emptyList()
-            errorMessage = error.message ?: "Failed to load online results."
+            errorMessage = error.message ?: s.hubNoOnlineResults.format(currentTab().label(s))
         }
 
         isDiscoverLoading = false
@@ -259,7 +266,7 @@ fun PluginsHubScreen(
                     },
                     selectedContentColor = selectedTabColor,
                     unselectedContentColor = unselectedTabColor,
-                    text = { Text(tab.label) }
+                    text = { Text(tab.label(s)) }
                 )
             }
         }
@@ -278,7 +285,7 @@ fun PluginsHubScreen(
                 SearchBar(
                     query = query,
                     onQueryChange = { query = it },
-                    placeholder = "Search online ${currentTab().label.lowercase(Locale.US)}..."
+                    placeholder = s.hubSearchPlaceholder.format(currentTab().label(s).lowercase(Locale.US))
                 )
             }
 
@@ -294,12 +301,12 @@ fun PluginsHubScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "Mod loader required for mods",
+                                text = s.hubModLoaderRequired,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = PocketColors.Warning
                             )
                             Text(
-                                text = "This server version is not using a supported mod loader. Switch this server to Fabric, Quilt, Forge, or NeoForge to install mods.",
+                                text = s.hubModLoaderDesc,
                                 color = pluginsHubMutedTextColor(),
                                 fontSize = 12.sp
                             )
@@ -312,9 +319,9 @@ fun PluginsHubScreen(
                 item {
                     Text(
                         text = if (isUploading) {
-                            "Adding file: $uploadProgress%"
+                            s.hubAddingFile.format(uploadProgress)
                         } else {
-                            "Downloading: $downloadProgress%"
+                            s.hubDownloading.format(downloadProgress)
                         },
                         fontSize = 12.sp,
                         color = pluginsHubMutedTextColor()
@@ -324,9 +331,9 @@ fun PluginsHubScreen(
 
             item {
                 SectionHeader(
-                    title = "Downloaded",
-                    subtitle = "Manage what is already stored for this server version.",
-                    actionLabel = "Add",
+                    title = s.hubSectionDownloaded,
+                    subtitle = s.hubSectionDownloadedDesc,
+                    actionLabel = s.hubAdd,
                     actionEnabled = true,
                     onAction = { showAddDialog = true },
                     isExpanded = downloadedSectionExpanded,
@@ -352,7 +359,7 @@ fun PluginsHubScreen(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = "Tap arrow to expand",
+                                text = s.hubTapToExpand,
                                 color = pluginsHubMutedTextColor(),
                                 fontSize = 12.sp
                             )
@@ -374,9 +381,9 @@ fun PluginsHubScreen(
                             )
                             if (success) {
                                 refreshDownloadedItems()
-                                onMessage("${item.name} ${if (item.enabled) "disabled" else "enabled"}. Restart the server to apply changes.")
+                                onMessage("${item.name} ${if (item.enabled) s.disabled else s.enabled}. ${s.hubDetailApplyDesc}")
                             } else {
-                                onMessage("Could not update ${item.name}.")
+                                onMessage("${s.hubDetailDescription}: ${item.name}")
                             }
                         },
                         onDelete = { deleteTarget = item },
@@ -393,9 +400,9 @@ fun PluginsHubScreen(
 
             item {
                 SectionHeader(
-                    title = "Discover Online",
-                    subtitle = "Only online results are shown here. Installed matches are marked for you.",
-                    actionLabel = if (errorMessage != null && !isDiscoverLoading) "Retry" else null,
+                    title = s.hubSectionDiscover,
+                    subtitle = s.hubSectionDiscoverDesc,
+                    actionLabel = if (errorMessage != null && !isDiscoverLoading) s.hubRetry else null,
                     onAction = { catalogRetryToken++ }
                 )
             }
@@ -419,7 +426,7 @@ fun PluginsHubScreen(
                                     strokeWidth = 2.dp
                                 )
                                 Text(
-                                    text = "Loading online results...",
+                                    text = s.hubLoadingOnline,
                                     color = pluginsHubMutedTextColor()
                                 )
                             }
@@ -443,7 +450,7 @@ fun PluginsHubScreen(
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Text(
-                                    text = "Searches are cached and rate-limited, so retrying in a moment usually works.",
+                                    text = s.hubSearchRetry,
                                     color = pluginsHubMutedTextColor(),
                                     fontSize = 12.sp
                                 )
@@ -490,9 +497,9 @@ fun PluginsHubScreen(
                                     downloadingCatalogKey = null
                                     result.onSuccess {
                                         refreshDownloadedItems()
-                                        Toast.makeText(context, "Installed ${remote.title}", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "${s.hubInstalled}: ${remote.title}", Toast.LENGTH_SHORT).show()
                                     }.onFailure {
-                                        onMessage(it.message ?: "Install failed")
+                                        onMessage(it.message ?: s.hubInstalling)
                                     }
                                 }
                             }
@@ -526,8 +533,8 @@ fun PluginsHubScreen(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("Delete ${deleting.name}?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
-                Text("This will permanently remove the file from this server version.", color = pluginsHubMutedTextColor())
+                Text(s.hubDeleteTitle.format(deleting.name), fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text(s.hubDeleteDesc, color = pluginsHubMutedTextColor())
                 TextButton(
                     onClick = {
                         PluginManager.deleteContent(
@@ -545,7 +552,7 @@ fun PluginsHubScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Delete", color = PocketColors.Danger)
+                    Text(s.hubDeleteAction, color = PocketColors.Danger)
                 }
                 TextButton(
                     onClick = {
@@ -556,7 +563,7 @@ fun PluginsHubScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Cancel")
+                    Text(s.cancel)
                 }
             }
         }
@@ -581,7 +588,7 @@ fun PluginsHubScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Add ${currentTab().label}",
+                    text = s.hubSectionDownloaded + " ${currentTab().label(s)}",
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 22.sp
                 )
@@ -597,14 +604,14 @@ fun PluginsHubScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(999.dp)
                 ) {
-                    Text("Upload from device")
+                    Text(s.hubUploadFromDevice)
                 }
 
                 TextField(
                     value = urlInput,
                     onValueChange = { urlInput = it },
                     singleLine = true,
-                    placeholder = { Text("Paste direct download URL") },
+                    placeholder = { Text(s.hubPasteUrl) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = duoTextFieldShape(),
                     colors = duoTextFieldColors()
@@ -622,7 +629,7 @@ fun PluginsHubScreen(
                             }
                         }
                     ) {
-                        Text("Cancel")
+                        Text(s.cancel)
                     }
                     TextButton(
                         onClick = {
@@ -646,7 +653,7 @@ fun PluginsHubScreen(
                                 }
                                 result.onSuccess {
                                     refreshDownloadedItems()
-                                    Toast.makeText(context, "Added ${currentTab().label.dropLastWhile { it == 's' }}.", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "${s.hubInstalled}: ${currentTab().label(s)}", Toast.LENGTH_SHORT).show()
                                 }.onFailure {
                                     onMessage(it.message ?: "Download failed")
                                 }
@@ -654,7 +661,7 @@ fun PluginsHubScreen(
                         },
                         enabled = urlInput.isNotBlank()
                     ) {
-                        Text("Download")
+                        Text(s.hubDownloadAction)
                     }
                 }
             }
@@ -766,6 +773,7 @@ private fun SectionHeader(
 
 @Composable
 private fun EmptyDownloadedCard(tab: ContentTab) {
+    val s = LocalAppStrings.current
     PocketCraftCard(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
@@ -777,7 +785,7 @@ private fun EmptyDownloadedCard(tab: ContentTab) {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "No downloaded ${tab.label.lowercase(Locale.US)} yet for this version.",
+                text = s.hubNoDownloaded.format(tab.label(s).lowercase(Locale.US)),
                 color = pluginsHubMutedTextColor()
             )
         }
@@ -786,6 +794,7 @@ private fun EmptyDownloadedCard(tab: ContentTab) {
 
 @Composable
 private fun EmptyOnlineCard(tab: ContentTab) {
+    val s = LocalAppStrings.current
     PocketCraftCard(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
@@ -797,7 +806,7 @@ private fun EmptyOnlineCard(tab: ContentTab) {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "No online ${tab.label.lowercase(Locale.US)} matched this search.",
+                text = s.hubNoOnlineResults.format(tab.label(s).lowercase(Locale.US)),
                 color = pluginsHubMutedTextColor()
             )
         }
@@ -873,7 +882,7 @@ private fun ItemIcon(item: Plugin, tab: ContentTab, packIcon: File?) {
                     .background(PocketColors.SurfaceVarDark, RoundedCornerShape(8.dp))
             )
         }
-            tab.label == "Mods" -> {
+            tab == ContentTab.MODS -> {
                 PocketModsIcon(
                     modifier = Modifier
                         .size(34.dp)
@@ -907,6 +916,7 @@ private fun RemoteContentRow(
     onShowDetails: () -> Unit,
     onInstall: () -> Unit
 ) {
+    val s = LocalAppStrings.current
     PocketCraftCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -974,7 +984,7 @@ private fun RemoteContentRow(
                             color = PocketColors.PrimaryMuted
                         ) {
                             Text(
-                                text = "Installed",
+                                text = s.hubInstalled,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                 color = PocketColors.Primary,
                                 fontWeight = FontWeight.Bold,
@@ -988,7 +998,7 @@ private fun RemoteContentRow(
                             color = pluginsHubSupportedChipContainerColor()
                         ) {
                             Text(
-                                text = "Supported Mod",
+                                text = s.hubSupportedMod,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                 color = pluginsHubSupportedChipContentColor(),
                                 fontWeight = FontWeight.Bold,
@@ -1002,7 +1012,7 @@ private fun RemoteContentRow(
                             color = pluginsHubUnsupportedChipContainerColor()
                         ) {
                             Text(
-                                text = "Unsupported",
+                                text = s.hubUnsupported,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                 color = pluginsHubUnsupportedChipContentColor(),
                                 fontWeight = FontWeight.Bold,
@@ -1018,7 +1028,7 @@ private fun RemoteContentRow(
                                 contentColor = if (pluginsHubIsDarkTheme()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary
                             )
                         ) {
-                            Text(if (isDownloading) "Installing..." else "Install")
+                            Text(if (isDownloading) s.hubInstalling else s.hubInstall)
                         }
                     }
                 }
@@ -1140,7 +1150,8 @@ private fun LocalDetailCardContent(
     onDismissRequest: () -> Unit
 ) {
     val item = detailCard.item
-    val statusLabel = if (item.enabled) "Enabled" else "Disabled"
+    val s = LocalAppStrings.current
+    val statusLabel = if (item.enabled) s.hubEnabledStatus else s.hubDisabledStatus
     val statusColor = if (item.enabled) PocketColors.Primary else pluginsHubMutedTextColor()
 
     Column(
@@ -1160,7 +1171,7 @@ private fun LocalDetailCardContent(
                     fontSize = 20.sp
                 )
                 Text(
-                    text = detailCard.tab.label.dropLastWhile { it == 's' },
+                    text = detailCard.tab.label(s).dropLastWhile { it == 's' },
                     fontSize = 12.sp,
                     color = pluginsHubMutedTextColor()
                 )
@@ -1179,17 +1190,17 @@ private fun LocalDetailCardContent(
             }
         }
 
-        DetailLine("File", item.fileName)
-        DetailLine("Version", item.version.ifBlank { "Not provided" })
-        DetailLine("Size", String.format(Locale.US, "%.2f MB", item.sizeMb))
-        DetailLine("Apply", "Restart the server after changing plugins or packs.")
+        DetailLine(s.hubDetailFile, item.fileName)
+        DetailLine(s.hubDetailVersion, item.version.ifBlank { s.hubDetailVersionNotProvided })
+        DetailLine(s.hubDetailSize, String.format(Locale.US, "%.2f MB", item.sizeMb))
+        DetailLine(s.hubDetailApply, s.hubDetailApplyDesc)
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
             TextButton(onClick = onDismissRequest) {
-                Text("Close")
+                Text(s.close)
             }
         }
     }
@@ -1201,11 +1212,12 @@ private fun RemoteDetailCardContent(
     onDismissRequest: () -> Unit
 ) {
     val item = detailCard.item
+    val s = LocalAppStrings.current
     val stateChipLabel = when {
-        detailCard.installed -> "Installed"
-        !item.canInstall && item.isSupported -> "Supported Mod"
-        !item.canInstall -> "Unsupported"
-        else -> detailCard.tab.label.dropLastWhile { it == 's' }
+        detailCard.installed -> s.hubInstalled
+        !item.canInstall && item.isSupported -> s.hubSupportedMod
+        !item.canInstall -> s.hubUnsupported
+        else -> detailCard.tab.label(s).dropLastWhile { it == 's' }
     }
     val stateChipColor = when {
         detailCard.installed -> PocketColors.PrimaryMuted
@@ -1253,7 +1265,7 @@ private fun RemoteDetailCardContent(
                     fontSize = 20.sp
                 )
                 Text(
-                    text = item.author?.takeIf { it.isNotBlank() } ?: "Community listing",
+                    text = item.author?.takeIf { it.isNotBlank() } ?: s.hubCommunityListing,
                     fontSize = 12.sp,
                     color = pluginsHubMutedTextColor()
                 )
@@ -1277,12 +1289,12 @@ private fun RemoteDetailCardContent(
             }
         }
 
-        DetailLine("Downloads", formatDownloads(item.downloads))
-        DetailLine("Source", item.source.replaceFirstChar { it.uppercase() })
-        DetailLine("Slug", item.slug)
-        DetailLine("Description", item.description)
+        DetailLine(s.hubDetailDownloads, formatDownloads(item.downloads))
+        DetailLine(s.hubDetailSource, item.source.replaceFirstChar { it.uppercase() })
+        DetailLine(s.hubDetailSlug, item.slug)
+        DetailLine(s.hubDetailDescription, item.description)
         item.supportMessage?.takeIf { it.isNotBlank() }?.let { message ->
-            DetailLine("Support", message)
+            DetailLine(s.hubDetailSupport, message)
         }
 
         Row(
@@ -1290,7 +1302,7 @@ private fun RemoteDetailCardContent(
             horizontalArrangement = Arrangement.End
         ) {
             TextButton(onClick = onDismissRequest) {
-                Text("Close")
+                Text(s.close)
             }
         }
     }
