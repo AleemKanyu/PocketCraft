@@ -8,27 +8,39 @@ import com.pocketcraft.server.data.preferences.AppPreferences
 import java.util.Locale
 
 object LocaleUtils {
-    fun wrapContext(context: Context): Context {
-        val preferences = AppPreferences(context)
-        val lang = preferences.appLanguage
-        if (lang.isEmpty() || lang == "system") {
-            return context
-        }
 
-        val locale = Locale(lang)
-        Locale.setDefault(locale)
+    /** Returns the user-selected Locale, or null if set to "system". */
+    fun getSavedLocale(context: Context): Locale? {
+        val lang = AppPreferences(context).appLanguage
+        return if (lang.isEmpty() || lang == "system") null else Locale(lang)
+    }
 
-        val resources = context.resources
-        val config = Configuration(resources.configuration)
-
+    /**
+     * Stamps [locale] into [config] so that Android's override configuration
+     * does not silently revert our language choice.
+     * Called from applyOverrideConfiguration() in each Activity.
+     */
+    fun applyToConfig(config: Configuration, locale: Locale) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             config.setLocale(locale)
-            val localeList = LocaleList(locale)
-            config.setLocales(localeList)
+            config.setLocales(LocaleList(locale))
         } else {
             @Suppress("DEPRECATION")
             config.locale = locale
         }
+    }
+
+    /**
+     * Wraps [context] so that resource lookups use the saved locale.
+     * Called from attachBaseContext() in each Activity / Service.
+     */
+    fun wrapContext(context: Context): Context {
+        val locale = getSavedLocale(context) ?: return context
+
+        Locale.setDefault(locale)
+
+        val config = Configuration(context.resources.configuration)
+        applyToConfig(config, locale)
 
         return context.createConfigurationContext(config)
     }

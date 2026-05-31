@@ -47,6 +47,15 @@ class MainActivity : ComponentActivity() {
         super.attachBaseContext(com.pocketcraft.server.util.LocaleUtils.wrapContext(newBase))
     }
 
+    override fun applyOverrideConfiguration(overrideConfig: android.content.res.Configuration?) {
+        overrideConfig?.let { cfg ->
+            com.pocketcraft.server.util.LocaleUtils.getSavedLocale(baseContext)?.let { locale ->
+                com.pocketcraft.server.util.LocaleUtils.applyToConfig(cfg, locale)
+            }
+        }
+        super.applyOverrideConfiguration(overrideConfig)
+    }
+
     companion object {
         var isAppInForeground = false
     }
