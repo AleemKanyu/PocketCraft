@@ -5,6 +5,7 @@ const express = require('express');
 const dgram   = require('dgram');
 const dns     = require('dns');
 const { startBedrockPing, updateServerStatus } = require('./bedrock-ping');
+const { handleJavaPing } = require('./java-ping');
 
 // Constants
 
@@ -24,6 +25,7 @@ const MAX_UDP_PAYLOAD            = 65535;
 const PHONE_POOL_IDLE_JITTER_MS  = 60_000;
 const REGISTER_RATE_WINDOW_MS    = 60_000;
 const REGISTER_RATE_LIMIT        = 10;
+const STALE_TUNNEL_TIMEOUT_MS    = 2 * 60_000;
 const MAX_USER_ID_LENGTH         = 128;
 const VALID_USER_ID_RE           = /^[a-zA-Z0-9_-]+$/;
 const RELAY_SECRET               = process.env.RELAY_SECRET || '';
@@ -654,9 +656,26 @@ function pairSockets(playerSocket, phoneSocket, userId) {
   configureSocket(playerSocket);
   configureSocket(phoneSocket);
 
+  playerSocket.on('data', (chunk) => {
+    if (!phoneSocket.destroyed) {
+      phoneSocket.write(chunk);
+    }
+  });
+
+  phoneSocket.on('data', (chunk) => {
+    if (!playerSocket.destroyed) {
+      playerSocket.write(chunk);
+    }
+  });
+
+  if (playerSocket.initialChunk) {
+    if (!phoneSocket.destroyed) {
+      phoneSocket.write(playerSocket.initialChunk);
+    }
+    playerSocket.initialChunk = null;
+  }
+
   playerSocket.resume();
-  playerSocket.pipe(phoneSocket);
-  phoneSocket.pipe(playerSocket);
 
   let killed = false;
 
@@ -664,8 +683,6 @@ function pairSockets(playerSocket, phoneSocket, userId) {
     if (killed) return;
     killed = true;
     console.log(`[relay] Pairing broken for ${userId} (source: ${src})`);
-    playerSocket.unpipe(phoneSocket);
-    phoneSocket.unpipe(playerSocket);
     if (!playerSocket.destroyed) playerSocket.destroy();
     if (!phoneSocket.destroyed) phoneSocket.destroy();
   };
@@ -922,13 +939,19 @@ app.post('/register', (req, res) => {
 
   tunnel.server = net.createServer({ allowHalfOpen: false }, (playerSocket) => {
     configureSocket(playerSocket);
-    playerSocket.pause();
-    const phoneSocket = takeNextPhoneSocket(tunnel);
-    if (phoneSocket) {
-      pairSockets(playerSocket, phoneSocket, userId);
-      return;
-    }
-    queuePlayer(tunnel, userId, playerSocket);
+    
+    playerSocket.once('data', (chunk) => {
+      if (handleJavaPing(playerSocket, chunk, tunnel.port)) return;
+      
+      playerSocket.initialChunk = chunk;
+      const phoneSocket = takeNextPhoneSocket(tunnel);
+      if (phoneSocket) {
+        pairSockets(playerSocket, phoneSocket, userId);
+        return;
+      }
+      playerSocket.pause();
+      queuePlayer(tunnel, userId, playerSocket);
+    });
   });
 
   tunnel.server.on('error', (err) => {
@@ -972,13 +995,19 @@ app.post(['/phone-ready', '/phone_ready', '/ready', '/phoneReady'], (req, res) =
 
     tunnel.server = net.createServer({ allowHalfOpen: false }, (playerSocket) => {
       configureSocket(playerSocket);
-      playerSocket.pause();
-      const phoneSocket = takeNextPhoneSocket(tunnel);
-      if (phoneSocket) {
-        pairSockets(playerSocket, phoneSocket, userId);
-        return;
-      }
-      queuePlayer(tunnel, userId, playerSocket);
+      
+      playerSocket.once('data', (chunk) => {
+        if (handleJavaPing(playerSocket, chunk, tunnel.port)) return;
+        
+        playerSocket.initialChunk = chunk;
+        const phoneSocket = takeNextPhoneSocket(tunnel);
+        if (phoneSocket) {
+          pairSockets(playerSocket, phoneSocket, userId);
+          return;
+        }
+        playerSocket.pause();
+        queuePlayer(tunnel, userId, playerSocket);
+      });
     });
 
     tunnel.server.on('error', (err) => {
@@ -1055,6 +1084,52 @@ app.get('/health', (_req, res) => {
     portsUsed: userPortMap.size,
     uptimeMs: (process.uptime() * 1000) | 0,
   });
+});
+
+app.get('/download/paper', async (req, res) => {
+  const version = String(req.query.version || '').trim();
+  if (!version || !/^\d+\.\d+(\.\d+)?$/.test(version)) {
+    return res.status(400).send('Invalid version format.');
+  }
+
+  try {
+    const apiRes = await fetch(`https://api.papermc.io/v2/projects/paper/versions/${version}`);
+    if (!apiRes.ok) {
+      return res.status(apiRes.status).send(`Failed to fetch version metadata from PaperMC: ${apiRes.statusText}`);
+    }
+    const data = await apiRes.json();
+    if (!data.builds || !Array.isArray(data.builds) || data.builds.length === 0) {
+      return res.status(404).send('No builds found for this version.');
+    }
+
+    const latestBuild = data.builds[data.builds.length - 1];
+    const downloadUrl = `https://api.papermc.io/v2/projects/paper/versions/${version}/builds/${latestBuild}/downloads/paper-${version}-${latestBuild}.jar`;
+
+    const jarRes = await fetch(downloadUrl, {
+      headers: {
+        'User-Agent': 'PocketCraft/1.0.0'
+      }
+    });
+
+    if (!jarRes.ok) {
+      return res.status(jarRes.status).send(`Failed to download JAR from PaperMC: ${jarRes.statusText}`);
+    }
+
+    res.setHeader('Content-Type', 'application/java-archive');
+    res.setHeader('Content-Disposition', `attachment; filename="paper-${version}-${latestBuild}.jar"`);
+    
+    const readableStream = jarRes.body;
+    if (readableStream && typeof readableStream.pipeTo === 'function') {
+      const { Readable } = require('stream');
+      Readable.fromWeb(readableStream).pipe(res);
+    } else {
+      const { Readable } = require('stream');
+      Readable.from(readableStream).pipe(res);
+    }
+  } catch (error) {
+    console.error('[download] Paper download error:', error);
+    res.status(500).send('Internal server error while processing download.');
+  }
 });
 
 // Phone relay TCP listener
@@ -1177,6 +1252,18 @@ setInterval(() => {
     const poolSize = t.phoneSocketPool.length;
     const hasBedrockSocket = !!(t.bedrockPhoneSocket && !t.bedrockPhoneSocket.destroyed);
     const hasUdp = userUdpSockets.has(userId);
+    const hasRecentReady = t.lastReadyAt && (Date.now() - t.lastReadyAt) < STALE_TUNNEL_TIMEOUT_MS;
+
+    if (
+      poolSize === 0 &&
+      !hasBedrockSocket &&
+      t.pendingPlayers.length === 0 &&
+      !hasRecentReady
+    ) {
+      console.warn(`[cleanup] Closing stale tunnel for ${userId}: no phone sockets or recent heartbeat.`);
+      closeTunnel(userId, 'stale_no_phone_sockets');
+      continue;
+    }
 
     if (hasUdp && poolSize === 0 && !hasBedrockSocket) {
       t.staleCycles = (t.staleCycles || 0) + 1;
