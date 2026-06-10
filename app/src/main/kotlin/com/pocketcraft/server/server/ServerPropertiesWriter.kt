@@ -65,7 +65,7 @@ object ServerPropertiesWriter {
     fun overlayManagedValues(props: Properties, prefs: ServerPrefsSnapshot) {
         props["level-name"] = prefs.worldName
         props["level-seed"] = prefs.worldSeed
-        props["max-players"] = prefs.maxPlayers.coerceIn(1, 20).toString()
+        props["max-players"] = prefs.maxPlayers.coerceIn(1, 1000).toString()
         props["server-port"] = "25565"
         props["difficulty"] = prefs.difficulty.lowercase()
         props["gamemode"] = prefs.gameMode.lowercase()
@@ -94,7 +94,9 @@ object ServerPropertiesWriter {
         props["max-build-height"] = prefs.maxBuildHeight.coerceAtLeast(64).toString()
         props["generate-structures"] = prefs.generateStructures.toString()
         props["level-type"] = prefs.levelType
-        props["server-ip"] = "0.0.0.0"
+        // Leave blank so the Java server binds all interfaces. Writing 0.0.0.0
+        // can leak an unspecified address into join/status paths on some builds.
+        props["server-ip"] = ""
         props["network-compression-threshold"] = ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD.toString()
         props["sync-chunk-writes"] = "false"
         props["max-tick-time"] = "60000"

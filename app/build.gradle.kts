@@ -18,6 +18,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.crashlytics)
+    alias(libs.plugins.oss.licenses)
 }
 
 val localProperties = Properties().apply {
@@ -70,7 +71,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = autoVersionCode
-        versionName = "1.2.0"
+        versionName = "1.5.0"
 
         buildConfigField("String", "RELAY_PUBLIC_DOMAIN", "\"joinmc.link\"")
         buildConfigField("String", "GITHUB_REPO_OWNER", "\"$githubRepoOwner\"")
@@ -153,7 +154,7 @@ android {
 
     packaging {
         jniLibs {
-            useLegacyPackaging = false
+            useLegacyPackaging = true
         }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -168,6 +169,8 @@ kotlin {
 }
 
 dependencies {
+    implementation("com.google.android.gms:play-services-oss-licenses:17.1.0")
+    implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("org.apache.commons:commons-compress:1.26.1")
     implementation("org.tukaani:xz:1.9")
     implementation(libs.androidx.core.ktx)
@@ -215,6 +218,7 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging-ktx")
     implementation("com.google.firebase:firebase-config-ktx")
     implementation("com.google.firebase:firebase-inappmessaging-display-ktx")
+    implementation("com.google.android.play:review-ktx:2.0.2")
 
     implementation("com.google.zxing:core:3.5.3")
     implementation("androidx.graphics:graphics-path:1.0.1")

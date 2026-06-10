@@ -154,7 +154,14 @@ class ServerConfigRepository @Inject constructor(
         val fallbackWorld = if (clean == "default") "world" else "world_${clean.replace('-', '_')}"
         val chosenWorld = worldName?.trim()?.takeIf { it.isNotEmpty() } ?: fallbackWorld
         val base = if (propertiesFile.exists()) parseConfig(propertiesFile) else ServerConfig()
-        val config = base.copy(worldName = chosenWorld)
+        val config = base.copy(
+            worldName = chosenWorld,
+            worldSeed = "",
+            levelType = "default",
+            serverType = ServerType.PAPER,
+            gameVersion = "",
+            customJarPath = null
+        )
         writeConfigFile(target, config)
         true
     }
@@ -245,7 +252,7 @@ class ServerConfigRepository @Inject constructor(
         return ServerConfig(
             worldName = props["level-name"] ?: defaultName,
             worldSeed = props["level-seed"] ?: "",
-            maxPlayers = (props["max-players"]?.toIntOrNull() ?: 10).coerceIn(1, 20),
+            maxPlayers = (props["max-players"]?.toIntOrNull() ?: 10).coerceIn(1, 1000),
             port = 25565,
             difficulty = props["difficulty"] ?: "normal",
             gameMode = props["gamemode"] ?: "survival",
@@ -295,7 +302,14 @@ class ServerConfigRepository @Inject constructor(
         if (file.exists()) return
         val worldBase = clean.replace('-', '_')
         val config = if (propertiesFile.exists()) {
-            parseConfig(propertiesFile)
+            parseConfig(propertiesFile).copy(
+                worldName = if (worldBase == "default") "world" else "world_$worldBase",
+                worldSeed = "",
+                levelType = "default",
+                serverType = ServerType.PAPER,
+                gameVersion = "",
+                customJarPath = null
+            )
         } else {
             ServerConfig(worldName = if (worldBase == "default") "world" else "world_$worldBase")
         }

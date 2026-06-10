@@ -21,4 +21,9 @@
     <string name="players_online">%1$d/%2$d 玩家</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">运行时间: %1$s</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/nc7ceYWVfT</string>
+    <string name="announcement_title">来自 PocketCraft 的留言</string>
+    <string name="announcement_body">嘿！我们想坦诚地告诉你 &#8212; PocketCraft 将永远完全免费。永远不会有订阅。\n\n我们通过少量的广告来维持服务器运行和应用的持续改进。仅此而已。\n\n如果你想帮助我们完全移除广告，或者只是想和团队聊聊天，请加入我们的 Discord &#8212; 我们非常欢迎你的加入。</string>
+    <string name="announcement_join_discord">加入 Discord</string>
+    <string name="announcement_got_it">知道了</string>
 </resources>

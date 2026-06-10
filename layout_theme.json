@@ -1,0 +1,41 @@
+[
+  {
+    "interactions": [
+      "clickable",
+      "focusable"
+    ],
+    "center": "[771,359]",
+    "key": 3506402
+  },
+  {
+    "interactions": [
+      "clickable",
+      "focusable"
+    ],
+    "center": "[771,491]",
+    "key": 3506402
+  },
+  {
+    "interactions": [
+      "clickable",
+      "focusable"
+    ],
+    "center": "[771,623]",
+    "key": 3506402
+  },
+  {
+    "text": "Creeper",
+    "center": "[697,359]",
+    "key": 3506402
+  },
+  {
+    "text": "Simple White",
+    "center": "[740,491]",
+    "key": 3506402
+  },
+  {
+    "text": "Simple Dark",
+    "center": "[729,623]",
+    "key": 3506402
+  }
+]

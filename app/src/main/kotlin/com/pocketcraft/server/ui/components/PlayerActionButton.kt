@@ -1,8 +1,8 @@
 package com.pocketcraft.server.ui.components
 
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -23,6 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import com.pocketcraft.server.ui.theme.ButtonFont
+import com.pocketcraft.server.ui.theme.button3d
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -66,8 +68,10 @@ fun PlayerActionButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
+    val restingBorder = 3.dp
     val offsetY by animateDpAsState(
-        targetValue = if (pressed && enabled) 4.dp else 0.dp,
+        targetValue = if (pressed && enabled) (restingBorder - 1.5.dp) else 0.dp,
+        animationSpec = tween(80),
         label = "action_button_offset"
     )
     val alpha = if (enabled) 1f else 0.55f
@@ -75,27 +79,19 @@ fun PlayerActionButton(
 
     Box(
         modifier = modifier
-            .padding(bottom = 8.dp)
+            .padding(bottom = 4.dp)
             .offset(y = offsetY)
     ) {
-        // Shadow layer (only show when not pressed)
-        if (!pressed) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .offset(y = 6.dp)
-                    .clip(shape)
-                    .background(actionType.shadowColor.copy(alpha = alpha))
-            )
-        }
-
-        // Main button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .button3d(
+                    elevation = 8.dp,
+                    borderColor = actionType.shadowColor.copy(alpha = alpha),
+                    depthColor = actionType.shadowColor.copy(alpha = alpha)
+                )
                 .clip(shape)
                 .background(actionType.backgroundColor.copy(alpha = alpha))
-                .border(2.dp, actionType.shadowColor.copy(alpha = alpha), shape)
                 .clickable(
                     enabled = enabled,
                     interactionSource = interactionSource,
@@ -110,9 +106,10 @@ fun PlayerActionButton(
                 text = label,
                 color = Color.White,
                 style = MaterialTheme.typography.labelLarge.copy(
-                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = ButtonFont,
+                    fontWeight = FontWeight.Normal,
                     fontSize = 14.sp,
-                    letterSpacing = 0.4.sp
+                    letterSpacing = 0.sp
                 )
             )
         }

@@ -11,6 +11,12 @@ const SERVER_GUID = 0xDEADBEEFCAFE1234n;
 const DEFAULT_PROTOCOL = '800';
 const DEFAULT_VERSION = '1.21.0';
 const statusMap = new Map();
+let pingLogCount = 0;
+
+function shouldLogPing() {
+  pingLogCount += 1;
+  return pingLogCount <= 10 || pingLogCount % 500 === 0;
+}
 
 function normalizeMotdPart(value, fallback) {
   return String(value ?? fallback)
@@ -71,7 +77,10 @@ function startBedrockPing(udpPort = 19132) {
   server.on('message', (msg, rinfo) => {
     if (!isRakNetPing(msg)) return;
 
-    console.log(`[BedrockPing] Got ping from ${rinfo.address}:${rinfo.port}, len=${msg.length}`);
+    const logPing = shouldLogPing();
+    if (logPing) {
+      console.log(`[BedrockPing] Got ping from ${rinfo.address}:${rinfo.port}, len=${msg.length}`);
+    }
 
     try {
       const pingTime = msg.readBigUInt64BE(1);
@@ -79,7 +88,7 @@ function startBedrockPing(udpPort = 19132) {
       server.send(pong, 0, pong.length, rinfo.port, rinfo.address, (err) => {
         if (err) {
           console.error(`[BedrockPing] Pong send error to ${rinfo.address}:${rinfo.port}:`, err.message);
-        } else {
+        } else if (logPing) {
           console.log(`[BedrockPing] Pong sent to ${rinfo.address}:${rinfo.port}, len=${pong.length}`);
         }
       });
@@ -108,11 +117,16 @@ function clearServerStatus(port) {
   statusMap.delete(Number(port));
 }
 
+function getServerStatus(port) {
+  return port ? statusMap.get(port) : statusMap.values().next().value;
+}
+
 module.exports = {
   startBedrockPing,
   updateServerStatus,
   buildPong,
   getMotd,
+  getServerStatus,
   clearServerStatus,
   isRakNetPing
 };

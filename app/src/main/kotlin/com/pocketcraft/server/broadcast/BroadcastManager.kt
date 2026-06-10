@@ -35,13 +35,10 @@ object BroadcastManager {
     fun getBroadcastsFlow(context: Context, appVersionCode: Int): Flow<List<BroadcastMessage>> = callbackFlow {
         val appContext = context.applicationContext
         val prefs = appContext.getSharedPreferences(BROADCAST_CACHE_PREFS, Context.MODE_PRIVATE)
-        val hasCache = prefs.contains(BROADCAST_CACHE_KEY)
         
-        if (hasCache) {
-            trySend(loadCachedBroadcasts(appContext, appVersionCode))
-        } else {
-            trySend(emptyList())
-        }
+        // Clear cached broadcasts on startup before Firestore fetch completes to avoid displaying stale/disabled warnings
+        prefs.edit().remove(BROADCAST_CACHE_KEY).apply()
+        trySend(emptyList())
 
         val listener = db.collection("broadcasts")
             .addSnapshotListener { snapshot, error ->
@@ -59,7 +56,7 @@ object BroadcastManager {
 
                 val messages = snapshot.documents.mapNotNull { doc ->
                     try {
-                        val active = doc.firstBoolean("active") ?: false
+                        val active = doc.firstBoolean("active", "enabled", "show") == true
                         val title = doc.firstString("title") ?: ""
                         val body = doc.firstString("body") ?: ""
                         val type = (doc.firstString("type") ?: "info").normalizeType()
@@ -133,7 +130,7 @@ object BroadcastManager {
 
         return runCatching {
             val json = JSONObject(raw)
-            val active = json.optBoolean("active", true)
+            val active = json.optBoolean("active", false) || json.optBoolean("enabled", false)
             if (!active) return null
 
             val title = json.optString("title").trim()

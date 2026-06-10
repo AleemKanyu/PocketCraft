@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.net.wifi.WifiManager
 import android.os.IBinder
 import android.os.PowerManager
 import android.os.Process
@@ -28,9 +29,7 @@ import com.pocketcraft.server.setup.JreExtractor
 import java.io.File
 import java.io.OutputStream
 import java.io.RandomAccessFile
-import java.net.Inet4Address
 import java.net.InetSocketAddress
-import java.net.NetworkInterface
 import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.ArrayDeque
@@ -62,7 +61,7 @@ class ServerHostService : Service() {
     }
 
     private enum class ServerStage(val notificationText: String) {
-        DOWNLOADING_SERVER("Downloading server..."),
+        DOWNLOADING_SERVER("Checking server JAR..."),
         EXTRACTING_JRE("Preparing Java runtime..."),
         CHECKING_PLUGINS("Checking Bedrock bridge..."),
         STARTING_SERVER("Starting server... (30-60s)"),
@@ -91,6 +90,7 @@ class ServerHostService : Service() {
     private var currentServerPort: Int = 25565
     private val relayManager by lazy { RelayManager(this) }
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
     private var stopReason: String = "unknown"
     private var autoRecoverWindowStartMs: Long = 0L
     private var autoRecoverAttempts: Int = 0
@@ -243,11 +243,13 @@ class ServerHostService : Service() {
                     gameVersion = resolvedGameVersion,
                     customJarPath = config.customJarPath,
                     targetFile = targetFile,
+                    serverDir = serverDir,
                     onProgress = { pct -> 
                         updateNotification("${ServerStage.DOWNLOADING_SERVER.notificationText} $pct%", force = false)
-                        sendEvent(versionId, EVENT_OUTPUT, "Downloading server: $pct%")
+                        sendEvent(versionId, EVENT_OUTPUT, "Checking imported server JAR: $pct%")
                     }
                 ).collect { jarFile ->
+                    val launchTarget = com.pocketcraft.server.service.ServerFileManager.readLaunchTarget(serverDir)
                     updateNotification(ServerStage.CHECKING_PLUGINS, force = true)
                     updateNotification(ServerStage.STARTING_SERVER, force = true)
 
@@ -256,6 +258,7 @@ class ServerHostService : Service() {
                             worldName = worldName,
                             versionId = versionId,
                             jarPath = jarFile.absolutePath,
+                            launchMode = launchTarget?.mode ?: com.pocketcraft.server.service.ServerFileManager.LaunchMode.JAR,
                             runtime = runtime,
             onOutput = { line ->
                 handleObservedOutputLine(versionId, line)
@@ -332,7 +335,7 @@ class ServerHostService : Service() {
                 }
             } catch (e: Exception) {
                 withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Failed to resolve JAR: ${e.message}")
+                    sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Server JAR is not ready: ${e.message}")
                     updateNotification("Server error", force = true)
                     isLaunching = false
                     stopInProgress.set(false)
@@ -422,7 +425,7 @@ class ServerHostService : Service() {
                 try {
                     relayManager.stopBedrockBridge()
                     kotlinx.coroutines.withTimeout(3000L) {
-                        relayManager.disconnect()
+                        relayManager.unregister()
                     }
                 } catch (_: Exception) {}
 
@@ -664,10 +667,10 @@ class ServerHostService : Service() {
 
     private fun startLogcatBridge(versionId: String) {
         if (logcatRunning.getAndSet(true)) return
-
         logcatThread = Thread {
             val process = ProcessBuilder(
                 "logcat",
+                "-T", "1",
                 "--pid=${Process.myPid()}",
                 "-v",
                 "brief",
@@ -712,6 +715,7 @@ class ServerHostService : Service() {
         if (logTailRunning.getAndSet(true)) return
 
         val latestLog = File(ServerFileManager.getServerDir(applicationContext, activeWorldNameOrDefault()), "logs/latest.log")
+        val tailStartLength = latestLog.takeIf { it.exists() }?.length() ?: 0L
         // Read up to 128KB of backlog so the user sees the start-up logs even if the tailer starts a bit late.
         val initialOffset = latestLog.takeIf { it.exists() }?.let { (it.length() - 131072).coerceAtLeast(0L) } ?: 0L
 
@@ -732,7 +736,8 @@ class ServerHostService : Service() {
                         raf.seek(offset)
                         while (logTailRunning.get()) {
                             val raw = raf.readLine() ?: break
-                            offset = raf.filePointer
+                            val currentOffset = raf.filePointer
+                            offset = currentOffset
 
                             val line = decodeLogLine(raw)
                                 ?.let(ConsoleParser::stripAnsi)
@@ -740,7 +745,8 @@ class ServerHostService : Service() {
                                 .orEmpty()
 
                             if (line.isBlank()) continue
-                            handleObservedOutputLine(versionId, line)
+                            val isBacklog = currentOffset <= tailStartLength
+                            handleObservedOutputLine(versionId, line, isBacklog)
                         }
                         offset = raf.filePointer
                     }
@@ -1040,6 +1046,34 @@ class ServerHostService : Service() {
             acquire(Long.MAX_VALUE)
         }
         android.util.Log.i("ServerHostService", "WakeLock acquired.")
+
+        // Keep WiFi out of power-save between game packets. Without this, the radio
+        // parks after ~50ms idle and adds a 20–150ms wake penalty on the next packet.
+        if (wifiLock == null) {
+            runCatching {
+                val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                val wifiMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                } else {
+                    @Suppress("DEPRECATION")
+                    WifiManager.WIFI_MODE_FULL_HIGH_PERF
+                }
+                @Suppress("DEPRECATION")
+                wifiLock = wm.createWifiLock(
+                    wifiMode,
+                    "PocketCraft:ServerWifiLock"
+                ).also {
+                    it.setReferenceCounted(false)
+                    it.acquire()
+                    android.util.Log.i(
+                        "ServerHostService",
+                        "WiFi low-latency lock acquired (mode=$wifiMode)."
+                    )
+                }
+            }.onFailure { e ->
+                android.util.Log.w("ServerHostService", "WiFi lock unavailable: ${e.message}")
+            }
+        }
     }
 
     private fun releaseWakeLock() {
@@ -1052,6 +1086,17 @@ class ServerHostService : Service() {
             android.util.Log.e("ServerHostService", "Error releasing WakeLock: ${e.message}")
         } finally {
             wakeLock = null
+        }
+
+        try {
+            wifiLock?.let {
+                if (it.isHeld) it.release()
+                android.util.Log.i("ServerHostService", "WiFi high-performance lock released.")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ServerHostService", "Error releasing WiFi lock: ${e.message}")
+        } finally {
+            wifiLock = null
         }
     }
 
@@ -1216,11 +1261,13 @@ class ServerHostService : Service() {
                     gameVersion = resolvedGameVersion,
                     customJarPath = config.customJarPath,
                     targetFile = targetFile,
+                    serverDir = serverDir,
                     onProgress = { pct -> 
                         updateNotification("${ServerStage.DOWNLOADING_SERVER.notificationText} $pct%", force = false)
-                        sendEvent(versionId, EVENT_OUTPUT, "Downloading server: $pct%")
+                        sendEvent(versionId, EVENT_OUTPUT, "Checking imported server JAR: $pct%")
                     }
                 ).collect { jarFile ->
+                    val launchTarget = com.pocketcraft.server.service.ServerFileManager.readLaunchTarget(serverDir)
                     updateNotification(ServerStage.CHECKING_PLUGINS, force = true)
                     updateNotification(ServerStage.STARTING_SERVER, force = true)
                     withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -1228,6 +1275,7 @@ class ServerHostService : Service() {
                             worldName = worldName,
                             versionId = versionId,
                             jarPath = jarFile.absolutePath,
+                            launchMode = launchTarget?.mode ?: com.pocketcraft.server.service.ServerFileManager.LaunchMode.JAR,
                             runtime = runtime,
             onOutput = { line ->
                 handleObservedOutputLine(versionId, line)
@@ -1307,7 +1355,7 @@ class ServerHostService : Service() {
                 }
             } catch (e: Exception) {
                 withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Failed to resolve JAR: ${e.message}")
+                    sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Server JAR is not ready: ${e.message}")
                     updateNotification("Server error", force = true)
                     isLaunching = false
                     stopInProgress.set(false)
@@ -1331,9 +1379,10 @@ class ServerHostService : Service() {
         return START_STICKY
     }
 
-    private fun handleObservedOutputLine(versionId: String, line: String) {
+    private fun handleObservedOutputLine(versionId: String, line: String, isBacklog: Boolean = false) {
         addLogLine(line)
         sendEvent(versionId, EVENT_OUTPUT, line)
+        if (isBacklog) return
         ConsoleParser.parseJoin(line)?.let { (name, _) ->
             synchronized(relayOnlinePlayers) {
                 relayOnlinePlayers.add(name.lowercase())
@@ -1449,17 +1498,7 @@ class ServerHostService : Service() {
     }
 
     private fun resolveLanEndpoint(port: Int): String? {
-        val ip = runCatching {
-            NetworkInterface.getNetworkInterfaces()
-                .toList()
-                .filter { it.isUp && !it.isLoopback }
-                .flatMap { it.inetAddresses.toList() }
-                .filterIsInstance<Inet4Address>()
-                .firstOrNull { !it.isLoopbackAddress && !it.isLinkLocalAddress }
-                ?.hostAddress
-        }.onFailure { e ->
-            android.util.Log.e("ServerHostService", "Failed to get network interfaces (SELinux?): ${e.message}")
-        }.getOrNull()
+        val ip = ServerAddressResolver.getLocalIpAddress()
         return if (ip.isNullOrBlank()) "0.0.0.0:$port" else "$ip:$port"
     }
 

@@ -51,11 +51,11 @@ object JreExtractor {
     }
 
     fun runtimeForVersion(versionId: String): RuntimeSpec {
-        val major = parseMajorVersion(versionId)
-        return if (major != null && major >= 26) {
-            RUNTIME_JAVA_25
-        } else {
-            defaultRuntimeForDevice()
+        val minecraftJavaMajor = parseMinecraftJavaMajor(versionId)
+        return when {
+            minecraftJavaMajor == null -> RUNTIME_JAVA_21
+            minecraftJavaMajor >= 26 -> RUNTIME_JAVA_25
+            else -> RUNTIME_JAVA_21
         }
     }
 
@@ -92,6 +92,9 @@ object JreExtractor {
         onProgress(0, "Checking Minecraft Runtime...")
 
         if (marker.exists() && hasRequiredRuntimeFiles(jreDir)) {
+            // Even on a cache-hit, guarantee the java binary is executable.
+            // If the app was updated or the filesystem remounted, permissions may be lost.
+            fixPermissions(File(jreDir, "bin"))
             onProgress(100, "Minecraft Runtime Ready")
             return
         }
@@ -206,9 +209,21 @@ object JreExtractor {
         )
     }
 
-    private fun parseMajorVersion(versionId: String): Int? {
-        val match = Regex("\\d+").find(versionId) ?: return null
-        return match.value.toIntOrNull()
+    private fun parseMinecraftJavaMajor(versionId: String): Int? {
+        val trimmed = versionId.trim()
+
+        // Only parse standard Minecraft release strings: "1.x", "1.x.y", "1.x.y-snapshot", etc.
+        // Forge build numbers like "26.1.2", "47.3.0" start with a number > 1 and are NOT
+        // Minecraft versions — treat them as unknown so we fall back to the safe Java 21 default.
+        if (!trimmed.startsWith("1.")) return null
+
+        val version = Regex("""\d+(?:\.\d+){1,2}""").find(trimmed)?.value ?: return null
+        val parts = version.split('.').mapNotNull { it.toIntOrNull() }
+        if (parts.size < 2) return null
+
+        // parts[0] == 1 guaranteed by the startsWith check above.
+        // parts[1] is the Minecraft generation: 1.21.x → 21, 1.12.x → 12, 1.26.x → 26 (future).
+        return parts[1]
     }
 
     private fun abiArchiveName(): String {
@@ -243,6 +258,22 @@ object JreExtractor {
                 file.setWritable(true, false)
             }
         }
+    }
+
+    /**
+     * Cheap boot-time guard: ensures the java binary is executable without a full re-extract.
+     * Call this before launching any server process. Returns true if the binary is ready.
+     */
+    fun ensureJavaBinaryExecutable(context: Context, runtime: RuntimeSpec = defaultRuntimeForDevice()): Boolean {
+        val javaBin = getJavaBinary(context, runtime)
+        if (!javaBin.exists()) return false
+        if (!javaBin.canExecute()) {
+            // Restore execute bit — can be lost after app updates or filesystem remounts
+            javaBin.setExecutable(true, false)
+            // Also chmod the rest of bin/ in case other launchers (java, keytool) lost it too
+            fixPermissions(File(getJreDir(context, runtime), "bin"))
+        }
+        return javaBin.canExecute()
     }
 
     private fun copyAssetFolder(
@@ -330,6 +361,12 @@ object JreExtractor {
                         outFile.outputStream().use { output ->
                             tarInput.copyTo(output)
                         }
+                        // Apply Unix permission bits stored in the TAR header.
+                        // Without this, bin/java is extracted as 0644 (not executable).
+                        val mode = entry.mode
+                        outFile.setReadable((mode and 0b100_000_000) != 0, false)
+                        outFile.setWritable((mode and 0b010_000_000) != 0, false)
+                        outFile.setExecutable((mode and 0b001_000_000) != 0, false)
                     }
                     processedEntries += 1
                     val percent = (progressStart + ((processedEntries.toFloat() * (progressEnd - progressStart)) / totalEntries).toInt()).coerceIn(progressStart, progressEnd)

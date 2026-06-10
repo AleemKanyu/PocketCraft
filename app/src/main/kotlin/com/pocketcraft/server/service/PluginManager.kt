@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.pocketcraft.server.BuildConfig
 import com.pocketcraft.server.data.model.Plugin
+import com.pocketcraft.server.server.BundledPluginInstaller
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -33,7 +34,6 @@ object PluginManager {
 
     private const val MODRINTH_BASE_URL = "https://api.modrinth.com/v2"
     private const val HANGAR_BASE_URL = "https://hangar.papermc.io/api/v1"
-    private const val GEYSERMC_DOWNLOAD_BASE_URL = "https://download.geysermc.org/v2/projects"
     private const val MEMORY_CACHE_TTL_MS = 3 * 60 * 1000L
     private const val HTTP_CACHE_BYTES = 12L * 1024L * 1024L
     private const val MODRINTH_PROVIDER = "modrinth"
@@ -44,13 +44,19 @@ object PluginManager {
     // is treated as a corrupted/truncated download and will be re-downloaded automatically.
     private val managedBridgePluginIds = setOf("geyser", "floodgate", "viaversion")
     private const val MANAGED_PLUGIN_MIN_VALID_BYTES = 512 * 1024L // 512 KB minimum for real bridge jars
-    private val incompatiblePluginTokens = listOf("fastleafdecay", "inventoryprofiles")
+    // Via* hooks the Netty pipeline and breaks same-version Java joins on 1.21.11+
+    // (debug_subscription_request decode kicks). Keep them disabled for native hosting.
+    private val incompatiblePluginTokens = listOf(
+        "fastleafdecay",
+        "inventoryprofiles",
+        "viaversion",
+        "viabackwards",
+        "viarewind"
+    )
     private val BLOCKED_PLUGINS = setOf("spark", "spark-bukkit")
     private val paperCompatibleLoaders = setOf("paper", "spigot", "purpur", "bukkit", "folia")
     private val modLoaderLabels = linkedMapOf(
         "fabric" to "Fabric",
-        "forge" to "Forge",
-        "neoforge" to "NeoForge",
         "quilt" to "Quilt"
     )
 
@@ -113,7 +119,6 @@ object PluginManager {
     private data class BundledPluginUpdate(
         val projectId: String,
         val title: String,
-        val downloadUrl: String? = null,
         val fileNameHint: String? = null,
         val catalogItem: RemoteCatalogItem? = null
     )
@@ -230,66 +235,9 @@ object PluginManager {
         onProgress: (String) -> Unit = {}
     ): Result<Unit> = withContext(Dispatchers.IO) {
         removeIncompatiblePlugins(context, worldName)
-        val geyser = RemoteCatalogItem(
-            source = MODRINTH_PROVIDER,
-            projectId = "geyser",
-            title = "Geyser",
-            slug = "geyser",
-            iconUrl = null,
-            description = "Built-in Bedrock bridge",
-            downloads = 0L
-        )
-        val viaVersion = RemoteCatalogItem(
-            source = MODRINTH_PROVIDER,
-            projectId = "viaversion",
-            title = "ViaVersion",
-            slug = "viaversion",
-            iconUrl = null,
-            description = "Built-in Java protocol compatibility for latest Bedrock via Geyser",
-            downloads = 0L
-        )
-
-        installManagedPluginIfMissing(
-            context = context,
-            worldName = worldName,
-            item = geyser,
-            onProgress = onProgress
-        ).onFailure { error ->
-            android.util.Log.w("PluginManager", "Modrinth/Hangar Geyser resolution failed: ${error.message}. Attempting direct download fallback...")
-            installManagedPluginFromDirectUrlIfMissing(
-                context = context,
-                worldName = worldName,
-                projectId = "geyser",
-                title = "Geyser",
-                downloadUrl = "$GEYSERMC_DOWNLOAD_BASE_URL/geyser/versions/latest/builds/latest/downloads/spigot",
-                fileNameHint = "Geyser-Spigot.jar",
-                onProgress = onProgress
-            ).fold(
-                onSuccess = {},
-                onFailure = { return@withContext Result.failure(it) }
-            )
-        }
-
-        installManagedPluginFromDirectUrlIfMissing(
-            context = context,
-            worldName = worldName,
-            projectId = "floodgate",
-            title = "Floodgate",
-            downloadUrl = "$GEYSERMC_DOWNLOAD_BASE_URL/floodgate/versions/latest/builds/latest/downloads/spigot",
-            fileNameHint = "Floodgate-Spigot.jar",
-            onProgress = onProgress
-        ).onFailure { error ->
-            android.util.Log.w("PluginManager", "Floodgate direct download failed: ${error.message}")
-        }
-
-        installManagedPluginIfMissing(
-            context = context,
-            worldName = worldName,
-            item = viaVersion,
-            onProgress = onProgress
-        ).onFailure { error ->
-            android.util.Log.w("PluginManager", "ViaVersion auto-install skipped: ${error.message}")
-        }
+        onProgress("Installing bundled Bedrock bridge plugins...")
+        val serverDir = ServerFileManager.getServerDir(context, worldName)
+        BundledPluginInstaller.installBundledPlugins(context, serverDir)
 
         ensureManagedPluginEnabled(context, worldName, "geyser")
         ensureManagedPluginEnabled(context, worldName, "floodgate")
@@ -304,56 +252,12 @@ object PluginManager {
         worldName: String,
         onProgress: (String) -> Unit = {}
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        val bundledPlugins = listOf(
-            BundledPluginUpdate(
-                projectId = "geyser",
-                title = "Geyser",
-                downloadUrl = "$GEYSERMC_DOWNLOAD_BASE_URL/geyser/versions/latest/builds/latest/downloads/spigot",
-                fileNameHint = "Geyser-Spigot.jar"
-            ),
-            BundledPluginUpdate(
-                projectId = "floodgate",
-                title = "Floodgate",
-                downloadUrl = "$GEYSERMC_DOWNLOAD_BASE_URL/floodgate/versions/latest/builds/latest/downloads/spigot",
-                fileNameHint = "Floodgate-Spigot.jar"
-            ),
-            BundledPluginUpdate(
-                projectId = "viaversion",
-                title = "ViaVersion",
-                catalogItem = RemoteCatalogItem(
-                    source = MODRINTH_PROVIDER,
-                    projectId = "viaversion",
-                    title = "ViaVersion",
-                    slug = "viaversion",
-                    iconUrl = null,
-                    description = "Built-in Java protocol compatibility for latest Bedrock via Geyser",
-                    downloads = 0L
-                )
-            )
-        )
-
-        for (plugin in bundledPlugins) {
-            try {
-                onProgress("Updating ${plugin.title} bridge plugin...")
-                withTimeoutOrNull(15000L) {
-                    replaceManagedPluginFromUrl(
-                        context = context,
-                        worldName = worldName,
-                        projectId = plugin.projectId,
-                        title = plugin.title,
-                        downloadUrl = plugin.downloadUrl,
-                        fileNameHint = plugin.fileNameHint,
-                        catalogItem = plugin.catalogItem
-                    )
-                } ?: Log.w("PluginManager", "Timeout auto-updating ${plugin.title}")
-            } catch (e: Exception) {
-                Log.w("PluginManager", "Failed to auto-update ${plugin.title}: ${e.message}")
-            }
-        }
+        onProgress("Refreshing bundled Bedrock bridge plugins...")
+        val serverDir = ServerFileManager.getServerDir(context, worldName)
+        BundledPluginInstaller.reinstallBundledPlugins(context, serverDir)
 
         ensureManagedPluginEnabled(context, worldName, "geyser")
         ensureManagedPluginEnabled(context, worldName, "floodgate")
-        ensureManagedPluginEnabled(context, worldName, "viaversion")
         
         enforceBedrockBridgeLocalConfig(context, worldName)
         
@@ -840,62 +744,7 @@ object PluginManager {
         runtimeKey: String = worldName,
         onProgress: (Int) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
-        try {
-            val dir = getContentDir(context, worldName, type)
-            val client = getHttpClient(context)
-            val request = Request.Builder()
-                .url(sourceUrl.trim())
-                .header("User-Agent", userAgent())
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    return@withContext Result.failure(Exception("HTTP ${response.code}"))
-                }
-
-                val resolvedName = resolveFileName(
-                    fileNameHint = fileNameHint,
-                    contentDisposition = response.header("Content-Disposition"),
-                    sourceUrl = sourceUrl,
-                    type = type
-                )
-
-                validateFileName(resolvedName, type)?.let { error ->
-                    return@withContext Result.failure(Exception(error))
-                }
-
-                val destFile = File(dir, sanitizeFileName(resolvedName))
-                val body = response.body ?: return@withContext Result.failure(Exception("Empty download"))
-                val totalBytes = body.contentLength()
-
-                body.byteStream().use { input ->
-                    FileOutputStream(destFile).use { output ->
-                        val buffer = ByteArray(16 * 1024)
-                        var downloaded = 0L
-                        var bytes = input.read(buffer)
-                        while (bytes != -1) {
-                            output.write(buffer, 0, bytes)
-                            downloaded += bytes
-                            if (totalBytes > 0) {
-                                withContext(Dispatchers.Main) {
-                                    onProgress(((downloaded * 100) / totalBytes).toInt().coerceIn(0, 100))
-                                }
-                            }
-                            bytes = input.read(buffer)
-                        }
-                    }
-                }
-
-                validateInstalledFile(destFile, type, runtimeKey)?.let { error ->
-                    destFile.delete()
-                    return@withContext Result.failure(Exception(error))
-                }
-
-                Result.success(destFile)
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        Result.failure(Exception("Direct in-app downloads are disabled. Open the official page in your browser, download the file there, then import it from device storage."))
     }
 
     suspend fun installRemoteItem(
@@ -907,28 +756,7 @@ object PluginManager {
         minecraftVersion: String? = null,
         onProgress: (Int) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
-        if (!item.canInstall) {
-            return@withContext Result.failure(Exception(item.supportMessage ?: "This item is not compatible with the current server runtime."))
-        }
-
-        val resolvedVersion = minecraftVersion 
-            ?: com.pocketcraft.server.data.repository.ServerConfigRepository(context).loadConfig().gameVersion.ifBlank { "1.20.4" }
-
-        val candidate = when (item.source) {
-            MODRINTH_PROVIDER -> resolveModrinthDownload(context, item, type, resolvedVersion, runtimeKey)
-            HANGAR_PROVIDER -> resolveHangarDownload(context, item, worldName)
-            else -> null
-        } ?: return@withContext Result.failure(Exception("Could not find a compatible download for ${item.title}."))
-
-        installFromUrl(
-            context = context,
-            sourceUrl = candidate.downloadUrl,
-            worldName = worldName,
-            type = type,
-            fileNameHint = candidate.fileName,
-            runtimeKey = runtimeKey,
-            onProgress = onProgress
-        )
+        Result.failure(Exception("Direct in-app downloads are disabled. Open ${item.title}'s official page, download the file in your browser, then import it from device storage."))
     }
 
     suspend fun fetchRemoteCatalog(
@@ -1118,7 +946,7 @@ object PluginManager {
                     val modSupportMessage = when (type) {
                         ContentType.MODS -> {
                             if (!supportsMods(runtimeKey)) {
-                                "Switch this server to Fabric, Quilt, Forge, or NeoForge to install mods."
+                                "Switch this server to Fabric or Quilt to install mods."
                             } else {
                                 val loaderLabel = matchedLoaders.firstNotNullOfOrNull { modLoaderLabels[it] }
                                 if (loaderLabel != null && compatibleLoaders.isNotEmpty() && matchedLoaders.none { it in compatibleLoaders }) {
@@ -1475,7 +1303,7 @@ object PluginManager {
             }
             ContentType.MODS -> {
                 if (!supportsMods(runtimeKey)) {
-                    return "This server does not support mods. Switch to Fabric, Quilt, Forge, or NeoForge first."
+                    return "This server does not support mods. Switch to Fabric or Quilt first."
                 }
                 val metadata = readArchiveMetadata(file)
                 val compatibleLoaders = compatibleModLoadersForRuntime(runtimeKey)
@@ -1586,8 +1414,6 @@ object PluginManager {
     private fun compatibleModLoadersForRuntime(versionId: String): List<String> {
         val normalizedVersion = versionId.lowercase(Locale.US)
         return when {
-            normalizedVersion.contains("neoforge") -> listOf("neoforge")
-            normalizedVersion.contains("forge") -> listOf("forge")
             normalizedVersion.contains("quilt") -> listOf("quilt", "fabric")
             normalizedVersion.contains("fabric") -> listOf("fabric")
             else -> emptyList()
@@ -1597,8 +1423,6 @@ object PluginManager {
     private fun runtimeLabel(versionId: String): String {
         val normalizedVersion = versionId.lowercase(Locale.US)
         return when {
-            normalizedVersion.contains("neoforge") -> "NeoForge"
-            normalizedVersion.contains("forge") -> "Forge"
             normalizedVersion.contains("quilt") -> "Quilt"
             normalizedVersion.contains("fabric") -> "Fabric"
             else -> "Vanilla/Paper"
@@ -1652,17 +1476,8 @@ object PluginManager {
             ensureManagedPluginEnabled(context, worldName, item.projectId)
             return Result.success(Unit)
         }
-        onProgress("Installing ${item.title} bridge plugin…")
-        Log.d("PluginManager", "Installing managed plugin: ${item.title} (${item.projectId})")
-        return withTimeoutOrNull(20000L) {
-            installRemoteItem(
-                context = context,
-                item = item,
-                worldName = worldName,
-                type = ContentType.PLUGINS,
-                onProgress = {}
-            ).map { Unit }
-        } ?: Result.failure(Exception("Timeout installing ${item.title}"))
+        onProgress("${item.title} must be imported manually.")
+        return Result.failure(Exception("${item.title} is not bundled and cannot be downloaded in-app."))
     }
 
     private suspend fun installManagedPluginFromCandidatesIfMissing(
@@ -1699,15 +1514,8 @@ object PluginManager {
             ensureManagedPluginEnabled(context, worldName, projectId)
             return Result.success(Unit)
         }
-        onProgress("Installing $title bridge plugin…")
-        return installFromUrl(
-            context = context,
-            sourceUrl = downloadUrl,
-            worldName = worldName,
-            type = ContentType.PLUGINS,
-            fileNameHint = fileNameHint,
-            onProgress = {}
-        ).map { Unit }
+        onProgress("$title must be imported manually.")
+        return Result.failure(Exception("$title is not bundled and cannot be downloaded in-app."))
     }
 
     private suspend fun replaceManagedPluginFromUrl(
@@ -1726,26 +1534,7 @@ object PluginManager {
         }
         existing?.forEach { it.delete() }
 
-        return if (downloadUrl != null) {
-            installFromUrl(
-                context = context,
-                sourceUrl = downloadUrl,
-                worldName = worldName,
-                type = ContentType.PLUGINS,
-                fileNameHint = fileNameHint,
-                onProgress = {}
-            ).map { Unit }
-        } else if (catalogItem != null) {
-            installRemoteItem(
-                context = context,
-                item = catalogItem,
-                worldName = worldName,
-                type = ContentType.PLUGINS,
-                onProgress = {}
-            ).map { Unit }
-        } else {
-            Result.failure(Exception("No download source for $title"))
-        }
+        return Result.failure(Exception("$title cannot be updated in-app. Bundle a newer version with an app update."))
     }
 
     private fun ensureManagedPluginEnabled(context: Context, worldName: String, projectId: String) {

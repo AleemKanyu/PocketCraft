@@ -6,9 +6,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -47,7 +51,8 @@ import kotlinx.coroutines.withContext
 fun ConfigEditorScreen(
     serverDir: File,
     isReadOnly: Boolean,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onOpenFileEditor: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -96,7 +101,8 @@ fun ConfigEditorScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
-                .padding(16.dp),
+                .padding(16.dp)
+                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(modifier = Modifier.fillMaxWidth()) {
@@ -149,7 +155,7 @@ fun ConfigEditorScreen(
                                 text = section.title,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 13.sp,
-                                letterSpacing = 1.2.sp,
+                                letterSpacing = 0.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             section.keys.forEach { key ->
@@ -162,6 +168,9 @@ fun ConfigEditorScreen(
                             }
                             HorizontalDivider()
                         }
+                    }
+                    item {
+                        Spacer(modifier = Modifier.navigationBarsPadding().height(80.dp))
                     }
                 }
 
@@ -247,6 +256,16 @@ fun ConfigEditorScreen(
                 ) {
                     Text("Close")
                 }
+
+                Button(
+                    onClick = onOpenFileEditor,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                ) {
+                    Text("Advanced: Open Full File Editor")
+                }
+
+                Spacer(modifier = Modifier.navigationBarsPadding().height(80.dp))
             }
         }
     }

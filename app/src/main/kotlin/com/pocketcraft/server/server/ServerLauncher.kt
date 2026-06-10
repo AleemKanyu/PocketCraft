@@ -58,16 +58,17 @@ class ServerLauncher(private val context: Context) {
         worldName: String,
         versionId: String,
         jarPath: String,
+        launchMode: ServerFileManager.LaunchMode = ServerFileManager.LaunchMode.JAR,
         runtime: JreExtractor.RuntimeSpec,
         onOutput : (String) -> Unit,
         onError  : (String) -> Unit,
         onStopped: (Int) -> Unit
     ) {
-        val jarFile = File(jarPath)
+        val launchTarget = File(jarPath)
         
-        // Pre-launch guard: abort immediately if JAR is missing or is a directory (EISDIR prevention)
-        if (!jarFile.exists() || jarFile.isDirectory) {
-            throw IllegalStateException("JAR not found: ${jarFile.absolutePath}")
+        // Pre-launch guard: abort immediately if the persisted launch target is missing.
+        if (!launchTarget.exists() || launchTarget.isDirectory) {
+            throw IllegalStateException("Launch target not found: ${launchTarget.absolutePath}")
         }
 
 
@@ -78,6 +79,14 @@ class ServerLauncher(private val context: Context) {
         
         val serverDirFileLocal = ServerFileManager.getServerDir(context, worldName)
         val props = ServerPropertiesHelper.readProperties(serverDirFileLocal)
+
+        // Validate level.dat and attempt recovery if corrupted
+        try {
+            validateAndRecoverLevelDat(serverDirFileLocal, props, onOutput)
+        } catch (e: Exception) {
+            onOutput("[PocketCraft] Level.dat validator exception: ${e.message}")
+        }
+
         val serverTypeStr = props.getProperty("pocketcraft-server-type", "PAPER")
         val serverType = com.pocketcraft.server.data.model.ServerType.fromString(serverTypeStr)
         
@@ -146,7 +155,7 @@ class ServerLauncher(private val context: Context) {
 
         onOutput("[PocketCraft] Starting world '$worldName' (version $versionId)...")
         onOutput("[PocketCraft] JRE: $jrePath")
-        onOutput("[PocketCraft] JAR: $jarPath")
+        onOutput("[PocketCraft] Launch target: $jarPath")
         
         val tmpShimDir = File(tmpDir)
         runCatching {
@@ -190,12 +199,13 @@ class ServerLauncher(private val context: Context) {
                     isRedmi && Build.VERSION.SDK_INT >= 36
                 }
 
-                if (forceExternal || isRedmiXiaomiAndroid16) {
+                if (launchMode != ServerFileManager.LaunchMode.JAR || forceExternal || isRedmiXiaomiAndroid16) {
                     onOutput("[PocketCraft] Routing to out-of-process JVM execution (ForceExternal=$forceExternal, RedmiAndroid16=$isRedmiXiaomiAndroid16)")
                     result = launchExternalJvm(
                         javaBin = javaBin,
                         jrePath = jrePath,
-                        jarPath = jarPath,
+                        launchTargetPath = jarPath,
+                        launchMode = launchMode,
                         serverDir = serverDir,
                         tmpDir = tmpDir,
                         shimDir = shimDir,
@@ -231,7 +241,8 @@ class ServerLauncher(private val context: Context) {
                         result = launchExternalJvm(
                             javaBin = javaBin,
                             jrePath = jrePath,
-                            jarPath = jarPath,
+                            launchTargetPath = jarPath,
+                            launchMode = launchMode,
                             serverDir = serverDir,
                             tmpDir = tmpDir,
                             shimDir = shimDir,
@@ -259,7 +270,8 @@ class ServerLauncher(private val context: Context) {
     private fun launchExternalJvm(
         javaBin: File,
         jrePath: String,
-        jarPath: String,
+        launchTargetPath: String,
+        launchMode: ServerFileManager.LaunchMode,
         serverDir: String,
         tmpDir: String,
         shimDir: File,
@@ -271,14 +283,10 @@ class ServerLauncher(private val context: Context) {
     ): Int {
         val errorFilePattern = File(serverDir, "hs_err_pid%p.log").absolutePath
         val nativeLibDir = context.applicationInfo.nativeLibraryDir
-        val wrapperBinSource = File(nativeLibDir, "libserverwrap.so")
-        val wrapperBin = File(context.codeCacheDir, "serverwrap")
-        if (wrapperBinSource.exists() && !wrapperBin.exists()) {
-            wrapperBinSource.copyTo(wrapperBin)
-        }
+        val wrapperBin = File(nativeLibDir, "libserverwrap.so")
         if (wrapperBin.exists() && !wrapperBin.canExecute()) {
-            wrapperBin.setExecutable(true, false)
-            android.util.Log.d("ServerLauncher", "Set serverwrap executable: ${wrapperBin.absolutePath}")
+            runCatching { android.system.Os.chmod(wrapperBin.absolutePath, 0x1ED) }
+                .onFailure { android.util.Log.w("ServerLauncher", "chmod serverwrap failed: ${it.message}") }
         }
         val archLibDir = detectRuntimeLibDir(jrePath)
         val jvmDir = File(archLibDir, "server").takeIf { it.isDirectory } ?: File(jrePath, "lib/server")
@@ -341,7 +349,7 @@ class ServerLauncher(private val context: Context) {
             "-XX:+UseStringDeduplication",
             "-XX:+UseG1GC",
             "-XX:+ParallelRefProcEnabled",
-            "-XX:MaxGCPauseMillis=200",
+            "-XX:MaxGCPauseMillis=50",
             "-XX:+DisableExplicitGC",
             "-XX:G1NewSizePercent=30",
             "-XX:G1MaxNewSizePercent=40",
@@ -362,14 +370,23 @@ class ServerLauncher(private val context: Context) {
             "-Dio.netty.recycler.maxCapacity=0",
             "-Dio.netty.recycler.maxCapacityPerThread=0",
             "-Dio.netty.recycler.linkCapacity=1024",
-            "-Dio.netty.allocator.type=unpooled",
+            "-Dio.netty.allocator.type=pooled",
             "-Djdk.lang.Process.launchMechanism=FORK",
-            "-jar",
-            jarPath,
-            "nogui",
-            "--port",
-            resolveServerPort(worldName).toString()
-        )
+        ).apply {
+            when (launchMode) {
+                ServerFileManager.LaunchMode.JAR -> {
+                    add("-jar")
+                    add(launchTargetPath)
+                    add("nogui")
+                    add("--port")
+                    add(resolveServerPort(worldName).toString())
+                }
+                ServerFileManager.LaunchMode.ARG_FILE -> {
+                    add("@$launchTargetPath")
+                    add("nogui")
+                }
+            }
+        }
 
         // Use Os.chmod (real syscall) instead of File.setExecutable which silently fails under SELinux.
         // 0x1ED = octal 0755 = rwxr-xr-x
@@ -462,6 +479,8 @@ class ServerLauncher(private val context: Context) {
         return raw.coerceIn(512, 4096)
     }
 
+    // Relay runtime tuning applied at server start. Java ping is dominated by bridge
+    // buffer sizes in RelayManager — see RelayManager KDoc before changing compression.
     private fun applyRelayReadyRuntimeProfile(
         serverDir: File,
         onOutput: (String) -> Unit
@@ -470,13 +489,6 @@ class ServerLauncher(private val context: Context) {
 
         val flightModeEnabled = runBlocking { AppPreferencesStore.isFlightModeEnabledFlow(context).first() }
         
-        val currentView = props.getProperty("view-distance", ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE.toString())
-            .toIntOrNull()
-            ?: ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE
-        val currentSimulation = props.getProperty(
-            "simulation-distance",
-            ServerPropertiesHelper.DEFAULT_SIMULATION_DISTANCE.toString()
-        ).toIntOrNull() ?: ServerPropertiesHelper.DEFAULT_SIMULATION_DISTANCE
         val currentCompression = props.getProperty(
             "network-compression-threshold",
             ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD.toString()
@@ -485,18 +497,11 @@ class ServerLauncher(private val context: Context) {
             "entity-broadcast-range-percentage",
             ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT.toString()
         ).toIntOrNull()
+        val currentView = props.getProperty("view-distance", ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE.toString())
+        val currentSimulation = props.getProperty("simulation-distance", ServerPropertiesHelper.DEFAULT_SIMULATION_DISTANCE.toString())
         val currentAllowFlight = props.getProperty("allow-flight", "false").toBoolean()
 
-        // Preserve the user-selected render distance across restarts.
-        // The relay tuning below keeps the lower bound sane, but should not
-        // force the slider back to the app default.
-        val maxPowerEnabled = AppPreferences(context).isMaxPowerMode
-        val maxView = if (maxPowerEnabled) 32 else 16
-        val maxSimulation = if (maxPowerEnabled) 16 else 10
-        var tunedView = currentView.coerceIn(3, maxView)
-        var tunedSimulation = currentSimulation.coerceIn(3, maxSimulation)
         var tunedAllowFlight = currentAllowFlight
-
 
         if (flightModeEnabled && !currentAllowFlight) {
             tunedAllowFlight = true
@@ -507,18 +512,10 @@ class ServerLauncher(private val context: Context) {
         val tunedEntityBroadcast = when {
             currentEntityBroadcast == null -> ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
             currentEntityBroadcast <= 0 -> ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
-            else -> currentEntityBroadcast
+            else -> currentEntityBroadcast.coerceAtMost(ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT)
         }
 
         var changed = false
-        if (tunedView != currentView) {
-            props["view-distance"] = tunedView.toString()
-            changed = true
-        }
-        if (tunedSimulation != currentSimulation) {
-            props["simulation-distance"] = tunedSimulation.toString()
-            changed = true
-        }
         if (tunedCompression != currentCompression) {
             props["network-compression-threshold"] = tunedCompression.toString()
             changed = true
@@ -540,13 +537,17 @@ class ServerLauncher(private val context: Context) {
             props["allow-flight"] = "true"
             changed = true
         }
+        if (props.getProperty("use-native-transport") != "false") {
+            props["use-native-transport"] = "false"
+            changed = true
+        }
 
         if (changed) {
             ServerPropertiesHelper.saveProperties(serverDir, props)
             onOutput("[PocketCraft] Internet relay profile applied.")
         }
         onOutput(
-            "[PocketCraft] Relay runtime profile: compression=$tunedCompression, view=$tunedView, simulation=$tunedSimulation, entity-range=$tunedEntityBroadcast%"
+            "[PocketCraft] Relay runtime profile: compression=$tunedCompression, view=$currentView, simulation=$currentSimulation, entity-range=$tunedEntityBroadcast%"
         )
     }
 
@@ -559,7 +560,7 @@ class ServerLauncher(private val context: Context) {
         val original = runCatching { paperGlobal.readText() }.getOrDefault("")
 
         var updated = original
-        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "auto-config-send-distance", "true")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "auto-config-send-distance", "false")
         updated = ensureYamlSectionValue(updated, "misc", "io-threads", "2")
         updated = ensureYamlSectionValue(updated, "misc", "worker-threads", "2")
         updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "2")
@@ -612,6 +613,10 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded-range", "10")
         updated = ensureYamlPathValue(updated, listOf("chunks"), "max-auto-save-chunks-per-tick", "4")
         updated = ensureYamlPathValue(updated, listOf("chunks"), "prevent-moving-into-unloaded-chunks", "true")
+        // Cap chunk floods on relay hosting — 5G uplink stalls ~300ms per 16KB write without this.
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading"), "player-max-chunk-send-rate", "8.0")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading"), "target-player-chunk-send-rate", "4.0")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading"), "player-max-concurrent-sends", "1")
         updated = ensureYamlPathValue(updated, listOf("tick-rates"), "mob-spawner", "2")
         updated = ensureYamlPathValue(updated, listOf("tick-rates"), "grass-spread", "4")
         updated = ensureYamlPathValue(updated, listOf("tick-rates"), "container-update", "1")
@@ -830,6 +835,22 @@ class ServerLauncher(private val context: Context) {
     }
 
     private fun extractAndPatchJnaLibrary(paperJarPath: String, serverDir: File, shimDir: File): Boolean {
+        val nativeLibDir = context.applicationInfo.nativeLibraryDir
+        val packagedJna = File(nativeLibDir, "libjnidispatch.so")
+        if (packagedJna.exists()) {
+            val dest = File(shimDir, "libjnidispatch.so")
+            val stampFile = File(shimDir, "libjnidispatch.meta")
+            val expectedStamp = "packaged|${packagedJna.length()}|${packagedJna.lastModified()}"
+            val currentStamp = runCatching { stampFile.readText(Charsets.UTF_8).trim() }.getOrDefault("")
+            if (currentStamp == expectedStamp && dest.exists()) {
+                return false
+            }
+            packagedJna.copyTo(dest, overwrite = true)
+            dest.setExecutable(true)
+            stampFile.writeText(expectedStamp, Charsets.UTF_8)
+            return true
+        }
+
         if (isPatchedJnaCacheCurrent(paperJarPath, shimDir)) {
             return false
         }
@@ -994,6 +1015,19 @@ class ServerLauncher(private val context: Context) {
                 'l'.code.toByte(), 'i'.code.toByte(), 'b'.code.toByte(),
                 'c'.code.toByte(), '.'.code.toByte(), 's'.code.toByte(),
                 'o'.code.toByte(), 0, 0, 0
+            ),
+            // __xpg_strerror_r -> strerror_r + 6 zero pads
+            "__xpg_strerror_r".toByteArray() to byteArrayOf(
+                's'.code.toByte(), 't'.code.toByte(), 'r'.code.toByte(),
+                'e'.code.toByte(), 'r'.code.toByte(), 'r'.code.toByte(),
+                'o'.code.toByte(), 'r'.code.toByte(), '_'.code.toByte(),
+                'r'.code.toByte(), 0, 0, 0, 0, 0, 0
+            ),
+            // __strdup -> strdup + 2 zero pads
+            "__strdup".toByteArray() to byteArrayOf(
+                's'.code.toByte(), 't'.code.toByte(), 'r'.code.toByte(),
+                'd'.code.toByte(), 'u'.code.toByte(), 'p'.code.toByte(),
+                0, 0
             )
         )
 
@@ -1072,5 +1106,60 @@ class ServerLauncher(private val context: Context) {
         var end = i
         while (end < data.size && data[end] != 0.toByte()) end++
         return if (end > i) String(data.copyOfRange(i, end)) else ""
+    }
+
+    private fun validateAndRecoverLevelDat(serverDir: File, props: java.util.Properties, onOutput: (String) -> Unit) {
+        val levelName = props.getProperty("level-name", "world")
+        val worldDir = File(serverDir, levelName)
+        val levelDat = File(worldDir, "level.dat")
+        val levelDatOld = File(worldDir, "level.dat_old")
+
+        if (!levelDat.exists()) {
+            return
+        }
+
+        fun isValidGzipFile(file: File): Boolean {
+            if (!file.exists() || file.length() == 0L) return false
+            return try {
+                java.util.zip.GZIPInputStream(file.inputStream()).use { gzip ->
+                    gzip.read()
+                    true
+                }
+            } catch (e: Exception) {
+                false
+            }
+        }
+
+        if (isValidGzipFile(levelDat)) {
+            return
+        }
+
+        onOutput("[PocketCraft] ALERT: Detected corrupted level.dat! Length: ${levelDat.length()} bytes.")
+
+        if (isValidGzipFile(levelDatOld)) {
+            onOutput("[PocketCraft] Attempting to restore level.dat from level.dat_old...")
+            try {
+                val corruptBackup = File(worldDir, "level.dat.corrupt_${System.currentTimeMillis()}")
+                levelDat.renameTo(corruptBackup)
+                levelDatOld.copyTo(levelDat, overwrite = true)
+                onOutput("[PocketCraft] Success: Restored level.dat from backup.")
+                return
+            } catch (e: Exception) {
+                onOutput("[PocketCraft] ERROR: Failed to restore level.dat from backup: ${e.message}")
+            }
+        }
+
+        onOutput("[PocketCraft] Both level.dat and level.dat_old are corrupt/missing. Moving them aside to allow server to boot...")
+        val timestamp = System.currentTimeMillis()
+        if (levelDat.exists()) {
+            val movedLevelDat = File(worldDir, "level.dat.corrupt_$timestamp")
+            levelDat.renameTo(movedLevelDat)
+            onOutput("[PocketCraft] Moved corrupt level.dat to ${movedLevelDat.name}")
+        }
+        if (levelDatOld.exists()) {
+            val movedLevelDatOld = File(worldDir, "level.dat_old.corrupt_$timestamp")
+            levelDatOld.renameTo(movedLevelDatOld)
+            onOutput("[PocketCraft] Moved corrupt level.dat_old to ${movedLevelDatOld.name}")
+        }
     }
 }

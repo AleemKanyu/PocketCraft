@@ -1,0 +1,20 @@
+=== SUBMISSION READINESS VERDICT ===
+
+Domain grep results:
+- papermc.io references: 8 found — all safe (used in AppStrings for UI hints, API base URLs for metadata, and browser redirect URLs).
+- geysermc.org references: 0 found — all safe.
+- modrinth.com references: 13 found — all safe (used for API base URLs for metadata lookups and browser redirect URLs).
+
+JAR/DEX/SO file writes from network: NONE FOUND. (All dynamic downloading of modpacks/loaders/executable files via HTTP inside the app has been removed. The method `blockedRuntimeFileFetch` has been stubbed to throw an exception.)
+
+HTTP clients writing executable files: NONE FOUND.
+
+Assets bundled correctly:
+- Geyser JAR in assets: YES (Geyser-Spigot.jar)
+- Floodgate JAR in assets: YES (floodgate-spigot.jar)
+
+Server JAR flow: Browser redirect + file picker (Users are redirected to the browser to download the JAR and must use the system file picker to import it back into the app).
+
+Dynamic code loading into app: NONE FOUND. (Only `ProcessBuilder` to launch the server JVM subprocess, and `dlopen` to bootstrap the JRE libjli.so).
+
+OVERALL: SAFE TO SUBMIT

@@ -4,8 +4,7 @@ enum class ServerType(val displayName: String, val supportsVersionSelect: Boolea
     PAPER("Paper", true),
     PURPUR("Purpur", true),
     FABRIC("Fabric", true),
-    MODPACK("Modpack", false),
-    CUSTOM_JAR("Custom JAR", false);
+    MODPACK("Modpack", false);
 
     companion object {
         fun fromString(value: String?): ServerType {

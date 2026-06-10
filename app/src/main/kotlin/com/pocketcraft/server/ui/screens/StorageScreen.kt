@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,21 +19,23 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -51,6 +54,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.service.ServerFileManager
+import com.pocketcraft.server.ui.theme.PocketColors
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -99,8 +103,8 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
     }
 
     var currentDir by remember(root) { mutableStateOf(root) }
-    var selectedFile by remember { mutableStateOf<File?>(null) }
-    var viewingTextFile by remember { mutableStateOf<File?>(null) }
+    var editingFile by remember { mutableStateOf<File?>(null) }
+    var deleteConfirmFile by remember { mutableStateOf<File?>(null) }
     var uploadProgress by remember { mutableIntStateOf(0) }
     var uploadIndeterminate by remember { mutableStateOf(false) }
     var isUploading by remember { mutableStateOf(false) }
@@ -165,271 +169,232 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // Backup location info
-        if (currentDir == root) {
-            androidx.compose.foundation.layout.Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    Icons.Default.Folder,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-                Text(
-                    "Server backups are saved to Downloads/PocketCraftWorldBackups/<world>",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            IconButton(
-                onClick = {
-                    if (currentDir != root) {
-                        currentDir = currentDir.parentFile ?: root
-                    }
-                },
-                enabled = currentDir != root
-            ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-            }
-            Text(
-                text = currentDir.relativeTo(root).path.ifBlank { "/" },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            IconButton(onClick = { uploadLauncher.launch("*/*") }) {
-                Icon(Icons.Default.UploadFile, contentDescription = "Upload file")
-            }
-        }
-
-        if (isUploading) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "📤 Uploading File",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = if (uploadIndeterminate) LocalAppStrings.current.uploading else "$uploadProgress%",
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                if (uploadIndeterminate) {
-                    LinearProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(999.dp))
-                            .height(8.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                    )
-                } else {
-                    LinearProgressIndicator(
-                        progress = { animatedUploadProgress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(999.dp))
-                            .height(8.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                    )
-                }
-            }
-        }
-
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(children, key = { it.absolutePath }) { file ->
-                Row(
+            // Backup location info
+            if (currentDir == root) {
+                androidx.compose.foundation.layout.Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
-                            if (file.isDirectory) {
-                                currentDir = file
-                            } else {
-                                selectedFile = file
-                            }
-                        }
-                        .padding(horizontal = 8.dp, vertical = 10.dp),
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Icon(
-                        imageVector = if (file.isDirectory) Icons.Default.Folder else Icons.Default.Description,
+                        Icons.Default.Folder,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurface
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
                     )
-                    Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Server backups are saved to Downloads/PocketCraftWorldBackups/<world>",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = {
+                        if (currentDir != root) {
+                            currentDir = currentDir.parentFile ?: root
+                        }
+                    },
+                    enabled = currentDir != root
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                }
+                Text(
+                    text = currentDir.relativeTo(root).path.ifBlank { "/" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(onClick = { editingFile = root }) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit files")
+                }
+                IconButton(onClick = { uploadLauncher.launch("*/*") }) {
+                    Icon(Icons.Default.UploadFile, contentDescription = "Upload file")
+                }
+            }
+
+            if (isUploading) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         Text(
-                            text = file.name,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = if (file.isDirectory) LocalAppStrings.current.folder else "${file.length() / 1024} KB",
-                            style = MaterialTheme.typography.bodySmall,
+                            text = "📤 Uploading File",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        Text(
+                            text = if (uploadIndeterminate) LocalAppStrings.current.uploading else "$uploadProgress%",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
-                    if (!file.isDirectory) {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurface
+                    if (uploadIndeterminate) {
+                        LinearProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(999.dp))
+                                .height(8.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            progress = { animatedUploadProgress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(999.dp))
+                                .height(8.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                         )
                     }
                 }
             }
+
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(children, key = { it.absolutePath }) { file ->
+                    val ext = file.extension.lowercase()
+                    val isEditable = !file.isDirectory &&
+                        ext in setOf("txt", "yml", "yaml", "json", "properties", "cfg", "conf", "toml", "log", "xml", "sh", "md", "ini", "env") &&
+                        file.length() <= 256 * 1024
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .clickable {
+                                if (file.isDirectory) {
+                                    currentDir = file
+                                } else if (isEditable) {
+                                    editingFile = file
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (file.isDirectory) Icons.Default.Folder else Icons.Default.Description,
+                            contentDescription = null,
+                            tint = if (file.isDirectory) PocketColors.Starting
+                            else if (isEditable) PocketColors.Primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = file.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (!file.isDirectory && !isEditable)
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                else
+                                    MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = when {
+                                    file.isDirectory -> LocalAppStrings.current.folder
+                                    isEditable -> "${file.length() / 1024} KB · tap to edit"
+                                    else -> "${file.length() / 1024} KB · cannot edit"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (!file.isDirectory) {
+                            IconButton(
+                                onClick = { deleteConfirmFile = file },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete",
+                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Full file editor — opens the in-app file manager/editor starting from root
+        if (editingFile != null) {
+            FileEditorScreen(
+                rootDir = root,
+                initialFile = if (editingFile != root) editingFile else null,
+                isServerRunning = stateHolder.status != ServerStatus.OFFLINE,
+                onFileSaved = { savedFile ->
+                    if (savedFile.name == "server.properties") {
+                        stateHolder.refreshAll()
+                    }
+                },
+                onClose = { editingFile = null }
+            )
         }
     }
 
-    if (selectedFile != null) {
-        val file = selectedFile!!
-        val fileActionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(
-            onDismissRequest = {
-                scope.launch {
-                    fileActionSheetState.hide()
-                    selectedFile = null
-                }
+    // Delete confirmation dialog
+    if (deleteConfirmFile != null) {
+        val file = deleteConfirmFile!!
+        AlertDialog(
+            onDismissRequest = { deleteConfirmFile = null },
+            title = { Text("Delete File", fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Text(
+                    "Are you sure you want to permanently delete \"${file.name}\"? This cannot be undone.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             },
-            sheetState = fileActionSheetState,
-            dragHandle = null,
-            containerColor = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(file.name, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
-                Text(LocalAppStrings.current.chooseAction, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            fileActionSheetState.hide()
-                            if (file.extension.lowercase() in setOf("txt", "log", "json", "properties", "yml", "yaml")) {
-                                viewingTextFile = file
-                            }
-                            selectedFile = null
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(LocalAppStrings.current.view)
-                }
-                TextButton(
-                    onClick = {
-                        runCatching {
-                            val uri = androidx.core.content.FileProvider.getUriForFile(
-                                context,
-                                "${context.packageName}.fileprovider",
-                                file
-                            )
-                            context.startActivity(
-                                Intent(Intent.ACTION_SEND).apply {
-                                    type = "*/*"
-                                    putExtra(Intent.EXTRA_STREAM, uri)
-                                    putExtra(Intent.EXTRA_SUBJECT, file.name)
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                }
-                            )
-                        }
-                        scope.launch {
-                            fileActionSheetState.hide()
-                            selectedFile = null
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(LocalAppStrings.current.share)
-                }
-                TextButton(
+            confirmButton = {
+                Button(
                     onClick = {
                         file.delete()
-                        scope.launch {
-                            fileActionSheetState.hide()
-                            selectedFile = null
-                        }
+                        deleteConfirmFile = null
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
                 ) {
-                    Text(LocalAppStrings.current.delete, color = MaterialTheme.colorScheme.error)
-                }
-            }
-        }
-    }
-
-    if (viewingTextFile != null) {
-        val file = viewingTextFile!!
-        val textFileSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(
-            onDismissRequest = {
-                scope.launch {
-                    textFileSheetState.hide()
-                    viewingTextFile = null
+                    Text("Delete")
                 }
             },
-            sheetState = textFileSheetState,
-            dragHandle = null,
-            containerColor = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(file.name, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
-                Text(
-                    text = runCatching { file.readText() }.getOrDefault(LocalAppStrings.current.unableToOpen),
-                    style = MaterialTheme.typography.bodySmall
-                )
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            textFileSheetState.hide()
-                            viewingTextFile = null
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(LocalAppStrings.current.close)
+            dismissButton = {
+                TextButton(onClick = { deleteConfirmFile = null }) {
+                    Text("Cancel")
                 }
             }
-        }
+        )
     }
+
 }
+

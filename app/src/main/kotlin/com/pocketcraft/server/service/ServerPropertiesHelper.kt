@@ -5,10 +5,15 @@ import java.util.Properties
 
 object ServerPropertiesHelper {
 
+    /**
+     * Disabled for relay hosting — zlib on every packet adds CPU load on the host phone
+     * and inflates Paper keepalive ping. The May 2026 regression was bridge buffer size,
+     * not this value. See RelayManager KDoc.
+     */
     const val RELAY_READY_COMPRESSION_THRESHOLD = -1
     const val DEFAULT_VIEW_DISTANCE = 6
     const val DEFAULT_SIMULATION_DISTANCE = 4
-    const val RELAY_READY_ENTITY_BROADCAST_PERCENT = 50
+    const val RELAY_READY_ENTITY_BROADCAST_PERCENT = 35
     const val POCKETCRAFT_JOIN_MESSAGE_TEXT = "hosted on Pocketcraft"
     const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/NGPzXFYp"
 
@@ -33,8 +38,6 @@ object ServerPropertiesHelper {
             props["pvp"] = "true"
             props["allow-flight"] = "true"
             props["hardcore"] = "false"
-            props["view-distance"] = DEFAULT_VIEW_DISTANCE.toString()
-            props["simulation-distance"] = DEFAULT_SIMULATION_DISTANCE.toString()
             props["spawn-monsters"] = "true"
             props["spawn-animals"] = "true"
             props["spawn-npcs"] = "true"
@@ -42,7 +45,6 @@ object ServerPropertiesHelper {
             props["enable-command-block"] = "true"
             props["pocketcraft-max-ram-mb"] = "1024"
             props["entity-broadcast-range-percentage"] = RELAY_READY_ENTITY_BROADCAST_PERCENT.toString()
-            // Relay traffic needs compression to keep chunk/login bursts stable.
             props["network-compression-threshold"] = RELAY_READY_COMPRESSION_THRESHOLD.toString()
             props["sync-chunk-writes"] = "false"
             props["max-tick-time"] = "60000"

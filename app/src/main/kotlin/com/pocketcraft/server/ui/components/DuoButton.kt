@@ -8,7 +8,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -16,6 +15,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -33,15 +33,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.pocketcraft.server.ui.theme.ButtonFont
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.ui.theme.PocketColors
-import com.pocketcraft.server.ui.theme.Monocraft
+import com.pocketcraft.server.ui.theme.button3d
 
-enum class DuoButtonVariant { Primary, Danger }
+enum class DuoButtonVariant { StartServer, Primary, Secondary, Danger }
 
 @Composable
 fun DuoButton(
@@ -51,97 +54,138 @@ fun DuoButton(
     icon: ImageVector? = null,
     enabled: Boolean = true,
     variant: DuoButtonVariant = DuoButtonVariant.Primary,
-    isLoading: Boolean = false
+    isLoading: Boolean = false,
+    fillMaxWidth: Boolean = true,
+    minHeight: Dp = 56.dp
 ) {
-    val background = when (variant) {
-        DuoButtonVariant.Primary -> PocketColors.PrimaryLight
-        DuoButtonVariant.Danger -> PocketColors.Danger
+    // ── Colors ──────────────────────────────────────────────────────────────
+    val bgColor: Color
+    val borderColor: Color
+    val bottomBorderColor: Color
+    val contentColor: Color
+
+    if (!enabled) {
+        bgColor = PocketColors.InactiveBg.copy(alpha = 0.72f)
+        borderColor = PocketColors.InactiveBorder.copy(alpha = 0.52f)
+        bottomBorderColor = PocketColors.InactiveBorderBottom.copy(alpha = 0.62f)
+        contentColor = PocketColors.InactiveText.copy(alpha = 0.48f)
+    } else {
+        when (variant) {
+            DuoButtonVariant.StartServer -> {
+                bgColor = PocketColors.Primary
+                borderColor = PocketColors.PrimaryBorder
+                bottomBorderColor = PocketColors.PrimaryBorderBottom
+                contentColor = PocketColors.PrimaryText
+            }
+            DuoButtonVariant.Primary -> {
+                bgColor = PocketColors.Primary
+                borderColor = PocketColors.PrimaryBorder
+                bottomBorderColor = PocketColors.PrimaryBorderBottom
+                contentColor = PocketColors.PrimaryText
+            }
+            DuoButtonVariant.Secondary -> {
+                bgColor = PocketColors.InactiveBg
+                borderColor = PocketColors.InactiveBorder
+                bottomBorderColor = PocketColors.InactiveBorderBottom
+                contentColor = PocketColors.InactiveText
+            }
+            DuoButtonVariant.Danger -> {
+                bgColor = PocketColors.DangerBg
+                borderColor = PocketColors.DangerBorder
+                bottomBorderColor = PocketColors.DangerBorderBottom
+                contentColor = PocketColors.DangerText
+            }
+        }
     }
-    val shadow = when (variant) {
-        DuoButtonVariant.Primary -> Color(0xFF58CC02)
-        DuoButtonVariant.Danger -> Color(0xFFC33542)
-    }
-    val contentColor = Color.Black
+
+    // ── Press state ──────────────────────────────────────────────────────────
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val offsetY by animateDpAsState(
-        targetValue = if (pressed && enabled) 4.dp else 0.dp,
-        label = "duo_button_offset"
-    )
-    val alpha = if (enabled) 1f else 0.55f
-    val shape = RoundedCornerShape(18.dp)
+    
+    val restingBorder = 3.dp
+    val targetBorder = if (pressed && enabled) 1.5.dp else restingBorder
+    val targetOffset = if (pressed && enabled) (restingBorder - 1.5.dp) else 0.dp
 
+    val offsetY by animateDpAsState(
+        targetValue  = targetOffset,
+        animationSpec = tween(80),
+        label = "duo_btn_offset"
+    )
+    val bottomBorderDp by animateDpAsState(
+        targetValue  = targetBorder,
+        animationSpec = tween(80),
+        label = "duo_btn_bottom_border"
+    )
+
+    // ── Loading spinner ──────────────────────────────────────────────────────
     val infiniteTransition = rememberInfiniteTransition(label = "loading_rotation")
     val rotation by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = 360f,
+        targetValue  = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
+            animation    = tween(1000, easing = LinearEasing),
+            repeatMode   = RepeatMode.Restart
         ),
         label = "rotation"
     )
 
+    val shape = RoundedCornerShape(50.dp) // fully pill-shaped as per spec
+
     Box(
         modifier = modifier
-            .padding(bottom = 8.dp)
+            .padding(bottom = 4.dp)  // space for bottom border overhang
             .offset(y = offsetY)
     ) {
-        if (!pressed) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .offset(y = 6.dp)
-                    .clip(shape)
-                    .background(shadow.copy(alpha = alpha))
-            )
-        }
-
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
+            modifier = (if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier)
+                .heightIn(min = minHeight)
+                .button3d(
+                    elevation = when (variant) {
+                        DuoButtonVariant.StartServer, DuoButtonVariant.Primary -> 8.dp
+                        else -> 6.dp
+                    },
+                    borderColor = borderColor,
+                    depthColor = bottomBorderColor,
+                    depthWidth = bottomBorderDp
+                )
                 .clip(shape)
-                .background(background.copy(alpha = alpha))
-                .border(2.dp, shadow.copy(alpha = alpha), shape)
+                .background(bgColor)
                 .clickable(
-                    enabled = enabled && !isLoading,
+                    enabled           = enabled && !isLoading,
                     interactionSource = interactionSource,
-                    indication = null,
-                    onClick = onClick
+                    indication        = null,
+                    onClick           = onClick
                 )
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 18.dp),
+                modifier = (if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier)
+                    .padding(horizontal = 22.dp, vertical = 16.dp),
                 horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment     = Alignment.CenterVertically
             ) {
                 if (icon != null || isLoading) {
                     val iconToShow = icon ?: Icons.Default.Refresh
                     Icon(
-                        imageVector = iconToShow,
+                        imageVector     = iconToShow,
                         contentDescription = null,
-                        tint = contentColor,
-                        modifier = Modifier
-                            .size(24.dp)
-                            .then(
-                                if (isLoading) Modifier.rotate(rotation) else Modifier
-                            )
+                        tint            = contentColor,
+                        modifier        = Modifier
+                            .size(20.dp)
+                            .then(if (isLoading) Modifier.rotate(rotation) else Modifier)
                     )
                     androidx.compose.foundation.layout.Spacer(Modifier.size(10.dp))
                 }
                 Text(
-                    text = text,
+                    text  = text,
                     color = contentColor,
                     style = MaterialTheme.typography.labelLarge.copy(
-                        fontFamily = Monocraft,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 17.sp,
-                        letterSpacing = 0.4.sp
+                        fontFamily   = ButtonFont,
+                        fontWeight   = FontWeight.Normal,
+                        fontSize     = 14.5.sp,
+                        letterSpacing = 0.sp
                     ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    maxLines  = 1,
+                    overflow  = TextOverflow.Ellipsis
                 )
             }
         }

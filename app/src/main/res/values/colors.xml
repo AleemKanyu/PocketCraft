@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#4A8F50</color>
+    <!-- Required by adaptive icon XMLs -->
+    <color name="ic_launcher_background">#D6DFD0</color>
+
+    <!-- Creeper green palette for system bars and WindowInsetsCompat -->
+    <color name="pocket_bg_light">#D6DFD0</color>
+    <color name="splash_background">#D6DFD0</color>
+    <color name="pocket_bg_dark">#181F18</color>
+    <color name="pocket_surface_card">#EAF0E4</color>
+    <color name="pocket_primary">#3D6E3D</color>
+    <color name="pocket_primary_dark">#2A522A</color>
+    <color name="pocket_primary_darker">#1E3E1E</color>
 </resources>

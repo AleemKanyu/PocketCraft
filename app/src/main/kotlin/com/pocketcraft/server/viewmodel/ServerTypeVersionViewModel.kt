@@ -5,6 +5,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pocketcraft.server.data.model.ServerType
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
+import com.pocketcraft.server.data.repository.ServerConfigRepository
+import com.pocketcraft.server.service.ServerFileManager
+import com.pocketcraft.server.service.ServerPropertiesHelper
 import com.pocketcraft.server.service.VersionCatalog
 import com.pocketcraft.server.server.ServerJarManager
 import java.io.File
@@ -12,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -52,21 +56,25 @@ class ServerTypeVersionViewModel @Inject constructor(
 
     private var initializedSelectionKey: Triple<ServerType, String?, String?>? = null
     private val quickVersionFallbacks = listOf(
-        "26.1.2", "26.1.1", "26.1", "1.21.11", "1.21.10", "1.21.9",
+        "1.21.11", "1.21.10", "1.21.9",
         "1.21.8", "1.21.7", "1.21.6", "1.21.4", "1.21.1", "1.20.6", "1.20.4", "1.20.1",
         "1.19.4", "1.19.2", "1.18.2", "1.17.1", "1.16.5"
     )
 
     init {
         viewModelScope.launch {
+            val savedVersion = loadSavedServerVersion()
+            if (!savedVersion.isNullOrBlank()) {
+                _selectedVersion.value = savedVersion
+            }
             AppPreferencesStore.showRcVersionsFlow(getApplication()).collect { showRc ->
                 _showRcVersions.value = showRc
                 if (_selectedType.value.supportsVersionSelect) {
-                    fetchVersionsForType(_selectedType.value)
+                    fetchVersionsForType(_selectedType.value, preferredVersion = _selectedVersion.value)
                 }
             }
         }
-        fetchVersionsForType(ServerType.PAPER)
+        fetchVersionsForType(ServerType.PAPER, preferredVersion = null)
         refreshDownloadedVersions()
     }
 
@@ -77,6 +85,7 @@ class ServerTypeVersionViewModel @Inject constructor(
         } else {
             _availableVersions.value = emptyList()
             _selectedVersion.value = null
+            refreshDownloadedVersions()
         }
     }
 
@@ -91,6 +100,9 @@ class ServerTypeVersionViewModel @Inject constructor(
         _selectedType.value = serverType
         _customJarPath.value = customJarPath
         if (serverType.supportsVersionSelect) {
+            if (!gameVersion.isNullOrBlank()) {
+                _selectedVersion.value = gameVersion
+            }
             fetchVersionsForType(serverType, preferredVersion = gameVersion)
         } else {
             _selectedVersion.value = null
@@ -101,6 +113,11 @@ class ServerTypeVersionViewModel @Inject constructor(
 
     fun setSelectedVersion(version: String) {
         _selectedVersion.value = version
+    }
+
+    fun onServerJarImported(version: String) {
+        _selectedVersion.value = version
+        refreshDownloadedVersions()
     }
 
     fun setCustomJarPath(path: String) {
@@ -216,12 +233,24 @@ class ServerTypeVersionViewModel @Inject constructor(
         
         val previousSelection = _selectedVersion.value
         _selectedVersion.value = when {
-            preferredVersion != null && finalVersions.contains(preferredVersion) -> preferredVersion
+            preferredVersion != null && preferredVersion.isNotBlank() -> preferredVersion
             previousSelection != null && finalVersions.contains(previousSelection) -> previousSelection
-            // Do NOT auto-pick any version if no selection exists
+            previousSelection != null && previousSelection.isNotBlank() -> previousSelection
+            finalVersions.isNotEmpty() -> finalVersions.first()
             else -> null
         }
         refreshDownloadedVersions()
+    }
+
+    private suspend fun loadSavedServerVersion(): String? {
+        val fromConfig = runCatching {
+            ServerConfigRepository(getApplication()).loadConfig().gameVersion
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+        if (fromConfig != null) return fromConfig
+
+        return AppPreferencesStore.getSelectedVersionFlow(getApplication())
+            .first()
+            ?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun quickFallbackVersions(type: ServerType): List<String> {
@@ -251,6 +280,10 @@ class ServerTypeVersionViewModel @Inject constructor(
     }
 
     private fun listDownloadedVersionsForType(type: ServerType): List<String> {
+        if (type == ServerType.MODPACK) {
+            return listDownloadedModpackIds()
+        }
+
         val serversDir = File(getApplication<Application>().filesDir, "servers/binaries")
         if (!serversDir.exists()) return emptyList()
         
@@ -258,7 +291,36 @@ class ServerTypeVersionViewModel @Inject constructor(
         return serversDir.listFiles()?.filter { it.isDirectory }?.mapNotNull { versionDir ->
             val version = versionDir.name
             val jarFile = File(versionDir, "$typeLower-$version.jar")
-            if (jarFile.exists() && jarFile.isFile && jarFile.length() > 50_000L) version else null
+            val minBytes = if (typeLower == "fabric") 10_000L else 1_000_000L
+            if (jarFile.exists() && jarFile.isFile && jarFile.length() > minBytes) version else null
         }?.distinct()?.sortedDescending() ?: emptyList()
+    }
+
+    private fun listDownloadedModpackIds(): List<String> {
+        val worldsRoot = File(getApplication<Application>().filesDir, "servers/worlds")
+        if (!worldsRoot.isDirectory) return emptyList()
+
+        return worldsRoot.listFiles()
+            .orEmpty()
+            .asSequence()
+            .filter { it.isDirectory }
+            .mapNotNull { worldDir ->
+                val props = ServerPropertiesHelper.readProperties(worldDir)
+                if (ServerType.fromString(props.getProperty("pocketcraft-server-type")) != ServerType.MODPACK) {
+                    return@mapNotNull null
+                }
+                val modpackId = props.getProperty("pocketcraft-modpack-id")
+                    ?: props.getProperty("pocketcraft-custom-jar-path")
+                    ?: return@mapNotNull null
+                val launchTarget = ServerFileManager.readLaunchTarget(worldDir) ?: return@mapNotNull null
+                if (modpackId.isNotBlank() && launchTarget.file.isFile && launchTarget.file.length() > 0L) {
+                    modpackId
+                } else {
+                    null
+                }
+            }
+            .distinct()
+            .sorted()
+            .toList()
     }
 }

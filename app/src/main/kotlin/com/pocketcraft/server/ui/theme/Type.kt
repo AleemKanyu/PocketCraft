@@ -16,86 +16,99 @@ val PlusJakartaSans = FontFamily(
     Font(R.font.plus_jakarta_sans_variable, weight = FontWeight.ExtraBold)
 )
 
+/** Pixel font for all in-app buttons. */
 val Monocraft = FontFamily(
     Font(R.font.monocraft, weight = FontWeight.Normal)
 )
 
+/** Playfair Display — headings (serif fallback on device). */
+val PlayfairDisplay = FontFamily.Serif
+
+/** DM Sans — body copy (bundled Plus Jakarta as close stand-in). */
+val DMSans = PlusJakartaSans
+
+/** DM Mono — uppercase labels and console output. */
+val DMMono = FontFamily.Monospace
+
+/** Convenience alias used by button components. */
+val ButtonFont = Monocraft
+
 val PocketCraftTypography = Typography(
     displayLarge = TextStyle(
-        fontFamily = PlusJakartaSans,
-        fontWeight = FontWeight.ExtraBold,
+        fontFamily = PlayfairDisplay,
+        fontWeight = FontWeight.Bold,
         fontSize = 34.sp,
-        letterSpacing = (-0.8).sp
+        letterSpacing = 0.sp
     ),
     displayMedium = TextStyle(
-        fontFamily = PlusJakartaSans,
-        fontWeight = FontWeight.ExtraBold,
+        fontFamily = PlayfairDisplay,
+        fontWeight = FontWeight.Bold,
         fontSize = 30.sp,
-        letterSpacing = (-0.6).sp
+        letterSpacing = 0.sp
     ),
     headlineLarge = TextStyle(
-        fontFamily = PlusJakartaSans,
-        fontWeight = FontWeight.ExtraBold,
+        fontFamily = PlayfairDisplay,
+        fontWeight = FontWeight.Bold,
         fontSize = 26.sp,
-        letterSpacing = (-0.5).sp
+        letterSpacing = 0.sp
     ),
     headlineMedium = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = PlayfairDisplay,
         fontWeight = FontWeight.Bold,
         fontSize = 22.sp
     ),
     headlineSmall = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = PlayfairDisplay,
         fontWeight = FontWeight.Bold,
         fontSize = 18.sp
     ),
     titleLarge = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = DMSans,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 20.sp,
-        letterSpacing = (-0.4).sp
+        letterSpacing = 0.sp
     ),
     titleMedium = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = DMSans,
         fontWeight = FontWeight.Bold,
         fontSize = 16.sp
     ),
     titleSmall = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = DMSans,
         fontWeight = FontWeight.SemiBold,
         fontSize = 14.sp
     ),
     bodyLarge = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = DMSans,
         fontWeight = FontWeight.Medium,
         fontSize = 15.sp
     ),
     bodyMedium = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = DMSans,
         fontWeight = FontWeight.Medium,
         fontSize = 13.sp
     ),
     bodySmall = TextStyle(
-        fontFamily = PlusJakartaSans,
-        fontWeight = FontWeight.Medium,
+        fontFamily = DMSans,
+        fontWeight = FontWeight.Normal,
         fontSize = 12.sp
     ),
     labelLarge = TextStyle(
-        fontFamily = PlusJakartaSans,
-        fontWeight = FontWeight.ExtraBold,
-        fontSize = 14.sp,
-        letterSpacing = 0.6.sp
+        fontFamily = DMMono,
+        fontWeight = FontWeight.Bold,
+        fontSize = 13.sp,
+        letterSpacing = 0.5.sp
     ),
     labelMedium = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = DMMono,
         fontWeight = FontWeight.Bold,
-        fontSize = 12.sp,
+        fontSize = 11.sp,
         letterSpacing = 0.4.sp
     ),
     labelSmall = TextStyle(
-        fontFamily = PlusJakartaSans,
+        fontFamily = DMMono,
         fontWeight = FontWeight.Bold,
         fontSize = 10.sp,
-        letterSpacing = 1.sp
+        letterSpacing = 0.5.sp
     )
 )

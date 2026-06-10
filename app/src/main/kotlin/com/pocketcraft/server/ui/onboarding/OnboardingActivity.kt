@@ -6,7 +6,6 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
@@ -102,6 +101,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -126,8 +126,10 @@ import com.pocketcraft.server.ui.screens.ServerTypeVersionBottomSheet
 import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.ButtonFont
 import com.pocketcraft.server.ui.theme.Monocraft
 import com.pocketcraft.server.ui.theme.PocketCraftTheme
+import com.pocketcraft.server.ui.theme.card3d
 import com.pocketcraft.server.ui.theme.pocketIsDarkTheme
 import com.pocketcraft.server.ui.util.playAppHaptic
 import com.pocketcraft.server.ui.util.ThemePreferenceStore
@@ -192,16 +194,16 @@ private fun onboardingBackgroundBrush(): Brush = if (pocketIsDarkTheme()) {
     Brush.verticalGradient(
         colors = listOf(
             PocketColors.BgDark,
-            Color(0xFF10211C),
-            Color(0xFF0B1714)
+            Color(0xFF121620),
+            Color(0xFF07090E)
         )
     )
 } else {
     Brush.verticalGradient(
         colors = listOf(
             Color(0xFFFFFFFF),
-            Color(0xFFEAF8E7),
-            Color(0xFFDFF3D8)
+            PocketColors.BgLight,
+            Color(0xFFE8EDF5)
         )
     )
 }
@@ -210,8 +212,8 @@ private fun onboardingBackgroundBrush(): Brush = if (pocketIsDarkTheme()) {
 private fun onboardingPhoneOuterBrush(): Brush = if (pocketIsDarkTheme()) {
     Brush.verticalGradient(
         listOf(
-            Color(0xFF1E352D),
-            Color(0xFF182A24)
+            Color(0xFF252B36),
+            Color(0xFF161A22)
         )
     )
 } else {
@@ -228,14 +230,14 @@ private fun onboardingPhoneInnerBrush(): Brush = if (pocketIsDarkTheme()) {
     Brush.verticalGradient(
         listOf(
             onboardingSurfaceSoftColor(),
-            Color(0xFF243E35)
+            Color(0xFF202633)
         )
     )
 } else {
     Brush.verticalGradient(
         listOf(
             PocketColors.SurfaceVarLight,
-            Color(0xFFEDF6E1)
+            Color(0xFFE9EEF6)
         )
     )
 }
@@ -259,18 +261,18 @@ class OnboardingActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, true)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         val initialThemePreference = ThemePreferenceStore.load(this)
 
         setContent {
             val darkTheme = initialThemePreference.resolve(systemDark = isSystemInDarkTheme())
             PocketCraftTheme(darkTheme = darkTheme) {
                 SideEffect {
-                    window.statusBarColor = if (darkTheme) PocketColors.BgDark.toArgb() else AndroidColor.parseColor("#F5FAF1")
-                    window.navigationBarColor = if (darkTheme) PocketColors.SurfaceDark.toArgb() else AndroidColor.parseColor("#DFF3D8")
+                    window.statusBarColor = PocketColors.BgApp.toArgb()
+                    window.navigationBarColor = PocketColors.BgApp.toArgb()
                     WindowInsetsControllerCompat(window, window.decorView).apply {
-                        isAppearanceLightStatusBars = !darkTheme
-                        isAppearanceLightNavigationBars = !darkTheme
+                        isAppearanceLightStatusBars = PocketColors.BgApp.luminance() >= 0.5f
+                        isAppearanceLightNavigationBars = PocketColors.BgApp.luminance() >= 0.5f
                     }
                 }
                 OnboardingScreen(onComplete = { completeOnboarding() })
@@ -779,7 +781,6 @@ private fun OnboardingPhoneFrame(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(26.dp, RoundedCornerShape(34.dp), clip = false)
             .clip(RoundedCornerShape(34.dp))
             .background(brush = onboardingPhoneOuterBrush())
             .border(1.5.dp, onboardingBorderColor().copy(alpha = 0.8f), RoundedCornerShape(34.dp))
@@ -1469,10 +1470,10 @@ private fun FloatingToolArt(modifier: Modifier, mirrored: Boolean = false, secon
             .padding(top = (bob * 10).dp)
     ) {
         Surface(
+            modifier = Modifier.card3d(elevation = 6.dp, cornerRadius = 24.dp),
             color = if (pocketIsDarkTheme()) MaterialTheme.colorScheme.surface.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.74f),
             shape = RoundedCornerShape(24.dp),
-            shadowElevation = 8.dp,
-            border = BorderStroke(1.dp, onboardingBorderColor().copy(alpha = 0.4f))
+            shadowElevation = 0.dp
         ) {
             Image(
                 painter = painterResource(id = tool),
@@ -1630,9 +1631,10 @@ private fun ScreenCard(accent: Color, title: String, subtitle: String) {
     Surface(
         color = onboardingSurfaceColor(),
         shape = RoundedCornerShape(18.dp),
-        shadowElevation = 2.dp,
-        border = BorderStroke(1.5.dp, onboardingAccentGreen().copy(alpha = 0.35f)),
-        modifier = Modifier.fillMaxWidth()
+        shadowElevation = 0.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .card3d(elevation = 4.dp, cornerRadius = 18.dp)
     ) {
         Column(
             modifier = Modifier
@@ -1658,9 +1660,10 @@ private fun DetailCard(accent: Color, title: String, body: String, icon: ImageVe
     Surface(
         color = onboardingSurfaceColor(),
         shape = RoundedCornerShape(16.dp),
-        shadowElevation = 2.dp,
-        border = BorderStroke(1.dp, onboardingAccentGreen().copy(alpha = 0.28f)),
-        modifier = Modifier.fillMaxWidth()
+        shadowElevation = 0.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .card3d(elevation = 4.dp, cornerRadius = 16.dp)
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -1698,9 +1701,10 @@ private fun FeatureListCard(accent: Color, entries: List<Pair<String, String>>) 
     Surface(
         color = onboardingSurfaceColor(),
         shape = RoundedCornerShape(18.dp),
-        shadowElevation = 2.dp,
-        border = BorderStroke(1.dp, onboardingAccentGreen().copy(alpha = 0.3f)),
-        modifier = Modifier.fillMaxWidth()
+        shadowElevation = 0.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .card3d(elevation = 4.dp, cornerRadius = 18.dp)
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -1733,9 +1737,10 @@ private fun FeatureGrid(items: List<FeatureItem>) {
                     Surface(
                         color = onboardingSurfaceColor(),
                         shape = RoundedCornerShape(18.dp),
-                        shadowElevation = 4.dp,
-                        border = BorderStroke(1.5.dp, onboardingAccentGreen().copy(alpha = 0.35f)),
-                        modifier = Modifier.weight(1f)
+                        shadowElevation = 0.dp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .card3d(elevation = 4.dp, cornerRadius = 18.dp)
                     ) {
                         Column(
                             modifier = Modifier.padding(12.dp),
@@ -1784,9 +1789,10 @@ private fun PermissionCard(accent: Color, icon: ImageVector, title: String, body
     Surface(
         color = onboardingSurfaceColor(),
         shape = RoundedCornerShape(16.dp),
-        shadowElevation = 2.dp,
-        border = BorderStroke(1.dp, onboardingAccentGreen().copy(alpha = 0.28f)),
-        modifier = Modifier.fillMaxWidth()
+        shadowElevation = 0.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .card3d(elevation = 4.dp, cornerRadius = 16.dp)
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -1824,7 +1830,8 @@ private fun StatCard(modifier: Modifier = Modifier, value: String, label: String
     Surface(
         color = onboardingAccentPurpleMuted(),
         shape = RoundedCornerShape(14.dp),
-        modifier = modifier
+        shadowElevation = 0.dp,
+        modifier = modifier.card3d(elevation = 4.dp, cornerRadius = 14.dp)
     ) {
         Column(
             modifier = Modifier.padding(vertical = 10.dp, horizontal = 8.dp),
@@ -1873,7 +1880,7 @@ private fun PrimaryButton(modifier: Modifier = Modifier, text: String, enabled: 
                 }
             )
         ) {
-            Text(text = text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+            Text(text = text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, fontFamily = ButtonFont, color = Color.White)
         }
     }
 }
@@ -1896,7 +1903,7 @@ private fun OutlineButton(modifier: Modifier = Modifier, text: String, onClick: 
             border = BorderStroke(1.5.dp, onboardingBorderColor())
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Text(text = text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = onboardingTextDark())
+                Text(text = text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, fontFamily = ButtonFont, color = onboardingTextDark())
             }
         }
     }
@@ -1912,7 +1919,7 @@ private fun SkipButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
         border = BorderStroke(1.dp, onboardingBorderColor())
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(text = "Skip", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = onboardingTextMuted())
+            Text(text = "Skip", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, fontFamily = ButtonFont, color = onboardingTextMuted())
         }
     }
 }

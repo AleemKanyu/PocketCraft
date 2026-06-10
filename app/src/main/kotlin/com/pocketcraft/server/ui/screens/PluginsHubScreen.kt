@@ -1,5 +1,7 @@
 package com.pocketcraft.server.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -80,6 +82,8 @@ import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.pocketcraft.server.data.model.Plugin
 import com.pocketcraft.server.service.PluginManager
+import com.pocketcraft.server.service.PluginSourceUrls
+import com.pocketcraft.server.ui.components.PluginInstallBottomSheet
 import com.pocketcraft.server.ui.components.PocketModsIcon
 import com.pocketcraft.server.ui.components.duoTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
@@ -134,6 +138,7 @@ fun PluginsHubScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var catalogRetryToken by remember { mutableIntStateOf(0) }
     var detailCard by remember { mutableStateOf<ContentDetailCard?>(null) }
+    var pendingRemoteInstall by remember { mutableStateOf<PluginManager.RemoteCatalogItem?>(null) }
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val selectedTabColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary
     val unselectedTabColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f) else MaterialTheme.colorScheme.onSurfaceVariant
@@ -478,29 +483,8 @@ fun PluginsHubScreen(
                                 )
                             },
                             onInstall = {
-                                scope.launch {
-                                    if (installed || !remote.canInstall) return@launch
-
-                                    isDownloading = true
-                                    downloadingCatalogKey = remote.catalogKey
-                                    downloadProgress = 0
-                                    val result = PluginManager.installRemoteItem(
-                                        context = context,
-                                        item = remote,
-                                        worldName = stateHolder.activeWorld,
-                                        type = currentTab().type,
-                                        runtimeKey = runtimeKey,
-                                        minecraftVersion = stateHolder.config.gameVersion,
-                                        onProgress = { downloadProgress = it.coerceIn(0, 100) }
-                                    )
-                                    isDownloading = false
-                                    downloadingCatalogKey = null
-                                    result.onSuccess {
-                                        refreshDownloadedItems()
-                                        Toast.makeText(context, "${s.hubInstalled}: ${remote.title}", Toast.LENGTH_SHORT).show()
-                                    }.onFailure {
-                                        onMessage(it.message ?: s.hubInstalling)
-                                    }
+                                if (!installed && remote.canInstall) {
+                                    pendingRemoteInstall = remote
                                 }
                             }
                         )
@@ -634,38 +618,54 @@ fun PluginsHubScreen(
                     TextButton(
                         onClick = {
                             scope.launch {
-                                isDownloading = true
-                                downloadingCatalogKey = null
-                                downloadProgress = 0
-                                val result = PluginManager.installFromUrl(
-                                    context = context,
-                                    sourceUrl = urlInput,
-                                    worldName = stateHolder.activeWorld,
-                                    type = currentTab().type,
-                                    fileNameHint = null,
-                                    runtimeKey = runtimeKey,
-                                    onProgress = { downloadProgress = it.coerceIn(0, 100) }
-                                )
-                                isDownloading = false
-                                if (result.isSuccess) {
-                                    addSheetState.hide()
-                                    showAddDialog = false
+                                val cleanUrl = urlInput.trim()
+                                if (cleanUrl.isNotBlank()) {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(cleanUrl)))
                                 }
-                                result.onSuccess {
-                                    refreshDownloadedItems()
-                                    Toast.makeText(context, "${s.hubInstalled}: ${currentTab().label(s)}", Toast.LENGTH_SHORT).show()
-                                }.onFailure {
-                                    onMessage(it.message ?: "Download failed")
-                                }
+                                onMessage("Download the file in your browser, then use Upload from device.")
                             }
                         },
                         enabled = urlInput.isNotBlank()
                     ) {
-                        Text(s.hubDownloadAction)
+                        Text("Open URL")
                     }
                 }
             }
         }
+    }
+
+    pendingRemoteInstall?.let { item ->
+        PluginInstallBottomSheet(
+            itemName = item.title,
+            itemPageUrl = PluginSourceUrls.getContentPage(item, currentTab().type),
+            pickerMimeTypes = when (currentTab().type) {
+                PluginManager.ContentType.RESOURCE_PACKS -> arrayOf("application/zip", "*/*")
+                else -> arrayOf("application/java-archive", "*/*")
+            },
+            onDismiss = { pendingRemoteInstall = null },
+            onFileSelected = { uri ->
+                scope.launch {
+                    isUploading = true
+                    uploadProgress = 0
+                    val result = PluginManager.installFromUri(
+                        context = context,
+                        uri = uri,
+                        worldName = stateHolder.activeWorld,
+                        type = currentTab().type,
+                        runtimeKey = runtimeKey,
+                        onProgress = { uploadProgress = it.coerceIn(0, 100) }
+                    )
+                    isUploading = false
+                    result.onSuccess {
+                        pendingRemoteInstall = null
+                        refreshDownloadedItems()
+                        Toast.makeText(context, "${s.hubInstalled}: ${item.title}", Toast.LENGTH_SHORT).show()
+                    }.onFailure {
+                        onMessage(it.message ?: "Could not add file.")
+                    }
+                }
+            }
+        )
     }
 
     detailCard?.let { activeDetail ->

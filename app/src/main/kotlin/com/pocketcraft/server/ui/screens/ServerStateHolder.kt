@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import com.pocketcraft.server.analytics.FirebaseAnalyticsManager
+import com.pocketcraft.server.BuildConfig
 import com.pocketcraft.server.WorldImporter
 import com.pocketcraft.server.data.model.PlayerInfo
 import com.pocketcraft.server.data.model.ServerConfig
@@ -79,6 +80,12 @@ import kotlinx.coroutines.flow.first
 
 enum class ServerStatus { ONLINE, STARTING, RESTARTING, OFFLINE }
 
+enum class ServerUiState {
+    IDLE,       // not running, show Start Server button
+    STARTING,   // process launched, waiting for "Done" log line
+    RUNNING     // fully ready, show address card + Stop/Restart
+}
+
 data class BackupEntry(
     val name: String,
     val sizeMb: Long,
@@ -96,7 +103,6 @@ data class WorldEntry(
 class ServerStateHolder(
     private val context: Context,
     val versionId: String,
-    private val initialServerType: ServerType = ServerType.PAPER,
     var activeWorld: String = "world"
 ) {
     companion object {
@@ -107,14 +113,17 @@ class ServerStateHolder(
     }
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val serverDir = ServerFileManager.getServerDir(appContext, activeWorld)
-    private val serverPhotosDir = File(serverDir, "server_photos").also { it.mkdirs() }
+    private val serverDir: File
+        get() = ServerFileManager.getServerDir(appContext, activeWorld.ifBlank { "world" })
+    private val serverPhotosDir: File
+        get() = File(serverDir, "server_photos").also { it.mkdirs() }
     private val backupsDir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "PocketCraft Server Backups").also { it.mkdirs() }
     private val logsQueue = ArrayDeque<String>(2000)
     private var receiverRegistered = false
     private var startedAtMillis: Long? = null
     private var startupStartedAtMillis: Long? = null
     private var startupProgressJob: Job? = null
+    private var startupLaunchJob: Job? = null
     private var stopWatchdogJob: Job? = null
     private var restartFallbackJob: Job? = null
     private var periodicWorldSaveJob: Job? = null
@@ -125,9 +134,16 @@ class ServerStateHolder(
     private val worldRegistryKey = "pocketcraft-world-list"
     private val worldSetupRegistryKey = "pocketcraft-world-setup-list"
     private val singleServerPort = 25565
+    private val serverSlotSystemFolderNames = setOf(
+        "plugins", "mods", "resourcepacks", "jre", "jre-21", "jre-runtime",
+        "logs", "cache", "config", "libraries", "binaries", "backups",
+        "crash-reports", "bundler", "versions", "world_plugin_profiles",
+        "server_photos"
+    )
     private val stopWatchdogTimeoutMs = 25_000L
     private val restartFallbackDelayMs = 10_000L
-    private val worldPluginProfilesDir = File(serverDir, "world_plugin_profiles").also { it.mkdirs() }
+    private val worldPluginProfilesDir: File
+        get() = File(serverDir, "world_plugin_profiles").also { it.mkdirs() }
     private val totalRamGb by lazy {
         val manager = appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val info = ActivityManager.MemoryInfo()
@@ -147,6 +163,7 @@ class ServerStateHolder(
         get() = _isRunning.value
         private set(value) {
             _isRunning.value = value
+            updateServerUiState()
             notifyStateChanged()
         }
 
@@ -155,8 +172,25 @@ class ServerStateHolder(
         get() = _isStarting.value
         private set(value) {
             _isStarting.value = value
+            updateServerUiState()
             notifyStateChanged()
         }
+
+    private val _serverUiState = mutableStateOf(ServerUiState.IDLE)
+    var serverUiState: ServerUiState
+        get() = _serverUiState.value
+        private set(value) {
+            _serverUiState.value = value
+            notifyStateChanged()
+        }
+
+    private fun updateServerUiState() {
+        serverUiState = when {
+            isRunning -> ServerUiState.RUNNING
+            isStarting -> ServerUiState.STARTING
+            else -> ServerUiState.IDLE
+        }
+    }
 
     private val _isRestartingCycle = mutableStateOf(false)
     var isRestartingCycle: Boolean
@@ -267,9 +301,6 @@ class ServerStateHolder(
             notifyStateChanged()
         }
     val isServerFullyReady: Boolean get() = serverJoinable
-    var movedTooQuicklyCount by mutableStateOf(0)
-        private set
-    private var lastMovedTooQuicklyMillis = 0L
     var isImportingWorld by mutableStateOf(false)
         private set
     var importProgressPercent by mutableStateOf(0f)
@@ -316,6 +347,7 @@ class ServerStateHolder(
 
             if (type == ServerHostService.EVENT_STOPPED || type == ServerHostService.EVENT_SERVER_CRASHED) {
                 scope.launch {
+                    val failedDuringStartup = isStarting
                     val shouldRestart = type == ServerHostService.EVENT_STOPPED && pendingRestart
                     pendingRestart = false
                     restartFallbackJob?.cancel()
@@ -337,7 +369,14 @@ class ServerStateHolder(
                         resetJoinable()
                     }
                     onlinePlayers.clear()
-                    appendLog("[INFO] Server stopped.")
+                    if (type == ServerHostService.EVENT_SERVER_CRASHED) {
+                        val reason = line.ifBlank { "The server process exited unexpectedly." }
+                        appendLog("[ERROR] Server process crashed ($reason).")
+                        FirebaseAnalyticsManager.logServerCrashed(versionId, line)
+                        recordServerFailure(reason, failedDuringStartup)
+                    } else {
+                        appendLog("[INFO] Server stopped.")
+                    }
                     stopWatchdogJob?.cancel()
                     stopWatchdogJob = null
                     if (shouldRestart) {
@@ -398,7 +437,9 @@ class ServerStateHolder(
                         }
                     }
                     ServerHostService.EVENT_SERVER_CRASHED -> {
-                        appendLog("[ERROR] Server process crashed (${line.ifBlank { "unknown" }}).")
+                        val failedDuringStartup = isStarting
+                        val reason = line.ifBlank { "The server exited unexpectedly." }
+                        appendLog("[ERROR] Server process crashed ($reason).")
                         FirebaseAnalyticsManager.logServerCrashed(versionId, line)
                         stopStartupProgressTracking(reset = true)
                         isStopping = false
@@ -407,8 +448,10 @@ class ServerStateHolder(
                         isRunning = false
                         tps = 0f
                         resetJoinable()
+                        recordServerFailure(reason, failedDuringStartup)
                     }
                     ServerHostService.EVENT_ERROR -> {
+                        val failedDuringStartup = isStarting
                         appendLog("[ERROR] $line")
                         stopStartupProgressTracking(reset = true)
                         isStopping = false
@@ -417,6 +460,10 @@ class ServerStateHolder(
                         isRunning = false
                         tps = 0f
                         resetJoinable()
+                        recordServerFailure(
+                            reason = line.ifBlank { "PocketCraft could not start the server process." },
+                            duringStartup = failedDuringStartup
+                        )
                     }
                     ServerHostService.EVENT_STOPPED -> {
                         val shouldRestart = pendingRestart
@@ -576,6 +623,41 @@ class ServerStateHolder(
     var showEulaDialog by mutableStateOf(false)
         private set
 
+    var showCrashDialog by mutableStateOf(false)
+        private set
+    var crashReason by mutableStateOf("")
+        private set
+    var crashDetails by mutableStateOf("")
+        private set
+    var crashWasDuringStartup by mutableStateOf(false)
+        private set
+
+    fun dismissCrashDialog() {
+        showCrashDialog = false
+        crashReason = ""
+        crashDetails = ""
+        crashWasDuringStartup = false
+    }
+
+    private fun recordServerFailure(reason: String, duringStartup: Boolean) {
+        val cleanReason = reason.trim().ifBlank { "The server exited unexpectedly." }
+        crashReason = cleanReason
+        crashWasDuringStartup = duringStartup
+        crashDetails = buildString {
+            appendLine("PocketCraft server issue")
+            appendLine("App version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            appendLine("Server type: ${config.serverType.displayName}")
+            appendLine("Server version: $versionId")
+            appendLine("World: ${activeWorld.ifBlank { "world" }}")
+            appendLine("Phase: ${if (duringStartup) "startup" else "running"}")
+            appendLine("Reason: $cleanReason")
+            appendLine()
+            appendLine("Recent console output:")
+            logsQueue.toList().takeLast(80).forEach { line -> appendLine(line) }
+        }.trim()
+        showCrashDialog = true
+    }
+
     fun dismissEulaDialog() {
         showEulaDialog = false
     }
@@ -596,7 +678,9 @@ class ServerStateHolder(
 
     fun startServer(isRestart: Boolean = false) {
         if (versionId.isBlank()) {
-            appendLog("[ERROR] No version selected. Please select a Minecraft version first.")
+            val reason = "No server version is selected."
+            appendLog("[ERROR] $reason")
+            recordServerFailure(reason, duringStartup = true)
             return
         }
         // Check persisted preference first — only ask once ever
@@ -614,7 +698,14 @@ class ServerStateHolder(
             }
         }
         // Ensure eula.txt is present in the active world dir (for new worlds or switched worlds)
-        ServerFileManager.prepareEula(appContext, activeWorld)
+        runCatching {
+            ServerFileManager.prepareEula(appContext, activeWorld)
+        }.onFailure { error ->
+            val reason = error.message ?: "PocketCraft could not prepare the Minecraft EULA file."
+            appendLog("[ERROR] Failed to prepare server files: $reason")
+            recordServerFailure(reason, duringStartup = true)
+            return
+        }
         if (isRunning || (!isRestart && isStarting) || (isStopping && !isRestart)) return
         lastStartRequestedMillis = System.currentTimeMillis()
         stopWatchdogJob?.cancel()
@@ -642,45 +733,62 @@ class ServerStateHolder(
         clearLogs()
         onlinePlayers.clear()
         sessionPlayers.clear()
-        appendLog("[PocketCraft] Booting Paper $versionId...")
+        appendLog("[PocketCraft] Booting ${config.serverType.displayName} $versionId...")
         appendLog("[PocketCraft] Checking Bedrock bridge plugins...")
 
-        scope.launch {
-            val currentWorld = activeWorld.ifBlank { "world" }
-            val bridgeProvisionResult = withContext(Dispatchers.IO) {
-                PluginManager.ensureBedrockBridgePlugins(appContext, currentWorld)
+        startupLaunchJob?.cancel()
+        startupLaunchJob = scope.launch {
+            try {
+                val currentWorld = activeWorld.ifBlank { "world" }
+                val bridgeProvisionResult = withContext(Dispatchers.IO) {
+                    PluginManager.ensureBedrockBridgePlugins(appContext, currentWorld)
+                }
+
+                bridgeProvisionResult.onFailure { error ->
+                    appendLog("[PocketCraft] Bedrock bridge setup warning: ${error.message ?: "unknown error"}")
+                }
+
+                appendLog("[PocketCraft] Checking optimization plugins...")
+
+                bedrockBridgeEnabled = withContext(Dispatchers.IO) {
+                    runCatching { PluginManager.isBedrockBridgeEnabled(appContext, currentWorld) }
+                        .getOrDefault(false)
+                }
+
+                appendLog("[PocketCraft] Starting server - this may take 30-60 seconds...")
+
+                withContext(Dispatchers.IO) {
+                    val currentActiveWorld = sanitizeWorldName(activeWorld.ifBlank { "world" })
+                    PlayerDataManager.fixOfflineUuids(serverDir, currentActiveWorld)
+                }
+
+                markActiveWorldSetupCompleted()
+                FirebaseAnalyticsManager.logServerStarted(versionId, config.maxPlayers)
+                ServerHostService.start(appContext, versionId, activeWorld)
+                startupLaunchJob = null
+
+                delay(1000)
+                refreshAll()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                startupLaunchJob = null
+                val reason = error.message ?: error::class.java.simpleName
+                appendLog("[ERROR] Failed to start server: $reason")
+                stopStartupProgressTracking(reset = true)
+                isStarting = false
+                isRunning = false
+                isStopping = false
+                resetJoinable()
+                recordServerFailure(reason, duringStartup = true)
             }
-
-            bridgeProvisionResult.onFailure { error ->
-                appendLog("[PocketCraft] Bedrock bridge setup warning: ${error.message ?: "unknown error"}")
-            }
-
-            appendLog("[PocketCraft] Checking optimization plugins...")
-
-            bedrockBridgeEnabled = withContext(Dispatchers.IO) {
-                runCatching { PluginManager.isBedrockBridgeEnabled(appContext, currentWorld) }
-                    .getOrDefault(false)
-            }
-
-            appendLog("[PocketCraft] Starting server - this may take 30-60 seconds...")
-            
-            withContext(Dispatchers.IO) {
-                val currentActiveWorld = sanitizeWorldName(activeWorld.ifBlank { "world" })
-                PlayerDataManager.fixOfflineUuids(serverDir, currentActiveWorld)
-            }
-
-            markActiveWorldSetupCompleted()
-            FirebaseAnalyticsManager.logServerStarted(versionId, config.maxPlayers)
-            ServerHostService.start(appContext, versionId, activeWorld)
-            
-            // Re-sync UI state once service starts
-            delay(1000)
-            refreshAll()
         }
     }
 
     fun stopServer() {
         if (isStopping || (!isRunning && !isStarting)) return
+        startupLaunchJob?.cancel()
+        startupLaunchJob = null
         pendingRestart = false
         restartFallbackJob?.cancel()
         restartFallbackJob = null
@@ -812,7 +920,10 @@ class ServerStateHolder(
             onlinePlayers.replaceAll { player ->
                 val newPing = pings[player.name] ?: pings[player.name.lowercase()]
                 if (newPing != null) {
-                    val updated = player.copy(pingMs = newPing)
+                    val updated = player.copy(
+                        pingMs = newPing.pingMs,
+                        ip = newPing.ip.ifBlank { player.ip }
+                    )
                     val sessionIdx = sessionPlayers.indexOfFirst { canonicalPlayerName(it.name) == canonicalPlayerName(player.name) }
                     if (sessionIdx >= 0) {
                         sessionPlayers[sessionIdx] = updated
@@ -898,21 +1009,6 @@ class ServerStateHolder(
             }
         }
 
-        if (cleanLine.contains("moved too quickly", ignoreCase = true)) {
-            val now = System.currentTimeMillis()
-
-            if (now - lastMovedTooQuicklyMillis > 10000) {
-                movedTooQuicklyCount = 1
-            } else {
-                movedTooQuicklyCount++
-            }
-            lastMovedTooQuicklyMillis = now
-            
-            if (movedTooQuicklyCount >= 5) {
-                appendLog("[PocketCraft] Detected severe movement lag (5+ events). Please consider reducing render distance.")
-                movedTooQuicklyCount = 0
-            }
-        }
     }
 
     private fun markServerReady() {
@@ -1535,7 +1631,7 @@ class ServerStateHolder(
     suspend fun saveSettings(next: ServerConfig, targetWorldName: String? = null): String = withContext(Dispatchers.IO) {
         val enforced = next.copy(
             port = singleServerPort,
-            maxPlayers = next.maxPlayers.coerceIn(1, 20),
+            maxPlayers = next.maxPlayers.coerceIn(1, 1000),
             viewDistance = next.viewDistance.coerceIn(3, 32),
             simulationDistance = next.simulationDistance.coerceIn(3, 32)
         )
@@ -1697,12 +1793,15 @@ class ServerStateHolder(
         if (!hadExistingSettings) {
             // Brand-new world with no prior settings — seed in sensible defaults
             // by inheriting the current world's config as a one-time template,
-            // but do NOT carry over world-specific values like seed or level-type.
+            // but do NOT carry over world-specific values or runtime selection.
             val templateConfig = config.copy(
                 worldName = normalized,
                 port = singleServerPort,
                 worldSeed = "",
-                levelType = "default"
+                levelType = "default",
+                serverType = ServerType.PAPER,
+                gameVersion = "",
+                customJarPath = null
             )
             saveConfig(templateConfig, targetDir = targetServerDir)
         }
@@ -1717,6 +1816,7 @@ class ServerStateHolder(
         syncRegistriesAcrossAllWorlds(extraWorlds = setOf(currentWorld, normalized))
 
         withContext(Dispatchers.Main) {
+            activeWorld = normalized
             refreshAll()
         }
         "Active world switched to $normalized."
@@ -1742,12 +1842,16 @@ class ServerStateHolder(
 
         // Seed the new world's server.properties using the current world's settings
         // as a one-time template (so the user doesn't need to re-configure RAM,
-        // max-players, etc. for every new world). World-specific values are reset.
+        // max-players, etc. for every new world). World-specific values and
+        // runtime selection are reset.
         val templateConfig = config.copy(
             worldName = normalized,
             port = singleServerPort,
             worldSeed = "",        // new world gets a random seed
-            levelType = "default"  // reset level-type; user can change it in setup
+            levelType = "default", // reset level-type; user can change it in setup
+            serverType = ServerType.PAPER,
+            gameVersion = "",
+            customJarPath = null
         )
         saveConfig(templateConfig, targetDir = targetServerDir)
         
@@ -2175,55 +2279,36 @@ class ServerStateHolder(
             return@withContext "Stop the server before resetting the world."
         }
         val activeWorldCopy = sanitizeWorldName(activeWorld.ifBlank { "world" })
-        val worldTargets = linkedSetOf(
-            "world",
-            activeWorldCopy
-        ).filter { it.isNotBlank() }.distinct()
+        val targetServerDir = ServerFileManager.getServerDirNoCreate(appContext, activeWorldCopy)
+        if (!targetServerDir.isDirectory) {
+            return@withContext "$activeWorldCopy was not found."
+        }
 
+        val recoveryRoot = resetRecoveryRoot(activeWorldCopy)
         var deletedAnything = false
-        worldTargets.flatMap { base ->
-            worldDirectoryCandidates(base)
-        }.distinctBy { it.absolutePath }.forEach { target ->
-            if (target.exists()) {
-                target.deleteRecursively()
-                deletedAnything = true
-            }
+
+        resetWorldBaseNames(activeWorldCopy, targetServerDir).forEach { base ->
+            resetWorldDirectory(File(targetServerDir, base), targetServerDir, recoveryRoot, deletePlayerData, deleteDatapacks)
+                .also { deletedAnything = deletedAnything || it }
+            resetWorldDirectory(File(targetServerDir, "${base}_nether"), targetServerDir, recoveryRoot, deletePlayerData, deleteDatapacks)
+                .also { deletedAnything = deletedAnything || it }
+            resetWorldDirectory(File(targetServerDir, "${base}_the_end"), targetServerDir, recoveryRoot, deletePlayerData, deleteDatapacks)
+                .also { deletedAnything = deletedAnything || it }
         }
 
-        if (deletePlayerData) {
-            listOf(
-                File(serverDir, "$activeWorld/playerdata"),
-                File(serverDir, "$activeWorld/stats"),
-                File(serverDir, "$activeWorld/advancements")
-            ).forEach {
-                if (it.exists()) {
-                    it.deleteRecursively()
-                    deletedAnything = true
-                }
-            }
-        }
-
-        if (deleteDatapacks) {
-            val datapacks = File(serverDir, "$activeWorld/datapacks")
-            if (datapacks.exists()) {
-                datapacks.deleteRecursively()
-                deletedAnything = true
-            }
-        }
+        resetFlatWorldEntries(targetServerDir, recoveryRoot, deletePlayerData, deleteDatapacks)
+            .also { deletedAnything = deletedAnything || it }
 
         if (deleteLogs) {
-            val logs = File(serverDir, "logs")
-            if (logs.exists()) {
-                logs.deleteRecursively()
-                deletedAnything = true
-            }
+            moveToResetRecovery(File(targetServerDir, "logs"), targetServerDir, recoveryRoot)
+                .also { deletedAnything = deletedAnything || it }
         }
 
         if (!deletedAnything) {
             return@withContext "Nothing selected for deletion."
         }
         withContext(Dispatchers.Main) { refreshAll() }
-        "Selected world data deleted."
+        "Selected world data reset. Recovery copy saved in app storage."
     }
 
 
@@ -2291,6 +2376,8 @@ class ServerStateHolder(
         stopPeriodicWorldSave()
         stopPeriodicLocationPolling()
         stopStartupProgressTracking(reset = false)
+        startupLaunchJob?.cancel()
+        startupLaunchJob = null
         stopWatchdogJob?.cancel()
         stopWatchdogJob = null
         restartFallbackJob?.cancel()
@@ -2367,12 +2454,14 @@ class ServerStateHolder(
     private fun startPeriodicWorldSave() {
         if (periodicWorldSaveJob?.isActive == true) return
         periodicWorldSaveJob = scope.launch(Dispatchers.IO) {
-            val saveIntervalMs = when {
-                totalRamGb <= 3 -> 8 * 60_000L
-                totalRamGb <= 4 -> 6 * 60_000L
-                else -> 4 * 60_000L
-            }
             while (periodicWorldSaveJob?.isActive == true) {
+                val playersOnline = onlinePlayers.isNotEmpty()
+                val saveIntervalMs = when {
+                    playersOnline -> 15 * 60_000L
+                    totalRamGb <= 3 -> 8 * 60_000L
+                    totalRamGb <= 4 -> 6 * 60_000L
+                    else -> 4 * 60_000L
+                }
                 delay(saveIntervalMs)
                 if (!isRunning || isStopping) continue
                 runCatching {
@@ -2491,7 +2580,7 @@ class ServerStateHolder(
         var loaded = ServerConfig(
             worldName = props.getProperty("level-name", activeWorld),
             worldSeed = props.getProperty("level-seed", ""),
-            maxPlayers = (props.getProperty("max-players", adaptiveMaxPlayers().toString()).toIntOrNull() ?: adaptiveMaxPlayers()).coerceIn(1, 20),
+            maxPlayers = (props.getProperty("max-players", adaptiveMaxPlayers().toString()).toIntOrNull() ?: adaptiveMaxPlayers()).coerceIn(1, 1000),
             port = singleServerPort,
             difficulty = props.getProperty("difficulty", "normal"),
             gameMode = props.getProperty("gamemode", "survival"),
@@ -2513,8 +2602,11 @@ class ServerStateHolder(
             maxRamMb = props.getProperty("pocketcraft-max-ram-mb", "1024").toIntOrNull() ?: 1024,
             generateStructures = props.getProperty("generate-structures", "true").toBoolean(),
             levelType = props.getProperty("level-type", "default"),
-            serverType = ServerType.fromString(props.getProperty("pocketcraft-server-type") ?: initialServerType.name),
-            gameVersion = props.getProperty("pocketcraft-game-version", versionId),
+            serverType = props.getProperty("pocketcraft-server-type")
+                ?.takeIf { it.isNotBlank() }
+                ?.let(ServerType::fromString)
+                ?: ServerType.PAPER,
+            gameVersion = props.getProperty("pocketcraft-game-version", ""),
             customJarPath = props.getProperty("pocketcraft-custom-jar-path")?.takeIf { it.isNotBlank() }
         )
         return loaded.copy(
@@ -2526,7 +2618,7 @@ class ServerStateHolder(
 
     private fun saveConfig(config: ServerConfig, targetDir: File = serverDir) {
         val enforcedConfig = config.copy(
-            maxPlayers = config.maxPlayers.coerceIn(1, 20),
+            maxPlayers = config.maxPlayers.coerceIn(1, 1000),
             viewDistance = config.viewDistance.coerceIn(3, 32),
             simulationDistance = config.simulationDistance.coerceIn(3, 32)
         )
@@ -3048,6 +3140,178 @@ class ServerStateHolder(
         }
 
         return candidates.filter { it.exists() }.distinctBy { it.absolutePath }
+    }
+
+    private fun resetWorldBaseNames(worldName: String, targetServerDir: File): Set<String> {
+        val props = ServerPropertiesHelper.readProperties(targetServerDir, persistDefaults = false)
+        val bases = linkedSetOf(sanitizeWorldName(worldName))
+
+        props.getProperty("level-name")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { bases.add(sanitizeWorldName(it)) }
+
+        val existingBase = bases.firstOrNull { base ->
+            directoryLooksLikeWorldDimension(File(targetServerDir, base)) ||
+                directoryLooksLikeWorldDimension(File(targetServerDir, "${base}_nether")) ||
+                directoryLooksLikeWorldDimension(File(targetServerDir, "${base}_the_end"))
+        }
+        if (existingBase != null) {
+            return bases.filter { it.isNotBlank() }.toSet()
+        }
+
+        val discoveredBases = targetServerDir.listFiles()
+            .orEmpty()
+            .asSequence()
+            .filter { it.isDirectory && it.name.lowercase(Locale.getDefault()) !in serverSlotSystemFolderNames }
+            .filter(::directoryLooksLikeWorldDimension)
+            .mapNotNull { extractWorldBaseName(it.name) }
+            .map(::sanitizeWorldName)
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.getDefault()) }
+            .toList()
+
+        if (discoveredBases.size == 1) {
+            bases.add(discoveredBases.single())
+        }
+
+        return bases.filter { it.isNotBlank() }.toSet()
+    }
+
+    private fun resetWorldDirectory(
+        worldDir: File,
+        allowedRoot: File,
+        recoveryRoot: File,
+        deletePlayerData: Boolean,
+        deleteDatapacks: Boolean
+    ): Boolean {
+        if (!worldDir.isDirectory || !isPathInsideRoot(worldDir, allowedRoot)) return false
+
+        val preservedNames = buildSet {
+            if (!deletePlayerData) {
+                add("playerdata")
+                add("stats")
+                add("advancements")
+            }
+            if (!deleteDatapacks) {
+                add("datapacks")
+            }
+        }
+
+        var movedAnything = false
+        worldDir.listFiles().orEmpty().forEach { child ->
+            val childName = child.name.lowercase(Locale.getDefault())
+            if (childName !in preservedNames) {
+                moveToResetRecovery(child, allowedRoot, recoveryRoot)
+                    .also { movedAnything = movedAnything || it }
+            }
+        }
+        return movedAnything
+    }
+
+    private fun resetFlatWorldEntries(
+        targetServerDir: File,
+        recoveryRoot: File,
+        deletePlayerData: Boolean,
+        deleteDatapacks: Boolean
+    ): Boolean {
+        val flatWorldEntryNames = linkedSetOf(
+            "DIM-1",
+            "DIM1",
+            "data",
+            "entities",
+            "level.dat",
+            "level.dat_old",
+            "poi",
+            "region",
+            "session.lock",
+            "uid.dat"
+        )
+        if (deletePlayerData) {
+            flatWorldEntryNames.add("playerdata")
+            flatWorldEntryNames.add("stats")
+            flatWorldEntryNames.add("advancements")
+        }
+        if (deleteDatapacks) {
+            flatWorldEntryNames.add("datapacks")
+        }
+
+        var movedAnything = false
+        flatWorldEntryNames.forEach { name ->
+            moveToResetRecovery(File(targetServerDir, name), targetServerDir, recoveryRoot)
+                .also { movedAnything = movedAnything || it }
+        }
+        return movedAnything
+    }
+
+    private fun resetRecoveryRoot(worldName: String): File {
+        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        return File(
+            File(appContext.filesDir, "reset_recovery"),
+            "${sanitizeWorldName(worldName)}/$timestamp"
+        ).also { it.mkdirs() }
+    }
+
+    private fun moveToResetRecovery(target: File, allowedRoot: File, recoveryRoot: File): Boolean {
+        if (!target.exists()) return false
+        if (!isPathInsideRoot(target, allowedRoot)) {
+            android.util.Log.e("ServerStateHolder", "Blocked reset delete outside selected world slot: ${target.absolutePath}")
+            return false
+        }
+
+        return runCatching {
+            val root = allowedRoot.canonicalFile
+            val source = target.canonicalFile
+            if (source == root) return@runCatching false
+
+            val relativePath = source.relativeTo(root).invariantSeparatorsPath
+            val destination = uniqueRecoveryPath(File(recoveryRoot, relativePath))
+            destination.parentFile?.mkdirs()
+
+            if (source.renameTo(destination)) {
+                return@runCatching true
+            }
+
+            val copied = if (source.isDirectory) {
+                source.copyRecursively(destination, overwrite = false)
+            } else {
+                source.copyTo(destination, overwrite = false)
+                true
+            }
+            if (!copied) {
+                destination.deleteRecursively()
+                return@runCatching false
+            }
+
+            val removed = if (source.isDirectory) source.deleteRecursively() else source.delete()
+            if (!removed) {
+                android.util.Log.w("ServerStateHolder", "Copied reset recovery but could not remove ${source.absolutePath}")
+            }
+            removed
+        }.getOrElse { error ->
+            android.util.Log.e("ServerStateHolder", "Failed moving reset target to recovery: ${target.absolutePath}", error)
+            false
+        }
+    }
+
+    private fun uniqueRecoveryPath(preferred: File): File {
+        if (!preferred.exists()) return preferred
+        val parent = preferred.parentFile ?: return preferred
+        val baseName = preferred.nameWithoutExtension.ifBlank { preferred.name }
+        val extension = preferred.extension.takeIf { it.isNotBlank() }?.let { ".$it" }.orEmpty()
+        var index = 2
+        while (true) {
+            val candidate = File(parent, "$baseName-$index$extension")
+            if (!candidate.exists()) return candidate
+            index++
+        }
+    }
+
+    private fun isPathInsideRoot(path: File, root: File): Boolean {
+        val canonicalRoot = root.canonicalFile
+        val canonicalPath = path.canonicalFile
+        return canonicalPath != canonicalRoot &&
+            canonicalPath.path.startsWith(canonicalRoot.path + File.separator)
     }
 
     private fun listWorldEntries(activeWorld: String): List<WorldEntry> {

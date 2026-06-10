@@ -356,7 +356,7 @@ fun PlayerDetailScreen(
                             fontSize = 12.sp
                         )
                         Text(
-                            text = if (player.pingMs > 0) "Ping ${player.pingMs}ms" else "Ping unavailable",
+                            text = player.pingText(),
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1053,5 +1053,4 @@ private fun formatPlaytime(ticks: Long): String {
         else -> "<1m"
     }
 }
-
 

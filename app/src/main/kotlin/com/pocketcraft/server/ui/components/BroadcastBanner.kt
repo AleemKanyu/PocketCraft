@@ -28,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Surface
+import com.pocketcraft.server.ui.theme.card3d
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -122,11 +123,16 @@ fun BroadcastBanner(
             modifier = modifier
                 .fillMaxWidth()
                 .padding(outerPadding)
+                .card3d(
+                    elevation = 4.dp,
+                    cornerRadius = 16.dp,
+                    borderColor = bannerBorder,
+                    depthColor = bannerBorder.copy(alpha = (bannerBorder.alpha * 1.35f).coerceAtMost(1f))
+                )
                 .let { base -> if (enableDetailsSheet) base.clickable { showDetails = true } else base },
             shape = RoundedCornerShape(16.dp),
             color = bannerColor,
-            border = BorderStroke(1.5.dp, bannerBorder),
-            shadowElevation = 4.dp
+            shadowElevation = 0.dp
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),

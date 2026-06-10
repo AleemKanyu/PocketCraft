@@ -316,8 +316,18 @@ function pairSockets(playerSocket, phoneSocket, userId) {
   configureSocket(playerSocket);
   configureSocket(phoneSocket);
   playerSocket.resume();
-  playerSocket.pipe(phoneSocket);
-  phoneSocket.pipe(playerSocket);
+
+  playerSocket.on('data', (chunk) => {
+    if (!phoneSocket.destroyed) {
+      phoneSocket.write(chunk);
+    }
+  });
+
+  phoneSocket.on('data', (chunk) => {
+    if (!playerSocket.destroyed) {
+      playerSocket.write(chunk);
+    }
+  });
 
   let killed = false;
 
@@ -325,8 +335,6 @@ function pairSockets(playerSocket, phoneSocket, userId) {
     if (killed) return;
     killed = true;
     console.log(`[relay] Pairing broken for ${userId} (source: ${src})`);
-    playerSocket.unpipe(phoneSocket);
-    phoneSocket.unpipe(playerSocket);
     if (!playerSocket.destroyed) playerSocket.destroy();
     if (!phoneSocket.destroyed) phoneSocket.destroy();
   };

@@ -31,6 +31,7 @@ object AppPreferencesKeys {
     val AUTO_RESTART = booleanPreferencesKey("auto_restart")
     val AUTO_RESTART_DELAY_SECONDS = stringPreferencesKey("auto_restart_delay_seconds")
     val RELAY_HOST = stringPreferencesKey("relay_host")
+    val RELAY_HOST_REGION_MIGRATED = booleanPreferencesKey("relay_host_region_migrated")
     val OPEN_SERVER_RISK_ACKNOWLEDGED = booleanPreferencesKey("open_server_risk_acknowledged")
     val INITIAL_WORLD_SETUP_SHOWN = booleanPreferencesKey("initial_world_setup_shown")
     val PENDING_AUTO_DOWNLOAD_VERSION = stringPreferencesKey("pending_auto_download_version")
@@ -48,6 +49,8 @@ object AppPreferencesKeys {
     val FIRST_SERVER_START_WARNING_DISMISSED = booleanPreferencesKey("first_server_start_warning_dismissed")
     val FLIGHT_MODE_ENABLED = booleanPreferencesKey("flight_mode_enabled")
     val FIRST_BOOT_COMPLETE = booleanPreferencesKey("first_boot_complete")
+    val NAV_INDICATOR_SHAPE = stringPreferencesKey("nav_indicator_shape")
+    val SERVER_TYPE_SETUP_GUIDE_SHOWN = booleanPreferencesKey("server_type_setup_guide_shown")
 }
 
 class AppPreferences(context: Context) {
@@ -175,6 +178,21 @@ class AppPreferences(context: Context) {
             ?: RelayServers.getBestForTimeZone(java.util.TimeZone.getDefault().id).host
         set(value) = prefs.edit().putString("relay_host", value).apply()
 
+    fun migrateLegacyRelayHostForRegion() {
+        if (prefs.getBoolean("relay_host_region_migrated", false)) return
+
+        val bestHost = RelayServers.getBestForTimeZone(java.util.TimeZone.getDefault().id).host
+        val currentHost = prefs.getString("relay_host", null)
+        prefs.edit().apply {
+            if (bestHost != RelayServers.SINGAPORE.host &&
+                (currentHost == null || currentHost == RelayServers.SINGAPORE.host)
+            ) {
+                putString("relay_host", bestHost)
+            }
+            putBoolean("relay_host_region_migrated", true)
+        }.apply()
+    }
+
     var onboardingCompleted: Boolean
         get() = prefs.getBoolean("onboarding_completed", false)
         set(value) = prefs.edit().putBoolean("onboarding_completed", value).apply()
@@ -190,6 +208,18 @@ class AppPreferences(context: Context) {
     var appLaunchCount: Int
         get() = prefs.getInt("app_launch_count", 0)
         set(value) = prefs.edit().putInt("app_launch_count", value).apply()
+
+    var ratingPopupLastShownAt: Long
+        get() = prefs.getLong("rating_popup_last_shown_at", 0L)
+        set(value) = prefs.edit().putLong("rating_popup_last_shown_at", value).apply()
+
+    var ratingPopupShowCount: Int
+        get() = prefs.getInt("rating_popup_show_count", 0)
+        set(value) = prefs.edit().putInt("rating_popup_show_count", value).apply()
+
+    var ratingPopupDismissedForever: Boolean
+        get() = prefs.getBoolean("rating_popup_dismissed_forever", false)
+        set(value) = prefs.edit().putBoolean("rating_popup_dismissed_forever", value).apply()
 
     var socialPromoShown: Boolean
         get() = prefs.getBoolean("social_promo_shown", false)
@@ -427,12 +457,28 @@ object AppPreferencesStore {
 
     fun getRelayHostFlow(context: Context): Flow<String> =
         context.appPreferencesDataStore.data.map { prefs ->
-            prefs[AppPreferencesKeys.RELAY_HOST] ?: "play.pocketcraft.online"
+            prefs[AppPreferencesKeys.RELAY_HOST]
+                ?: RelayServers.getBestForTimeZone(java.util.TimeZone.getDefault().id).host
         }
 
     suspend fun setRelayHost(context: Context, host: String) {
         context.appPreferencesDataStore.edit { prefs ->
             prefs[AppPreferencesKeys.RELAY_HOST] = host
+        }
+    }
+
+    suspend fun migrateLegacyRelayHostForRegion(context: Context) {
+        val bestHost = RelayServers.getBestForTimeZone(java.util.TimeZone.getDefault().id).host
+        context.appPreferencesDataStore.edit { prefs ->
+            if (prefs[AppPreferencesKeys.RELAY_HOST_REGION_MIGRATED] == true) return@edit
+
+            val currentHost = prefs[AppPreferencesKeys.RELAY_HOST]
+            if (bestHost != RelayServers.SINGAPORE.host &&
+                (currentHost == null || currentHost == RelayServers.SINGAPORE.host)
+            ) {
+                prefs[AppPreferencesKeys.RELAY_HOST] = bestHost
+            }
+            prefs[AppPreferencesKeys.RELAY_HOST_REGION_MIGRATED] = true
         }
     }
 
@@ -582,6 +628,28 @@ object AppPreferencesStore {
     suspend fun setFirstBootComplete(context: Context, complete: Boolean) {
         context.appPreferencesDataStore.edit { prefs ->
             prefs[AppPreferencesKeys.FIRST_BOOT_COMPLETE] = complete
+        }
+    }
+
+    fun getNavIndicatorShapeFlow(context: Context): Flow<String> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.NAV_INDICATOR_SHAPE] ?: "PILL"
+        }
+
+    suspend fun setNavIndicatorShape(context: Context, shape: String) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.NAV_INDICATOR_SHAPE] = shape
+        }
+    }
+
+    fun isServerTypeSetupGuideShownFlow(context: Context): Flow<Boolean> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.SERVER_TYPE_SETUP_GUIDE_SHOWN] ?: false
+        }
+
+    suspend fun setServerTypeSetupGuideShown(context: Context, shown: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.SERVER_TYPE_SETUP_GUIDE_SHOWN] = shown
         }
     }
 

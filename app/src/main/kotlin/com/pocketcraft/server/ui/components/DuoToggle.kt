@@ -2,7 +2,6 @@ package com.pocketcraft.server.ui.components
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
@@ -13,10 +12,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.card3d
 
 @Composable
 fun DuoToggle(
@@ -26,33 +26,38 @@ fun DuoToggle(
     enabled: Boolean = true
 ) {
     val trackShape = RoundedCornerShape(12.dp)
-    val colorScheme = MaterialTheme.colorScheme
     val thumbOffset = animateDpAsState(
         targetValue = if (checked) 24.dp else 0.dp,
         label = "duo_toggle_offset"
     )
     val trackColor = when {
-        !enabled -> colorScheme.surfaceVariant.copy(alpha = 0.6f)
-        checked -> PocketColors.Primary
-        else -> colorScheme.surfaceVariant
+        !enabled -> PocketColors.InactiveBg.copy(alpha = 0.6f)
+        checked  -> PocketColors.Primary
+        else     -> PocketColors.InactiveBg
     }
-    val borderColor = when {
-        !enabled -> colorScheme.outline.copy(alpha = 0.45f)
-        checked -> Color(0xFF4AA502)
-        else -> colorScheme.outline.copy(alpha = 0.8f)
+    val sideColor = when {
+        !enabled -> PocketColors.InactiveBorder.copy(alpha = 0.45f)
+        checked  -> PocketColors.PrimaryBorder
+        else     -> PocketColors.InactiveBorder
     }
-    val thumbColor = if (enabled) {
-        colorScheme.surface
-    } else {
-        colorScheme.surface.copy(alpha = 0.7f)
+    val bottomColor = when {
+        !enabled -> sideColor
+        checked  -> PocketColors.PrimaryBorderBottom
+        else     -> PocketColors.InactiveBorderBottom
     }
+    val thumbColor = if (enabled) PocketColors.PrimaryText else PocketColors.PrimaryText.copy(alpha = 0.5f)
 
     Box(
         modifier = modifier
             .size(width = 52.dp, height = 30.dp)
+            .card3d(
+                elevation = 4.dp,
+                cornerRadius = 12.dp,
+                borderColor = sideColor,
+                depthColor = bottomColor
+            )
             .clip(trackShape)
             .background(trackColor)
-            .border(2.dp, borderColor, trackShape)
             .clickable(enabled = enabled) { onCheckedChange(!checked) }
             .padding(horizontal = 3.dp),
         contentAlignment = Alignment.CenterStart
@@ -63,7 +68,6 @@ fun DuoToggle(
                 .size(width = 20.dp, height = 18.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(thumbColor)
-                .border(1.5.dp, borderColor.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
         )
     }
 }

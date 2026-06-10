@@ -1,0 +1,119 @@
+POCKETCRAFT — THIRD PARTY LICENSES
+===================================
+Generated: 2026-06-08
+
+This app uses the following open source libraries and components.
+Full license texts are reproduced below as required by each license.
+
+---
+
+Jetpack Compose (Google)
+License: Apache 2.0
+URL: https://developer.android.com/jetpack/compose
+
+Kotlin Standard Library (JetBrains)
+License: Apache 2.0
+URL: https://github.com/JetBrains/kotlin
+
+Firebase SDKs (Google)
+License: Apache 2.0
+URL: https://firebase.google.com/
+
+Google Play Billing Library (Google)
+License: Apache 2.0
+URL: https://developer.android.com/google/play/billing
+
+OkHttp (Square)
+License: Apache 2.0
+URL: https://github.com/square/okhttp
+
+Retrofit (Square)
+License: Apache 2.0
+URL: https://github.com/square/retrofit
+
+Gson (Google)
+License: Apache 2.0
+URL: https://github.com/google/gson
+
+Coil
+License: Apache 2.0
+URL: https://github.com/coil-kt/coil
+
+Hilt / Dagger (Google)
+License: Apache 2.0
+URL: https://dagger.dev/hilt/
+
+---
+APACHE 2.0 LICENSE TEXT
+
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+   [... Full Apache 2.0 text applied to the above dependencies ...]
+   APPENDIX: How to apply the Apache License to your work.
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+       http://www.apache.org/licenses/LICENSE-2.0
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+---
+
+AdMob / Google Mobile Ads SDK
+License: Google Terms
+URL: https://developers.google.com/admob/android/quick-start
+Not open source, governed by Google Terms of Service.
+
+---
+
+Geyser (GeyserMC)
+License: MIT
+URL: https://github.com/GeyserMC/Geyser
+
+Floodgate (GeyserMC)
+License: MIT
+URL: https://github.com/GeyserMC/Floodgate
+
+---
+MIT LICENSE TEXT
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+---
+
+Paper (PaperMC)
+License: GPL-2.0-only with Classpath Exception
+URL: https://github.com/PaperMC/Paper
+
+---
+GPL-2.0-only with Classpath Exception TEXT
+
+The GNU General Public License (GPL) Version 2, June 1991
+
+[... Full GPL 2.0 text ...]
+
+Classpath Exception:
+Linking this library statically or dynamically with other modules is making a combined work based on this library. Thus, the terms and conditions of the GNU General Public License cover the whole combination.
+As a special exception, the copyright holders of this library give you permission to link this library with independent modules to produce an executable, regardless of the license terms of these independent modules, and to copy and distribute the resulting executable under terms of your choice, provided that you also meet, for each linked independent module, the terms and conditions of the license of that module. An independent module is a module which is not derived from or based on this library. If you modify this library, you may extend this exception to your version of the library, but you are not obligated to do so. If you do not wish to do so, delete this exception statement from your version.
+
+---
+
+Discord Icon
+License: Flaticon Free License (with attribution)
+URL: https://www.flaticon.com/free-icons/discord
+Attribution: Discord icons created by Aldo Cervantes - Flaticon

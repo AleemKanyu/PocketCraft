@@ -39,7 +39,8 @@ import com.pocketcraft.server.config.RelayServerConfig
 import com.pocketcraft.server.config.RelayServers
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.pocketCardBorderColor
-import com.pocketcraft.server.ui.theme.pocketCardShadowColor
+import com.pocketcraft.server.ui.components.DuoButton
+import com.pocketcraft.server.ui.components.DuoButtonVariant
 import com.pocketcraft.server.ui.components.PocketCraftCard
 
 @Composable
@@ -49,7 +50,6 @@ fun RelayRegionScreen(
     onSelectHost: (String) -> Unit
 ) {
     val selected = RelayServers.getByHost(selectedHost)
-    val shadowColor = pocketCardShadowColor()
 
     Column(
         modifier = Modifier
@@ -74,23 +74,12 @@ fun RelayRegionScreen(
         }
 
         PocketCraftCard(
-            modifier = Modifier.shadow(
-                elevation = 12.dp,
-                shape = RoundedCornerShape(28.dp),
-                ambientColor = shadowColor,
-                spotColor = shadowColor,
-                clip = false
-            ),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f)
-                } else {
-                    PocketColors.PrimaryMuted.copy(alpha = 0.52f)
-                }
-            ),
-            border = BorderStroke(1.dp, pocketCardBorderColor()),
-            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            cornerRadius = 28.dp,
+            containerColor = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f)
+            } else {
+                PocketColors.PrimaryMuted.copy(alpha = 0.52f)
+            }
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 22.dp),
@@ -152,24 +141,12 @@ private fun RelayRegionCard(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    val shadowColor = pocketCardShadowColor()
     PocketCraftCard(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(
-                elevation = 10.dp,
-                shape = RoundedCornerShape(28.dp),
-                ambientColor = shadowColor,
-                spotColor = shadowColor,
-                clip = false
-            )
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
-        ),
-        border = BorderStroke(2.dp, pocketCardBorderColor()),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        cornerRadius = 28.dp,
+        containerColor = if (selected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -207,17 +184,12 @@ private fun RelayRegionCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Button(
+            DuoButton(
+                text = if (selected) "Selected" else "Use This Region",
                 onClick = onClick,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (selected) PocketColors.PrimaryMuted else PocketColors.Primary,
-                    contentColor = if (selected) PocketColors.PrimaryDark else MaterialTheme.colorScheme.onPrimary
-                )
-            ) {
-                Text(if (selected) "Selected" else "Use This Region", fontWeight = FontWeight.ExtraBold)
-            }
+                variant = if (selected) DuoButtonVariant.Secondary else DuoButtonVariant.Primary,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.pocketcraft.server.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -59,6 +61,8 @@ import com.pocketcraft.server.data.model.Plugin
 import com.pocketcraft.server.service.PluginManager
 import com.pocketcraft.server.ui.components.duoTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
+import com.pocketcraft.server.ui.components.DuoButton
+import com.pocketcraft.server.ui.components.DuoButtonVariant
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.pocketCardShadowColor
 import com.pocketcraft.server.ui.theme.pocketHighContrastBorderColor
@@ -181,14 +185,13 @@ fun DownloadedPluginsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Button(onClick = { showAddDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                Text(
-                    text = s.add,
-                    modifier = Modifier.padding(start = 6.dp),
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            DuoButton(
+                text = s.add,
+                onClick = { showAddDialog = true },
+                icon = Icons.Default.Add,
+                fillMaxWidth = false,
+                minHeight = 40.dp
+            )
         }
 
         TabRow(selectedTabIndex = selectedTab) {
@@ -220,18 +223,8 @@ fun DownloadedPluginsScreen(
                 contentAlignment = Alignment.Center
             ) {
                 PocketCraftCard(
-                    modifier = Modifier
-                        .padding(20.dp)
-                        .shadow(
-                            elevation = 12.dp,
-                            shape = RoundedCornerShape(20.dp),
-                            ambientColor = cardShadowColor,
-                            spotColor = cardShadowColor,
-                            clip = false
-                        ),
-                    shape = RoundedCornerShape(20.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.5.dp, cardBorderColor),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    modifier = Modifier.padding(20.dp),
+                    cornerRadius = 20.dp
                 ) {
                     Column(
                         modifier = Modifier.padding(24.dp),
@@ -306,39 +299,44 @@ fun DownloadedPluginsScreen(
             ) {
                 Text("${s.delete} ${item.name}?", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                 Text(s.deleteConfirmDesc, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(
-                    onClick = {
-                        val deleted = PluginManager.deleteContent(
-                            context = context,
-                            worldName = stateHolder.activeWorld,
-                            type = currentTab().type,
-                            plugin = item
-                        )
-                        scope.launch {
-                            deleteSheetState.hide()
-                            deleteTarget = null
-                            if (deleted) {
-                                refresh()
-                                onMessage("${item.name} deleted.")
-                            } else {
-                                onMessage("Could not delete ${item.name}.")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    DuoButton(
+                        text = s.cancel,
+                        onClick = {
+                            scope.launch {
+                                deleteSheetState.hide()
+                                deleteTarget = null
                             }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(s.delete, color = PocketColors.Danger)
-                }
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            deleteSheetState.hide()
-                            deleteTarget = null
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(s.cancel)
+                        },
+                        variant = DuoButtonVariant.Secondary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    DuoButton(
+                        text = s.delete,
+                        onClick = {
+                            val deleted = PluginManager.deleteContent(
+                                context = context,
+                                worldName = stateHolder.activeWorld,
+                                type = currentTab().type,
+                                plugin = item
+                            )
+                            scope.launch {
+                                deleteSheetState.hide()
+                                deleteTarget = null
+                                if (deleted) {
+                                    refresh()
+                                    onMessage("${item.name} deleted.")
+                                } else {
+                                    onMessage("Could not delete ${item.name}.")
+                                }
+                            }
+                        },
+                        variant = DuoButtonVariant.Danger,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
@@ -363,7 +361,8 @@ fun DownloadedPluginsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text("${s.add} ${currentTab().label(s)}", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
-                TextButton(
+                DuoButton(
+                    text = s.uploadFromDevice,
                     onClick = {
                         scope.launch {
                             addSheetState.hide()
@@ -371,10 +370,9 @@ fun DownloadedPluginsScreen(
                             uploadLauncher.launch("*/*")
                         }
                     },
+                    variant = DuoButtonVariant.Primary,
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(s.uploadFromDevice)
-                }
+                )
                 TextField(
                     value = urlInput,
                     onValueChange = { urlInput = it },
@@ -384,42 +382,27 @@ fun DownloadedPluginsScreen(
                     shape = duoTextFieldShape(),
                     colors = duoTextFieldColors()
                 )
-                TextButton(
+                DuoButton(
+                    text = "Open URL",
                     onClick = {
                         val cleanUrl = urlInput.trim()
                         if (cleanUrl.isBlank()) {
-                            Toast.makeText(context, "Paste a direct URL first.", Toast.LENGTH_SHORT).show()
-                            return@TextButton
+                            Toast.makeText(context, "Paste a URL first.", Toast.LENGTH_SHORT).show()
+                            return@DuoButton
                         }
                         scope.launch {
-                            isDownloading = true
-                            downloadProgress = 0
-                            val result = PluginManager.installFromUrl(
-                                context = context,
-                                sourceUrl = cleanUrl,
-                                worldName = stateHolder.activeWorld,
-                                type = currentTab().type,
-                                fileNameHint = null,
-                                runtimeKey = runtimeKey,
-                                onProgress = { downloadProgress = it.coerceIn(0, 100) }
-                            )
-                            isDownloading = false
-                            showAddDialog = false
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(cleanUrl)))
                             urlInput = ""
                             addSheetState.hide()
-                            result.onSuccess {
-                                refresh()
-                                onMessage("${currentTab().label(s).dropLastWhile { it == 's' }} downloaded. Restart the server to apply changes.")
-                            }.onFailure {
-                                onMessage(it.message ?: "Download failed.")
-                            }
+                            showAddDialog = false
+                            onMessage("Download the file in your browser, then add it from device storage.")
                         }
                     },
+                    variant = DuoButtonVariant.Primary,
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(s.download)
-                }
-                TextButton(
+                )
+                DuoButton(
+                    text = s.cancel,
                     onClick = {
                         scope.launch {
                             urlInput = ""
@@ -427,10 +410,9 @@ fun DownloadedPluginsScreen(
                             showAddDialog = false
                         }
                     },
+                    variant = DuoButtonVariant.Danger,
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(s.cancel)
-                }
+                )
             }
         }
     }
@@ -447,16 +429,7 @@ private fun DownloadedItemRow(
 ) {
     val s = LocalAppStrings.current
     PocketCraftCard(
-        modifier = Modifier.shadow(
-            elevation = 10.dp,
-            shape = RoundedCornerShape(18.dp),
-            ambientColor = shadowColor,
-            spotColor = shadowColor,
-            clip = false
-        ),
-        shape = RoundedCornerShape(18.dp),
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, borderColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        cornerRadius = 18.dp
     ) {
         Row(
             modifier = Modifier

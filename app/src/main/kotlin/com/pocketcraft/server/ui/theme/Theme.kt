@@ -7,57 +7,94 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
+import com.pocketcraft.server.ui.util.MobTheme
 
-private val LightColorScheme = lightColorScheme(
-    primary = PocketColors.Primary,
-    onPrimary = PocketColors.TextLight,
-    primaryContainer = PocketColors.PrimaryMuted,
-    secondary = PocketColors.PrimaryDark,
-    background = PocketColors.BgLight,
-    surface = PocketColors.SurfaceLight,
-    surfaceVariant = PocketColors.SurfaceVarLight,
-    onBackground = PocketColors.TextLight,
-    onSurface = PocketColors.TextLight,
-    onSurfaceVariant = PocketColors.TextMuted,
-    outline = PocketColors.BorderLight,
-    error = PocketColors.Danger,
-    tertiary = PocketColors.Starting
-)
+private fun pocketColorScheme() = with(PocketColors.currentPalette) {
+    val darkSurface = bgApp.luminance() < 0.5f
+    val secondaryAccent = when (PocketColors.activeMobTheme) {
+        MobTheme.CREEPER -> if (PocketColors.isDark) Color(0xFF8ACC8A) else primaryBorder
+        else -> primaryBorder
+    }
 
-private val DarkColorScheme = darkColorScheme(
-    primary = PocketColors.SurfaceVarDark,
-    onPrimary = PocketColors.TextDark,
-    primaryContainer = PocketColors.SurfaceDark,
-    onPrimaryContainer = PocketColors.TextDark,
-    secondary = PocketColors.TextDark,
-    background = PocketColors.BgDark,
-    surface = PocketColors.SurfaceDark,
-    surfaceVariant = PocketColors.SurfaceVarDark,
-    onBackground = PocketColors.TextDark,
-    onSurface = PocketColors.TextDark,
-    onSurfaceVariant = PocketColors.TextDark.copy(alpha = 0.9f),
-    outline = PocketColors.BorderDark,
-    outlineVariant = Color(0xFF447D69),
-    error = PocketColors.Danger,
-    tertiary = PocketColors.Starting
-)
+    if (darkSurface) {
+        darkColorScheme(
+            background           = bgApp,
+            surface              = surfaceCard,
+            surfaceVariant       = surfaceHover,
+            surfaceTint          = navActivePillBg,
+            primary              = primary,
+            onPrimary            = bgApp,
+            primaryContainer     = navActivePillBg,
+            onPrimaryContainer   = primary,
+            secondary            = tagText,
+            onSecondary          = bgApp,
+            secondaryContainer   = surfaceHover,
+            onSecondaryContainer = tagText,
+            tertiary             = primaryBorder,
+            onTertiary           = bgApp,
+            tertiaryContainer    = tagBg,
+            onTertiaryContainer  = tagText,
+            onBackground         = textPrimary,
+            onSurface            = textPrimary,
+            onSurfaceVariant     = textMuted,
+            outline              = cardBorder,
+            outlineVariant       = inactiveBorder,
+            error                = danger,
+            onError              = textPrimary,
+            errorContainer       = dangerBg,
+            onErrorContainer     = dangerText
+        )
+    } else {
+        lightColorScheme(
+            primary              = primary,
+            onPrimary            = primaryText,
+            primaryContainer     = navActivePillBg,
+            onPrimaryContainer   = textPrimary,
+            secondary            = secondaryAccent,
+            onSecondary          = primaryText,
+            secondaryContainer   = surfaceHover,
+            onSecondaryContainer = textPrimary,
+            tertiary             = primaryBorder,
+            onTertiary           = primaryText,
+            tertiaryContainer    = tagBg,
+            onTertiaryContainer  = tagText,
+            background           = bgApp,
+            surface              = surfaceCard,
+            surfaceVariant       = surfaceHover,
+            surfaceTint          = primary,
+            onBackground         = textPrimary,
+            onSurface            = textPrimary,
+            onSurfaceVariant     = textSecondary,
+            outline              = cardBorder,
+            outlineVariant       = cardBorder.copy(alpha = 0.45f),
+            error                = danger,
+            errorContainer       = dangerBg,
+            onErrorContainer     = dangerText
+        )
+    }
+}
 
 private val PocketShapes = Shapes(
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(12.dp),
-    large = RoundedCornerShape(14.dp)
+    small  = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(16.dp),
+    large  = RoundedCornerShape(20.dp)
 )
 
 @Composable
 fun PocketCraftTheme(
     darkTheme: Boolean = false,
+    mobTheme: MobTheme = PocketColors.activeMobTheme,
     content: @Composable () -> Unit
 ) {
+    PocketColors.isDark = darkTheme
+    PocketColors.activeMobTheme = mobTheme
+
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
-        typography = PocketCraftTypography,
-        shapes = PocketShapes,
-        content = content
+        colorScheme = pocketColorScheme(),
+        typography  = PocketCraftTypography,
+        shapes      = PocketShapes,
+        content     = content
     )
 }

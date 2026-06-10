@@ -1,20 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.PocketCraft" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">#F5F7F3</item>
-        <item name="android:statusBarColor">#F5F7F3</item>
-        <item name="android:navigationBarColor">#58CC02</item>
+        <!-- App background matches BgLight (#E8F0E0) -->
+        <item name="android:windowBackground">@color/pocket_bg_light</item>
+        <item name="android:statusBarColor">@color/pocket_bg_light</item>
+        <!-- Navigation bar matches BgLight for a seamless bottom bar look -->
+        <item name="android:navigationBarColor">@color/pocket_bg_light</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionBar">false</item>
         <item name="android:forceDarkAllowed">false</item>
     </style>
     <style name="Theme.PocketCraft.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">#F5F7F3</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_square</item>
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_splash_icon</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/ic_launcher_background</item>
         <item name="postSplashScreenTheme">@style/Theme.PocketCraft</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionBar">false</item>
-        <item name="android:statusBarColor">#F5F7F3</item>
-        <item name="android:navigationBarColor">#58CC02</item>
+        <item name="android:statusBarColor">@color/splash_background</item>
+        <item name="android:navigationBarColor">@color/splash_background</item>
     </style>
 </resources>

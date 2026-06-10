@@ -25,7 +25,7 @@ const val WORLD_NAME_KEY = "world_name"
 /**
  * WorkManager worker that orchestrates first-launch setup:
  * 1. Extract JRE
- * 2. Download PaperMC JAR
+ * 2. Validate imported server JAR
  * 3. Write eula.txt
  * 4. Write server.properties
  */
@@ -46,8 +46,8 @@ class SetupWorker @AssistedInject constructor(
             JreExtractor.extractIfNeeded(applicationContext, runtime)
             setProgressSync(data("Java runtime ready.", 10, 1))
 
-            // Step 2: Download Server JAR
-            setProgress(data("Downloading server $serverVersion…", 20, 2))
+            // Step 2: Validate imported Server JAR
+            setProgress(data("Checking imported server $serverVersion…", 20, 2))
             
             // Use ServerFileManager to get the correct isolated directory
             val versionDir = ServerFileManager.getServerDir(applicationContext, worldName)
@@ -62,7 +62,7 @@ class SetupWorker @AssistedInject constructor(
                 targetFile = jarFile,
                 onProgress = { percent ->
                     val overall = 20 + (percent * 0.5).toInt()
-                    setProgressAsync(data("Downloading server $serverVersion… $percent%", overall, 2))
+                    setProgressAsync(data("Checking imported server $serverVersion… $percent%", overall, 2))
                 }
             ).collect { jarFile -> }
 

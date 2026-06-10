@@ -1,7 +1,7 @@
 package com.pocketcraft.server
 
 import android.os.Bundle
-import android.graphics.Color
+import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -12,8 +12,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.luminance
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.pocketcraft.server.R
 import com.pocketcraft.server.analytics.FirebaseAnalyticsManager
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
@@ -26,8 +29,10 @@ import com.pocketcraft.server.ui.screens.SplashScreen
 import com.pocketcraft.server.ui.theme.PocketCraftTheme
 import com.pocketcraft.server.ui.util.ThemePreference
 import com.pocketcraft.server.ui.util.ThemePreferenceStore
+import com.pocketcraft.server.ui.util.MobTheme
 import com.google.firebase.crashlytics.ktx.crashlytics
 import com.google.firebase.ktx.Firebase
+import com.google.android.play.core.review.ReviewManagerFactory
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +48,7 @@ import com.pocketcraft.server.ui.components.UpdatePopup
 import androidx.compose.runtime.CompositionLocalProvider
 import com.pocketcraft.server.util.LocalAppStrings
 import com.pocketcraft.server.util.appStringsFor
+import java.util.concurrent.TimeUnit
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -61,6 +67,12 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         var isAppInForeground = false
+        private const val KEY_RATE_LAST_REQUEST_AT = "play_store_rating_last_request_at"
+        private const val KEY_RATE_REQUEST_COUNT = "play_store_rating_request_count"
+        private const val RATE_MIN_LAUNCHES = 3
+        private const val RATE_MAX_REQUESTS = 3
+        private const val RATE_PROMPT_DELAY_MS = 1_200L
+        private val RATE_REQUEST_COOLDOWN_MS = TimeUnit.DAYS.toMillis(30)
     }
 
     override fun onStart() {
@@ -80,14 +92,22 @@ class MainActivity : ComponentActivity() {
         val onboardingCompleted = preferences.onboardingCompleted
         preferences.recordAppLaunch()
         val initialThemePreference = ThemePreferenceStore.load(this)
+        val initialMobTheme = ThemePreferenceStore.loadMobTheme(this)
         val initialDarkTheme = initialThemePreference.resolve(systemDark = ThemePreferenceStore.isSystemDark(this))
+        PocketColors.activeMobTheme = initialMobTheme
+        PocketColors.isDark = initialDarkTheme
 
-        window.statusBarColor = if (initialDarkTheme) PocketColors.BgDark.toArgb() else Color.parseColor("#F5F7F3")
-        window.navigationBarColor = if (initialDarkTheme) PocketColors.SurfaceDark.toArgb() else PocketColors.Primary.toArgb()
-        WindowCompat.setDecorFitsSystemWindows(window, true)
+        val splashBackgroundColor = ContextCompat.getColor(this, R.color.splash_background)
+        val initialSystemBarColor = splashBackgroundColor
+        val initialNavBarColor = splashBackgroundColor
+        val initialLightSystemBars = true
+        val initialLightNavBar = true
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = initialSystemBarColor
+        window.navigationBarColor = initialNavBarColor
         WindowInsetsControllerCompat(window, window.decorView).apply {
-            isAppearanceLightStatusBars = !initialDarkTheme
-            isAppearanceLightNavigationBars = !initialDarkTheme
+            isAppearanceLightStatusBars = initialLightSystemBars
+            isAppearanceLightNavigationBars = initialLightNavBar
         }
 
         // Never block startup on DataStore reads; OEM builds may ANR the activity.
@@ -114,6 +134,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var themePreference by remember { mutableStateOf(initialThemePreference) }
+            var mobTheme by remember { mutableStateOf(initialMobTheme) }
             val systemDarkTheme = isSystemInDarkTheme()
             val darkTheme = themePreference.resolve(systemDark = systemDarkTheme)
 
@@ -145,31 +166,30 @@ class MainActivity : ComponentActivity() {
 
             val appStrings = appStringsFor(AppPreferences(this@MainActivity).appLanguage)
             CompositionLocalProvider(LocalAppStrings provides appStrings) {
-            PocketCraftTheme(darkTheme = darkTheme) {
+            PocketCraftTheme(darkTheme = darkTheme, mobTheme = mobTheme) {
                 var jreReady by remember { mutableStateOf(false) }
                 var jreError by remember { mutableStateOf<String?>(null) }
                 var jreProgress by remember { mutableStateOf(0) }
                 var jreStatus by remember { mutableStateOf("Preparing Minecraft Runtime...") }
 
                 SideEffect {
-                    val showingSplash = jreError == null && (!jreReady || !onboardingCompleted)
-                    val statusBarColor = when {
-                        showingSplash && darkTheme -> PocketColors.BgDark.toArgb()
-                        showingSplash -> Color.parseColor("#F5F7F3")
-                        darkTheme -> PocketColors.BgDark.toArgb()
-                        else -> Color.parseColor("#F5F7F3")
+                    val onSplash = jreError == null && !jreReady
+                    val splashBackgroundColor = ContextCompat.getColor(this@MainActivity, R.color.splash_background)
+                    val statusBarColor = if (onSplash) {
+                        splashBackgroundColor
+                    } else {
+                        PocketColors.BgApp.toArgb()
                     }
-                    val navigationBarColor = when {
-                        showingSplash && darkTheme -> PocketColors.BgDark.toArgb()
-                        showingSplash -> Color.parseColor("#E6F1DF")
-                        darkTheme -> PocketColors.Primary.toArgb()
-                        else -> PocketColors.Primary.toArgb()
+                    val navBarColor = if (onSplash) {
+                        splashBackgroundColor
+                    } else {
+                        PocketColors.FooterBg.toArgb()
                     }
                     window.statusBarColor = statusBarColor
-                    window.navigationBarColor = navigationBarColor
+                    window.navigationBarColor = navBarColor
                     WindowInsetsControllerCompat(window, window.decorView).apply {
-                        isAppearanceLightStatusBars = !darkTheme
-                        isAppearanceLightNavigationBars = !darkTheme
+                        isAppearanceLightStatusBars = androidx.compose.ui.graphics.Color(statusBarColor).luminance() >= 0.5f
+                        isAppearanceLightNavigationBars = androidx.compose.ui.graphics.Color(navBarColor).luminance() >= 0.5f
                     }
                 }
 
@@ -198,6 +218,12 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                LaunchedEffect(jreReady, onboardingCompleted, updateConfig) {
+                    if (jreReady && onboardingCompleted && updateConfig == null) {
+                        maybeRequestPlayStoreRating(preferences)
+                    }
+                }
+
                 when {
                     jreError != null -> ErrorScreen(
                         message = "Failed to prepare runtime:\n$jreError",
@@ -219,12 +245,22 @@ class MainActivity : ComponentActivity() {
                     }
                     else -> PocketCraftApp(
                         isDarkTheme = darkTheme,
+                        currentMobTheme = mobTheme,
                         onDarkThemeChange = { enabled ->
                             val nextPreference = if (enabled) ThemePreference.DARK else ThemePreference.LIGHT
                             if (themePreference != nextPreference) {
+                                PocketColors.isDark = enabled
                                 themePreference = nextPreference
                                 ThemePreferenceStore.save(this@MainActivity, nextPreference)
                                 FirebaseAnalyticsManager.logThemeChanged(nextPreference.name.lowercase())
+                            }
+                        },
+                        onMobThemeChange = { nextTheme: MobTheme ->
+                            if (mobTheme != nextTheme) {
+                                PocketColors.activeMobTheme = nextTheme
+                                mobTheme = nextTheme
+                                ThemePreferenceStore.saveMobTheme(this@MainActivity, nextTheme)
+                                FirebaseAnalyticsManager.logThemeChanged(nextTheme.id)
                             }
                         }
                     )
@@ -250,5 +286,32 @@ class MainActivity : ComponentActivity() {
             }
             }
         }
+    }
+
+    private fun maybeRequestPlayStoreRating(preferences: AppPreferences) {
+        val prefs = getSharedPreferences("app_relay_prefs", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val lastRequestAt = prefs.getLong(KEY_RATE_LAST_REQUEST_AT, 0L)
+        val requestCount = prefs.getInt(KEY_RATE_REQUEST_COUNT, 0)
+
+        if (preferences.appLaunchCount < RATE_MIN_LAUNCHES) return
+        if (requestCount >= RATE_MAX_REQUESTS) return
+        if (now - lastRequestAt < RATE_REQUEST_COOLDOWN_MS) return
+
+        window.decorView.postDelayed({
+            if (isFinishing || isDestroyed) return@postDelayed
+
+            prefs.edit()
+                .putLong(KEY_RATE_LAST_REQUEST_AT, System.currentTimeMillis())
+                .putInt(KEY_RATE_REQUEST_COUNT, requestCount + 1)
+                .apply()
+
+            val reviewManager = ReviewManagerFactory.create(this)
+            reviewManager.requestReviewFlow().addOnCompleteListener { requestTask ->
+                if (!requestTask.isSuccessful || isFinishing || isDestroyed) return@addOnCompleteListener
+
+                reviewManager.launchReviewFlow(this, requestTask.result)
+            }
+        }, RATE_PROMPT_DELAY_MS)
     }
 }

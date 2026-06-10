@@ -37,9 +37,11 @@ import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.ui.components.*
 import com.pocketcraft.server.ui.theme.Monocraft
+import com.pocketcraft.server.ui.util.MobTheme
 import com.pocketcraft.server.ui.util.ThemePreference
 import com.pocketcraft.server.ui.util.ThemePreferenceStore
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.card3d
 import com.pocketcraft.server.ui.util.playAppHaptic
 import com.pocketcraft.server.util.RamUtils
 import kotlinx.coroutines.Dispatchers
@@ -97,7 +99,9 @@ fun SettingsScreen(
     onMessage: (String) -> Unit,
     onOpenConfigEditor: () -> Unit = {},
     onOpenLegalPage: () -> Unit = {},
-    onDarkThemeChange: (Boolean) -> Unit = {}
+    onDarkThemeChange: (Boolean) -> Unit = {},
+    currentMobTheme: MobTheme = MobTheme.SKELETON,
+    onMobThemeChange: (MobTheme) -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -216,16 +220,18 @@ fun SettingsScreen(
     }
 
     Scaffold(
-        bottomBar = {
+        topBar = {
             AnimatedVisibility(
                 visible = saveStatus != SaveStatus.IDLE,
-                enter = fadeIn() + slideInVertically { it },
-                exit = fadeOut() + slideOutVertically { it }
+                enter = fadeIn() + slideInVertically { -it },
+                exit = fadeOut() + slideOutVertically { -it }
             ) {
                 Surface(
-                    tonalElevation = 8.dp,
-                    shadowElevation = 8.dp,
-                    modifier = Modifier.fillMaxWidth()
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .card3d(elevation = 4.dp, cornerRadius = 0.dp)
                 ) {
                     Row(
                         modifier = Modifier
@@ -362,50 +368,47 @@ fun SettingsScreen(
             }
         }
     ) { paddingValues ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues),
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(paddingValues)
         ) {
-
-            @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-            stickyHeader {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.background,
-                    tonalElevation = 2.dp
-                ) {
-                    Column {
-                        TabRow(
-                            selectedTabIndex = activeTab,
-                            containerColor = Color.Transparent,
-                            contentColor = PocketColors.Primary,
-                            indicator = { tabPositions ->
-                                TabRowDefaults.SecondaryIndicator(
-                                    modifier = Modifier.tabIndicatorOffset(tabPositions[activeTab]),
-                                    color = PocketColors.Primary
-                                )
-                            },
-                            divider = {}
-                        ) {
-                            tabs.forEachIndexed { index, title ->
-                                Tab(
-                                    selected = activeTab == index,
-                                    onClick = { playHaptic(); activeTab = index },
-                                    text = { Text(title, fontWeight = if (activeTab == index) FontWeight.ExtraBold else FontWeight.Bold, fontSize = 13.sp) }
-                                )
-                            }
-                        }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-                    }
+            TabRow(
+                selectedTabIndex = activeTab,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                containerColor = Color.Transparent,
+                contentColor = PocketColors.Primary,
+                indicator = { tabPositions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        modifier = Modifier.tabIndicatorOffset(tabPositions[activeTab]),
+                        color = PocketColors.Primary
+                    )
+                },
+                divider = {}
+            ) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = activeTab == index,
+                        onClick = { playHaptic(); activeTab = index },
+                        text = { Text(title, fontWeight = if (activeTab == index) FontWeight.ExtraBold else FontWeight.Bold, fontSize = 13.sp) }
+                    )
                 }
             }
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 24.dp),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
+            )
 
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Top)
+            ) {
             // --- TAB 0: SERVER ---
             if (activeTab == 0) {
-                item { SettingsSection(activeS.performance, Icons.Default.Memory) }
+                item { SettingsSection(activeS.performance, Icons.Default.Memory, isFirstSection = true) }
                 item {
                     SettingsSliderRow(
                         icon = Icons.Default.Visibility,
@@ -692,20 +695,32 @@ fun SettingsScreen(
 
             // --- TAB 1: APP ---
             if (activeTab == 1) {
-                item { SettingsSection(activeS.appPreferences, Icons.Default.Tune) }
+                item { SettingsSection(activeS.appPreferences, Icons.Default.Tune, isFirstSection = true) }
                 item {
-                    var isDark by remember { mutableStateOf(ThemePreferenceStore.load(context) == ThemePreference.DARK) }
-                    SettingsToggleRow(
-                        icon = "🌚",
-                        label = "Dark Theme",
-                        description = "Force dark mode for the app",
-                        checked = isDark,
-                        onToggle = { enabled ->
-                            isDark = enabled
-                            onDarkThemeChange(enabled)
+                    SettingsDropdownRow(
+                        icon = Icons.Default.Palette,
+                        label = "Mob Theme",
+                        description = "Choose the app's Minecraft mob color palette",
+                        options = MobTheme.entries.map { it.id },
+                        optionLabels = MobTheme.entries.associate { it.id to it.themeName },
+                        selected = currentMobTheme.id,
+                        onSelected = { selectedId ->
+                            onMobThemeChange(MobTheme.fromId(selectedId))
                             playHaptic()
                         }
                     )
+                }
+                item {
+                    GameCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onMessage("More themes coming soon!") },
+                        contentPadding = PaddingValues(vertical = 16.dp)
+                    ) {
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text("More themes coming soon...", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                 }
                 item {
                     SettingsToggleRow(
@@ -778,7 +793,7 @@ fun SettingsScreen(
 
             // --- TAB 2: ABOUT ---
             if (activeTab == 2) {
-                item { SettingsSection("FIND US ONLINE", Icons.Default.Share) }
+                item { SettingsSection("FIND US ONLINE", Icons.Default.Share, isFirstSection = true) }
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -866,6 +881,16 @@ fun SettingsScreen(
                             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.gg/nc7ceYWVfT"))) }
                                 .onFailure { onMessage("Could not open Discord link.") }
                         })
+                        SettingsLinkRow(icon = Icons.Default.Warning, label = "Report Abuse", description = "Report policy violations or harmful content", onClick = {
+                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("mailto:support@pocketcraft.online?subject=Report%20Abuse"))) }
+                                .onFailure { onMessage("Could not open email client.") }
+                        })
+                        SettingsLinkRow(icon = Icons.Default.Description, label = "Open Source Licenses", description = "Third-party software licenses", onClick = {
+                            runCatching {
+                                com.google.android.gms.oss.licenses.OssLicensesMenuActivity.setActivityTitle("Open Source Licenses")
+                                context.startActivity(Intent(context, com.google.android.gms.oss.licenses.OssLicensesMenuActivity::class.java))
+                            }.onFailure { onMessage("Could not open licenses.") }
+                        })
                     }
                 }
 
@@ -893,6 +918,7 @@ fun SettingsScreen(
             }
 
             item { Spacer(modifier = Modifier.height(32.dp)) }
+            }
         }
     }
 
@@ -1015,9 +1041,16 @@ private fun sanitizeLevelType(raw: String): String {
 }
 
 @Composable
-fun SettingsSection(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector? = null) {
+fun SettingsSection(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    isFirstSection: Boolean = false
+) {
     Row(
-        modifier = Modifier.padding(top = 20.dp, start = 16.dp, bottom = 6.dp),
+        modifier = Modifier.padding(
+            top = if (isFirstSection) 0.dp else 8.dp,
+            bottom = 6.dp
+        ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -1033,7 +1066,7 @@ fun SettingsSection(title: String, icon: androidx.compose.ui.graphics.vector.Ima
             text = title,
             fontWeight = FontWeight.ExtraBold,
             fontSize = 11.sp,
-            letterSpacing = 1.5.sp,
+            letterSpacing = 0.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
         )
     }

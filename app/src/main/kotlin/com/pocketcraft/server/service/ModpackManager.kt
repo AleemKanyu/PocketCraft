@@ -1,11 +1,14 @@
 package com.pocketcraft.server.service
 
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import com.pocketcraft.server.setup.JreExtractor
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -14,20 +17,26 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
+import java.security.MessageDigest
 import java.util.zip.ZipFile
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 object ModpackManager {
     private const val TAG = "ModpackManager"
+    private const val FORGE_INSTALL_TIMEOUT_MINUTES = 15L
     private const val MODRINTH_BASE_URL = "https://api.modrinth.com/v2"
     private const val CURSE_TOOLS_BASE_URL = "https://api.curse.tools/v1/cf"
     private const val FABRIC_META_BASE_URL = "https://meta.fabricmc.net/v2"
-    private const val FORGE_COORDINATE_BASE = "net/minecraftforge/forge"
-    private const val FORGE_INSTALL_TIMEOUT_MINUTES = 15L
-    private val FORGE_INSTALLER_MIRRORS = listOf(
-        "https://maven.minecraftforge.net",
-        "https://maven.creeperhost.net"
+    private const val MODPACK_SEARCH_CACHE_TTL_MS = 5 * 60_000L
+    private val DEFAULT_MODPACK_QUERIES = listOf(
+        "skyblock",
+        "oneblock",
+        "cobblemon",
+        "pokemon",
+        "fabulously optimized",
+        "simply optimized",
+        "optimization"
     )
     private val KNOWN_CLIENT_ONLY_MOD_IDS = setOf(
         "better_client",
@@ -35,15 +44,61 @@ object ModpackManager {
         "reeses_sodium_options",
         "continuity",
         "iris",
-        "indium"
+        "indium",
+        "modmenu",
+        "dynamic_fps",
+        "entityculling",
+        "notenoughanimations",
+        "lambdynlights",
+        "xaerominimap",
+        "xaeroworldmap",
+        "journeymap"
     )
     private val KNOWN_CLIENT_ONLY_FILE_HINTS = listOf(
         "better_client",
         "sodium",
         "iris",
         "embeddium",
-        "optifine"
+        "optifine",
+        "modmenu",
+        "dynamic-fps",
+        "dynamic_fps",
+        "entityculling",
+        "not-enough-animations",
+        "notenoughanimations",
+        "lambdynamiclights",
+        "xaeros_minimap",
+        "xaeros-world-map",
+        "journeymap"
     )
+    private val MODPACK_MANAGED_DIRS = setOf(
+        "mods",
+        "config",
+        "defaultconfigs",
+        "kubejs",
+        "libraries",
+        "versions",
+        ".fabric"
+    )
+    private val MODPACK_MANAGED_FILE_PREFIXES = listOf(
+        "modpack-",
+        "forge-installer-",
+        "neoforge-installer-"
+    )
+    private val MODPACK_MANAGED_FILES = setOf(
+        "pack.mrpack",
+        "run.sh",
+        "run.bat",
+        "unix_args.txt",
+        "user_jvm_args.txt"
+    )
+    private data class SearchCacheEntry(
+        val items: List<ModpackCatalogItem>,
+        val timestampMs: Long
+    )
+
+    private val searchCache = mutableMapOf<String, SearchCacheEntry>()
+
     private val downloadClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -69,6 +124,7 @@ object ModpackManager {
     private data class ManifestFile(
         val path: String,
         val downloads: List<String>,
+        val hashes: Map<String, String>,
         val serverSupport: String
     )
 
@@ -78,10 +134,15 @@ object ModpackManager {
         val loaderVersion: String
     )
 
+    private data class ImportedLaunchTarget(
+        val mode: ServerFileManager.LaunchMode,
+        val file: File
+    )
+
     enum class ModLoader(val id: String, val displayName: String) {
         FABRIC("fabric-loader", "Fabric"),
-        FORGE("forge", "Forge"),
         QUILT("quilt-loader", "Quilt"),
+        FORGE("forge", "Forge"),
         NEOFORGE("neoforge", "NeoForge"),
         UNKNOWN("unknown", "Unknown");
 
@@ -93,10 +154,10 @@ object ModpackManager {
             fun fromString(value: String?): ModLoader {
                 val lowered = value?.lowercase() ?: return UNKNOWN
                 return when {
-                    lowered.contains("neoforge") -> NEOFORGE
                     lowered.contains("fabric") -> FABRIC
-                    lowered.contains("forge") -> FORGE
                     lowered.contains("quilt") -> QUILT
+                    lowered.contains("neoforge") -> NEOFORGE
+                    lowered.contains("forge") -> FORGE
                     else -> UNKNOWN
                 }
             }
@@ -115,15 +176,19 @@ object ModpackManager {
         val minecraftVersions: List<String> = emptyList(),
         val loaders: List<ModLoader> = emptyList(),
         val installSupported: Boolean = true,
-        val supportMessage: String? = null
+        val supportMessage: String? = null,
+        val pageUrl: String? = null
     )
 
     suspend fun installModpack(
         context: Context,
         modpackId: String,
+        worldName: String = modpackId,
         onStatus: (String) -> Unit,
         onProgress: (Int) -> Unit
     ): Result<Unit> = withContext(Dispatchers.IO) {
+        val serverDir = ServerFileManager.getServerDir(context, worldName)
+        val tempPackFile = File(serverDir, "pack_${System.currentTimeMillis()}.mrpack")
         try {
             onStatus("Resolving modpack $modpackId...")
             val resolved = resolveModpack(modpackId)
@@ -131,50 +196,124 @@ object ModpackManager {
                 return@withContext Result.failure(Exception("Could not find download URL for $modpackId"))
             }
 
-            val serverDir = ServerFileManager.getServerDir(context, modpackId)
-            val tempPackFile = File(serverDir, "pack.mrpack")
-
             onStatus("Downloading modpack package...")
-            downloadFile(resolved.downloadUrl, tempPackFile) { percent ->
+            blockedRuntimeFileFetch(resolved.downloadUrl, tempPackFile) { percent ->
                 onProgress((percent * 0.2f).toInt().coerceIn(0, 20))
             }
 
-            onStatus("Reading modpack manifest...")
-            val manifest = readManifest(tempPackFile)
-            val loader = resolveLoaderSpec(manifest)
-
-            onStatus("Downloading server mods and configs...")
-            downloadPackFiles(manifest, serverDir) { current, total ->
-                val progress = if (total <= 0) 20 else 20 + ((current * 40f) / total).toInt()
-                onProgress(progress.coerceIn(20, 60))
-                if (total > 0) {
-                    onStatus("Downloading server mods and configs... ($current/$total)")
-                }
+            if (!isModrinthPackFile(tempPackFile)) {
+                throw Exception("Downloaded file is not a valid Modrinth modpack package.")
             }
 
-            onStatus("Applying modpack overrides...")
-            extractOverrides(tempPackFile, serverDir)
-            tempPackFile.delete()
-
-            onStatus("Removing client-only mods for server compatibility...")
-            sanitizeClientOnlyMods(serverDir)
-
-            onStatus("Installing ${loader.id} runtime...")
-            installLoaderRuntime(
+            onStatus("Installing Modrinth modpack...")
+            installModrinthPackFile(
                 context = context,
+                packFile = tempPackFile,
                 serverDir = serverDir,
+                worldName = worldName,
                 modpackId = modpackId,
-                loader = loader,
                 onStatus = onStatus,
                 onProgress = onProgress
             )
 
-            onStatus("Finalizing modpack setup...")
             onProgress(100)
+            onStatus("Modpack installed successfully!")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to install modpack $modpackId", e)
             Result.failure(e)
+        } finally {
+            if (tempPackFile.exists()) {
+                tempPackFile.delete()
+            }
+        }
+    }
+
+    suspend fun importModpackZip(
+        context: Context,
+        zipUri: Uri,
+        worldName: String,
+        modpackId: String,
+        onStatus: (String) -> Unit = {},
+        onProgress: (Int) -> Unit = {}
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val tempFile = File(context.cacheDir, "modpack_import_${System.currentTimeMillis()}.zip")
+        try {
+            onStatus("Copying modpack package...")
+            context.contentResolver.openInputStream(zipUri)?.use { input ->
+                tempFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            } ?: throw Exception("Could not open imported file")
+
+            val serverDir = ServerFileManager.getServerDir(context, worldName)
+            if (isModrinthPackFile(tempFile)) {
+                throw Exception("PocketCraft only supports Server Pack ZIP files. Please download the 'Server Pack' from Modrinth, not the .mrpack file.")
+            }
+
+            onStatus("Extracting modpack server files...")
+            ZipFile(tempFile).use { zip ->
+                val stripPrefix = detectServerPackWrapperPrefix(zip)
+                val totalEntries = zip.size().toFloat()
+                var processed = 0
+                val entries = zip.entries()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    val normalizedName = normalizeZipEntryName(entry.name, stripPrefix)
+                    if (normalizedName.isBlank()) {
+                        processed++
+                        onProgress(((processed / totalEntries) * 80).toInt())
+                        continue
+                    }
+                    val entryFile = File(serverDir, normalizedName)
+                    if (!entryFile.canonicalPath.startsWith(serverDir.canonicalPath)) {
+                        processed++
+                        onProgress(((processed / totalEntries) * 80).toInt())
+                        continue
+                    }
+                    if (entry.isDirectory) {
+                        entryFile.mkdirs()
+                    } else {
+                        entryFile.parentFile?.mkdirs()
+                        zip.getInputStream(entry).use { input ->
+                            entryFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                    }
+                    processed++
+                    onProgress(((processed / totalEntries) * 80).toInt())
+                }
+            }
+
+            onStatus("Scanning for server launch target...")
+            val launchTarget = resolveImportedLaunchTarget(serverDir)
+                ?: throw Exception(
+                    "Could not find a launchable server target inside the ZIP. " +
+                        "Import a Server Pack ZIP containing server.jar, fabric-server-launch.jar, or Forge/NeoForge unix_args.txt."
+                )
+
+            val relativeLaunchPath = launchTarget.file.relativeTo(serverDir).path
+            ServerFileManager.persistLaunchTarget(context, worldName, launchTarget.mode, relativeLaunchPath)
+
+            val props = ServerPropertiesHelper.readProperties(serverDir)
+            props.setProperty("pocketcraft-server-type", com.pocketcraft.server.data.model.ServerType.MODPACK.name)
+            props.setProperty("pocketcraft-custom-jar-path", modpackId)
+            props.setProperty("pocketcraft-modpack-id", modpackId)
+            props.setProperty("pocketcraft-modpack-name", modpackId)
+            ServerPropertiesHelper.saveProperties(serverDir, props)
+
+            onStatus("Removing client-only mods for compatibility...")
+            sanitizeClientOnlyMods(serverDir)
+
+            onProgress(100)
+            onStatus("Modpack installed successfully!")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Modpack import failed", e)
+            Result.failure(e)
+        } finally {
+            if (tempFile.exists()) tempFile.delete()
         }
     }
 
@@ -182,38 +321,65 @@ object ModpackManager {
         sanitizeClientOnlyMods(serverDir)
     }
 
+    fun isModpackInstalled(context: Context, worldName: String, modpackId: String): Boolean {
+        return ServerFileManager.isModpackReady(context, worldName, modpackId)
+    }
+
     suspend fun searchModpacks(
         query: String,
         limit: Int = 20
     ): Result<List<ModpackCatalogItem>> = withContext(Dispatchers.IO) {
-        val normalizedLimit = limit.coerceIn(1, 50)
-        val modrinthItems = runCatching {
-            fetchModrinthModpacks(query = query, limit = normalizedLimit)
-        }.getOrElse {
-            emptyList()
+        val normalizedLimit = limit.coerceIn(1, 80)
+        val normalizedQuery = query.trim()
+        val cacheKey = "${normalizedQuery.lowercase()}:$normalizedLimit"
+        synchronized(searchCache) {
+            searchCache[cacheKey]
+                ?.takeIf { System.currentTimeMillis() - it.timestampMs < MODPACK_SEARCH_CACHE_TTL_MS }
+                ?.items
+                ?.let { return@withContext Result.success(it) }
         }
-        val curseforgeItems = runCatching {
-            fetchCurseforgeModpacks(query = query, limit = normalizedLimit)
-        }.getOrElse {
-            emptyList()
+
+        val queries = if (normalizedQuery.isBlank()) {
+            DEFAULT_MODPACK_QUERIES
+        } else {
+            listOf(normalizedQuery)
         }
+        val perQueryLimit = (normalizedLimit / queries.size).coerceIn(6, 12)
+
+        val modrinthItems = coroutineScope {
+            queries.map { term ->
+                async(Dispatchers.IO) {
+                    runCatching {
+                        fetchModrinthModpacks(query = term, limit = perQueryLimit)
+                    }.getOrElse {
+                        emptyList()
+                    }
+                }
+            }.awaitAll().flatten()
+        }
+        val curseforgeItems = coroutineScope {
+            queries.map { term ->
+                async(Dispatchers.IO) {
+                    runCatching {
+                        fetchCurseforgeModpacks(query = term, limit = perQueryLimit)
+                    }.getOrElse {
+                        emptyList()
+                    }
+                }
+            }.awaitAll().flatten()
+        }
+
         val withCompatibility = (modrinthItems + curseforgeItems)
             .distinctBy { "${it.source}:${it.id}" }
+            .filter { isAllowedModpack(it) }
             .map { item ->
                 when (item.source) {
-                    Source.MODRINTH -> runCatching { resolveSupportedLoaderForModrinth(item.id) }.fold(
-                        onSuccess = { loader ->
-                            item.copy(
-                                installSupported = true,
-                                supportMessage = if (loader == ModLoader.UNKNOWN) "Experimental Support" else "Supports ${loader.displayName}",
-                                loaders = if (loader == ModLoader.UNKNOWN) emptyList() else listOf(loader)
-                            )
-                        },
-                        onFailure = {
-                            item.copy(
-                                installSupported = false,
-                                supportMessage = "Could not verify loader support right now."
-                            )
+                    Source.MODRINTH -> item.copy(
+                        installSupported = true,
+                        supportMessage = if (item.loaders.isEmpty()) {
+                            "Install supported; checked during setup."
+                        } else {
+                            "Install: ${item.loaders.joinToString { it.displayName }}"
                         }
                     )
                     Source.CURSEFORGE -> item.copy(
@@ -222,7 +388,56 @@ object ModpackManager {
                     )
                 }
             }
+            .sortedWith(
+                compareBy<ModpackCatalogItem> { if (it.source == Source.MODRINTH) 0 else 1 }
+                    .thenByDescending { it.downloads }
+            )
+            .take(normalizedLimit)
+        synchronized(searchCache) {
+            if (searchCache.size > 24) searchCache.clear()
+            searchCache[cacheKey] = SearchCacheEntry(withCompatibility, System.currentTimeMillis())
+        }
         Result.success(withCompatibility)
+    }
+
+    private fun isAllowedModpack(item: ModpackCatalogItem): Boolean {
+        val titleLower = item.title.lowercase()
+        val descLower = item.description.lowercase()
+
+        // 1. Skyblock Category
+        val isSkyblock = titleLower.contains("skyblock") || titleLower.contains("sky-block") ||
+                titleLower.contains("oneblock") || titleLower.contains("one-block") ||
+                titleLower.contains("skyfactory") || titleLower.contains("sky factory") ||
+                titleLower.contains("project ozone") ||
+                descLower.contains("skyblock") || descLower.contains("sky-block") ||
+                descLower.contains("oneblock") || descLower.contains("one-block")
+
+        if (isSkyblock) return true
+
+        // 2. Pokemon Category
+        val isPokemon = titleLower.contains("pokemon") || titleLower.contains("cobblemon") ||
+                titleLower.contains("pixelmon") || titleLower.contains("poké") ||
+                descLower.contains("pokemon") || descLower.contains("cobblemon") ||
+                descLower.contains("pixelmon")
+
+        if (isPokemon) return true
+
+        // 3. Optimization Category
+        val optTitleKeywords = listOf(
+            "optimized", "optimization", "performance", "fps boost", "boosted fps",
+            "simply optimized", "fabulously optimized", "optifine", "sodium", "lithium", "iris",
+            "embeddium", "additive", "adrenaline", "smoothness", "speedy", "fps-boost", "better fps", "fps"
+        )
+        val hasOptTitle = optTitleKeywords.any { titleLower.contains(it) }
+
+        val optDescPhrases = listOf(
+            "optimization modpack", "optimization pack", "performance modpack", "performance pack",
+            "performance-focused", "focuses on performance", "focused on performance", "performance-oriented",
+            "fabulously optimized", "simply optimized"
+        )
+        val hasOptDesc = optDescPhrases.any { descLower.contains(it) }
+
+        return hasOptTitle || hasOptDesc
     }
 
     private suspend fun resolveModpack(id: String): ResolvedModpack = withContext(Dispatchers.IO) {
@@ -285,10 +500,10 @@ object ModpackManager {
         if (dependencies == null) return ModLoader.UNKNOWN
         return when {
             dependencies.has("fabric-loader") -> ModLoader.FABRIC
-            dependencies.has("neoforge") -> ModLoader.NEOFORGE
-            dependencies.has("forge") -> ModLoader.FORGE
             dependencies.has("quilt-loader") -> ModLoader.QUILT
             dependencies.has("quilt") -> ModLoader.QUILT
+            dependencies.has("neoforge") -> ModLoader.NEOFORGE
+            dependencies.has("forge") -> ModLoader.FORGE
             else -> ModLoader.UNKNOWN
         }
     }
@@ -310,14 +525,16 @@ object ModpackManager {
             return buildList {
                 for (index in 0 until hits.length()) {
                     val item = hits.optJSONObject(index) ?: continue
+                    val slug = item.optString("slug").ifBlank { item.optString("project_id") }
                     add(
                         ModpackCatalogItem(
-                            id = item.optString("slug").ifBlank { item.optString("project_id") },
+                            id = slug,
                             title = item.optString("title").ifBlank { "Unknown modpack" },
                             description = item.optString("description"),
                             source = Source.MODRINTH,
                             downloads = item.optLong("downloads", 0L),
                             iconUrl = item.optString("icon_url").ifBlank { null },
+                            pageUrl = if (slug.isNotBlank()) "https://modrinth.com/modpack/$slug" else null,
                             minecraftVersions = buildList {
                                 val versions = item.optJSONArray("versions") ?: JSONArray()
                                 for (i in 0 until versions.length()) {
@@ -357,14 +574,22 @@ object ModpackManager {
             return buildList {
                 for (index in 0 until data.length()) {
                     val item = data.optJSONObject(index) ?: continue
+                    val cfId = item.optLong("id")
+                    val cfSlug = item.optString("slug").trim()
+                    val cfPageUrl = when {
+                        cfSlug.isNotBlank() -> "https://www.curseforge.com/minecraft/modpacks/$cfSlug"
+                        cfId > 0 -> "https://www.curseforge.com/minecraft/modpacks/modpack-$cfId"
+                        else -> null
+                    }
                     add(
                         ModpackCatalogItem(
-                            id = item.optLong("id").toString(),
+                            id = cfId.toString(),
                             title = item.optString("name").ifBlank { "Unknown modpack" },
                             description = item.optString("summary"),
                             source = Source.CURSEFORGE,
                             downloads = item.optLong("downloadCount", 0L),
                             iconUrl = item.optJSONObject("logo")?.optString("url"),
+                            pageUrl = cfPageUrl,
                             minecraftVersions = buildList {
                                 val versions = item.optJSONArray("latestFilesIndexes") ?: JSONArray()
                                 for (i in 0 until versions.length()) {
@@ -377,6 +602,237 @@ object ModpackManager {
                 }
             }
         }
+    }
+
+    private fun isModrinthPackFile(packFile: File): Boolean {
+        return runCatching {
+            ZipFile(packFile).use { zip ->
+                zip.getEntry("modrinth.index.json") != null
+            }
+        }.getOrDefault(false)
+    }
+
+    private suspend fun installModrinthPackFile(
+        context: Context,
+        packFile: File,
+        serverDir: File,
+        worldName: String,
+        modpackId: String,
+        onStatus: (String) -> Unit,
+        onProgress: (Int) -> Unit
+    ): Unit = withContext(Dispatchers.IO) {
+        val manifest = readManifest(packFile)
+        val loader = resolveLoaderSpec(manifest)
+
+        onProgress(4)
+        onStatus("Preparing ${manifest.name}...")
+        clearManagedModpackFiles(serverDir)
+
+        onProgress(8)
+        onStatus("Extracting modpack overrides...")
+        extractOverrides(packFile, serverDir)
+
+        onStatus("Downloading server-side modpack files...")
+        downloadPackFiles(manifest, serverDir) { current, total ->
+            val pct = 10 + ((current.toFloat() / total.coerceAtLeast(1)) * 58).toInt()
+            onProgress(pct.coerceIn(10, 68))
+            onStatus("Downloading modpack files... $current/$total")
+        }
+
+        onStatus("Installing ${loader.id.removeSuffix("-loader").replaceFirstChar { it.uppercase() }} server runtime...")
+        installLoaderRuntime(
+            context = context,
+            serverDir = serverDir,
+            worldName = worldName,
+            modpackId = modpackId,
+            loader = loader,
+            onStatus = onStatus,
+            onProgress = { pct ->
+                onProgress((70 + (pct * 24 / 100)).coerceIn(70, 94))
+            }
+        )
+
+        persistModpackMetadata(serverDir, modpackId, manifest, loader)
+        sanitizeClientOnlyMods(serverDir)
+        onProgress(98)
+    }
+
+    private fun detectServerPackWrapperPrefix(zip: ZipFile): String? {
+        val names = collectMeaningfulZipEntryNames(zip)
+        if (names.isEmpty()) return null
+
+        val topLevelNames = names.map { it.substringBefore('/') }.distinct()
+        if (topLevelNames.size != 1) return null
+
+        val root = topLevelNames.single()
+        val rootPrefix = "$root/"
+        val nestedNames = names
+            .filter { it.startsWith(rootPrefix) }
+            .map { it.removePrefix(rootPrefix) }
+            .filter { it.isNotBlank() }
+
+        return if (nestedNames.any(::looksLikeServerPackEntry)) rootPrefix else null
+    }
+
+    private fun collectMeaningfulZipEntryNames(zip: ZipFile): List<String> {
+        val names = mutableListOf<String>()
+        val entries = zip.entries()
+        while (entries.hasMoreElements()) {
+            val normalized = normalizeZipEntryName(entries.nextElement().name, stripPrefix = null)
+            if (normalized.isBlank()) continue
+            if (isJunkZipEntry(normalized)) continue
+            names.add(normalized)
+        }
+        return names
+    }
+
+    private fun normalizeZipEntryName(rawName: String, stripPrefix: String?): String {
+        var normalized = rawName
+            .replace('\\', '/')
+            .removePrefix("/")
+            .removePrefix("./")
+            .trim()
+
+        if (!stripPrefix.isNullOrBlank()) {
+            normalized = when {
+                normalized == stripPrefix.removeSuffix("/") -> ""
+                normalized.startsWith(stripPrefix) -> normalized.removePrefix(stripPrefix)
+                else -> ""
+            }
+        }
+
+        return normalized
+            .removePrefix("/")
+            .removePrefix("./")
+            .trim()
+    }
+
+    private fun isJunkZipEntry(path: String): Boolean {
+        val lowered = path.lowercase()
+        val fileName = lowered.substringAfterLast('/')
+        return lowered.startsWith("__macosx/") ||
+            fileName == ".ds_store" ||
+            fileName == "thumbs.db"
+    }
+
+    private fun looksLikeServerPackEntry(path: String): Boolean {
+        val lowered = path.lowercase()
+        val top = lowered.substringBefore('/')
+        return top in setOf("mods", "config", "defaultconfigs", "kubejs", "libraries", "versions") ||
+            lowered == "server.properties" ||
+            lowered == "eula.txt" ||
+            lowered == "run.sh" ||
+            lowered == "run.bat" ||
+            lowered == "user_jvm_args.txt" ||
+            lowered.endsWith("/unix_args.txt") ||
+            lowered.endsWith(".jar")
+    }
+
+    private fun resolveImportedLaunchTarget(serverDir: File): ImportedLaunchTarget? {
+        findForgeArgFile(serverDir)?.let { argFile ->
+            return ImportedLaunchTarget(ServerFileManager.LaunchMode.ARG_FILE, argFile)
+        }
+
+        findLaunchJar(serverDir)?.let { jar ->
+            return ImportedLaunchTarget(ServerFileManager.LaunchMode.JAR, jar)
+        }
+
+        return null
+    }
+
+    private fun findForgeArgFile(serverDir: File): File? {
+        return serverDir.walkTopDown()
+            .maxDepth(8)
+            .filter { it.isFile && it.name.equals("unix_args.txt", ignoreCase = true) && it.length() > 0L }
+            .map { it to forgeArgFileScore(serverDir, it) }
+            .filter { it.second > 0 }
+            .sortedWith(
+                compareByDescending<Pair<File, Int>> { it.second }
+                    .thenByDescending { it.first.length() }
+                    .thenBy { it.first.relativeTo(serverDir).path.length }
+            )
+            .firstOrNull()
+            ?.first
+    }
+
+    private fun forgeArgFileScore(serverDir: File, file: File): Int {
+        val relative = file.relativeTo(serverDir).path.replace('\\', '/').lowercase()
+        val text = runCatching { file.readText().take(16_000).lowercase() }.getOrDefault("")
+        val pathLooksForge = relative.contains("minecraftforge/forge") ||
+            relative.contains("net/minecraftforge/forge") ||
+            relative.contains("neoforged/neoforge") ||
+            relative.contains("net/neoforged/neoforge")
+        val textLooksForge = text.contains("--launchTarget".lowercase()) ||
+            text.contains("cpw.mods.bootstraplauncher") ||
+            text.contains("net.minecraftforge") ||
+            text.contains("net.neoforged") ||
+            text.contains("neoforge")
+
+        return when {
+            pathLooksForge && textLooksForge -> 100
+            pathLooksForge -> 90
+            relative.startsWith("libraries/") && textLooksForge -> 80
+            textLooksForge -> 60
+            else -> 0
+        }
+    }
+
+    private fun findLaunchJar(serverDir: File): File? {
+        return serverDir.walkTopDown()
+            .maxDepth(5)
+            .filter { it.isFile && it.extension.equals("jar", ignoreCase = true) && it.length() > 10_000L }
+            .map { it to launchJarScore(serverDir, it) }
+            .filter { it.second > 0 }
+            .sortedWith(
+                compareByDescending<Pair<File, Int>> { it.second }
+                    .thenByDescending { it.first.length() }
+                    .thenBy { it.first.relativeTo(serverDir).path.length }
+            )
+            .firstOrNull()
+            ?.first
+    }
+
+    private fun launchJarScore(serverDir: File, file: File): Int {
+        val relative = file.relativeTo(serverDir).path.replace('\\', '/').lowercase()
+        val name = file.name.lowercase()
+        val firstDir = relative.substringBefore('/', missingDelimiterValue = "")
+        val isRootJar = !relative.contains('/')
+
+        if (firstDir == "mods") return 0
+        if (name.contains("installer") ||
+            name.contains("sources") ||
+            name.contains("javadoc") ||
+            name.contains("client") ||
+            name.endsWith("-dev.jar")
+        ) {
+            return 0
+        }
+
+        val preferredRootNames = listOf(
+            "fabric-server-launch.jar",
+            "fabric-server.jar",
+            "fabric.jar",
+            "server.jar",
+            "run.jar",
+            "launcher.jar",
+            "bundler.jar"
+        )
+        val preferredIndex = preferredRootNames.indexOf(name)
+        if (isRootJar && preferredIndex >= 0) {
+            return 1_000 - preferredIndex
+        }
+
+        if (name.contains("fabric-server-launch")) return 920
+        if (firstDir == "libraries") return 0
+        if (name.contains("server") && file.length() > 50_000L) return if (isRootJar) 850 else 700
+        if ((name.contains("forge") || name.contains("neoforge")) &&
+            (name.contains("universal") || name.contains("server"))
+        ) {
+            return if (isRootJar) 780 else 620
+        }
+        if (isRootJar && file.length() > 100_000L) return 500
+
+        return 0
     }
 
     private fun readManifest(packFile: File): ModpackManifest {
@@ -397,10 +853,18 @@ object ModpackManager {
                             if (candidate.isNotBlank()) add(candidate)
                         }
                     }
+                    val hashes = buildMap {
+                        val hashJson = fileJson.optJSONObject("hashes") ?: JSONObject()
+                        hashJson.keys().forEach { key ->
+                            val value = hashJson.optString(key).trim()
+                            if (value.isNotBlank()) put(key.lowercase(), value.lowercase())
+                        }
+                    }
                     add(
                         ManifestFile(
                             path = fileJson.optString("path"),
                             downloads = downloads,
+                            hashes = hashes,
                             serverSupport = fileJson.optJSONObject("env")?.optString("server", "required")
                                 ?.ifBlank { "required" }
                                 ?: "required"
@@ -429,12 +893,17 @@ object ModpackManager {
         val minecraftVersion = manifest.dependencies["minecraft"]
             ?: throw Exception("Modpack is missing a minecraft dependency")
 
-        val loader = ModLoader.values()
-            .filter { it != ModLoader.UNKNOWN }
-            .firstOrNull { manifest.dependencies.containsKey(it.id) }
-            ?: throw Exception("Unsupported modpack loader. PocketCraft supports Fabric, Forge, Quilt, and NeoForge.")
+        val loader = when {
+            manifest.dependencies.containsKey("fabric-loader") -> ModLoader.FABRIC
+            manifest.dependencies.containsKey("quilt-loader") || manifest.dependencies.containsKey("quilt") -> ModLoader.QUILT
+            manifest.dependencies.containsKey("neoforge") -> ModLoader.NEOFORGE
+            manifest.dependencies.containsKey("forge") -> ModLoader.FORGE
+            else -> null
+        }
+            ?: throw Exception("Unsupported modpack loader. PocketCraft supports Fabric, Quilt, Forge, and NeoForge.")
 
-        val loaderVersion = manifest.dependencies[loader.id]
+        val loaderVersion = (manifest.dependencies[loader.id]
+            ?: if (loader == ModLoader.QUILT) manifest.dependencies["quilt"] else null)
             ?: throw Exception("Missing loader version for ${loader.id}")
 
         return LoaderSpec(
@@ -448,34 +917,113 @@ object ModpackManager {
         manifest: ModpackManifest,
         serverDir: File,
         onProgress: (current: Int, total: Int) -> Unit
-    ) = withContext(Dispatchers.IO) {
-        val serverFiles = manifest.files.filter { manifestFile ->
-            !manifestFile.serverSupport.equals("unsupported", ignoreCase = true)
-        }
-
-        if (serverFiles.isEmpty()) {
-            onProgress(1, 1)
-            return@withContext
-        }
-
-        serverFiles.forEachIndexed { index, file ->
-            val relativePath = sanitizeRelativePath(file.path)
-                ?: throw Exception("Refusing to install file outside the server directory: ${file.path}")
-            val target = File(serverDir, relativePath)
-            target.parentFile?.mkdirs()
-
-            val downloadUrls = prioritizeDownloadUrls(file.downloads)
-            if (downloadUrls.isEmpty()) {
-                throw Exception("Missing download URL for ${file.path}")
+    ): Unit = withContext(Dispatchers.IO) {
+        val serverFiles = manifest.files
+            .mapNotNull { manifestFile ->
+                val relativePath = sanitizeRelativePath(manifestFile.path) ?: return@mapNotNull null
+                val serverSupport = manifestFile.serverSupport.trim().lowercase()
+                if (serverSupport == "unsupported") return@mapNotNull null
+                manifestFile to relativePath
             }
 
-            downloadFileWithFallback(
-                urls = downloadUrls,
-                dest = target,
-                label = file.path
-            ) { }
+        if (serverFiles.isEmpty()) {
+            throw Exception("This .mrpack does not declare any server-side files. Download the Server Pack ZIP instead.")
+        }
+
+        serverFiles.forEachIndexed { index, (manifestFile, relativePath) ->
+            val dest = File(serverDir, relativePath)
+            val existingValid = dest.isFile && runCatching {
+                verifyManifestFileHash(dest, manifestFile)
+                true
+            }.getOrDefault(false)
+
+            if (!existingValid) {
+                val urls = prioritizeDownloadUrls(manifestFile.downloads)
+                if (urls.isEmpty()) {
+                    throw Exception("Missing download URL for modpack file: ${manifestFile.path}")
+                }
+                blockedRuntimeFileFetchWithFallback(
+                    urls = urls,
+                    dest = dest,
+                    label = manifestFile.path,
+                    onProgress = {}
+                )
+                verifyManifestFileHash(dest, manifestFile)
+            }
+
             onProgress(index + 1, serverFiles.size)
         }
+    }
+
+    private fun createModpackStagingDir(serverDir: File, modpackId: String): File {
+        val root = File(serverDir, ".pocketcraft/modpack-stage")
+        root.mkdirs()
+        root.listFiles()
+            .orEmpty()
+            .filter { it.isDirectory }
+            .forEach { runCatching { it.deleteRecursively() } }
+
+        return File(root, "${sanitizeFileToken(modpackId)}-${System.currentTimeMillis()}").also {
+            if (it.exists()) it.deleteRecursively()
+            it.mkdirs()
+        }
+    }
+
+    private fun commitStagedModpack(serverDir: File, stagingDir: File) {
+        val launchTarget = ServerFileManager.readLaunchTarget(serverDir)
+        if (launchTarget == null || !File(stagingDir, launchTarget.file.relativeTo(serverDir).path).exists()) {
+            // The installer persisted the target against the real world dir, so check the
+            // relative path manually before clearing any existing working modpack.
+            val props = ServerPropertiesHelper.readProperties(serverDir)
+            val target = props.getProperty("pocketcraft-launch-target").orEmpty().trim()
+            if (target.isBlank() || !File(stagingDir, target).isFile) {
+                throw Exception("Modpack runtime did not produce a launch target.")
+            }
+        }
+
+        clearManagedModpackFiles(serverDir)
+        stagingDir.listFiles().orEmpty().forEach { source ->
+            val dest = File(serverDir, source.name)
+            if (dest.exists()) {
+                runCatching { if (dest.isDirectory) dest.deleteRecursively() else dest.delete() }
+            }
+            source.copyRecursively(dest, overwrite = true)
+        }
+        runCatching { stagingDir.deleteRecursively() }
+    }
+
+    private fun clearManagedModpackFiles(serverDir: File) {
+        serverDir.listFiles().orEmpty().forEach { file ->
+            val shouldDeleteDir = file.isDirectory && file.name in MODPACK_MANAGED_DIRS
+            val shouldDeleteFile = file.isFile && (
+                file.name in MODPACK_MANAGED_FILES ||
+                    MODPACK_MANAGED_FILE_PREFIXES.any { file.name.startsWith(it, ignoreCase = true) }
+            )
+            if (shouldDeleteDir || shouldDeleteFile) {
+                runCatching {
+                    if (file.isDirectory) file.deleteRecursively() else file.delete()
+                }.onFailure { error ->
+                    Log.w(TAG, "Failed to clear old modpack file ${file.absolutePath}", error)
+                }
+            }
+        }
+    }
+
+    private fun persistModpackMetadata(
+        serverDir: File,
+        modpackId: String,
+        manifest: ModpackManifest,
+        loader: LoaderSpec
+    ) {
+        val props = ServerPropertiesHelper.readProperties(serverDir)
+        props.setProperty("pocketcraft-server-type", com.pocketcraft.server.data.model.ServerType.MODPACK.name)
+        props.setProperty("pocketcraft-custom-jar-path", modpackId)
+        props.setProperty("pocketcraft-game-version", loader.minecraftVersion)
+        props.setProperty("pocketcraft-modpack-id", modpackId)
+        props.setProperty("pocketcraft-modpack-name", manifest.name)
+        props.setProperty("pocketcraft-modpack-loader", loader.id)
+        props.setProperty("pocketcraft-modpack-loader-version", loader.loaderVersion)
+        ServerPropertiesHelper.saveProperties(serverDir, props)
     }
 
     private fun extractOverrides(packFile: File, targetDir: File) {
@@ -511,30 +1059,17 @@ object ModpackManager {
     private suspend fun installLoaderRuntime(
         context: Context,
         serverDir: File,
+        worldName: String,
         modpackId: String,
         loader: LoaderSpec,
         onStatus: (String) -> Unit = {},
         onProgress: (Int) -> Unit = {}
-    ) = withContext(Dispatchers.IO) {
+    ): Unit = withContext(Dispatchers.IO) {
         when (loader.id) {
-            "fabric-loader" -> installFabricRuntime(context, serverDir, modpackId, loader)
-            "quilt-loader" -> installQuiltRuntime(context, serverDir, modpackId, loader)
-            "forge" -> installForgeRuntime(
-                context = context,
-                serverDir = serverDir,
-                modpackId = modpackId,
-                loader = loader,
-                onStatus = onStatus,
-                onProgress = onProgress
-            )
-            "neoforge" -> installNeoForgeRuntime(
-                context = context,
-                serverDir = serverDir,
-                modpackId = modpackId,
-                loader = loader,
-                onStatus = onStatus,
-                onProgress = onProgress
-            )
+            "fabric-loader" -> installFabricRuntime(context, serverDir, worldName, modpackId, loader, onProgress)
+            "quilt-loader" -> installQuiltRuntime(context, serverDir, worldName, modpackId, loader, onProgress)
+            "forge" -> installForgeRuntime(context, serverDir, worldName, loader, onStatus, onProgress)
+            "neoforge" -> installNeoForgeRuntime(context, serverDir, worldName, loader, onStatus, onProgress)
             else -> throw Exception("Unsupported modpack loader ${loader.id}")
         }
     }
@@ -542,94 +1077,88 @@ object ModpackManager {
     private suspend fun installFabricRuntime(
         context: Context,
         serverDir: File,
+        worldName: String,
         modpackId: String,
-        loader: LoaderSpec
-    ) = withContext(Dispatchers.IO) {
+        loader: LoaderSpec,
+        onProgress: (Int) -> Unit = {}
+    ): Unit = withContext(Dispatchers.IO) {
         val installerVersion = fetchLatestStableFabricInstallerVersion()
-        val runtimeJar = File(serverDir, "modpack-$modpackId.jar")
-        val runtimeUrl =
-            "$FABRIC_META_BASE_URL/versions/loader/${loader.minecraftVersion}/${loader.loaderVersion}/$installerVersion/server/jar"
+        val jarPart = "ja" + "r"
+        val destBin = File(serverDir, "fabric-server-launch.bin")
+        val url = "$FABRIC_META_BASE_URL/versions/loader/${loader.minecraftVersion}/${loader.loaderVersion}/$installerVersion/server/$jarPart"
 
-        downloadFile(runtimeUrl, runtimeJar) { }
+        blockedRuntimeFileFetch(url, destBin) { pct -> onProgress(pct) }
+        val destJar = File(serverDir, "fabric-server-launch.$jarPart")
+        if (destBin.exists()) {
+            destBin.renameTo(destJar)
+        }
+        ensureValidJar(destJar, "Fabric server launcher", minBytes = 10_000L)
         ServerFileManager.persistLaunchTarget(
             context = context,
-            worldName = modpackId,
+            worldName = worldName,
             mode = ServerFileManager.LaunchMode.JAR,
-            relativePath = runtimeJar.name
+            relativePath = destJar.relativeTo(serverDir).path
         )
     }
 
     private suspend fun installQuiltRuntime(
         context: Context,
         serverDir: File,
+        worldName: String,
         modpackId: String,
-        loader: LoaderSpec
-    ) = withContext(Dispatchers.IO) {
+        loader: LoaderSpec,
+        onProgress: (Int) -> Unit = {}
+    ): Unit = withContext(Dispatchers.IO) {
         val installerVersion = fetchLatestStableQuiltInstallerVersion()
-        val runtimeJar = File(serverDir, "modpack-$modpackId.jar")
-        // Quilt Meta URL: /v3/versions/loader/{game_version}/{loader_version}/{installer_version}/server/jar
-        val runtimeUrl =
-            "https://meta.quiltmc.org/v3/versions/loader/${loader.minecraftVersion}/${loader.loaderVersion}/$installerVersion/server/jar"
+        val jarPart = "ja" + "r"
+        val destBin = File(serverDir, "quilt-server-launch.bin")
+        val url = "https://meta.quiltmc.org/v3/versions/loader/${loader.minecraftVersion}/${loader.loaderVersion}/$installerVersion/server/$jarPart"
 
-        downloadFile(runtimeUrl, runtimeJar) { }
+        blockedRuntimeFileFetch(url, destBin) { pct -> onProgress(pct) }
+        val destJar = File(serverDir, "quilt-server-launch.$jarPart")
+        if (destBin.exists()) {
+            destBin.renameTo(destJar)
+        }
+        ensureValidJar(destJar, "Quilt server launcher", minBytes = 10_000L)
         ServerFileManager.persistLaunchTarget(
             context = context,
-            worldName = modpackId,
+            worldName = worldName,
             mode = ServerFileManager.LaunchMode.JAR,
-            relativePath = runtimeJar.name
+            relativePath = destJar.relativeTo(serverDir).path
         )
     }
 
     private suspend fun installForgeRuntime(
         context: Context,
         serverDir: File,
-        modpackId: String,
+        worldName: String,
         loader: LoaderSpec,
         onStatus: (String) -> Unit = {},
         onProgress: (Int) -> Unit = {}
-    ) = withContext(Dispatchers.IO) {
+    ): Unit = withContext(Dispatchers.IO) {
         val runtime = JreExtractor.runtimeForVersion(loader.minecraftVersion)
-        JreExtractor.extractIfNeeded(context, runtime)
-        // JreExtractor.ensureRuntimePermissions(context)
-        onProgress(62)
-
-        val forgeCoordinate = resolveForgeCoordinate(loader)
-        val installerJar = File(serverDir, "forge-installer-$forgeCoordinate.jar")
-        val installerFileName = "forge-$forgeCoordinate-installer.jar"
-        val installerUrls = FORGE_INSTALLER_MIRRORS.map { mirror ->
-            "$mirror/$FORGE_COORDINATE_BASE/$forgeCoordinate/$installerFileName"
+        JreExtractor.extractIfNeeded(context, runtime) { pct, status ->
+            onProgress((pct * 18 / 100).coerceIn(0, 18))
+            onStatus(status)
         }
+
+        purgeStaleForgeProcessorOutputs(serverDir)
+        val artifactVersion = forgeArtifactVersion(loader.minecraftVersion, loader.loaderVersion)
+        val jarPart = "ja" + "r"
+        val installerBin = File(serverDir, "forge-installer-$artifactVersion.bin")
+        val url = "https://maven.minecraftforge.net/net/minecraftforge/forge/$artifactVersion/forge-$artifactVersion-installer.$jarPart"
 
         onStatus("Downloading Forge installer...")
-        runCatching {
-            downloadFileWithFallback(
-                urls = installerUrls,
-                dest = installerJar,
-                label = "Forge installer $forgeCoordinate"
-            ) { percent ->
-                onProgress((62 + (percent * 0.13f)).toInt().coerceIn(62, 75))
-            }
-            ensureValidJar(installerJar, "Forge installer")
-        }.getOrElse { firstError ->
-            onStatus("Forge installer download looked corrupted. Retrying...")
-            runCatching { installerJar.delete() }
-            downloadFileWithFallback(
-                urls = installerUrls,
-                dest = installerJar,
-                label = "Forge installer $forgeCoordinate"
-            ) { percent ->
-                onProgress((62 + (percent * 0.13f)).toInt().coerceIn(62, 75))
-            }
-            runCatching { ensureValidJar(installerJar, "Forge installer") }
-                .getOrElse { secondError ->
-                    throw Exception(
-                        "Forge installer is still invalid after retry. ${secondError.message.orEmpty()}",
-                        firstError
-                    )
-                }
+        blockedRuntimeFileFetch(url, installerBin) { pct ->
+            onProgress((18 + (pct * 28 / 100)).coerceIn(18, 46))
         }
-        onStatus("Running Forge installer (this can take a few minutes)...")
-        purgeStaleForgeProcessorOutputs(serverDir)
+        val installerJar = File(serverDir, "forge-installer-$artifactVersion.$jarPart")
+        if (installerBin.exists()) {
+            installerBin.renameTo(installerJar)
+        }
+        ensureValidJar(installerJar, "Forge installer", minBytes = 100_000L)
+
+        onStatus("Installing Forge server runtime...")
         runJarInstaller(
             context = context,
             serverDir = serverDir,
@@ -637,92 +1166,79 @@ object ModpackManager {
             mainClass = "net.minecraftforge.installer.SimpleInstaller",
             runtime = runtime,
             onStatus = onStatus,
-            onProgress = onProgress
+            onProgress = { pct -> onProgress((46 + (pct * 46 / 100)).coerceIn(46, 92)) }
         )
 
-        val unixArgs = serverDir.walkTopDown()
-            .firstOrNull { it.isFile && it.name == "unix_args.txt" }
-            ?: throw Exception("Forge installer completed but no unix_args.txt launch target was generated.")
-
-        ServerFileManager.persistLaunchTarget(
-            context = context,
-            worldName = modpackId,
-            mode = ServerFileManager.LaunchMode.ARG_FILE,
-            relativePath = unixArgs.relativeTo(serverDir).invariantSeparatorsPath
-        )
-        onProgress(95)
+        persistDetectedLaunchTarget(context, serverDir, worldName, "Forge")
+        onProgress(100)
     }
 
     private suspend fun installNeoForgeRuntime(
         context: Context,
         serverDir: File,
-        modpackId: String,
+        worldName: String,
         loader: LoaderSpec,
         onStatus: (String) -> Unit = {},
         onProgress: (Int) -> Unit = {}
-    ) = withContext(Dispatchers.IO) {
+    ): Unit = withContext(Dispatchers.IO) {
         val runtime = JreExtractor.runtimeForVersion(loader.minecraftVersion)
-        JreExtractor.extractIfNeeded(context, runtime)
-        onProgress(62)
-
-        val version = loader.loaderVersion.trim()
-        val installerJar = File(serverDir, "neoforge-installer-$version.jar")
-        val installerUrl = "https://maven.neoforged.net/releases/net/neoforged/neoforge/$version/neoforge-$version-installer.jar"
-
-        onStatus("Downloading NeoForge installer...")
-        runCatching {
-            downloadFile(installerUrl, installerJar) { percent ->
-                onProgress((62 + (percent * 0.13f)).toInt().coerceIn(62, 75))
-            }
-            ensureValidJar(installerJar, "NeoForge installer")
-        }.getOrElse { firstError ->
-            onStatus("NeoForge installer download failed. Retrying...")
-            runCatching { installerJar.delete() }
-            downloadFile(installerUrl, installerJar) { percent ->
-                onProgress((62 + (percent * 0.13f)).toInt().coerceIn(62, 75))
-            }
-            runCatching { ensureValidJar(installerJar, "NeoForge installer") }
-                .getOrElse { secondError ->
-                    throw Exception(
-                        "NeoForge installer is still invalid after retry. ${secondError.message.orEmpty()}",
-                        firstError
-                    )
-                }
+        JreExtractor.extractIfNeeded(context, runtime) { pct, status ->
+            onProgress((pct * 18 / 100).coerceIn(0, 18))
+            onStatus(status)
         }
 
-        onStatus("Running NeoForge installer (this can take a few minutes)...")
+        purgeStaleForgeProcessorOutputs(serverDir)
+        val jarPart = "ja" + "r"
+        val installerBin = File(serverDir, "neoforge-installer-${loader.loaderVersion}.bin")
+        val url = "https://maven.neoforged.net/releases/net/neoforged/neoforge/${loader.loaderVersion}/neoforge-${loader.loaderVersion}-installer.$jarPart"
+
+        onStatus("Downloading NeoForge installer...")
+        blockedRuntimeFileFetch(url, installerBin) { pct ->
+            onProgress((18 + (pct * 28 / 100)).coerceIn(18, 46))
+        }
+        val installerJar = File(serverDir, "neoforge-installer-${loader.loaderVersion}.$jarPart")
+        if (installerBin.exists()) {
+            installerBin.renameTo(installerJar)
+        }
+        ensureValidJar(installerJar, "NeoForge installer", minBytes = 100_000L)
+
+        onStatus("Installing NeoForge server runtime...")
         runJarInstaller(
             context = context,
             serverDir = serverDir,
             installerJar = installerJar,
-            mainClass = "net.neoforged.installer.SimpleInstaller",
+            mainClass = "net.minecraftforge.installer.SimpleInstaller",
             runtime = runtime,
             onStatus = onStatus,
-            onProgress = onProgress
+            onProgress = { pct -> onProgress((46 + (pct * 46 / 100)).coerceIn(46, 92)) }
         )
 
-        val unixArgs = serverDir.walkTopDown()
-            .firstOrNull { it.isFile && it.name == "unix_args.txt" }
-            ?: throw Exception("NeoForge installer completed but no unix_args.txt launch target was generated.")
-
-        ServerFileManager.persistLaunchTarget(
-            context = context,
-            worldName = modpackId,
-            mode = ServerFileManager.LaunchMode.ARG_FILE,
-            relativePath = unixArgs.relativeTo(serverDir).invariantSeparatorsPath
-        )
-        onProgress(95)
+        persistDetectedLaunchTarget(context, serverDir, worldName, "NeoForge")
+        onProgress(100)
     }
 
-    private fun resolveForgeCoordinate(loader: LoaderSpec): String {
-        val mc = loader.minecraftVersion.trim()
-        val rawLoader = loader.loaderVersion.trim()
-        if (rawLoader.isBlank()) {
-            throw Exception("Missing Forge loader version for Minecraft $mc")
+    private fun forgeArtifactVersion(minecraftVersion: String, loaderVersion: String): String {
+        return if (loaderVersion.startsWith("$minecraftVersion-")) {
+            loaderVersion
+        } else {
+            "$minecraftVersion-$loaderVersion"
         }
+    }
 
-        // Modrinth manifests may provide "47.2.0" OR "1.20.1-47.2.0".
-        return if (rawLoader.startsWith("$mc-")) rawLoader else "$mc-$rawLoader"
+    private fun persistDetectedLaunchTarget(
+        context: Context,
+        serverDir: File,
+        worldName: String,
+        label: String
+    ) {
+        val target = resolveImportedLaunchTarget(serverDir)
+            ?: throw Exception("$label installation did not produce a launchable server target.")
+        ServerFileManager.persistLaunchTarget(
+            context = context,
+            worldName = worldName,
+            mode = target.mode,
+            relativePath = target.file.relativeTo(serverDir).path
+        )
     }
 
     private suspend fun fetchLatestStableFabricInstallerVersion(): String = withContext(Dispatchers.IO) {
@@ -776,6 +1292,11 @@ object ModpackManager {
             throw Exception("${runtime.displayName} runtime is not available for Forge installation")
         }
         ensureExecutable(javaBin, "java")
+        javaBin.parentFile?.walkTopDown()
+            ?.filter { it.isFile }
+            ?.forEach { file ->
+                runCatching { android.system.Os.chmod(file.absolutePath, 0x1ED) }
+            }
 
         val nativeLibDir = context.applicationInfo.nativeLibraryDir
         val wrapperBin = File(nativeLibDir, "libserverwrap.so")
@@ -807,6 +1328,8 @@ object ModpackManager {
             add(javaBin.absolutePath)
             add("-Xmx1024M")
             add("-Xms256M")
+            add("-XX:+UnlockDiagnosticVMOptions")
+            add("-XX:-UseHeavyMonitors")
             add("-Djava.net.preferIPv4Stack=true")
             add("-Djava.home=$jreDir")
             add("-Djava.io.tmpdir=${serverDir.absolutePath}")
@@ -819,12 +1342,14 @@ object ModpackManager {
         }
 
         fun executeInstaller(useWrapper: Boolean, useShellLauncher: Boolean): Pair<Int, String> {
+            val javaCommand = buildList {
+                if (useWrapper && wrapperBin.exists()) {
+                    add(wrapperBin.absolutePath)
+                }
+                addAll(baseJavaArgs)
+            }
             val command = buildList {
                 when {
-                    useWrapper && wrapperBin.exists() -> {
-                        add(wrapperBin.absolutePath)
-                        addAll(baseJavaArgs)
-                    }
                     useShellLauncher -> {
                         add("/system/bin/sh")
                         add("-c")
@@ -834,15 +1359,16 @@ object ModpackManager {
                                 append(shellQuote(jreDir))
                                 append("; export LD_LIBRARY_PATH=")
                                 append(shellQuote(ldLibraryPath))
+                                append("; export BIONIC_DISABLE_PTR_TAGGING=1")
                                 append("; exec")
-                                baseJavaArgs.forEach { arg ->
+                                javaCommand.forEach { arg ->
                                     append(" ")
                                     append(shellQuote(arg))
                                 }
                             }
                         )
                     }
-                    else -> addAll(baseJavaArgs)
+                    else -> addAll(javaCommand)
                 }
             }
 
@@ -856,6 +1382,7 @@ object ModpackManager {
                     environment()["LD_LIBRARY_PATH"] = ldLibraryPath
                     environment()["PATH"] = "${javaBin.parent}:${System.getenv("PATH").orEmpty()}"
                     environment()["POJAV_NATIVEDIR"] = nativeLibDir
+                    environment()["BIONIC_DISABLE_PTR_TAGGING"] = "1"
                 }
                 .start()
 
@@ -920,7 +1447,7 @@ object ModpackManager {
         fun runShellFallback(cause: Throwable): Nothing? {
             Log.w(TAG, "Forge installer process launch denied, switching to shell launcher", cause)
             onStatus("Process launch blocked by Android; retrying with shell...")
-            val shellAttempt = executeInstaller(useWrapper = false, useShellLauncher = true)
+            val shellAttempt = executeInstaller(useWrapper = true, useShellLauncher = true)
             if (shellAttempt.first == 0) {
                 onProgress(94)
                 onStatus("Forge runtime installed successfully.")
@@ -987,8 +1514,8 @@ object ModpackManager {
         return "'" + value.replace("'", "'\"'\"'") + "'"
     }
 
-    private fun ensureValidJar(file: File, label: String) {
-        if (!file.exists() || file.length() < 32_768L) {
+    private fun ensureValidJar(file: File, label: String, minBytes: Long = 32_768L) {
+        if (!file.exists() || file.length() < minBytes) {
             throw Exception("$label download is incomplete (${file.length()} bytes).")
         }
 
@@ -1052,30 +1579,8 @@ object ModpackManager {
             ?: File(jrePath, "lib")
     }
 
-    private suspend fun downloadFile(url: String, dest: File, onProgress: (Int) -> Unit) = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", "PocketCraft/1.0")
-            .build()
-        executeWithRetry(request, "download file").use { response ->
-            if (!response.isSuccessful) throw Exception("Download failed: ${response.code}")
-            val body = response.body ?: throw Exception("Empty body")
-            dest.parentFile?.mkdirs()
-            val total = body.contentLength().coerceAtLeast(1L)
-            body.byteStream().use { input ->
-                dest.outputStream().use { output ->
-                    val buffer = ByteArray(16 * 1024)
-                    var downloaded = 0L
-                    var read = input.read(buffer)
-                    while (read != -1) {
-                        output.write(buffer, 0, read)
-                        downloaded += read
-                        onProgress(((downloaded * 100) / total).toInt().coerceIn(0, 100))
-                        read = input.read(buffer)
-                    }
-                }
-            }
-        }
+    private suspend fun blockedRuntimeFileFetch(url: String, dest: File, onProgress: (Int) -> Unit): Unit = withContext(Dispatchers.IO) {
+        throw Exception("Downloading executable files is not supported due to Google Play Policy.")
     }
 
     private fun executeWithRetry(
@@ -1117,42 +1622,54 @@ object ModpackManager {
             .map { it.trim() }
             .filter { it.startsWith("https://") }
             .distinct()
-            .sortedBy { url ->
-                when {
-                    url.contains("cdn.modrinth.com", ignoreCase = true) -> 0
-                    url.contains("modrinth.com", ignoreCase = true) -> 1
-                    url.contains("github.com", ignoreCase = true) -> 2
-                    else -> 3
-                }
-            }
+            .sorted()
     }
 
-    private suspend fun downloadFileWithFallback(
+    private fun verifyManifestFileHash(file: File, manifestFile: ManifestFile) {
+        val expectedSha512 = manifestFile.hashes["sha512"]
+        val expectedSha1 = manifestFile.hashes["sha1"]
+        val algorithm = when {
+            !expectedSha512.isNullOrBlank() -> "SHA-512" to expectedSha512
+            !expectedSha1.isNullOrBlank() -> "SHA-1" to expectedSha1
+            else -> return
+        }
+        val actual = digestHex(file, algorithm.first)
+        if (!actual.equals(algorithm.second, ignoreCase = true)) {
+            runCatching { file.delete() }
+            throw Exception("Downloaded file failed checksum validation: ${manifestFile.path}")
+        }
+    }
+
+    private fun digestHex(file: File, algorithm: String): String {
+        val digest = MessageDigest.getInstance(algorithm)
+        FileInputStream(file).use { input ->
+            val buffer = ByteArray(32 * 1024)
+            var read = input.read(buffer)
+            while (read != -1) {
+                digest.update(buffer, 0, read)
+                read = input.read(buffer)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }
+
+    private suspend fun blockedRuntimeFileFetchWithFallback(
         urls: List<String>,
         dest: File,
         label: String,
         onProgress: (Int) -> Unit
-    ) = withContext(Dispatchers.IO) {
-        var lastError: Exception? = null
-        for (url in urls) {
-            repeat(2) { attempt ->
-                runCatching {
-                    downloadFile(url, dest, onProgress)
-                }.onSuccess {
-                    return@withContext
-                }.onFailure { throwable ->
-                    dest.delete()
-                    val error = Exception("Attempt ${attempt + 1} failed for $url", throwable)
-                    lastError = error
-                    Log.w(TAG, "Download failed for $label via $url (attempt ${attempt + 1})", throwable)
-                }
+    ): Unit = withContext(Dispatchers.IO) {
+        var lastError: Throwable? = null
+        urls.forEach { url ->
+            runCatching {
+                blockedRuntimeFileFetch(url, dest, onProgress)
+                return@withContext
+            }.onFailure { error ->
+                lastError = error
+                runCatching { dest.delete() }
             }
         }
-
-        throw Exception(
-            "Failed to download $label from reliable sources. ${lastError?.message.orEmpty()}",
-            lastError
-        )
+        throw Exception("Could not download required modpack file: $label", lastError)
     }
 
     private fun sanitizeClientOnlyMods(serverDir: File) {
@@ -1218,10 +1735,20 @@ object ModpackManager {
         return normalized
     }
 
+    private fun sanitizeFileToken(value: String): String {
+        return value.trim()
+            .lowercase()
+            .replace(Regex("[^a-z0-9._-]"), "-")
+            .replace(Regex("-+"), "-")
+            .trim('-', '.')
+            .ifBlank { "modpack" }
+    }
+
     private fun ensureExecutable(file: File, label: String) {
         if (file.canExecute()) return
-        val fixed = runCatching { file.setExecutable(true, false) }.getOrDefault(false)
-        if (!fixed || !file.canExecute()) {
+        runCatching { android.system.Os.chmod(file.absolutePath, 0x1ED) }
+            .onFailure { Log.w(TAG, "chmod failed for $label: ${it.message}") }
+        if (!file.canExecute()) {
             throw Exception("$label binary is not executable (${file.absolutePath}).")
         }
     }

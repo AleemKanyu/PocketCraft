@@ -188,7 +188,7 @@ fun FilesScreen(
                             color = PocketColors.PrimaryDark,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 11.sp,
-                            letterSpacing = 1.sp
+                            letterSpacing = 0.sp
                         )
                     }
                 }
@@ -360,7 +360,7 @@ private fun SectionLabel(title: String) {
         text = title,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 11.sp,
-        letterSpacing = 1.5.sp,
+        letterSpacing = 0.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
         modifier = Modifier.padding(horizontal = 4.dp)
     )

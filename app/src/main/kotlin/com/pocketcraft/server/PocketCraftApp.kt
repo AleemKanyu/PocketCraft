@@ -10,11 +10,15 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.ktx.crashlytics
 import com.google.firebase.ktx.Firebase
 import com.pocketcraft.server.data.preferences.AppPreferences
+import com.pocketcraft.server.data.preferences.AppPreferencesStore
+import com.pocketcraft.server.server.BundledPluginInstaller
 import dagger.hilt.android.HiltAndroidApp
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -45,6 +49,8 @@ open class PocketCraftApp : Application(), Configuration.Provider {
             }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
+        migrateRelayHostForRegion()
+        reinstallBundledPluginsAfterAppUpdate()
     }
 
     override fun onTerminate() {
@@ -57,6 +63,42 @@ open class PocketCraftApp : Application(), Configuration.Provider {
             Application.getProcessName()
         } else {
             packageName
+        }
+    }
+
+    private fun reinstallBundledPluginsAfterAppUpdate() {
+        val prefs = getSharedPreferences("pocketcraft_prefs", MODE_PRIVATE)
+        val lastInstalledVersion = prefs.getInt("last_plugin_install_version", 0)
+        val currentVersion = BuildConfig.VERSION_CODE
+        if (currentVersion <= lastInstalledVersion) return
+
+        runCatching {
+            val worldsDir = File(filesDir, "servers/worlds")
+            worldsDir.listFiles()
+                .orEmpty()
+                .filter { it.isDirectory }
+                .forEach { worldDir ->
+                    BundledPluginInstaller.forceReinstallBundledPlugins(applicationContext, worldDir)
+                }
+        }.onFailure { error ->
+            Firebase.crashlytics.recordException(error)
+        }
+
+        prefs.edit().putInt("last_plugin_install_version", currentVersion).apply()
+    }
+
+    private fun migrateRelayHostForRegion() {
+        runCatching {
+            AppPreferences(applicationContext).migrateLegacyRelayHostForRegion()
+        }.onFailure { error ->
+            Firebase.crashlytics.recordException(error)
+        }
+        applicationScope.launch {
+            runCatching {
+                AppPreferencesStore.migrateLegacyRelayHostForRegion(applicationContext)
+            }.onFailure { error ->
+                Firebase.crashlytics.recordException(error)
+            }
         }
     }
 

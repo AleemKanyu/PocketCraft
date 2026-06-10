@@ -3,7 +3,6 @@ package com.pocketcraft.server.di
 import android.content.Context
 import androidx.room.Room
 import com.pocketcraft.server.data.api.MojangApiService
-import com.pocketcraft.server.data.api.PaperMcApiService
 import com.pocketcraft.server.data.db.VersionDao
 import com.pocketcraft.server.data.db.VersionDatabase
 import com.pocketcraft.server.data.repository.ServerConfigRepository
@@ -64,16 +63,6 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun providePaperMcApiService(okHttpClient: OkHttpClient): PaperMcApiService =
-        Retrofit.Builder()
-            .baseUrl("https://api.papermc.io/v2/projects/paper/")
-            .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(PaperMcApiService::class.java)
-
-    @Provides
-    @Singleton
     fun provideVersionRepository(
         @ApplicationContext context: Context,
         mojangApiService: MojangApiService,
@@ -81,4 +70,3 @@ object AppModule {
         okHttpClient: OkHttpClient
     ): VersionRepository = VersionRepository(context, mojangApiService, versionDao, okHttpClient)
 }
-

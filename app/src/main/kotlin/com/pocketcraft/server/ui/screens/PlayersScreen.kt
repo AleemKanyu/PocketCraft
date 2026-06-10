@@ -289,7 +289,7 @@ fun PlayersOnlineTab(
                 "ACTIVE NOW",
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 11.sp,
-                letterSpacing = 2.sp,
+                letterSpacing = 0.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(0.5f)
             )
             Surface(
@@ -302,7 +302,7 @@ fun PlayersOnlineTab(
                     color = PocketColors.Primary,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 11.sp,
-                    letterSpacing = 1.sp
+                    letterSpacing = 0.sp
                 )
             }
         }
@@ -361,8 +361,7 @@ fun PlayerOnlineCard(
     onOp: () -> Unit
 ) {
     val subtitle = if (isOnline) {
-        val pingText = player.pingMs.takeIf { it >= 0 }?.let { "${it}ms" } ?: "..."
-        "Ping: $pingText"
+        player.pingText()
     } else {
         if (!isServerRunning) "Last session" else "Offline"
     }

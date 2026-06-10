@@ -258,7 +258,7 @@ fun BackupsScreen(
                 text = "SAVED BACKUPS",
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 12.sp,
-                letterSpacing = 2.sp,
+                letterSpacing = 0.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }

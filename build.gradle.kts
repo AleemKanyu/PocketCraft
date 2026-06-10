@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.hilt) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.google.services) apply false
+    alias(libs.plugins.oss.licenses) apply false
     id("com.github.jk1.dependency-license-report") version "2.9"
 }
 

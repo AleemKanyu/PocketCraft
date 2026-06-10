@@ -1,8 +1,6 @@
 package com.pocketcraft.server.ui.screens
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
@@ -14,8 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,19 +21,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 import com.pocketcraft.server.data.model.ServerType
+import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.service.ModpackManager
+import com.pocketcraft.server.service.ServerFileManager
+import com.pocketcraft.server.server.ServerJarImporter
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.DuoButtonVariant
+import com.pocketcraft.server.ui.components.ServerJarPickerBottomSheet
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.raisedBorder
 import com.pocketcraft.server.viewmodel.ServerTypeVersionViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,10 +56,10 @@ fun ServerTypeVersionBottomSheet(
     currentCustomJarPath: String? = null,
     viewModel: ServerTypeVersionViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val selectedType by viewModel.selectedType.collectAsState()
     val availableVersions by viewModel.availableVersions.collectAsState()
     val selectedVersion by viewModel.selectedVersion.collectAsState()
-    val customJarPath by viewModel.customJarPath.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val downloadedVersions by viewModel.downloadedVersions.collectAsState()
@@ -62,6 +70,32 @@ fun ServerTypeVersionBottomSheet(
     val isOffline by viewModel.isOffline.collectAsState()
     var selectedModpackId by remember { mutableStateOf<String?>(null) }
     var versionToDelete by remember { mutableStateOf<String?>(null) }
+    var versionToImport by remember { mutableStateOf<String?>(null) }
+    var selectedModpackPageUrl by remember { mutableStateOf<String?>(null) }
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val accentTextColor = if (isDarkTheme) PocketColors.PrimaryLight else PocketColors.PrimaryDark
+    val setupGuideShown by AppPreferencesStore.isServerTypeSetupGuideShownFlow(context).collectAsState(initial = false)
+    val scope = rememberCoroutineScope()
+    var showServerTypeGuide by remember { mutableStateOf(false) }
+
+    fun confirmSelection() {
+        if (selectedType == ServerType.MODPACK) {
+            val pageUrl = selectedModpackPageUrl
+            val payloadPath = if (!pageUrl.isNullOrBlank()) "$selectedModpackId|$pageUrl" else selectedModpackId
+            onConfirm(selectedType, selectedVersion, payloadPath)
+        } else {
+            onConfirm(selectedType, selectedVersion, null)
+        }
+    }
+
+    fun confirmWithGuideIfNeeded() {
+        val changingServerType = selectedType != currentServerType
+        if (!setupGuideShown && changingServerType) {
+            showServerTypeGuide = true
+        } else {
+            confirmSelection()
+        }
+    }
 
     LaunchedEffect(currentServerType, currentGameVersion, currentCustomJarPath) {
         viewModel.initializeSelection(
@@ -71,20 +105,17 @@ fun ServerTypeVersionBottomSheet(
         )
         if (currentServerType == ServerType.MODPACK) {
             selectedModpackId = currentCustomJarPath
+            selectedModpackPageUrl = null // page URL not stored in prefs, will be set on re-select
         }
     }
 
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let { viewModel.setCustomJarPath(it.toString()) }
-    }
 
     LaunchedEffect(selectedType, modpackQuery) {
         if (selectedType != ServerType.MODPACK) return@LaunchedEffect
+        if (modpackQuery.isNotBlank()) delay(350)
         modpackLoading = true
         modpackError = null
-        val result = ModpackManager.searchModpacks(query = modpackQuery.trim(), limit = 20)
+        val result = ModpackManager.searchModpacks(query = modpackQuery.trim(), limit = 48)
         result.onSuccess { items ->
             modpackResults = items
         }.onFailure {
@@ -99,12 +130,21 @@ fun ServerTypeVersionBottomSheet(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
+        val bottomSheetBg = if (isDarkTheme) PocketColors.SurfaceCardDark else PocketColors.SurfaceCard
+        val bottomSheetBorder = if (isDarkTheme) PocketColors.CardBorderDark else PocketColors.CardBorder
+        val bottomSheetDepth = if (isDarkTheme) PocketColors.CardBorderBottomDark else PocketColors.CardBorderBottom
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(18.dp))
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
-                .border(2.dp, PocketColors.Primary.copy(alpha = 0.28f), RoundedCornerShape(18.dp))
+                .background(bottomSheetBg)
+                .raisedBorder(
+                    color = bottomSheetBorder,
+                    depthColor = bottomSheetDepth,
+                    cornerRadius = 18.dp,
+                    borderWidth = 1.5.dp,
+                    depthWidth = 3.dp
+                )
                 .padding(14.dp)
         ) {
             Column {
@@ -113,7 +153,7 @@ fun ServerTypeVersionBottomSheet(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 24.sp,
-                    color = PocketColors.PrimaryDark,
+                    color = accentTextColor,
                     modifier = Modifier.padding(bottom = 14.dp)
                 )
 
@@ -121,29 +161,37 @@ fun ServerTypeVersionBottomSheet(
                     text = "Server Type",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = PocketColors.PrimaryDark,
+                    color = accentTextColor,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    ServerType.values().filter { it != ServerType.CUSTOM_JAR && it != ServerType.MODPACK }.forEach { type ->
+                    ServerType.values().filter { it != ServerType.MODPACK }.forEach { type ->
                         val isSelected = selectedType == type
-                        val isLockedByModpack = selectedModpackId != null
-                        OutlinedCard(
+                        val cardBg = if (isSelected) PocketColors.primaryBg else PocketColors.InactiveBg
+                        val cardBorder = if (isSelected) PocketColors.primaryBorder else PocketColors.InactiveBorder
+                        val cardDepth = if (isSelected) PocketColors.primaryDepth else PocketColors.InactiveBorderBottom
+                        val cardText = if (isSelected) PocketColors.PrimaryText else PocketColors.InactiveText
+
+                        Box(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp)
-                                .alpha(if (isLockedByModpack) 0.5f else 1f)
-                                .clickable(enabled = !isLockedByModpack) { viewModel.setServerType(type) },
-                            colors = CardDefaults.outlinedCardColors(
-                                containerColor = if (isSelected) PocketColors.PrimaryMuted else MaterialTheme.colorScheme.surface
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(
-                                width = if (isSelected) 2.dp else 1.dp,
-                                color = if (isSelected) PocketColors.Primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
-                            )
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(cardBg)
+                                .raisedBorder(
+                                    color = cardBorder,
+                                    depthColor = cardDepth,
+                                    cornerRadius = 16.dp,
+                                    borderWidth = 1.5.dp,
+                                    depthWidth = 3.dp
+                                )
+                                .clickable {
+                                    selectedModpackId = null
+                                    viewModel.setServerType(type)
+                                }
                         ) {
                             Row(
                                 modifier = Modifier
@@ -157,7 +205,7 @@ fun ServerTypeVersionBottomSheet(
                                         Icons.Default.Check,
                                         contentDescription = null,
                                         modifier = Modifier.size(16.dp),
-                                        tint = PocketColors.PrimaryDark
+                                        tint = cardText
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                 }
@@ -166,7 +214,7 @@ fun ServerTypeVersionBottomSheet(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) PocketColors.PrimaryDark else MaterialTheme.colorScheme.onSurface
+                                    color = cardText
                                 )
                             }
                         }
@@ -174,23 +222,28 @@ fun ServerTypeVersionBottomSheet(
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
-                var showModpackSoonDialog by remember { mutableStateOf(false) }
 
-                val isModpackSelected = selectedType == ServerType.MODPACK
-                OutlinedCard(
+                val modpackBg = PocketColors.InactiveBg
+                val modpackBorder = PocketColors.InactiveBorder
+                val modpackDepth = PocketColors.InactiveBorderBottom
+                val modpackText = PocketColors.InactiveText.copy(alpha = 0.6f)
+
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp)
-                        .alpha(0.6f)
-                        .clickable { showModpackSoonDialog = true },
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.outlinedCardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    border = androidx.compose.foundation.BorderStroke(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
-                    )
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(modpackBg)
+                        .raisedBorder(
+                            color = modpackBorder,
+                            depthColor = modpackDepth,
+                            cornerRadius = 16.dp,
+                            borderWidth = 1.5.dp,
+                            depthWidth = 3.dp
+                        )
+                        .clickable {
+                            Toast.makeText(context, "Modpack support coming soon!", Toast.LENGTH_SHORT).show()
+                        }
                 ) {
                     Row(
                         modifier = Modifier
@@ -199,116 +252,34 @@ fun ServerTypeVersionBottomSheet(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "🔒 ",
-                            fontSize = 16.sp
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = modpackText
                         )
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = ServerType.MODPACK.displayName,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            color = modpackText
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Surface(
                             shape = RoundedCornerShape(50),
-                            color = PocketColors.Warning.copy(alpha = 0.2f)
+                            color = PocketColors.InactiveBorder.copy(alpha = 0.5f)
                         ) {
                             Text(
-                                "SOON",
+                                "COMING SOON",
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = PocketColors.Warning
+                                color = PocketColors.InactiveText
                             )
                         }
                     }
-                }
-
-                if (showModpackSoonDialog) {
-                    AlertDialog(
-                        onDismissRequest = { showModpackSoonDialog = false },
-                        title = { Text("Coming Soon! 🛠️", fontWeight = FontWeight.Bold) },
-                        text = {
-                            Text("Modpacks (RLCraft, Better MC, SkyFactory, etc.) are being optimized for mobile and will be available in the next major update!")
-                        },
-                        confirmButton = {
-                            TextButton(onClick = { showModpackSoonDialog = false }) {
-                                Text("AWESOME", fontWeight = FontWeight.Bold, color = PocketColors.Primary)
-                            }
-                        },
-                        shape = RoundedCornerShape(24.dp),
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                var showCustomJarSoonDialog by remember { mutableStateOf(false) }
-                OutlinedCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .alpha(0.6f)
-                        .clickable { showCustomJarSoonDialog = true },
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.outlinedCardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    border = androidx.compose.foundation.BorderStroke(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 10.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "🔒 ",
-                            fontSize = 16.sp
-                        )
-                        Text(
-                            text = ServerType.CUSTOM_JAR.displayName,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = PocketColors.Warning.copy(alpha = 0.2f)
-                        ) {
-                            Text(
-                                "SOON",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = PocketColors.Warning
-                            )
-                        }
-                    }
-                }
-
-                if (showCustomJarSoonDialog) {
-                    AlertDialog(
-                        onDismissRequest = { showCustomJarSoonDialog = false },
-                        title = { Text("Coming Soon! 🛠️", fontWeight = FontWeight.Bold) },
-                        text = {
-                            Text("Uploading custom server JAR files will be available in a future update!")
-                        },
-                        confirmButton = {
-                            TextButton(onClick = { showCustomJarSoonDialog = false }) {
-                                Text("AWESOME", fontWeight = FontWeight.Bold, color = PocketColors.Primary)
-                            }
-                        },
-                        shape = RoundedCornerShape(24.dp),
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -318,11 +289,27 @@ fun ServerTypeVersionBottomSheet(
                         text = "Game Version",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = PocketColors.PrimaryDark,
+                        color = accentTextColor,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
 
-                    if (isLoading) {
+                    if (selectedVersion == null) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Text(
+                                text = "Loading version...",
+                                fontSize = 12.sp,
+                                color = accentTextColor,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    } else if (isLoading) {
                         Column(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -336,7 +323,7 @@ fun ServerTypeVersionBottomSheet(
                                 Text(
                                     text = if (availableVersions.isNotEmpty()) "Refreshing versions..." else "Loading versions...",
                                     fontSize = 12.sp,
-                                    color = PocketColors.PrimaryDark,
+                                    color = accentTextColor,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
@@ -348,56 +335,94 @@ fun ServerTypeVersionBottomSheet(
                                 items(availableVersions) { version ->
                                     val isSelected = selectedVersion == version
                                     val isDownloaded = downloadedVersions.contains(version)
-                                    Row(
+
+                                    val itemBg = when {
+                                        isSelected -> PocketColors.primaryBg
+                                        isDownloaded -> PocketColors.TagBg
+                                        else -> if (isDarkTheme) PocketColors.SurfaceVarDark else PocketColors.SurfaceCard
+                                    }
+                                    val itemBorder = when {
+                                        isSelected -> PocketColors.primaryBorder
+                                        isDownloaded -> PocketColors.TagBorder
+                                        else -> if (isDarkTheme) PocketColors.CardBorderDark else PocketColors.CardBorder
+                                    }
+                                    val itemDepth = when {
+                                        isSelected -> PocketColors.primaryDepth
+                                        isDownloaded -> PocketColors.TagBorderBottom
+                                        else -> if (isDarkTheme) PocketColors.CardBorderBottomDark else PocketColors.CardBorderBottom
+                                    }
+                                    val itemText = when {
+                                        isSelected -> PocketColors.PrimaryText
+                                        isDownloaded -> PocketColors.TagText
+                                        else -> if (isDarkTheme) Color.White else PocketColors.TextPrimary
+                                    }
+                                    val itemSubtext = when {
+                                        isSelected -> PocketColors.PrimaryText.copy(alpha = 0.7f)
+                                        isDownloaded -> PocketColors.TagText.copy(alpha = 0.7f)
+                                        else -> if (isDarkTheme) PocketColors.TextMuted else PocketColors.TextSecondary
+                                    }
+
+                                    Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .border(
-                                                width = if (isSelected) 2.dp else 1.dp,
-                                                color = if (isSelected) PocketColors.Primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.7f),
-                                                shape = RoundedCornerShape(10.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(itemBg)
+                                            .raisedBorder(
+                                                color = itemBorder,
+                                                depthColor = itemDepth,
+                                                cornerRadius = 12.dp,
+                                                borderWidth = 1.5.dp,
+                                                depthWidth = 3.dp
                                             )
-                                            .background(
-                                                if (isSelected) PocketColors.PrimaryMuted.copy(alpha = 0.48f) else MaterialTheme.colorScheme.surface,
-                                                RoundedCornerShape(10.dp)
-                                            )
-                                            .clickable { viewModel.setSelectedVersion(version) }
-                                            .padding(10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = when {
-                                                isSelected -> Icons.Default.Check
-                                                isDownloaded -> Icons.Default.Download
-                                                else -> Icons.Default.AutoAwesome
-                                            },
-                                            contentDescription = null,
-                                            tint = if (isSelected) PocketColors.PrimaryDark else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = version,
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                color = if (isSelected) PocketColors.PrimaryDark else MaterialTheme.colorScheme.onSurface
-                                            )
-                                            if (isDownloaded) {
-                                                Text(
-                                                    text = "Downloaded",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = PocketColors.PrimaryDark
-                                                )
+                                            .clickable {
+                                                if (isDownloaded) {
+                                                    viewModel.setSelectedVersion(version)
+                                                } else {
+                                                    versionToImport = version
+                                                }
                                             }
-                                        }
-                                        if (isDownloaded) {
-                                            IconButton(onClick = { versionToDelete = version }) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Delete,
-                                                    contentDescription = "Delete downloaded version",
-                                                    tint = MaterialTheme.colorScheme.error
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = when {
+                                                    isSelected -> Icons.Default.Check
+                                                    isDownloaded -> Icons.Default.Download
+                                                    else -> Icons.Default.AutoAwesome
+                                                },
+                                                contentDescription = null,
+                                                tint = itemText,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = version,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                    color = itemText
                                                 )
+                                                if (isDownloaded) {
+                                                    Text(
+                                                        text = "Imported",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = itemSubtext
+                                                    )
+                                                }
+                                            }
+                                            if (isDownloaded) {
+                                                IconButton(onClick = { versionToDelete = version }) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Delete,
+                                                        contentDescription = "Delete downloaded version",
+                                                        tint = if (isSelected) PocketColors.PrimaryText else MaterialTheme.colorScheme.error
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -425,64 +450,102 @@ fun ServerTypeVersionBottomSheet(
                                 )
                             }
                         }
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 300.dp)
-                            ) {
-                                items(availableVersions) { version ->
-                                    val isSelected = selectedVersion == version
-                                    val isDownloaded = downloadedVersions.contains(version)
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 300.dp)
+                        ) {
+                            items(availableVersions) { version ->
+                                val isSelected = selectedVersion == version
+                                val isDownloaded = downloadedVersions.contains(version)
+
+                                val itemBg = when {
+                                    isSelected -> PocketColors.primaryBg
+                                    isDownloaded -> PocketColors.TagBg
+                                    else -> if (isDarkTheme) PocketColors.SurfaceVarDark else PocketColors.SurfaceCard
+                                }
+                                val itemBorder = when {
+                                    isSelected -> PocketColors.primaryBorder
+                                    isDownloaded -> PocketColors.TagBorder
+                                    else -> if (isDarkTheme) PocketColors.CardBorderDark else PocketColors.CardBorder
+                                }
+                                val itemDepth = when {
+                                    isSelected -> PocketColors.primaryDepth
+                                    isDownloaded -> PocketColors.TagBorderBottom
+                                    else -> if (isDarkTheme) PocketColors.CardBorderBottomDark else PocketColors.CardBorderBottom
+                                }
+                                val itemText = when {
+                                    isSelected -> PocketColors.PrimaryText
+                                    isDownloaded -> PocketColors.TagText
+                                    else -> if (isDarkTheme) Color.White else PocketColors.TextPrimary
+                                }
+                                val itemSubtext = when {
+                                    isSelected -> PocketColors.PrimaryText.copy(alpha = 0.7f)
+                                    isDownloaded -> PocketColors.TagText.copy(alpha = 0.7f)
+                                    else -> if (isDarkTheme) PocketColors.TextMuted else PocketColors.TextSecondary
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(itemBg)
+                                        .raisedBorder(
+                                            color = itemBorder,
+                                            depthColor = itemDepth,
+                                            cornerRadius = 12.dp,
+                                            borderWidth = 1.5.dp,
+                                            depthWidth = 3.dp
+                                        )
+                                        .clickable {
+                                            if (isDownloaded) {
+                                                viewModel.setSelectedVersion(version)
+                                            } else {
+                                                versionToImport = version
+                                            }
+                                        }
+                                ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .border(
-                                                width = if (isSelected) 2.dp else 1.dp,
-                                                color = if (isSelected) PocketColors.Primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.7f),
-                                                shape = RoundedCornerShape(10.dp)
-                                            )
-                                            .background(
-                                                if (isSelected) PocketColors.PrimaryMuted.copy(alpha = 0.48f) else MaterialTheme.colorScheme.surface,
-                                                RoundedCornerShape(10.dp)
-                                            )
-                                            .clickable { viewModel.setSelectedVersion(version) }
                                             .padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = when {
-                                            isSelected -> Icons.Default.Check
-                                            isDownloaded -> Icons.Default.Download
-                                            else -> Icons.Default.AutoAwesome
-                                        },
-                                        contentDescription = null,
-                                        tint = if (isSelected) PocketColors.PrimaryDark else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = version,
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (isSelected) PocketColors.PrimaryDark else MaterialTheme.colorScheme.onSurface
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = when {
+                                                isSelected -> Icons.Default.Check
+                                                isDownloaded -> Icons.Default.Download
+                                                else -> Icons.Default.AutoAwesome
+                                            },
+                                            contentDescription = null,
+                                            tint = itemText,
+                                            modifier = Modifier.size(20.dp)
                                         )
-                                        if (isDownloaded) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
                                             Text(
-                                                text = "Downloaded",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = PocketColors.PrimaryDark
+                                                text = version,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                color = itemText
                                             )
+                                            if (isDownloaded) {
+                                                Text(
+                                                    text = "Imported",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = itemSubtext
+                                                )
+                                            }
                                         }
-                                    }
-                                    if (isDownloaded) {
-                                        IconButton(onClick = { versionToDelete = version }) {
+                                        if (isDownloaded) {
+                                            IconButton(onClick = { versionToDelete = version }) {
                                                 Icon(
-                                                imageVector = Icons.Default.Delete,
-                                                contentDescription = "Delete downloaded version",
-                                                tint = MaterialTheme.colorScheme.error
-                                            )
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "Delete downloaded version",
+                                                    tint = if (isSelected) PocketColors.PrimaryText else MaterialTheme.colorScheme.error
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -498,7 +561,7 @@ fun ServerTypeVersionBottomSheet(
                         text = "Modpacks (Modrinth + CurseForge)",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = PocketColors.PrimaryDark,
+                        color = accentTextColor,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                     OutlinedTextField(
@@ -539,75 +602,110 @@ fun ServerTypeVersionBottomSheet(
                                     .fillMaxWidth()
                                     .heightIn(max = 280.dp)
                             ) {
-                                items(modpackResults.take(12), key = { "${it.source}:${it.id}" }) { modpack ->
+                                items(modpackResults.take(30), key = { "${it.source}:${it.id}" }) { modpack ->
                                     val isSelected = selectedModpackId == modpack.id
-                                    Row(
+                                    val isDownloaded = downloadedVersions.contains(modpack.id)
+
+                                    val itemBg = when {
+                                        isSelected -> PocketColors.primaryBg
+                                        isDownloaded -> PocketColors.TagBg
+                                        else -> if (isDarkTheme) PocketColors.SurfaceVarDark else PocketColors.SurfaceCard
+                                    }
+                                    val itemBorder = when {
+                                        isSelected -> PocketColors.primaryBorder
+                                        isDownloaded -> PocketColors.TagBorder
+                                        else -> if (isDarkTheme) PocketColors.CardBorderDark else PocketColors.CardBorder
+                                    }
+                                    val itemDepth = when {
+                                        isSelected -> PocketColors.primaryDepth
+                                        isDownloaded -> PocketColors.TagBorderBottom
+                                        else -> if (isDarkTheme) PocketColors.CardBorderBottomDark else PocketColors.CardBorderBottom
+                                    }
+                                    val itemText = when {
+                                        isSelected -> PocketColors.PrimaryText
+                                        isDownloaded -> PocketColors.TagText
+                                        else -> if (isDarkTheme) Color.White else PocketColors.TextPrimary
+                                    }
+                                    val itemSubtext = when {
+                                        isSelected -> PocketColors.PrimaryText.copy(alpha = 0.7f)
+                                        isDownloaded -> PocketColors.TagText.copy(alpha = 0.7f)
+                                        else -> if (isDarkTheme) PocketColors.TextMuted else PocketColors.TextSecondary
+                                    }
+
+                                    Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(vertical = 4.dp)
-                                            .border(
-                                                width = if (isSelected) 2.dp else 1.dp,
-                                                color = if (isSelected) PocketColors.Primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                                                shape = RoundedCornerShape(12.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(itemBg)
+                                            .raisedBorder(
+                                                color = itemBorder,
+                                                depthColor = itemDepth,
+                                                cornerRadius = 12.dp,
+                                                borderWidth = 1.5.dp,
+                                                depthWidth = 3.dp
                                             )
-                                            .background(
-                                                if (isSelected) PocketColors.PrimaryMuted.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surface,
-                                                RoundedCornerShape(12.dp)
-                                            )
-                                            .clickable(enabled = modpack.installSupported) { 
+                                            .clickable(enabled = modpack.installSupported) {
                                                 selectedModpackId = modpack.id
-                                                viewModel.setServerType(ServerType.MODPACK) 
+                                                selectedModpackPageUrl = modpack.pageUrl
+                                                viewModel.setServerType(ServerType.MODPACK)
                                             }
-                                            .padding(10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        if (!modpack.iconUrl.isNullOrBlank()) {
-                                            AsyncImage(
-                                                model = modpack.iconUrl,
-                                                contentDescription = modpack.title,
-                                                modifier = Modifier
-                                                    .size(36.dp)
-                                                    .clip(RoundedCornerShape(8.dp))
-                                            )
-                                        } else {
-                                            Icon(
-                                                imageVector = Icons.Default.AutoAwesome,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(36.dp)
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = modpack.title,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Text(
-                                                text = "${modpack.source.name.lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }} • ${modpack.downloads} downloads",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            if (!modpack.supportMessage.isNullOrBlank()) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (!modpack.iconUrl.isNullOrBlank()) {
+                                                AsyncImage(
+                                                    model = modpack.iconUrl,
+                                                    contentDescription = modpack.title,
+                                                    modifier = Modifier
+                                                        .size(36.dp)
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                )
+                                            } else {
+                                                Icon(
+                                                    imageVector = Icons.Default.AutoAwesome,
+                                                    contentDescription = null,
+                                                    tint = itemText,
+                                                    modifier = Modifier.size(36.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
                                                 Text(
-                                                    text = modpack.supportMessage,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = if (modpack.installSupported) PocketColors.PrimaryDark else MaterialTheme.colorScheme.error,
+                                                    text = modpack.title,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                                    color = itemText,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
+                                                Text(
+                                                    text = "${modpack.source.name.lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }} • ${modpack.downloads} downloads",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = itemSubtext
+                                                )
+                                                if (!modpack.supportMessage.isNullOrBlank()) {
+                                                    Text(
+                                                        text = if (isDownloaded) "Downloaded" else modpack.supportMessage,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = if (modpack.installSupported) (if (isSelected) PocketColors.PrimaryText else PocketColors.primaryBg) else MaterialTheme.colorScheme.error,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
                                             }
-                                        }
-                                        if (isSelected) {
-                                            Icon(
-                                                imageVector = Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = PocketColors.PrimaryDark,
-                                                modifier = Modifier.size(18.dp)
-                                            )
+                                            if (isSelected || isDownloaded) {
+                                                Icon(
+                                                    imageVector = if (isSelected) Icons.Default.Check else Icons.Default.Download,
+                                                    contentDescription = null,
+                                                    tint = itemText,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -616,59 +714,14 @@ fun ServerTypeVersionBottomSheet(
                     }
                 }
 
-                if (selectedType == ServerType.CUSTOM_JAR) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Custom JAR Upload",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = PocketColors.PrimaryDark,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    OutlinedCard(
-                        onClick = {
-                            filePickerLauncher.launch(arrayOf("application/java-archive", "application/zip", "application/octet-stream"))
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.outlinedCardColors(
-                            containerColor = PocketColors.PrimaryMuted.copy(alpha = 0.6f)
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(
-                            width = 2.dp,
-                            color = PocketColors.Primary
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.FolderOpen, contentDescription = "Select JAR")
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column {
-                                Text(
-                                    text = if (customJarPath != null) "JAR Selected" else "Tap to upload custom server JAR",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "Used only for Custom JAR server type.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-
                 Spacer(modifier = Modifier.height(12.dp))
 
                 val isConfirmEnabled = if (selectedType.supportsVersionSelect) {
+                    // Allow confirming any selected version — downloading happens after
                     selectedVersion != null
-                } else if (selectedType == ServerType.MODPACK) {
-                    selectedModpackId != null
                 } else {
-                    customJarPath != null
+                    // MODPACK: requires a modpack to be selected
+                    selectedModpackId != null
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -684,10 +737,7 @@ fun ServerTypeVersionBottomSheet(
                     Spacer(modifier = Modifier.width(10.dp))
                     DuoButton(
                         text = "CONFIRM",
-                        onClick = {
-                            val payloadPath = if (selectedType == ServerType.MODPACK) selectedModpackId else customJarPath
-                            onConfirm(selectedType, selectedVersion, payloadPath)
-                        },
+                        onClick = { confirmWithGuideIfNeeded() },
                         enabled = isConfirmEnabled,
                         modifier = Modifier
                             .weight(1f),
@@ -697,11 +747,49 @@ fun ServerTypeVersionBottomSheet(
         }
     }
 
+    if (showServerTypeGuide) {
+        AlertDialog(
+            onDismissRequest = { showServerTypeGuide = false },
+            title = {
+                Text(
+                    text = "Before changing server type",
+                    fontWeight = FontWeight.ExtraBold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ServerTypeGuideLine("Paper and Purpur are best for plugin servers.")
+                    ServerTypeGuideLine("Fabric is for Fabric mods and needs a matching imported server JAR.")
+                    ServerTypeGuideLine("Modpacks may need a .mrpack or Server Pack ZIP, and large packs can take a while to import.")
+                    ServerTypeGuideLine("Changing type can affect worlds, mods, plugins, and configs. Use a separate world if you are testing.")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            AppPreferencesStore.setServerTypeSetupGuideShown(context, true)
+                        }
+                        showServerTypeGuide = false
+                        confirmSelection()
+                    }
+                ) {
+                    Text("Continue")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showServerTypeGuide = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     if (versionToDelete != null) {
         AlertDialog(
             onDismissRequest = { versionToDelete = null },
             title = { Text("Delete Version", fontWeight = FontWeight.Bold) },
-            text = { Text("Are you sure you want to delete the downloaded files for $versionToDelete? This will free up storage, but you will need to re-download it to use it.") },
+            text = { Text("Are you sure you want to delete the imported files for $versionToDelete? This will free up storage, but you will need to import the server JAR again to use it.") },
             confirmButton = {
                 TextButton(onClick = {
                     versionToDelete?.let { viewModel.deleteDownloadedVersion(it) }
@@ -717,6 +805,56 @@ fun ServerTypeVersionBottomSheet(
             },
             containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(24.dp)
+        )
+    }
+
+    versionToImport?.let { version ->
+        ServerJarPickerBottomSheet(
+            serverType = selectedType,
+            version = version,
+            onDismiss = { versionToImport = null },
+            onJarSelected = { uri ->
+                val targetFile = ServerFileManager.getServerJarFile(
+                    context = context.applicationContext,
+                    gameVersion = version,
+                    serverType = selectedType
+                )
+                when (val result = ServerJarImporter.importServerJar(
+                    context = context.applicationContext,
+                    uri = uri,
+                    targetFile = targetFile,
+                    serverType = selectedType
+                )) {
+                    is ServerJarImporter.ImportResult.Success -> {
+                        viewModel.onServerJarImported(version)
+                        versionToImport = null
+                        Toast.makeText(context, "${selectedType.displayName} $version imported.", Toast.LENGTH_SHORT).show()
+                    }
+                    is ServerJarImporter.ImportResult.Error -> {
+                        Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun ServerTypeGuideLine(text: String) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = "•",
+            color = PocketColors.Primary,
+            fontWeight = FontWeight.ExtraBold
+        )
+        Text(
+            text = text,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp,
+            lineHeight = 18.sp
         )
     }
 }

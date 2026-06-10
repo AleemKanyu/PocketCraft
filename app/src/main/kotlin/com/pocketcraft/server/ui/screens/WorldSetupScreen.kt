@@ -14,7 +14,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -164,15 +168,20 @@ fun WorldSetupScreen(
     }
 
     suspend fun finishSetup() {
-        val versionId = selectedVersion.trim()
+        val selectedModpackId = selectedCustomJarPath?.trim().orEmpty()
+        val versionId = when {
+            selectedServerType == ServerType.MODPACK -> selectedModpackId
+            selectedServerType.supportsVersionSelect -> selectedVersion.trim()
+            else -> stateHolder.config.gameVersion.ifBlank { selectedVersion.trim() }
+        }
         val trimmedServerName = serverName.trim()
         val trimmedDescription = if (serverDescription.trim().isBlank()) "Hosted on Pocketcraft" else serverDescription.trim()
 
         val isNameBlank = trimmedServerName.isBlank()
-        val isVersionBlank = if (selectedServerType.supportsVersionSelect) {
-            versionId.isBlank()
-        } else {
-            selectedCustomJarPath.isNullOrBlank()
+        val isVersionBlank = when {
+            selectedServerType == ServerType.MODPACK -> selectedModpackId.isBlank()
+            selectedServerType.supportsVersionSelect -> versionId.isBlank()
+            else -> selectedCustomJarPath.isNullOrBlank()
         }
 
         showServerNameError = isNameBlank
@@ -263,10 +272,13 @@ fun WorldSetupScreen(
         )
         stateHolder.saveSettings(updatedConfig, targetWorldName = targetWorld)
 
-        if (updatedConfig.serverType.supportsVersionSelect) {
+        if (updatedConfig.serverType == ServerType.MODPACK) {
+            onComplete()
+            return
+        } else if (updatedConfig.serverType.supportsVersionSelect) {
             isDownloadingVersion = true
             versionDownloadProgress = 0
-            val downloadResult = runCatching {
+            val importCheckResult = runCatching {
                 withContext(Dispatchers.IO) {
                     val targetJar = ServerFileManager.getServerJarFile(
                         context = context,
@@ -287,9 +299,9 @@ fun WorldSetupScreen(
                 }
             }
             isDownloadingVersion = false
-            if (downloadResult.isFailure) {
-                val error = downloadResult.exceptionOrNull()
-                onMessage("Version download failed: ${error?.message ?: "unknown error"}")
+            if (importCheckResult.isFailure) {
+                val error = importCheckResult.exceptionOrNull()
+                onMessage("Server JAR import required: ${error?.message ?: "unknown error"}")
                 return
             }
         }
@@ -312,13 +324,16 @@ fun WorldSetupScreen(
             description = trimmedDescription
         )
 
+        AppPreferencesStore.setSelectedServerType(context, selectedServerType.name)
         AppPreferencesStore.setSelectedVersion(context, versionId)
         AppPreferencesStore.setWorldSeed(context, trimmedSeed)
         AppPreferencesStore.setSeedSetupShown(context, true)
         AppPreferencesStore.setInitialWorldSetupShown(context, true)
         stateHolder.markActiveWorldSetupCompleted()
 
-        if (selectedServerType.supportsVersionSelect && versionId != stateHolder.config.gameVersion) {
+        if (selectedServerType == ServerType.MODPACK ||
+            (selectedServerType.supportsVersionSelect && versionId != stateHolder.config.gameVersion)
+        ) {
             onVersionSelected(versionId)
         }
 
@@ -341,6 +356,7 @@ fun WorldSetupScreen(
                 )
             )
             .padding(16.dp)
+            .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -454,12 +470,18 @@ fun WorldSetupScreen(
                 }
 
                 val hasSelectedVersion = selectedVersion.isNotBlank()
-                OutlinedTextField(
-                    value = if (selectedServerType.supportsVersionSelect) {
+                val selectedRuntimeLabel = when {
+                    selectedServerType.supportsVersionSelect ->
                         if (hasSelectedVersion) "${selectedServerType.displayName} $selectedVersion" else ""
-                    } else {
-                        "${selectedServerType.displayName} (Custom JAR)"
-                    },
+                    selectedServerType == ServerType.MODPACK ->
+                        selectedCustomJarPath
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { "${selectedServerType.displayName} $it" }
+                            ?: ""
+                    else -> "${selectedServerType.displayName} (Custom JAR)"
+                }
+                OutlinedTextField(
+                    value = selectedRuntimeLabel,
                     onValueChange = {},
                     singleLine = true,
                     readOnly = true,
@@ -655,6 +677,8 @@ fun WorldSetupScreen(
                 )
             }
         }
+
+        Spacer(modifier = Modifier.navigationBarsPadding().height(80.dp))
     }
 
     if (showVersionDialog) {
@@ -682,15 +706,15 @@ fun WorldSetupScreen(
                     scope.launch {
                         selectedServerType = type
                         selectedCustomJarPath = customJar
-                        if (type.supportsVersionSelect) {
-                            selectedVersion = version ?: selectedVersion
-                        } else {
-                            selectedVersion = stateHolder.config.gameVersion.ifBlank { selectedVersion }
+                        selectedVersion = when {
+                            type == ServerType.MODPACK -> customJar.orEmpty()
+                            type.supportsVersionSelect -> version ?: selectedVersion
+                            else -> stateHolder.config.gameVersion.ifBlank { selectedVersion }
                         }
-                        val valid = if (type.supportsVersionSelect) {
-                            (version ?: selectedVersion).isNotBlank()
-                        } else {
-                            !customJar.isNullOrBlank()
+                        val valid = when {
+                            type == ServerType.MODPACK -> !customJar.isNullOrBlank()
+                            type.supportsVersionSelect -> (version ?: selectedVersion).isNotBlank()
+                            else -> !customJar.isNullOrBlank()
                         }
                         if (valid) {
                             showVersionError = false

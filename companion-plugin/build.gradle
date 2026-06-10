@@ -9,7 +9,12 @@ repositories {
 
 dependencies {
     compileOnly 'io.papermc.paper:paper-api:1.20.4-R0.1-SNAPSHOT'
+    compileOnly 'io.netty:netty-transport:4.1.118.Final'
 }
 
 sourceCompatibility = '17'
 targetCompatibility = '17'
+
+jar {
+    archiveBaseName = 'PocketCraftCompanion'
+}

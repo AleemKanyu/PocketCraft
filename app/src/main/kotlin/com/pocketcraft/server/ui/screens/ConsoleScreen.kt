@@ -13,13 +13,18 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,6 +69,7 @@ import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -95,19 +101,27 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import coil.compose.AsyncImage
+import com.pocketcraft.server.R
+import com.pocketcraft.server.data.model.ServerType
 import com.pocketcraft.server.data.model.PlayerInfo
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
@@ -125,7 +139,12 @@ import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.service.VersionCatalog
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.button3d
+import com.pocketcraft.server.ui.theme.card3d
+import com.pocketcraft.server.ui.theme.pill3d
 import com.pocketcraft.server.ui.theme.pocketIsDarkTheme
+import com.pocketcraft.server.ui.theme.ButtonFont
+import com.pocketcraft.server.ui.theme.DMMono
 import com.pocketcraft.server.ui.theme.Monocraft
 import com.pocketcraft.server.ui.theme.pocketCardShadowColor
 import com.pocketcraft.server.ui.theme.pocketHighContrastBorderColor
@@ -151,9 +170,11 @@ fun ConsoleScreen(
     stateHolder: ServerStateHolder,
     onViewAllPlayers: () -> Unit,
     onChangeVersion: () -> Unit = {},
+    onInstallCurrentVersion: () -> Unit = {},
     onPlayerSelected: (PlayerInfo) -> Unit = {},
     onOpenServerDetails: () -> Unit = {},
     onAddWorld: () -> Unit = {},
+    adContentAfterVersion: (@Composable () -> Unit)? = null,
     topContentBelowServerCard: (@Composable () -> Unit)? = null
 ) {
     val stateTrigger by stateHolder.stateUpdateTrigger.collectAsStateWithLifecycle()
@@ -173,13 +194,33 @@ fun ConsoleScreen(
     var seedSetupShown by remember { mutableStateOf(false) }
     var firstBootWarningSessionDismissed by remember { mutableStateOf(false) }
     var showDownloadRequiredDialog by remember { mutableStateOf(false) }
-    val isVersionDownloaded =
-        ServerFileManager.isServerJarReady(context, stateHolder.config.gameVersion, stateHolder.config.serverType)
+    val configuredRuntime = stateHolder.config.customJarPath
+        ?.takeIf { it.isNotBlank() }
+        ?: stateHolder.config.gameVersion
+    val effectiveServerType = if (
+        stateHolder.config.serverType == ServerType.MODPACK ||
+        (stateHolder.config.serverType.supportsVersionSelect && isLikelyModpackRuntimeId(configuredRuntime))
+    ) {
+        ServerType.MODPACK
+    } else {
+        stateHolder.config.serverType
+    }
+    val displayedRuntimeVersion = if (effectiveServerType == ServerType.MODPACK) {
+        configuredRuntime
+    } else {
+        stateHolder.config.gameVersion
+    }
+    val isVersionDownloaded = if (effectiveServerType == ServerType.MODPACK) {
+        ServerFileManager.isModpackReady(context, stateHolder.activeWorld, configuredRuntime)
+    } else {
+        ServerFileManager.isServerJarReady(context, stateHolder.config.gameVersion, effectiveServerType)
+    }
     val animatedStartupProgress by animateFloatAsState(
         targetValue = (stateHolder.startupProgressPercent / 100f).coerceIn(0f, 1f),
         animationSpec = tween(durationMillis = 700),
         label = "startup_progress"
     )
+    val uiState = stateHolder.serverUiState
     val cardShadowColor = pocketCardShadowColor()
     val firstServerStartWarningDismissed by AppPreferencesStore.isFirstServerStartWarningDismissedFlow(context).collectAsState(initial = false)
 
@@ -285,7 +326,7 @@ fun ConsoleScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
@@ -323,20 +364,17 @@ fun ConsoleScreen(
                     val bodyColor = if (isDark) Color(0xFFFFE7D6).copy(alpha = 0.88f) else Color(0xFF92400E)
                     val accent = PocketColors.ConsoleWarn
                     
-                    Surface(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .shadow(
-                                elevation = 8.dp,
-                                shape = RoundedCornerShape(16.dp),
-                                ambientColor = cardShadowColor,
-                                spotColor = cardShadowColor,
-                                clip = false
-                            ),
-                        shape = RoundedCornerShape(16.dp),
-                        color = bannerColor,
-                        border = androidx.compose.foundation.BorderStroke(1.5.dp, bannerBorder),
-                        shadowElevation = 4.dp
+                            .card3d(
+                                elevation = 6.dp,
+                                cornerRadius = 16.dp,
+                                borderColor = bannerBorder,
+                                depthColor = bannerBorder.copy(alpha = (bannerBorder.alpha * 1.5f).coerceAtMost(1f))
+                            )
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(bannerColor)
                     ) {
                         Box {
                             Row(
@@ -397,20 +435,18 @@ fun ConsoleScreen(
         }
         if (stateHolder.status == ServerStatus.ONLINE && !stateHolder.config.whiteList && !stateHolder.openServerRiskAcknowledged) {
             item {
-                Surface(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .shadow(
-                            elevation = 8.dp,
-                            shape = RoundedCornerShape(16.dp),
-                            ambientColor = cardShadowColor,
-                            spotColor = cardShadowColor,
-                            clip = false
-                        ),
-                    shape = RoundedCornerShape(16.dp),
-                    color = pocketWarningSurfaceColor(),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, pocketWarningBorderColor()),
-                    shadowElevation = 4.dp
+                        .card3d(
+                            elevation = 6.dp,
+                            cornerRadius = 16.dp,
+                            borderColor = pocketWarningBorderColor(),
+                            depthColor = pocketWarningBorderColor().copy(alpha = (pocketWarningBorderColor().alpha * 1.5f).coerceAtMost(1f)),
+                            borderWidth = 1.dp
+                        )
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(pocketWarningSurfaceColor())
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -462,61 +498,23 @@ fun ConsoleScreen(
         }
 
         item {
-            if (stateHolder.status == ServerStatus.ONLINE || stateHolder.isRestarting || stateHolder.status == ServerStatus.STARTING) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    DuoButton(
-                        text = run { val s = LocalAppStrings.current; if (stateHolder.isStopping && !stateHolder.isRestarting) s.stopping else s.stopServer },
-                        onClick = { stateHolder.stopServer() },
-                        enabled = !stateHolder.isStopping,
-                        variant = DuoButtonVariant.Danger,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    if (stateHolder.status == ServerStatus.STARTING) {
-                        DuoButton(
-                            text = LocalAppStrings.current.starting,
-                            onClick = {},
-                            enabled = false,
-                            isLoading = true,
-                            variant = DuoButtonVariant.Primary,
-                            modifier = Modifier.weight(1f)
-                        )
-                    } else {
-                        DuoButton(
-                            text = run { val s = LocalAppStrings.current; if (stateHolder.isRestarting) s.restarting else s.restartServer },
-                            onClick = {
-                                try {
-                                    if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
-                                        Toast.makeText(context, "No internet connection. Please check your network.", Toast.LENGTH_LONG).show()
-                                        return@DuoButton
-                                    }
-                                    stateHolder.restartServer()
-                                } catch (e: Exception) {
-                                    android.util.Log.e("ConsoleScreen", "Restart error", e)
-                                    Toast.makeText(context, "Error during restart: ${e.message}", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            enabled = !stateHolder.isRestarting,
-                            isLoading = stateHolder.isRestarting,
-                            variant = DuoButtonVariant.Primary,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            } else {
-                    DuoButton(
-                        text = run { val s = LocalAppStrings.current; if (stateHolder.isRestartingCycle) s.restarting else if (stateHolder.status == ServerStatus.STARTING) s.starting else s.startServer },
+            when (uiState) {
+                ServerUiState.IDLE -> {
+                    PremiumHomeButton(
+                        text = run {
+                            val s = LocalAppStrings.current
+                            if (stateHolder.isRestartingCycle) s.restarting else s.startServer
+                        },
                         onClick = {
                             try {
                                 if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
                                     Toast.makeText(context, "No internet connection. Please check your network.", Toast.LENGTH_LONG).show()
-                                    return@DuoButton
+                                    return@PremiumHomeButton
                                 }
                                 if (isVersionDownloaded) {
                                     stateHolder.startServer()
+                                } else if (effectiveServerType == ServerType.MODPACK) {
+                                    onInstallCurrentVersion()
                                 } else {
                                     showDownloadRequiredDialog = true
                                 }
@@ -525,54 +523,83 @@ fun ConsoleScreen(
                                 Toast.makeText(context, "Error starting server: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
                         },
-                        enabled = stateHolder.status != ServerStatus.STARTING && !stateHolder.isRestarting && !stateHolder.isStopping,
-                        isLoading = stateHolder.status == ServerStatus.STARTING || stateHolder.isRestarting,
-                        modifier = Modifier.fillMaxWidth()
+                        enabled = !stateHolder.isRestarting && !stateHolder.isStopping,
+                        icon = if (stateHolder.isRestarting) Icons.Default.Refresh else Icons.Default.PlayArrow,
+                        modifier = Modifier.fillMaxWidth(),
+                        style = PremiumHomeButtonStyle.StartServer
                     )
                 }
-        }
-        // Startup Progress Bar (shown only when starting)
-        if (stateHolder.isStarting) {
-            item {
-                GameCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = "Starting Server",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
+                ServerUiState.STARTING -> {
+                    StartupProgressCard(
+                        progress = animatedStartupProgress,
+                        progressPercent = stateHolder.startupProgressPercent,
+                        status = stateHolder.startupStatusMessage.ifBlank { "Initializing server..." },
+                        isStopping = stateHolder.isStopping,
+                        onStop = {
+                            stateHolder.stopServer()
+                        }
+                    )
+                }
+                ServerUiState.RUNNING -> {
+                    if (stateHolder.isStopping && !stateHolder.isRestarting) {
+                        PremiumHomeButton(
+                            text = LocalAppStrings.current.stopping,
+                            icon = Icons.Default.Stop,
+                            onClick = {},
+                            enabled = false,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = PremiumHomeButtonStyle.DangerGhost
                         )
-                        LinearProgressIndicator(
-                            progress = { animatedStartupProgress },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
+                    } else if (stateHolder.isRestarting) {
+                        PremiumHomeButton(
+                            text = LocalAppStrings.current.restarting,
+                            icon = Icons.Default.Refresh,
+                            onClick = {},
+                            enabled = false,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = PremiumHomeButtonStyle.Primary
                         )
+                    } else {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = stateHolder.startupStatusMessage.ifBlank { "Initializing..." },
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            PremiumHomeButton(
+                                text = "Stop",
+                                icon = Icons.Default.Stop,
+                                onClick = {
+                                    stateHolder.stopServer()
+                                },
+                                enabled = true,
+                                modifier = Modifier.weight(0.34f),
+                                style = PremiumHomeButtonStyle.DangerGhost
                             )
-                            Text(
-                                text = "${stateHolder.startupProgressPercent}%",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = PocketColors.Primary
+
+                            PremiumHomeButton(
+                                text = "Restart",
+                                icon = Icons.Default.Refresh,
+                                onClick = {
+                                    try {
+                                        if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
+                                            Toast.makeText(context, "No internet connection. Please check your network.", Toast.LENGTH_LONG).show()
+                                            return@PremiumHomeButton
+                                        }
+                                        stateHolder.restartServer()
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("ConsoleScreen", "Restart error", e)
+                                        Toast.makeText(context, "Error during restart: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                enabled = true,
+                                modifier = Modifier.weight(0.66f),
+                                style = PremiumHomeButtonStyle.Primary
                             )
                         }
                     }
                 }
             }
         }
-        if (stateHolder.onlinePlayers.isNotEmpty()) {
+        if (uiState == ServerUiState.RUNNING && stateHolder.onlinePlayers.isNotEmpty()) {
             item {
                 Row(
                     modifier = Modifier
@@ -585,7 +612,7 @@ fun ConsoleScreen(
                         text = "${LocalAppStrings.current.players} (${stateHolder.onlinePlayers.size}/${stateHolder.config.maxPlayers})",
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 15.sp,
-                        letterSpacing = 0.5.sp
+                        letterSpacing = 0.sp
                     )
                     TextButton(onClick = onViewAllPlayers) {
                         Text(
@@ -607,13 +634,40 @@ fun ConsoleScreen(
         }
         item {
             VersionUpgradeCard(
-                serverTypeName = stateHolder.config.serverType.displayName,
-                currentVersion = stateHolder.config.gameVersion,
+                serverTypeName = effectiveServerType.displayName,
+                currentVersion = displayedRuntimeVersion,
                 availableVersions = availableVersions,
                 onUpgrade = { onChangeVersion() },
+                onInstallCurrent = onInstallCurrentVersion,
                 serverIsRunning = stateHolder.isNavigationLocked,
                 isVersionDownloaded = isVersionDownloaded
             )
+        }
+        adContentAfterVersion?.let { adContent ->
+            item(key = "home_banner_ad") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .card3d(elevation = 6.dp, cornerRadius = 20.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(if (pocketIsDarkTheme()) PocketColors.SurfaceCardDark else PocketColors.SurfaceCard)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "SPONSORED",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 0.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                        adContent()
+                    }
+                }
+            }
         }
         // F3G tip removed UI block
         item {
@@ -920,6 +974,116 @@ fun ConsoleScreen(
 }
 
 @Composable
+private fun StartupProgressCard(
+    progress: Float,
+    progressPercent: Int,
+    status: String,
+    isStopping: Boolean,
+    onStop: () -> Unit
+) {
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val resolvedBgColor = if (isDark) PocketColors.SurfaceCardDark else PocketColors.SurfaceCard
+    val sideColor = if (isDark) PocketColors.CardBorderDark else PocketColors.CardBorder
+    val bottomColor = if (isDark) PocketColors.CardBorderBottomDark else PocketColors.CardBorderBottom
+    val shape = RoundedCornerShape(18.dp)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .card3d(
+                elevation = 6.dp,
+                cornerRadius = 18.dp,
+                borderColor = sideColor,
+                depthColor = bottomColor
+            )
+            .clip(shape)
+            .background(resolvedBgColor)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(PocketColors.Primary.copy(alpha = 0.14f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = PocketColors.Primary,
+                        strokeWidth = 3.dp
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (isStopping) "Stopping startup..." else "Starting your server",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 17.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (isStopping) "Safely closing server processes" else "You can stop this at any time",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = PocketColors.Primary.copy(alpha = 0.14f)
+                ) {
+                    Text(
+                        text = "$progressPercent%",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        color = PocketColors.Primary,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(14.dp)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progress.coerceIn(0.04f, 1f))
+                        .height(14.dp)
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(PocketColors.Primary)
+                )
+            }
+
+            Text(
+                text = status,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            PremiumHomeButton(
+                text = if (isStopping) "STOPPING..." else "STOP STARTUP",
+                icon = Icons.Default.Stop,
+                onClick = onStop,
+                enabled = !isStopping,
+                modifier = Modifier.fillMaxWidth(),
+                style = PremiumHomeButtonStyle.DangerGhost
+            )
+        }
+    }
+}
+
+@Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun ServerIdentityCard(
     stateHolder: ServerStateHolder,
@@ -936,6 +1100,9 @@ private fun ServerIdentityCard(
         stateHolder.status == ServerStatus.STARTING ||
         stateHolder.status == ServerStatus.RESTARTING
     val canChangeWorld = stateHolder.status == ServerStatus.OFFLINE
+    val isDarkTheme = pocketIsDarkTheme()
+    val accentGreen = Color(0xFF3D8B45)
+    val accentText = if (isDarkTheme) PocketColors.PrimaryLight else PocketColors.PrimaryDark
     var showWorldSheet by remember { mutableStateOf(false) }
     var showDeleteWorldDialog by remember { mutableStateOf<WorldEntry?>(null) }
     val activeWorld = stateHolder.worlds.firstOrNull { it.isActive } ?: stateHolder.worlds.firstOrNull()
@@ -948,37 +1115,30 @@ private fun ServerIdentityCard(
                     .fillMaxWidth()
                     .clickable { showWorldSheet = true }
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .background(PocketColors.PrimaryMuted, RoundedCornerShape(999.dp))
-                                .border(2.dp, PocketColors.Primary.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = LocalAppStrings.current.yourServer,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = PocketColors.PrimaryDark,
-                                letterSpacing = 1.sp
-                            )
-                        }
-                    }
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = LocalAppStrings.current.yourServer,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isDarkTheme) PocketColors.PrimaryLight.copy(alpha = 0.78f) else PocketColors.TextSection,
+                        letterSpacing = 0.sp
+                    )
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(76.dp)
-                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(22.dp))
-                                .background(PocketColors.PrimaryMuted)
-                                .border(2.dp, PocketColors.Primary.copy(alpha = 0.26f), androidx.compose.foundation.shape.RoundedCornerShape(22.dp)),
+                                .size(44.dp)
+                                .card3d(
+                                    elevation = 4.dp,
+                                    cornerRadius = 12.dp,
+                                    borderColor = if (isDarkTheme) PocketColors.CardBorderDark else PocketColors.TagBorder,
+                                    depthColor = if (isDarkTheme) PocketColors.CardBorderBottomDark else PocketColors.TagBorderBottom
+                                )
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (isDarkTheme) PocketColors.SurfaceVarDark else PocketColors.TagBg),
                             contentAlignment = Alignment.Center
                         ) {
                             if (stateHolder.serverPhotoUrl.isNotBlank()) {
@@ -996,12 +1156,10 @@ private fun ServerIdentityCard(
                                     contentScale = ContentScale.Crop
                                 )
                             } else {
-                                androidx.compose.foundation.Image(
-                                    painter = androidx.compose.ui.res.painterResource(com.pocketcraft.server.R.drawable.ic_launcher_foreground_square),
-                                    contentDescription = "Server icon",
-                                    modifier = Modifier
-                                        .size(54.dp)
-                                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                                Image(
+                                    painter = painterResource(id = R.drawable.minecraft_api_diamond_pickaxe_hd),
+                                    contentDescription = "Server logo",
+                                    modifier = Modifier.size(28.dp)
                                 )
                             }
                         }
@@ -1010,71 +1168,75 @@ private fun ServerIdentityCard(
                             Text(
                                 text = stateHolder.serverName.ifBlank { stateHolder.activeWorld.ifBlank { "world" } },
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 22.sp,
-                                lineHeight = 24.sp
+                                fontSize = 18.sp,
+                                lineHeight = 20.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                            if (stateHolder.serverDescription.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(3.dp))
-                                Text(
-                                    text = stateHolder.serverDescription,
-                                    fontSize = 13.sp,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = stateHolder.serverDescription.ifBlank { "Hosted on PocketCraft" },
+                                fontSize = 12.sp,
+                                lineHeight = 14.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(5.dp))
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
-                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(999.dp))
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    .pill3d(
+                                        elevation = 4.dp,
+                                        borderColor = if (isDarkTheme) PocketColors.CardBorderDark else PocketColors.TagBorder,
+                                        depthColor = if (isDarkTheme) PocketColors.CardBorderBottomDark else PocketColors.TagBorderBottom,
+                                        borderWidth = 1.5.dp,
+                                        depthWidth = 2.dp
+                                    )
+                                    .clip(RoundedCornerShape(50.dp))
+                                    .background(if (isDarkTheme) PocketColors.SurfaceVarDark else PocketColors.TagBg)
+                                    .padding(horizontal = 9.dp, vertical = 4.dp)
                             ) {
+                                val tagTextColor = if (isDarkTheme) PocketColors.TextDark.copy(alpha = 0.86f) else PocketColors.TagText
                                 Icon(
                                     imageVector = Icons.Filled.Dns,
                                     contentDescription = null,
-                                    modifier = Modifier.size(14.dp),
-                                    tint = PocketColors.PrimaryDark
+                                    modifier = Modifier.size(12.dp),
+                                    tint = tagTextColor
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = stateHolder.activeWorld.ifBlank { "world" },
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp,
+                                    color = tagTextColor,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
                         }
                     }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                    HorizontalDivider(
                         modifier = Modifier
-                            .background(PocketColors.Primary.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
-                            .padding(horizontal = 10.dp, vertical = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ChevronRight,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = PocketColors.PrimaryDark
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                                Text(
-                                    text = if (canChangeWorld) LocalAppStrings.current.tapToSwap else LocalAppStrings.current.stopToSwitch,
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                            .fillMaxWidth()
+                            .padding(top = 2.dp),
+                        color = if (isDarkTheme) PocketColors.CardBorderDark.copy(alpha = 0.5f) else PocketColors.CardBorder.copy(alpha = 0.55f)
+                    )
+                    Text(
+                        text = if (canChangeWorld) LocalAppStrings.current.tapToSwap else LocalAppStrings.current.stopToSwitch,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
 
-            StatusBadge(
-                status = stateHolder.status,
-                bedrockBridgeEnabled = stateHolder.bedrockBridgeEnabled,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (stateHolder.serverUiState == ServerUiState.RUNNING) {
+                StatusBadge(
+                    status = stateHolder.status,
+                    bedrockBridgeEnabled = stateHolder.bedrockBridgeEnabled,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
 
         if (showWorldSheet) {
@@ -1147,6 +1309,10 @@ private fun ServerIdentityCard(
                                         scope.launch {
                                             val msg = stateHolder.setActiveWorld(world.name)
                                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                            if (msg.startsWith("Active world switched")) {
+                                                showWorldSheet = false
+                                                showDeleteWorldDialog = null
+                                            }
                                         }
                                     },
                                     onRequestDelete = { showDeleteWorldDialog = world }
@@ -1228,30 +1394,26 @@ private fun ServerIdentityCard(
         val publicAddress = stateHolder.publicAddress?.takeIf { it.isNotBlank() }
         val internetRelayAddress = publicAddress ?: "No relay address"
 
-        val localWifiAddress = "${stateHolder.localIp}:${stateHolder.config.port}"
+        val localWifiAddress = stateHolder.localIp
+            .takeIf(::isShareableLanIp)
+            ?.let { "$it:${stateHolder.config.port}" }
         val relayReady = !publicAddress.isNullOrBlank()
-        val canShareAddresses = stateHolder.isServerFullyReady && relayReady
+        val canShareAddresses = stateHolder.serverUiState == ServerUiState.RUNNING &&
+            (relayReady || !localWifiAddress.isNullOrBlank())
         val joinCardShadowColor = pocketCardShadowColor()
-        val joinCardBorderColor = pocketHighContrastBorderColor()
+        val joinCardBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
 
         AnimatedVisibility(
             visible = canShareAddresses,
             enter = fadeIn() + slideInVertically { it / 3 },
             exit = fadeOut() + slideOutVertically { it / 3 }
         ) {
-            Surface(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(
-                        elevation = 14.dp,
-                        shape = RoundedCornerShape(14.dp),
-                        ambientColor = joinCardShadowColor,
-                        spotColor = joinCardShadowColor,
-                        clip = false
-                    ),
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.5.dp, joinCardBorderColor)
+                    .card3d(elevation = 6.dp, cornerRadius = 18.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(if (pocketIsDarkTheme()) PocketColors.SurfaceCardDark else PocketColors.SurfaceCard)
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -1267,7 +1429,7 @@ private fun ServerIdentityCard(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = PocketColors.Primary,
-                            letterSpacing = 0.8.sp
+                            letterSpacing = 0.sp
                         )
 
                         Surface(
@@ -1296,37 +1458,28 @@ private fun ServerIdentityCard(
                     }
 
                     AddressValueRow(
-                        label = "Java / Internet relay",
+                        label = "Internet relay",
                         address = internetRelayAddress,
                         emphasized = true
                     )
 
                     AddressValueRow(
-                        label = "Wi-Fi",
-                        address = localWifiAddress,
+                        label = "Wi-Fi (Java)",
+                        address = localWifiAddress ?: "Wi-Fi address unavailable",
                         emphasized = false
                     )
 
-                    OutlinedButton(
+                    PremiumHomeButton(
+                        text = "Bedrock Join Guide",
+                        icon = Icons.Filled.Info,
                         onClick = onOpenBedrockHelp,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(999.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
-                        ),
-                        border = BorderStroke(1.5.dp, joinCardBorderColor)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Info,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = PocketColors.Primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Bedrock Join Guide", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PocketColors.Primary)
-                    }
+                        style = PremiumHomeButtonStyle.Secondary
+                    )
 
-                    OutlinedButton(
+                    PremiumHomeButton(
+                        text = "Share Join Addresses",
+                        icon = Icons.Default.Share,
                         onClick = {
                             shareServerAddresses(
                                 context = context,
@@ -1336,21 +1489,8 @@ private fun ServerIdentityCard(
                         },
                         enabled = canShareAddresses,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(999.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
-                        ),
-                        border = BorderStroke(1.5.dp, joinCardBorderColor)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = PocketColors.Primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Share Join Addresses", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PocketColors.Primary)
-                    }
+                        style = PremiumHomeButtonStyle.Secondary
+                    )
                 }
             }
         }
@@ -1389,9 +1529,10 @@ private fun SeedStepRow(step: String, text: String) {
 @Composable
 private fun JoinStepCard(step: String, title: String, body: String) {
     Surface(
+        modifier = Modifier.card3d(elevation = 4.dp, cornerRadius = 18.dp),
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        border = BorderStroke(1.dp, pocketSheetBorderColor())
+        shadowElevation = 0.dp
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -1585,7 +1726,7 @@ private fun OnlinePlayerCard(
 ) {
     PlayerCard(
         username = player.name,
-        subtitle = player.pingMs.takeIf { it > 0 }?.let { "Ping: ${it}ms" } ?: "Ping unavailable",
+        subtitle = player.pingText(),
         modifier = Modifier.clickable { onOpenDetails() },
         actions = listOf(
             PlayerCardAction(label = "Make OP", onClick = { stateHolder.opPlayer(player.name) }),
@@ -1617,15 +1758,160 @@ private fun AddressValueRow(
         )
         Text(
             text = address,
-            fontSize = if (emphasized) 16.sp else 14.sp,
-            fontWeight = if (emphasized) FontWeight.ExtraBold else FontWeight.Bold,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Ellipsis,
-            fontFamily = FontFamily.Monospace
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = (-0.2).sp
         )
     }
+}
+
+@Composable
+private fun PremiumHomeButton(
+    text: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    style: PremiumHomeButtonStyle = PremiumHomeButtonStyle.Secondary,
+    cornerRadius: Dp = 15.dp
+) {
+    // ── Colors — matched to HTML reference design ────────────────────────
+    val bgColor: Color
+    val borderColor: Color
+    val bottomBorderColor: Color
+    val contentColor: Color
+
+    val isDark = pocketIsDarkTheme()
+
+    if (!enabled) {
+        bgColor = if (isDark) PocketColors.SurfaceVarDark.copy(alpha = 0.72f) else PocketColors.InactiveBg
+        borderColor = if (isDark) PocketColors.CardBorderDark.copy(alpha = 0.52f) else PocketColors.InactiveBorder
+        bottomBorderColor = if (isDark) PocketColors.CardBorderBottomDark.copy(alpha = 0.62f) else PocketColors.InactiveBorderBottom
+        contentColor = if (isDark) PocketColors.TextDark.copy(alpha = 0.48f) else PocketColors.TextMuted
+    } else {
+        when (style) {
+            // HTML: bg #4a8a4a, border #2a6a2a, depth #1a5a1a
+            PremiumHomeButtonStyle.StartServer -> {
+                bgColor = PocketColors.Primary          // #4a8a4a
+                borderColor = PocketColors.PrimaryBorder    // #2a6a2a
+                bottomBorderColor = PocketColors.PrimaryBorderBottom  // #1a5a1a
+                contentColor = PocketColors.PrimaryText     // #e8f8e0
+            }
+            PremiumHomeButtonStyle.Primary -> {
+                bgColor = PocketColors.Primary
+                borderColor = PocketColors.PrimaryBorder
+                bottomBorderColor = PocketColors.PrimaryBorderBottom
+                contentColor = PocketColors.PrimaryText
+            }
+            PremiumHomeButtonStyle.Secondary -> {
+                bgColor = if (isDark) PocketColors.SurfaceVarDark else PocketColors.InactiveBg           // #ddeece
+                borderColor = if (isDark) PocketColors.CardBorderDark else PocketColors.InactiveBorder    // #b0cc98
+                bottomBorderColor = if (isDark) PocketColors.CardBorderBottomDark else PocketColors.InactiveBorderBottom // #90b878
+                contentColor = if (isDark) PocketColors.TextDark.copy(alpha = 0.76f) else PocketColors.InactiveText     // #5a7a5a
+            }
+            PremiumHomeButtonStyle.DangerGhost -> {
+                bgColor = if (isDark) Color(0xFF331A1F) else PocketColors.DangerBg.copy(alpha = 0.10f)
+                borderColor = if (isDark) PocketColors.Offline.copy(alpha = 0.44f) else PocketColors.DangerBorder.copy(alpha = 0.35f)
+                bottomBorderColor = if (isDark) Color(0xFF682431) else PocketColors.DangerBorderBottom.copy(alpha = 0.50f)
+                contentColor = if (isDark) Color(0xFFFF8A9A) else PocketColors.Offline
+            }
+        }
+    }
+
+    // ── Press state ──────────────────────────────────────────────────────────
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val isDangerGhost = style == PremiumHomeButtonStyle.DangerGhost
+    val restingBorder = when (style) {
+        PremiumHomeButtonStyle.DangerGhost -> 2.dp
+        PremiumHomeButtonStyle.StartServer -> 3.dp
+        else -> 3.dp
+    }
+    val targetBorder = if (pressed && enabled) 1.dp else restingBorder
+    val targetOffset = if (pressed && enabled && !isDangerGhost) (restingBorder - 1.5.dp) else 0.dp
+
+    val offsetY by animateDpAsState(
+        targetValue = targetOffset,  // 0.dp for DangerGhost (targetOffset guards with !isDangerGhost)
+        animationSpec = tween(80),
+        label = "premium_btn_offset"
+    )
+    val bottomBorderDp by animateDpAsState(
+        targetValue = targetBorder,
+        animationSpec = tween(80),
+        label = "premium_btn_bottom_border"
+    )
+
+    val shape = RoundedCornerShape(cornerRadius)
+
+    val widthModifier = Modifier.fillMaxWidth()
+
+    Box(
+        modifier = modifier
+            .padding(bottom = if (isDangerGhost) 2.dp else 4.dp) // space for bottom border overhang
+            .offset(y = offsetY)
+    ) {
+        Box(
+            modifier = Modifier
+                .then(widthModifier)
+                .height(52.dp)
+                // Raised border drawn BEFORE clip — bottom edge stays visible
+                .card3d(
+                    elevation = if (isDangerGhost) 4.dp else 8.dp,
+                    cornerRadius = cornerRadius,
+                    borderColor = borderColor,
+                    depthColor = bottomBorderColor,
+                    borderWidth = if (isDangerGhost) 1.dp else 1.5.dp,
+                    depthWidth = bottomBorderDp
+                )
+                .clip(shape)
+                .background(bgColor)
+                .clickable(
+                    enabled           = enabled,
+                    interactionSource = interactionSource,
+                    indication        = null,
+                    onClick           = onClick
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(if (style == PremiumHomeButtonStyle.StartServer || style == PremiumHomeButtonStyle.Primary) 17.dp else 16.dp),
+                    tint = contentColor
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = text,
+                    color = contentColor,
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontFamily    = ButtonFont,
+                        fontWeight    = if (isDangerGhost) FontWeight.Normal else FontWeight.Normal,
+                        fontSize      = if (isDangerGhost) 13.sp else 14.5.sp,
+                        letterSpacing = 0.sp
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+private enum class PremiumHomeButtonStyle {
+    StartServer,
+    Primary,
+    Secondary,
+    DangerGhost
 }
 
 private fun shareServerAddresses(
@@ -1649,6 +1935,16 @@ private fun shareServerAddresses(
     context.startActivity(Intent.createChooser(shareIntent, "Share server address"))
 }
 
+private fun isShareableLanIp(ip: String): Boolean {
+    val trimmed = ip.trim()
+    return trimmed.isNotBlank() &&
+        trimmed != "0.0.0.0" &&
+        trimmed != "127.0.0.1" &&
+        !trimmed.startsWith("127.") &&
+        !trimmed.startsWith("169.254.") &&
+        !trimmed.contains(":")
+}
+
 @Composable
 private fun ConsoleCard(
     stateHolder: ServerStateHolder,
@@ -1659,7 +1955,20 @@ private fun ConsoleCard(
 ) {
     val context = LocalContext.current
 
-    GameCard(modifier = Modifier.fillMaxWidth()) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            // Dark-card shadow (agent spec: blur=14, offsetY=5, alpha=0.18)
+            .card3d(
+                elevation = 6.dp,
+                cornerRadius = 16.dp,
+                borderColor = PocketColors.ConsoleBorder,
+                depthColor = PocketColors.ConsoleBorderBottom
+            )
+            .clip(RoundedCornerShape(16.dp))
+            .background(PocketColors.ConsoleBg)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1668,9 +1977,10 @@ private fun ConsoleCard(
             Text(
                 text = LocalAppStrings.current.console,
                 fontWeight = FontWeight.ExtraBold,
+                fontFamily = DMMono,
                 fontSize = 12.sp,
-                letterSpacing = 2.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                letterSpacing = 0.sp,
+                color = PocketColors.ConsoleDim
             )
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 IconButton(
@@ -1686,14 +1996,15 @@ private fun ConsoleCard(
                         imageVector = Icons.Default.Share,
                         contentDescription = "Copy logs",
                         modifier = Modifier.size(18.dp),
-                        tint = PocketColors.PrimaryDark
+                        tint = PocketColors.ConsoleBright.copy(alpha = 0.85f)
                     )
                 }
                 TextButton(onClick = stateHolder::clearLogs) {
                     Text(
                         text = LocalAppStrings.current.clearLog,
                         fontSize = 12.sp,
-                        color = PocketColors.PrimaryDark
+                        fontFamily = ButtonFont,
+                        color = PocketColors.ConsoleBright.copy(alpha = 0.85f)
                     )
                 }
             }
@@ -1702,18 +2013,18 @@ private fun ConsoleCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp)
+                .height(156.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(PocketColors.ConsoleBg)
+                .background(PocketColors.ConsoleBg.copy(alpha = 0.92f))
                 .padding(10.dp)
         ) {
             if (stateHolder.logs.isEmpty()) {
                 Text(
-                    text = "[PocketCraft] Console output will appear here.",
-                    fontFamily = FontFamily.Monospace,
+                    text = "[PocketCraft] Starting server...\n[PocketCraft] Console output will appear here",
+                    fontFamily = DMMono,
                     fontSize = 11.sp,
                     lineHeight = 17.sp,
-                    color = PocketColors.ConsoleGreen
+                    color = PocketColors.ConsoleBright
                 )
             } else {
                 LazyColumn(
@@ -1726,10 +2037,10 @@ private fun ConsoleCard(
                     ) { _, line ->
                         Text(
                             text = line,
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = DMMono,
                             fontSize = 11.sp,
                             lineHeight = 17.sp,
-                            color = PocketColors.ConsoleGreen
+                            color = PocketColors.ConsoleBright
                         )
                     }
                 }
@@ -1749,7 +2060,7 @@ private fun ConsoleCard(
                 shape = duoTextFieldShape(),
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    fontFamily = FontFamily.Monospace
+                    fontFamily = DMMono
                 ),
                 colors = duoOutlinedTextFieldColors()
             )
@@ -1766,6 +2077,7 @@ private fun ConsoleCard(
                     contentDescription = "Send command"
                 )
             }
+        }
         }
     }
 }
@@ -1797,16 +2109,13 @@ private fun RamSettingsCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf("low" to ramStrings.ramLow, "manual" to ramStrings.ramManual, "full" to ramStrings.ramFull).forEach { (mode, label) ->
-                    FilterChip(
-                        selected = if (isLocked) false else ramMode == mode,
-                        onClick = { if (isEnabled) onRamModeChange(mode) },
-                        label = { Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold) },
+                    val selected = !isLocked && ramMode == mode
+                    RamPillButton(
+                        text = label,
+                        selected = selected,
                         enabled = isEnabled,
-                        modifier = Modifier.weight(1f),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = PocketColors.PrimaryMuted,
-                            selectedLabelColor = PocketColors.PrimaryDark
-                        )
+                        onClick = { if (isEnabled) onRamModeChange(mode) },
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
@@ -1877,6 +2186,84 @@ private fun RamSettingsCard(
 }
 
 @Composable
+private fun RamPillButton(
+    text: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val isDark = pocketIsDarkTheme()
+
+    val bgColor = if (selected) PocketColors.Primary else if (isDark) PocketColors.SurfaceVarDark else PocketColors.TagBg
+    val borderColor = if (selected) PocketColors.PrimaryBorder else if (isDark) PocketColors.CardBorderDark else PocketColors.TagBorder
+    val bottomBorderColor = if (selected) PocketColors.PrimaryBorderBottom else if (isDark) PocketColors.CardBorderBottomDark else PocketColors.TagBorderBottom
+    val contentColor = if (selected) PocketColors.PrimaryText else if (isDark) PocketColors.TextDark.copy(alpha = 0.74f) else PocketColors.InactiveText
+
+    val finalBgColor = if (enabled) bgColor else if (isDark) PocketColors.SurfaceVarDark.copy(alpha = 0.68f) else PocketColors.InactiveBg
+    val finalBorderColor = if (enabled) borderColor else if (isDark) PocketColors.CardBorderDark.copy(alpha = 0.45f) else PocketColors.InactiveBorder
+    val finalBottomBorderColor = if (enabled) bottomBorderColor else if (isDark) PocketColors.CardBorderBottomDark.copy(alpha = 0.55f) else PocketColors.InactiveBorder
+    val finalContentColor = if (enabled) contentColor else if (isDark) PocketColors.TextDark.copy(alpha = 0.44f) else PocketColors.TextMuted
+
+    val shape = RoundedCornerShape(50.dp)
+    val targetBorder = if (pressed && enabled) 1.dp else 3.dp
+    val targetOffset = if (pressed && enabled) 1.5.dp else 0.dp
+
+    val offsetY by animateDpAsState(
+        targetValue = targetOffset,
+        animationSpec = tween(80),
+        label = "ram_pill_offset"
+    )
+    val bottomBorderDp by animateDpAsState(
+        targetValue = targetBorder,
+        animationSpec = tween(80),
+        label = "ram_pill_bottom_border"
+    )
+
+    Box(
+        modifier = modifier
+            .padding(bottom = 3.dp)
+            .offset(y = offsetY)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(38.dp)
+                .pill3d(
+                    elevation = 4.dp,
+                    borderColor = finalBorderColor,
+                    depthColor = finalBottomBorderColor,
+                    depthWidth = bottomBorderDp
+                )
+                .clip(shape)
+                .background(finalBgColor)
+                .clickable(
+                    enabled = enabled,
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onClick
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                color = finalContentColor,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontFamily = ButtonFont,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 13.sp,
+                    letterSpacing = 0.sp
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
 private fun RamUsageCard(usedMb: Int, maxMb: Int) {
     val fraction = if (maxMb > 0) (usedMb.toFloat() / maxMb).coerceIn(0f, 1f) else 0f
     val barColor = when {
@@ -1921,4 +2308,11 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
+}
+
+private fun isLikelyModpackRuntimeId(value: String): Boolean {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return false
+    if (trimmed.matches(Regex("""\d+(?:\.\d+){1,3}(?:[-+][A-Za-z0-9_.-]+)?"""))) return false
+    return trimmed.any { it.isLetter() } && trimmed.any { it == '-' || it == '_' }
 }

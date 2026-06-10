@@ -255,56 +255,8 @@ class RateLimitedModrinthClient(context: Context) {
         }
     }
 
-    /**
-     * Download mod with streaming (doesn't cache entire file)
-     */
     suspend fun downloadMod(projectId: String, versionNumber: String): Result<ByteArray> = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val versionsUrl = "$baseUrl/project/$projectId/versions?loaders=[\"paper\",\"spigot\",\"bukkit\"]"
-            val versionsRequest = Request.Builder()
-                .url(versionsUrl)
-                .header("User-Agent", "PocketCraft-App")
-                .build()
-
-            val versionsResponse = client.newCall(versionsRequest).execute()
-            if (!versionsResponse.isSuccessful) {
-                return@withContext Result.failure(Exception("Failed to fetch versions"))
-            }
-
-            val versionsBody = versionsResponse.body?.string() ?: return@withContext Result.failure(Exception("Empty response"))
-            val versions = gson.fromJson(versionsBody, JsonArray::class.java)
-
-            var downloadUrl: String? = null
-            for (version in versions) {
-                val versionObj = version.asJsonObject
-                if (versionObj.get("version_number").asString == versionNumber) {
-                    val files = versionObj.getAsJsonArray("files")
-                    if (files.size() > 0) {
-                        downloadUrl = files[0].asJsonObject.get("url").asString
-                        break
-                    }
-                }
-            }
-
-            if (downloadUrl == null) {
-                return@withContext Result.failure(Exception("Version not found"))
-            }
-
-            val downloadRequest = Request.Builder()
-                .url(downloadUrl)
-                .header("User-Agent", "PocketCraft-App")
-                .build()
-
-            val downloadResponse = client.newCall(downloadRequest).execute()
-            if (!downloadResponse.isSuccessful) {
-                return@withContext Result.failure(Exception("Download failed"))
-            }
-
-            val data = downloadResponse.body?.bytes() ?: return@withContext Result.failure(Exception("Empty download"))
-            Result.success(data)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        Result.failure(Exception("Direct in-app mod/plugin downloads are disabled. Download in a browser, then import the file from device storage."))
     }
 
     /**

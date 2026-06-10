@@ -5,8 +5,6 @@ const express = require('express');
 const dgram   = require('dgram');
 const dns     = require('dns');
 const { startBedrockPing, updateServerStatus } = require('./bedrock-ping');
-const { handleJavaPing } = require('./java-ping');
-
 // Constants
 
 const CONTROL_PORT               = 8080;
@@ -519,26 +517,9 @@ function pairSockets(playerSocket, phoneSocket, userId) {
   configureSocket(playerSocket);
   configureSocket(phoneSocket);
 
-  playerSocket.on('data', (chunk) => {
-    if (!phoneSocket.destroyed) {
-      phoneSocket.write(chunk);
-    }
-  });
-
-  phoneSocket.on('data', (chunk) => {
-    if (!playerSocket.destroyed) {
-      playerSocket.write(chunk);
-    }
-  });
-
-  if (playerSocket.initialChunk) {
-    if (!phoneSocket.destroyed) {
-      phoneSocket.write(playerSocket.initialChunk);
-    }
-    playerSocket.initialChunk = null;
-  }
-
   playerSocket.resume();
+  playerSocket.pipe(phoneSocket);
+  phoneSocket.pipe(playerSocket);
 
   let killed = false;
 
@@ -546,6 +527,8 @@ function pairSockets(playerSocket, phoneSocket, userId) {
     if (killed) return;
     killed = true;
     console.log(`[relay] Pairing broken for ${userId} (source: ${src})`);
+    playerSocket.unpipe(phoneSocket);
+    phoneSocket.unpipe(playerSocket);
     if (!playerSocket.destroyed) playerSocket.destroy();
     if (!phoneSocket.destroyed) phoneSocket.destroy();
   };
@@ -780,19 +763,13 @@ app.post('/register', (req, res) => {
 
   tunnel.server = net.createServer({ allowHalfOpen: false }, (playerSocket) => {
     configureSocket(playerSocket);
-    
-    playerSocket.once('data', (chunk) => {
-      if (handleJavaPing(playerSocket, chunk, tunnel.port)) return;
-      
-      playerSocket.initialChunk = chunk;
-      const phoneSocket = takeNextPhoneSocket(tunnel);
-      if (phoneSocket) {
-        pairSockets(playerSocket, phoneSocket, userId);
-        return;
-      }
-      playerSocket.pause();
-      queuePlayer(tunnel, userId, playerSocket);
-    });
+    playerSocket.pause();
+    const phoneSocket = takeNextPhoneSocket(tunnel);
+    if (phoneSocket) {
+      pairSockets(playerSocket, phoneSocket, userId);
+      return;
+    }
+    queuePlayer(tunnel, userId, playerSocket);
   });
 
   tunnel.server.on('error', (err) => {

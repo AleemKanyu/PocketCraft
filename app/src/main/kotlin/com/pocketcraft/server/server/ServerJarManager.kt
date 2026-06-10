@@ -3,11 +3,9 @@ package com.pocketcraft.server.server
 import android.util.Log
 import com.pocketcraft.server.service.VersionCacheManager
 import com.pocketcraft.server.data.model.ServerType
+import com.pocketcraft.server.service.VersionCatalog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
@@ -16,7 +14,6 @@ import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 
 object ServerJarManager {
@@ -47,36 +44,16 @@ object ServerJarManager {
         }
 
         val versions = when (serverType) {
-            ServerType.PAPER -> fetchPaperVersions()
+            ServerType.PAPER -> VersionCatalog.fetchStableVersions(limit = 80)
             ServerType.PURPUR -> fetchPurpurVersions()
             ServerType.FABRIC -> fetchFabricVersions()
             ServerType.MODPACK -> emptyList()
-            ServerType.CUSTOM_JAR -> emptyList()
         }
 
         if (versions.isNotEmpty()) {
             VersionCacheManager.put(context, cacheKey, versions)
         }
         versions
-    }
-
-    private fun fetchPaperVersions(): List<String> {
-        val req = Request.Builder()
-            .url("https://api.papermc.io/v2/projects/paper")
-            .header("Accept", "application/json")
-            .header("User-Agent", USER_AGENT)
-            .build()
-        client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw Exception("PaperMC API error ${resp.code}")
-            val body = resp.body?.string() ?: throw Exception("Empty response")
-            val json = JSONObject(body)
-            val versions = json.getJSONArray("versions")
-            val list = mutableListOf<String>()
-            for (i in (versions.length() - 1) downTo 0) {
-                list.add(versions.getString(i))
-            }
-            return list
-        }
     }
 
     private fun fetchPurpurVersions(): List<String> {
@@ -119,27 +96,42 @@ object ServerJarManager {
         }
     }
 
+
+
     fun resolveJar(
         serverType: ServerType,
         gameVersion: String,
         customJarPath: String?,
         targetFile: File,
+        serverDir: File? = null,
         onProgress: (Int) -> Unit
     ): Flow<File> = flow {
-        if (serverType == ServerType.CUSTOM_JAR) {
-            val jarFile = File(customJarPath ?: throw Exception("Custom JAR path is missing"))
-            if (!jarFile.exists()) {
-                throw Exception("Custom JAR file does not exist: ${jarFile.absolutePath}")
+
+        if (serverType == ServerType.MODPACK) {
+            val dir = serverDir ?: throw IllegalStateException("Modpack server directory is missing")
+            val launchTarget = com.pocketcraft.server.service.ServerFileManager.readLaunchTarget(dir)
+            if (launchTarget == null) {
+                // No launch target means modpack was never installed on this world.
+                // This typically happens when the user switches worlds before installing the modpack.
+                throw IllegalStateException(
+                    "Modpack not installed on this world. Tap \"Install Modpack\" on the Home screen to set it up before starting."
+                )
             }
-            emit(jarFile)
+            if (!launchTarget.file.exists() || launchTarget.file.isDirectory || launchTarget.file.length() <= 0L) {
+                throw IllegalStateException(
+                    "Modpack files are missing or incomplete. Tap \"Install Modpack\" on the Home screen to re-install."
+                )
+            }
+            onProgress(100)
+            emit(launchTarget.file)
             return@flow
         }
 
         if (gameVersion.isBlank()) {
-            throw IllegalStateException("Server version not set. Please select a version before downloading a JAR.")
+            throw IllegalStateException("Server version not set. Please select a version and import its server JAR.")
         }
 
-        val expectedMinSize = if (serverType == ServerType.FABRIC) 50_000L else 1_000_000L
+        val expectedMinSize = if (serverType == ServerType.FABRIC) 10_000L else 1_000_000L
         android.util.Log.d("ServerJarManager", "resolveJar: serverType=$serverType gameVersion=$gameVersion targetFile=${targetFile.absolutePath} exists=${targetFile.exists()} isDir=${targetFile.isDirectory} size=${targetFile.length()}")
         if (targetFile.exists() && targetFile.length() > expectedMinSize) {
             android.util.Log.d("ServerJarManager", "resolveJar: cache hit, emitting ${targetFile.absolutePath}")
@@ -153,106 +145,8 @@ object ServerJarManager {
             targetFile.deleteRecursively()
         }
 
-        val downloadUrl = when (serverType) {
-
-            ServerType.PAPER -> resolvePaperUrl(gameVersion)
-            ServerType.PURPUR -> resolvePurpurUrl(gameVersion)
-            ServerType.FABRIC -> resolveFabricUrl(gameVersion)
-            ServerType.MODPACK -> throw IllegalStateException("Modpack uses dedicated installer flow")
-            ServerType.CUSTOM_JAR -> throw IllegalStateException("Unreachable")
-        }
-
-        downloadFile(downloadUrl, targetFile, onProgress)
-        
-        val minSize = if (serverType == ServerType.FABRIC) 50_000L else 1024 * 1024L
-        if (!targetFile.exists() || targetFile.length() < minSize) {
-            targetFile.delete()
-            throw Exception("Downloaded file is invalid. Please retry.")
-        }
-
-        emit(targetFile)
+        throw IllegalStateException(
+            "Server JAR is not installed. Open the version picker, download ${serverType.displayName} $gameVersion in your browser, then select the downloaded JAR."
+        )
     }.flowOn(Dispatchers.IO)
-
-    private fun resolvePaperUrl(version: String): String {
-        if (version.isBlank()) {
-            throw IllegalStateException("Server version not set. Please select a version before downloading a JAR.")
-        }
-        val req = Request.Builder()
-            .url("https://api.papermc.io/v2/projects/paper/versions/$version/builds")
-            .header("Accept", "application/json")
-            .header("User-Agent", USER_AGENT)
-            .build()
-        client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw Exception("PaperMC API error")
-            val json = JSONObject(resp.body?.string() ?: "")
-            val builds = json.getJSONArray("builds")
-            val latestBuild = builds.getJSONObject(builds.length() - 1)
-            val buildNum = latestBuild.getInt("build")
-            val fileName = latestBuild.getJSONObject("downloads").getJSONObject("application").getString("name")
-            return "https://api.papermc.io/v2/projects/paper/versions/$version/builds/$buildNum/downloads/$fileName"
-        }
-    }
-
-    private fun resolvePurpurUrl(version: String): String {
-        return "https://api.purpurmc.org/v2/purpur/$version/latest/download"
-    }
-
-    private fun resolveFabricUrl(version: String): String {
-        val loaderReq = Request.Builder()
-            .url("https://meta.fabricmc.net/v2/versions/loader")
-            .header("Accept", "application/json")
-            .header("User-Agent", USER_AGENT)
-            .build()
-        val loaderVersion = client.newCall(loaderReq).execute().use { resp ->
-            if (!resp.isSuccessful) throw Exception("Fabric API error")
-            val json = JSONArray(resp.body?.string() ?: "")
-            json.getJSONObject(0).getString("version")
-        }
-
-        val installerReq = Request.Builder()
-            .url("https://meta.fabricmc.net/v2/versions/installer")
-            .header("Accept", "application/json")
-            .header("User-Agent", USER_AGENT)
-            .build()
-        val installerVersion = client.newCall(installerReq).execute().use { resp ->
-            if (!resp.isSuccessful) throw Exception("Fabric API error")
-            val json = JSONArray(resp.body?.string() ?: "")
-            json.getJSONObject(0).getString("version")
-        }
-        
-        // As per https://meta.fabricmc.net/v2/versions/loader/1.20.4/0.15.7/1.0.0/server/jar
-        // But the actual installer version from API is something like "1.0.1"
-        return "https://meta.fabricmc.net/v2/versions/loader/$version/$loaderVersion/$installerVersion/server/jar"
-    }
-
-    private fun downloadFile(url: String, target: File, onProgress: (Int) -> Unit) {
-        val req = Request.Builder()
-            .url(url)
-            .header("User-Agent", USER_AGENT)
-            .build()
-        client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw Exception("Download failed with HTTP ${resp.code}")
-            val contentLength = resp.body?.contentLength() ?: -1L
-            val input = resp.body?.byteStream() ?: throw Exception("No stream")
-
-            FileOutputStream(target).use { output ->
-                val buffer = ByteArray(16384)
-                var downloaded = 0L
-                var bytes: Int
-                var lastProgress = -1
-
-                while (input.read(buffer).also { bytes = it } >= 0) {
-                    output.write(buffer, 0, bytes)
-                    downloaded += bytes
-                    if (contentLength > 0) {
-                        val progress = ((downloaded * 100) / contentLength).toInt()
-                        if (progress != lastProgress) {
-                            onProgress(progress)
-                            lastProgress = progress
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

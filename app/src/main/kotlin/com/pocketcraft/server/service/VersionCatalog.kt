@@ -9,29 +9,13 @@ import org.json.JSONObject
 object VersionCatalog {
 
     private val versionRegex = Regex("^\\d+\\.\\d+(\\.\\d+)?$")
+    // Only include valid Minecraft versions (1.x.x). Purpur recently introduced their own
+    // versioning scheme (e.g. "26.1.2") which passes versionRegex but is unknown to PaperMC.
+    private val minecraftVersionRegex = Regex("^1\\.\\d+(\\.\\d+)?$")
     private val userAgent = "PocketCraft/1.0"
 
     suspend fun fetchStableVersions(limit: Int = 60): List<String> = withContext(Dispatchers.IO) {
         val client = OkHttpClient.Builder().build()
-
-        val fromPaper = runCatching {
-            val request = Request.Builder()
-                .url("https://api.papermc.io/v2/projects/paper")
-                .header("User-Agent", userAgent)
-                .build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use emptyList<String>()
-                val body = response.body?.string().orEmpty()
-                val json = JSONObject(body)
-                val versions = json.optJSONArray("versions") ?: return@use emptyList<String>()
-                buildList {
-                    for (i in 0 until versions.length()) {
-                        val version = versions.optString(i)
-                        if (versionRegex.matches(version)) add(version)
-                    }
-                }.reversed().distinct().take(limit)
-            }
-        }.getOrDefault(emptyList())
 
         val fromPurpur = runCatching {
             val request = Request.Builder()
@@ -46,7 +30,7 @@ object VersionCatalog {
                 buildList {
                     for (i in 0 until versions.length()) {
                         val version = versions.optString(i)
-                        if (versionRegex.matches(version)) add(version)
+                        if (minecraftVersionRegex.matches(version)) add(version)
                     }
                 }.distinct()
             }
@@ -66,14 +50,14 @@ object VersionCatalog {
                         val entry = versions.optJSONObject(i) ?: continue
                         if (!entry.optBoolean("stable")) continue
                         val version = entry.optString("version")
-                        if (versionRegex.matches(version)) add(version)
+                        if (minecraftVersionRegex.matches(version)) add(version)
                     }
                 }.distinct()
             }
         }.getOrDefault(emptyList())
 
-        val combined = (fromPurpur + fromFabric + fromPaper)
-            .filter { versionRegex.matches(it) }
+        val combined = (fromPurpur + fromFabric)
+            .filter { minecraftVersionRegex.matches(it) }
             .distinct()
             .sortedWith(versionComparator)
             .take(limit)
@@ -95,7 +79,7 @@ object VersionCatalog {
                         val entry = versions.optJSONObject(i) ?: continue
                         if (entry.optString("type") != "release") continue
                         val id = entry.optString("id")
-                        if (versionRegex.matches(id)) add(id)
+                        if (minecraftVersionRegex.matches(id)) add(id)
                     }
                 }.distinct().sortedWith(versionComparator).take(limit)
             }

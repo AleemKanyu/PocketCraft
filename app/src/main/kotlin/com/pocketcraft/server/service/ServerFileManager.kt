@@ -3,6 +3,7 @@ package com.pocketcraft.server.service
 import android.content.Context
 import com.pocketcraft.server.data.model.ServerType
 import com.pocketcraft.server.data.preferences.AppPreferences
+import com.pocketcraft.server.server.BundledPluginInstaller
 import java.io.File
 
 object ServerFileManager {
@@ -38,9 +39,25 @@ object ServerFileManager {
      * Returns true if the server JAR has already been downloaded.
      */
     fun isServerJarReady(context: Context, gameVersion: String, serverType: ServerType): Boolean {
+        if (serverType == ServerType.MODPACK) {
+            return false
+        }
         val jar = getServerJarFile(context, gameVersion, serverType)
-        val expectedMinSize = if (serverType == ServerType.FABRIC) 50_000L else 1_000_000L
+        val expectedMinSize = if (serverType == ServerType.FABRIC) 10_000L else 1_000_000L
         return jar.exists() && jar.length() > expectedMinSize
+    }
+
+    fun isModpackReady(context: Context, worldName: String, modpackId: String? = null): Boolean {
+        val serverDir = getServerDirNoCreate(context, worldName)
+        if (!serverDir.isDirectory) return false
+        val props = ServerPropertiesHelper.readProperties(serverDir)
+        if (ServerType.fromString(props.getProperty("pocketcraft-server-type")) != ServerType.MODPACK) return false
+        val installedId = props.getProperty("pocketcraft-modpack-id")
+            ?: props.getProperty("pocketcraft-custom-jar-path")
+            ?: ""
+        if (!modpackId.isNullOrBlank() && installedId != modpackId) return false
+        val launchTarget = readLaunchTarget(serverDir) ?: return false
+        return launchTarget.file.exists() && launchTarget.file.isFile && launchTarget.file.length() > 0L
     }
 
     /**
@@ -149,6 +166,8 @@ object ServerFileManager {
         File(serverDir, "logs").mkdirs()
         
         val pluginsDir = File(serverDir, "plugins").also { it.mkdirs() }
+        BundledPluginInstaller.installBundledPlugins(context, serverDir)
+
         runCatching {
             context.assets.open("default_plugins/PocketCraftCompanion.jar").use { input ->
                 File(pluginsDir, "PocketCraftCompanion.jar").outputStream().use { output ->
@@ -171,6 +190,11 @@ object ServerFileManager {
         ARG_FILE
     }
 
+    data class LaunchTarget(
+        val mode: LaunchMode,
+        val file: File
+    )
+
     fun persistLaunchTarget(context: Context, worldName: String, mode: LaunchMode, relativePath: String) {
         val serverDir = getServerDir(context, worldName)
         val props = ServerPropertiesHelper.readProperties(serverDir)
@@ -179,5 +203,18 @@ object ServerFileManager {
         runCatching {
             ServerPropertiesHelper.saveProperties(serverDir, props)
         }
+    }
+
+    fun readLaunchTarget(serverDir: File): LaunchTarget? {
+        val props = ServerPropertiesHelper.readProperties(serverDir)
+        val mode = runCatching {
+            LaunchMode.valueOf(props.getProperty("pocketcraft-launch-mode", LaunchMode.JAR.name))
+        }.getOrDefault(LaunchMode.JAR)
+        val relativePath = props.getProperty("pocketcraft-launch-target")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+        if (relativePath.startsWith("/") || relativePath.contains("..")) return null
+        return LaunchTarget(mode = mode, file = File(serverDir, relativePath))
     }
 }

@@ -21,4 +21,9 @@
     <string name="players_online">%1$d/%2$d jugadores</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Tiempo activo: %1$s</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/nc7ceYWVfT</string>
+    <string name="announcement_title">Una nota de PocketCraft</string>
+    <string name="announcement_body">¡Hola! Solo queríamos ser sinceros &#8212; PocketCraft siempre será completamente gratis. Sin suscripciones, nunca.\n\nUsamos una pequeña cantidad de anuncios para mantener los servidores funcionando y la aplicación mejorando. Eso es todo.\n\nSi quieres ayudarnos a ser completamente sin anuncios, o simplemente quieres chatear con el equipo, únete a nuestro Discord &#8212; nos encantaría tenerte.</string>
+    <string name="announcement_join_discord">Unirse a Discord</string>
+    <string name="announcement_got_it">Entendido</string>
 </resources>

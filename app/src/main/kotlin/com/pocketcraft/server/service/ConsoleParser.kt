@@ -9,6 +9,11 @@ data class ChunkyProgress(
     val percent: Float
 )
 
+data class ParsedPlayerPing(
+    val pingMs: Int,
+    val ip: String = ""
+)
+
 sealed interface ServerEvent {
     data object ServerFullyReady : ServerEvent
 }
@@ -121,18 +126,20 @@ object ConsoleParser {
         return null
     }
 
-    // e.g. "[17:30:06 INFO]: [PocketCraftPing] Steve:10 Alex:42"
+    // e.g. "[17:30:06 INFO]: [PocketCraftPing] Steve:10@127.0.0.1 Alex:42"
     private val PING_REGEX = Regex("""\[PocketCraftPing\](.*)""")
 
-    fun parsePing(line: String): Map<String, Int> {
+    fun parsePing(line: String): Map<String, ParsedPlayerPing> {
         val match = PING_REGEX.find(line) ?: return emptyMap()
         val data = match.groupValues[1].trim()
-        val pings = mutableMapOf<String, Int>()
+        val pings = mutableMapOf<String, ParsedPlayerPing>()
         for (pair in data.split(" ")) {
-            val parts = pair.split(":")
-            if (parts.size == 2) {
-                pings[parts[0]] = parts[1].toIntOrNull() ?: -1
-            }
+            val name = pair.substringBefore(':').trim()
+            if (name.isBlank() || !pair.contains(':')) continue
+            val value = pair.substringAfter(':')
+            val ping = value.substringBefore('@').toIntOrNull() ?: -1
+            val ip = value.substringAfter('@', "").trim()
+            pings[name] = ParsedPlayerPing(pingMs = ping, ip = ip)
         }
         return pings
     }

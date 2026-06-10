@@ -19,10 +19,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ModalBottomSheet
@@ -54,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.ContentScale
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -61,7 +64,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import com.pocketcraft.server.BuildConfig
-import com.pocketcraft.server.PocketCraftApp
 import com.pocketcraft.server.broadcast.FeedbackPromptCenter
 import com.pocketcraft.server.broadcast.FeedbackPromptPayload
 import com.pocketcraft.server.broadcast.PocketCraftMessagingService
@@ -71,18 +73,21 @@ import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.config.RemoteConfigManager
 import com.pocketcraft.server.R
-import com.pocketcraft.server.server.ServerHostService
 import com.pocketcraft.server.ui.components.BroadcastBanner
+import com.pocketcraft.server.ui.components.AnnouncementDialog
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.card3d
 import com.pocketcraft.server.ui.theme.pocketPopupAccentContainerColor
+import com.pocketcraft.server.ui.util.MobTheme
 import com.pocketcraft.server.service.ModpackManager
+import com.pocketcraft.server.ui.components.ServerModpackPickerBottomSheet
 import com.pocketcraft.server.viewmodel.BroadcastViewModel
 import com.google.firebase.crashlytics.ktx.crashlytics
 import com.google.firebase.ktx.Firebase
 import com.pocketcraft.server.data.model.ServerType
-import com.pocketcraft.server.server.ServerJarManager
 import com.pocketcraft.server.service.ServerFileManager
+import com.pocketcraft.server.service.ServerPropertiesHelper
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -104,25 +109,26 @@ private data class PendingVersionChange(
 @Composable
 fun PocketCraftApp(
     isDarkTheme: Boolean,
-    onDarkThemeChange: (Boolean) -> Unit
+    currentMobTheme: MobTheme,
+    onDarkThemeChange: (Boolean) -> Unit,
+    onMobThemeChange: (MobTheme) -> Unit
 ) {
     var screen by remember { mutableStateOf(Screen.LOADING) }
     var transitionTarget by remember { mutableStateOf<Screen?>(null) }
     var loadingStatus by remember { mutableStateOf("Preparing PocketCraft...") }
     var versionDownloadProgress by remember { mutableStateOf(0) }
     var versionId by remember { mutableStateOf("") }
+    var lastProcessedWorld by remember { mutableStateOf("") }
     var bootstrapComplete by remember { mutableStateOf(false) }
     var selectedServerType by remember { mutableStateOf(ServerType.PAPER) }
     var downloadedVersions by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var pendingAutoDownloadVersion by remember { mutableStateOf<String?>(null) }
     var showVersionPickerDialog by remember { mutableStateOf(false) }
     var showVersionRiskDialog by remember { mutableStateOf(false) }
     var pendingVersionChange by remember { mutableStateOf<PendingVersionChange?>(null) }
     var pendingVersionRollbackConfig by remember { mutableStateOf<Triple<ServerType, String, String?>?>(null) }
     var showExitDialog by remember { mutableStateOf(false) }
-    var showCommunityDialog by remember { mutableStateOf(false) }
-    var pendingCommunityDialog by remember { mutableStateOf(false) }
-    var discordPopupAlreadyShownRemotely by remember { mutableStateOf<Boolean?>(null) }
+    var showAnnouncementDialog by remember { mutableStateOf(false) }
+    var pendingAnnouncementDialog by remember { mutableStateOf(false) }
     var showInstagramDialog by remember { mutableStateOf(false) }
     var pendingInstagramDialog by remember { mutableStateOf(false) }
     var showConsentDialog by remember { mutableStateOf(false) }
@@ -132,9 +138,17 @@ fun PocketCraftApp(
     var feedbackPromptInput by remember { mutableStateOf("") }
     var sendingFeedbackPrompt by remember { mutableStateOf(false) }
     var feedbackPromptError by remember { mutableStateOf<String?>(null) }
+    var showRatingPromptDialog by remember { mutableStateOf(false) }
     var homeScreenReady by remember { mutableStateOf(false) }
-    var showDiscordButtonFromRemoteConfig by remember { mutableStateOf(true) }
     var showInstagramButtonFromRemoteConfig by remember { mutableStateOf(true) }
+    var showModpackImportDialog by remember { mutableStateOf(false) }
+    var pendingModpackImportId by remember { mutableStateOf<String?>(null) }
+    var pendingModpackImportPageUrl by remember { mutableStateOf<String?>(null) }
+    var modpackImportInProgress by remember { mutableStateOf(false) }
+    var modpackImportId by remember { mutableStateOf<String?>(null) }
+    var modpackImportStatus by remember { mutableStateOf("Preparing modpack import...") }
+    var modpackImportProgress by remember { mutableStateOf(0) }
+    var modpackImportError by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -143,7 +157,7 @@ fun PocketCraftApp(
     val scope = rememberCoroutineScope()
     val selectedWorld by AppPreferencesStore.getSelectedWorldFlow(context).collectAsState(initial = "world")
     val stateHolder = remember(versionId, selectedWorld) {
-        ServerStateHolder(context.applicationContext, versionId, selectedServerType, selectedWorld)
+        ServerStateHolder(context.applicationContext, versionId, selectedWorld)
     }
     val broadcastViewModel: BroadcastViewModel = hiltViewModel()
     val configBanner by broadcastViewModel.configBanner.collectAsState()
@@ -162,9 +176,10 @@ fun PocketCraftApp(
     val hasBlockingSheet = showVersionPickerDialog ||
         showVersionRiskDialog ||
         showConsentDialog ||
-        showCommunityDialog ||
+        showAnnouncementDialog ||
         showInstagramDialog ||
         showFeedbackPromptDialog ||
+        showRatingPromptDialog ||
         showExitDialog
 
     DisposableEffect(stateHolder) {
@@ -186,57 +201,149 @@ fun PocketCraftApp(
     LaunchedEffect(Unit) {
         val setupComplete = AppPreferencesStore.isSetupCompleteFlow(context).first()
         val storedVersionId = AppPreferencesStore.getStoredSelectedVersionFlow(context).first()
-        val savedVersionId = AppPreferencesStore.getSelectedVersionFlow(context).first()
-        val savedServerType = ServerType.fromString(AppPreferencesStore.getSelectedServerTypeFlow(context).first())
+        val storedServerType = ServerType.fromString(
+            AppPreferencesStore.getSelectedServerTypeFlow(context).first()
+        )
         val pending = AppPreferencesStore.getPendingAutoDownloadVersionFlow(context).first()
-        val activeVersionId = ServerHostService.getPersistedActiveVersion(context)
+        val activeWorld = AppPreferencesStore.getSelectedWorldFlow(context).first()
 
-        selectedServerType = savedServerType
+        val worldDir = ServerFileManager.getServerDir(context.applicationContext, activeWorld)
+        val worldProps = ServerPropertiesHelper.readProperties(worldDir)
+        val worldVersion = worldProps.getProperty("pocketcraft-game-version").orEmpty()
+        val worldServerType = worldProps.getProperty("pocketcraft-server-type")
+            ?.takeIf { it.isNotBlank() }
+            ?.let(ServerType::fromString)
+        val bootstrapVersion = worldVersion.ifBlank { storedVersionId.orEmpty() }
+        val initialServerType = worldServerType
+            ?: if (bootstrapVersion.isNotBlank()) storedServerType else ServerType.PAPER
+
+        selectedServerType = initialServerType
         downloadedVersions = scanDownloadedRuntimeKeys(context.applicationContext)
+        lastProcessedWorld = activeWorld
 
-        val bootstrapVersion = when {
-            activeVersionId.isNotBlank() -> activeVersionId
-            !storedVersionId.isNullOrBlank() -> storedVersionId
-            else -> "" // Do NOT auto-pick any version if no selection exists
-        }
         versionId = bootstrapVersion
 
-        if (!pending.isNullOrBlank() &&
-            !downloadedVersions.contains(runtimeDownloadKey(savedServerType, pending))
-        ) {
-            Log.i(TAG_POCKETCRAFT_APP, "Need download for version=$bootstrapVersion")
-            pendingAutoDownloadVersion = pending
-            transitionTarget = Screen.SERVER
+        if (bootstrapVersion.isNotBlank() && worldVersion.isBlank()) {
+            stateHolder.saveSettings(
+                stateHolder.config.copy(
+                    serverType = initialServerType,
+                    gameVersion = bootstrapVersion,
+                    customJarPath = if (initialServerType == ServerType.MODPACK) {
+                        stateHolder.config.customJarPath?.takeIf { it.isNotBlank() } ?: bootstrapVersion
+                    } else {
+                        null
+                    }
+                ),
+                targetWorldName = activeWorld
+            )
+        }
+
+        if (!pending.isNullOrBlank()) {
+            AppPreferencesStore.setPendingAutoDownloadVersion(context, null)
         }
 
         if (!setupComplete) {
             AppPreferencesStore.setSetupComplete(context, true)
         }
-        AppPreferencesStore.setSelectedServerType(context, savedServerType.name)
-        if (!bootstrapVersion.isNullOrBlank() && storedVersionId != bootstrapVersion) {
+        AppPreferencesStore.setSelectedServerType(context, initialServerType.name)
+        if (bootstrapVersion.isNotBlank() && storedVersionId != bootstrapVersion) {
             AppPreferencesStore.setSelectedVersion(context, bootstrapVersion)
         }
         bootstrapComplete = true
-        transitionTarget = if (bootstrapVersion.isBlank()) Screen.VERSION_PICKER else Screen.SERVER
+        transitionTarget = Screen.SERVER
     }
 
     LaunchedEffect(stateHolder, versionId, selectedServerType, bootstrapComplete) {
-        if (!bootstrapComplete || versionId.isBlank()) return@LaunchedEffect
+        if (!bootstrapComplete) return@LaunchedEffect
+
+        if (stateHolder.activeWorld != lastProcessedWorld) {
+            val targetServerDir = ServerFileManager.getServerDir(context.applicationContext, stateHolder.activeWorld)
+            val targetProps = ServerPropertiesHelper.readProperties(targetServerDir)
+            val rawTargetVersion = targetProps.getProperty("pocketcraft-game-version").orEmpty()
+            val targetVersion = rawTargetVersion.ifBlank {
+                versionId.ifBlank {
+                    AppPreferencesStore.getStoredSelectedVersionFlow(context).first().orEmpty()
+                }
+            }
+            val rawTargetType = targetProps.getProperty("pocketcraft-server-type")
+                ?.takeIf { it.isNotBlank() }
+                ?.let(ServerType::fromString)
+            val targetType = rawTargetType
+                ?: if (targetVersion.isNotBlank()) selectedServerType else ServerType.PAPER
+
+            if (targetVersion.isNotBlank() && rawTargetVersion.isBlank()) {
+                stateHolder.saveSettings(
+                    stateHolder.config.copy(
+                        serverType = targetType,
+                        gameVersion = targetVersion,
+                        customJarPath = if (targetType == ServerType.MODPACK) {
+                            stateHolder.config.customJarPath?.takeIf { it.isNotBlank() } ?: targetVersion
+                        } else {
+                            null
+                        }
+                    ),
+                    targetWorldName = stateHolder.activeWorld
+                )
+            }
+
+            var updated = false
+            if (targetVersion.isNotBlank() && targetVersion != versionId) {
+                versionId = targetVersion
+                AppPreferencesStore.setSelectedVersion(context, targetVersion)
+                updated = true
+            }
+            if (targetType != selectedServerType) {
+                selectedServerType = targetType
+                AppPreferencesStore.setSelectedServerType(context, targetType.name)
+                updated = true
+            }
+            lastProcessedWorld = stateHolder.activeWorld
+
+            if (updated) {
+                return@LaunchedEffect
+            }
+        }
+
+        if (versionId.isBlank()) {
+            val restoredVersion = stateHolder.config.gameVersion
+                .takeIf { it.isNotBlank() }
+                ?: AppPreferencesStore.getStoredSelectedVersionFlow(context).first().orEmpty()
+            if (restoredVersion.isNotBlank()) {
+                versionId = restoredVersion
+                AppPreferencesStore.setSelectedVersion(context, restoredVersion)
+            }
+            return@LaunchedEffect
+        }
+
         stateHolder.refreshAll()
         snapshotFlow { stateHolder.isRefreshing }
             .dropWhile { !it }
             .first { !it }
 
         val current = stateHolder.config
-        val shouldSyncRuntime = current.gameVersion != versionId || current.serverType != selectedServerType
-        if (shouldSyncRuntime) {
+        if (current.gameVersion.isBlank()) {
             stateHolder.saveSettings(
                 current.copy(
                     serverType = selectedServerType,
-                    gameVersion = versionId
+                    gameVersion = versionId,
+                    customJarPath = if (selectedServerType == ServerType.MODPACK) {
+                        current.customJarPath?.takeIf { it.isNotBlank() } ?: versionId
+                    } else {
+                        null
+                    }
                 )
             )
-            stateHolder.refreshAll()
+            AppPreferencesStore.setSelectedServerType(context, selectedServerType.name)
+            AppPreferencesStore.setSelectedVersion(context, versionId)
+            return@LaunchedEffect
+        }
+        val shouldSyncRuntime = current.gameVersion != versionId || current.serverType != selectedServerType
+        if (shouldSyncRuntime) {
+            selectedServerType = current.serverType
+            versionId = current.gameVersion
+            AppPreferencesStore.setSelectedServerType(context, current.serverType.name)
+            AppPreferencesStore.setSelectedVersion(context, current.gameVersion)
+            return@LaunchedEffect
         }
     }
 
@@ -261,18 +368,6 @@ fun PocketCraftApp(
             if (prompt != null) {
                 pendingFeedbackPrompt = prompt
             }
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        discordPopupAlreadyShownRemotely = FeedbackService
-            .hasDiscordPopupBeenShown(context)
-            .getOrDefault(false)
-    }
-
-    LaunchedEffect(Unit) {
-        RemoteConfigManager.showDiscordButton.collect { value ->
-            showDiscordButtonFromRemoteConfig = value
         }
     }
 
@@ -304,10 +399,10 @@ fun PocketCraftApp(
     LaunchedEffect(
         screen,
         homeScreenReady,
-        showDiscordButtonFromRemoteConfig,
         showInstagramButtonFromRemoteConfig,
         hasPendingBroadcast,
-        discordPopupAlreadyShownRemotely
+        showAnnouncementDialog,
+        pendingAnnouncementDialog
     ) {
         if (screen != Screen.SERVER || !homeScreenReady) {
             return@LaunchedEffect
@@ -315,23 +410,19 @@ fun PocketCraftApp(
         if (hasPendingBroadcast) {
             return@LaunchedEffect
         }
-        if (discordPopupAlreadyShownRemotely == null) {
-            return@LaunchedEffect
-        }
         val needsConsent = legalVersionAccepted != BuildConfig.LEGAL_POLICY_VERSION
         if (needsConsent) {
             pendingConsentDialog = true
         }
-        val shouldPromptDiscord =
-            preferences.appLaunchCount >= 2 &&
-                !preferences.socialLinksJoined &&
-                showDiscordButtonFromRemoteConfig &&
-                discordPopupAlreadyShownRemotely == false
+        if (
+            !showAnnouncementDialog &&
+            !pendingAnnouncementDialog &&
+            AnnouncementDialog.shouldShow(context)
+        ) {
+            pendingAnnouncementDialog = true
+        }
         val shouldPromptInstagram = !preferences.socialLinksJoined && showInstagramButtonFromRemoteConfig
-        if (shouldPromptDiscord) {
-            delay(700)
-            pendingCommunityDialog = true
-        } else if (shouldPromptInstagram) {
+        if (shouldPromptInstagram) {
             delay(700)
             pendingInstagramDialog = true
         }
@@ -340,7 +431,7 @@ fun PocketCraftApp(
     LaunchedEffect(
         pendingConsentDialog,
         showVersionPickerDialog,
-        showCommunityDialog,
+        showAnnouncementDialog,
         showInstagramDialog,
         showExitDialog,
         screen,
@@ -348,14 +439,15 @@ fun PocketCraftApp(
     ) {
         if (!pendingConsentDialog) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
-        val hasBlockingPopup = showVersionPickerDialog || showExitDialog || showCommunityDialog || showInstagramDialog
+        val hasBlockingPopup = showVersionPickerDialog || showExitDialog || showAnnouncementDialog || showInstagramDialog
         if (hasBlockingPopup) return@LaunchedEffect
         showConsentDialog = true
         pendingConsentDialog = false
     }
 
     LaunchedEffect(
-        pendingCommunityDialog,
+        pendingAnnouncementDialog,
+        pendingConsentDialog,
         showVersionPickerDialog,
         showConsentDialog,
         showInstagramDialog,
@@ -364,24 +456,23 @@ fun PocketCraftApp(
         homeScreenReady,
         hasPendingBroadcast
     ) {
-        if (!pendingCommunityDialog) return@LaunchedEffect
+        if (!pendingAnnouncementDialog) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
-        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showExitDialog || showCommunityDialog || showInstagramDialog || hasPendingBroadcast
+        if (pendingConsentDialog) return@LaunchedEffect
+        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showExitDialog || showAnnouncementDialog || showInstagramDialog || hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
-        showCommunityDialog = true
-        pendingCommunityDialog = false
-        if (discordPopupAlreadyShownRemotely == false) {
-            discordPopupAlreadyShownRemotely = true
-            FeedbackService.markDiscordPopupShown(context)
-        }
+        showAnnouncementDialog = true
+        pendingAnnouncementDialog = false
     }
 
     LaunchedEffect(
         pendingInstagramDialog,
         pendingFeedbackPrompt,
+        pendingConsentDialog,
+        pendingAnnouncementDialog,
         showVersionPickerDialog,
         showConsentDialog,
-        showCommunityDialog,
+        showAnnouncementDialog,
         showExitDialog,
         screen,
         homeScreenReady,
@@ -390,7 +481,8 @@ fun PocketCraftApp(
         if (!pendingInstagramDialog) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
         if (!showInstagramButtonFromRemoteConfig) return@LaunchedEffect
-        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showCommunityDialog || showExitDialog || showInstagramDialog || showFeedbackPromptDialog || hasPendingBroadcast
+        if (pendingConsentDialog || pendingAnnouncementDialog) return@LaunchedEffect
+        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showAnnouncementDialog || showExitDialog || showInstagramDialog || showFeedbackPromptDialog || hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
         showInstagramDialog = true
         pendingInstagramDialog = false
@@ -398,9 +490,11 @@ fun PocketCraftApp(
 
     LaunchedEffect(
         pendingFeedbackPrompt,
+        pendingConsentDialog,
+        pendingAnnouncementDialog,
         showVersionPickerDialog,
         showConsentDialog,
-        showCommunityDialog,
+        showAnnouncementDialog,
         showInstagramDialog,
         showExitDialog,
         screen,
@@ -409,22 +503,60 @@ fun PocketCraftApp(
     ) {
         if (pendingFeedbackPrompt == null) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
-        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showCommunityDialog || showInstagramDialog || showExitDialog || hasPendingBroadcast
+        if (pendingConsentDialog || pendingAnnouncementDialog) return@LaunchedEffect
+        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showAnnouncementDialog || showInstagramDialog || showExitDialog || hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
         showFeedbackPromptDialog = true
     }
 
+    LaunchedEffect(
+        screen,
+        homeScreenReady,
+        pendingConsentDialog,
+        pendingAnnouncementDialog,
+        showVersionPickerDialog,
+        showConsentDialog,
+        showAnnouncementDialog,
+        showInstagramDialog,
+        showFeedbackPromptDialog,
+        showExitDialog,
+        hasPendingBroadcast
+    ) {
+        if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
+        if (pendingConsentDialog || pendingAnnouncementDialog) return@LaunchedEffect
+        if (preferences.ratingPopupDismissedForever) return@LaunchedEffect
+        if (preferences.appLaunchCount < 2) return@LaunchedEffect
+        if (preferences.ratingPopupShowCount >= 3) return@LaunchedEffect
+        val cooldownMs = 14L * 24L * 60L * 60L * 1000L
+        if (System.currentTimeMillis() - preferences.ratingPopupLastShownAt < cooldownMs) return@LaunchedEffect
+        val hasBlockingPopup = showVersionPickerDialog ||
+            showConsentDialog ||
+            showAnnouncementDialog ||
+            showInstagramDialog ||
+            showFeedbackPromptDialog ||
+            showExitDialog ||
+            hasPendingBroadcast
+        if (hasBlockingPopup) return@LaunchedEffect
+        delay(1_000)
+        preferences.ratingPopupLastShownAt = System.currentTimeMillis()
+        preferences.ratingPopupShowCount = preferences.ratingPopupShowCount + 1
+        showRatingPromptDialog = true
+    }
+
     SideEffect {
         val window = activity?.window ?: return@SideEffect
+        val splashBackgroundColor = ContextCompat.getColor(context, R.color.splash_background)
         val statusBarColor = when {
             hasBlockingSheet -> colorScheme.surface.toArgb()
+            screen == Screen.LOADING || screen == Screen.DOWNLOADING -> splashBackgroundColor
             screen == Screen.SERVER -> colorScheme.surface.toArgb()
             else -> colorScheme.background.toArgb()
         }
         val navBarColor = when {
             hasBlockingSheet -> colorScheme.surface.toArgb()
-            screen == Screen.SERVER -> PocketColors.Primary.toArgb()
-            else -> colorScheme.background.toArgb()
+            screen == Screen.LOADING || screen == Screen.DOWNLOADING -> splashBackgroundColor
+            screen == Screen.SERVER -> PocketColors.FooterBg.toArgb()
+            else -> PocketColors.FooterBg.toArgb()
         }
         window.statusBarColor = statusBarColor
         window.navigationBarColor = navBarColor
@@ -435,16 +567,28 @@ fun PocketCraftApp(
     }
 
     fun requestVersionChange(type: ServerType, version: String) {
+        val selectedVersion = version.trim()
+        if (selectedVersion.isBlank()) {
+            Toast.makeText(context, "Please select a server version first.", Toast.LENGTH_LONG).show()
+            return
+        }
         Log.i(
             TAG_POCKETCRAFT_APP,
-            "requestVersionChange version=$version current=$versionId"
+            "requestVersionChange version=$selectedVersion current=$versionId"
         )
         selectedServerType = type
-        versionId = version
+        versionId = selectedVersion
         scope.launch {
+            stateHolder.saveSettings(
+                stateHolder.config.copy(
+                    serverType = type,
+                    gameVersion = selectedVersion,
+                    customJarPath = if (type == ServerType.MODPACK) selectedVersion else null
+                )
+            )
             AppPreferencesStore.setSetupComplete(context, true)
             AppPreferencesStore.setSelectedServerType(context, type.name)
-            AppPreferencesStore.setSelectedVersion(context, version)
+            AppPreferencesStore.setSelectedVersion(context, selectedVersion)
             stateHolder.markActiveWorldSetupCompleted()
             transitionTarget = Screen.SERVER
             screen = Screen.LOADING
@@ -457,8 +601,33 @@ fun PocketCraftApp(
         customJar: String?,
         createNewWorld: Boolean
     ) {
+        val effectiveType = if (
+            type.supportsVersionSelect &&
+            customJar.isNullOrBlank() &&
+            isLikelyModpackRuntimeId(resolvedVersion)
+        ) {
+            ServerType.MODPACK
+        } else {
+            type
+        }
+        val effectiveCustomJar = if (effectiveType == ServerType.MODPACK) {
+            customJar?.takeIf { it.isNotBlank() } ?: resolvedVersion
+        } else {
+            customJar
+        }
+        val modpackIdForConfig = if (effectiveType == ServerType.MODPACK) {
+            effectiveCustomJar.orEmpty().substringBefore('|').trim()
+        } else {
+            null
+        }
+        val effectiveVersion = if (effectiveType == ServerType.MODPACK) {
+            modpackIdForConfig.orEmpty()
+        } else {
+            resolvedVersion
+        }
+
         if (createNewWorld) {
-            val worldHint = "${type.name.lowercase()}_${resolvedVersion.replace('.', '_')}"
+            val worldHint = "${effectiveType.name.lowercase()}_${effectiveVersion.replace('.', '_')}"
             val createdMessage = stateHolder.createWorld(worldHint)
             val createdWorld = parseCreatedWorldName(createdMessage)
             if (createdWorld == null) {
@@ -474,84 +643,51 @@ fun PocketCraftApp(
 
         val currentConfig = stateHolder.config
         val newConfig = currentConfig.copy(
-            serverType = type,
-            gameVersion = resolvedVersion,
-            customJarPath = customJar
+            serverType = effectiveType,
+            gameVersion = effectiveVersion,
+            customJarPath = if (effectiveType == ServerType.MODPACK) modpackIdForConfig else effectiveCustomJar
         )
         stateHolder.saveSettings(newConfig)
 
-        if (type == ServerType.MODPACK) {
-            val modpackId = customJar?.trim().orEmpty()
+        if (effectiveType == ServerType.MODPACK) {
+            val rawPayload = effectiveCustomJar?.trim().orEmpty()
+            // Payload may be encoded as "modpackId|pageUrl" to carry browser URL
+            val modpackId = rawPayload.substringBefore('|').trim()
+            val encodedPageUrl = rawPayload.substringAfter('|', missingDelimiterValue = "").trim()
+                .takeIf { it.startsWith("http") }
+
             if (modpackId.isBlank()) {
                 Toast.makeText(context, "Please select a modpack first.", Toast.LENGTH_LONG).show()
                 return
             }
 
-            loadingStatus = "Installing modpack..."
-            versionDownloadProgress = 0
-            screen = Screen.DOWNLOADING
-
-            val installResult = ModpackManager.installModpack(
-                context = context.applicationContext,
-                modpackId = modpackId,
-                onStatus = { status ->
-                    scope.launch { loadingStatus = status }
-                },
-                onProgress = { percent ->
-                    scope.launch { versionDownloadProgress = percent.coerceIn(0, 100) }
-                }
-            )
-
-            if (installResult.isFailure) {
-                Toast.makeText(
-                    context,
-                    "Failed to install modpack: ${installResult.exceptionOrNull()?.message ?: "unknown error"}",
-                    Toast.LENGTH_LONG
-                ).show()
-                loadingStatus = "Preparing PocketCraft..."
-                versionDownloadProgress = 0
-                transitionTarget = Screen.SERVER
-                screen = Screen.SERVER
+            val activeWorld = stateHolder.activeWorld.ifBlank { "world" }
+            if (ModpackManager.isModpackInstalled(context.applicationContext, activeWorld, modpackId)) {
+                AppPreferencesStore.setSelectedServerType(context, effectiveType.name)
+                AppPreferencesStore.setSelectedVersion(context, modpackId)
+                downloadedVersions = scanDownloadedRuntimeKeys(context.applicationContext)
+                requestVersionChange(effectiveType, modpackId)
                 return
             }
 
-            AppPreferencesStore.setSelectedServerType(context, type.name)
-            AppPreferencesStore.setSelectedVersion(context, modpackId)
-            downloadedVersions = scanDownloadedRuntimeKeys(context.applicationContext)
-            requestVersionChange(type, modpackId)
+            pendingModpackImportId = modpackId
+            pendingModpackImportPageUrl = encodedPageUrl ?: "https://modrinth.com/modpacks"
+            showModpackImportDialog = true
             return
         }
 
-        if (type.supportsVersionSelect) {
-            loadingStatus = "Downloading $type $resolvedVersion..."
-            versionDownloadProgress = 0
-            screen = Screen.DOWNLOADING
-            val downloadResult = runCatching {
-                withContext(Dispatchers.IO) {
-                    val targetFile = ServerFileManager.getServerJarFile(
-                        context = context.applicationContext,
-                        gameVersion = resolvedVersion,
-                        serverType = type
-                    )
-                    ServerJarManager.resolveJar(
-                        serverType = type,
-                        gameVersion = resolvedVersion,
-                        customJarPath = null,
-                        targetFile = targetFile,
-                        onProgress = { percent ->
-                            scope.launch {
-                                versionDownloadProgress = percent.coerceIn(0, 100)
-                                loadingStatus = "Downloading $type $resolvedVersion... $percent%"
-                            }
-                        }
-                    ).collect { }
-                }
+        if (effectiveType.supportsVersionSelect) {
+            val jarReady = withContext(Dispatchers.IO) {
+                ServerFileManager.isServerJarReady(
+                    context = context.applicationContext,
+                    gameVersion = effectiveVersion,
+                    serverType = effectiveType
+                )
             }
-            if (downloadResult.isFailure) {
-                val error = downloadResult.exceptionOrNull()
+            if (!jarReady) {
                 Toast.makeText(
                     context,
-                    "Failed to download $type $resolvedVersion: ${error?.message ?: "unknown error"}",
+                    "Import ${effectiveType.displayName} $effectiveVersion first from the version picker.",
                     Toast.LENGTH_LONG
                 ).show()
                 loadingStatus = "Preparing PocketCraft..."
@@ -562,11 +698,11 @@ fun PocketCraftApp(
             }
         }
 
-        if (type.supportsVersionSelect) {
-            AppPreferencesStore.setSelectedServerType(context, type.name)
-            AppPreferencesStore.setSelectedVersion(context, resolvedVersion)
+        if (effectiveType.supportsVersionSelect) {
+            AppPreferencesStore.setSelectedServerType(context, effectiveType.name)
+            AppPreferencesStore.setSelectedVersion(context, effectiveVersion)
             downloadedVersions = scanDownloadedRuntimeKeys(context.applicationContext)
-            requestVersionChange(type, resolvedVersion)
+            requestVersionChange(effectiveType, effectiveVersion)
         } else {
             loadingStatus = "Preparing PocketCraft..."
             transitionTarget = Screen.SERVER
@@ -596,34 +732,6 @@ fun PocketCraftApp(
         }
     }
 
-    LaunchedEffect(pendingAutoDownloadVersion, selectedServerType, downloadedVersions) {
-        val pending = pendingAutoDownloadVersion?.trim().orEmpty()
-        if (pending.isBlank()) return@LaunchedEffect
-        if (downloadedVersions.contains(runtimeDownloadKey(selectedServerType, pending))) {
-            pendingAutoDownloadVersion = null
-            AppPreferencesStore.setPendingAutoDownloadVersion(context, null)
-            return@LaunchedEffect
-        }
-
-        PocketCraftApp.applicationScope.launch {
-            runCatching {
-                withContext(Dispatchers.Main.immediate) {
-                    applyVersionChange(
-                        type = selectedServerType,
-                        resolvedVersion = pending,
-                        customJar = null,
-                        createNewWorld = false
-                    )
-                }
-            }
-            withContext(Dispatchers.Main.immediate) {
-                downloadedVersions = scanDownloadedRuntimeKeys(context.applicationContext)
-                pendingAutoDownloadVersion = null
-                AppPreferencesStore.setPendingAutoDownloadVersion(context, null)
-            }
-        }
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
         when (screen) {
             Screen.LOADING -> SplashScreen(
@@ -639,13 +747,62 @@ fun PocketCraftApp(
             Screen.SERVER -> ServerScreen(
                 stateHolder = stateHolder,
                 onChangeVersion = { showVersionPickerDialog = true },
+                onInstallCurrentVersion = {
+                    scope.launch {
+                        val currentConfig = stateHolder.config
+                        val configuredRuntime = currentConfig.customJarPath
+                            ?.takeIf { it.isNotBlank() }
+                            ?: currentConfig.gameVersion.takeIf { it.isNotBlank() }
+                        val installType = if (
+                            currentConfig.serverType.supportsVersionSelect &&
+                            isLikelyModpackRuntimeId(configuredRuntime.orEmpty())
+                        ) {
+                            ServerType.MODPACK
+                        } else {
+                            currentConfig.serverType
+                        }
+                        val modpackId = currentConfig.customJarPath
+                            ?.takeIf { it.isNotBlank() }
+                            ?: currentConfig.gameVersion.takeIf { it.isNotBlank() }
+                        if (installType == ServerType.MODPACK && modpackId.isNullOrBlank()) {
+                            Toast.makeText(context, "Please select a modpack first.", Toast.LENGTH_LONG).show()
+                            return@launch
+                        }
+                        val resolvedVersion = if (installType == ServerType.MODPACK) {
+                            modpackId.orEmpty()
+                        } else {
+                            currentConfig.gameVersion
+                        }
+                        val customJar = if (installType == ServerType.MODPACK) {
+                            modpackId
+                        } else {
+                            currentConfig.customJarPath
+                        }
+                        applyVersionChange(
+                            type = installType,
+                            resolvedVersion = resolvedVersion,
+                            customJar = customJar,
+                            createNewWorld = false
+                        )
+                    }
+                },
                 onVersionSelected = { version ->
                     requestVersionChange(stateHolder.config.serverType, version)
                 },
                 onRequestExit = { showExitDialog = true },
                 isDarkTheme = isDarkTheme,
                 onDarkThemeChange = onDarkThemeChange,
+                currentMobTheme = currentMobTheme,
+                onMobThemeChange = onMobThemeChange,
                 homeTopContent = {
+                    if (modpackImportInProgress || modpackImportError != null) {
+                        ModpackImportProgressCard(
+                            modpackId = modpackImportId.orEmpty(),
+                            status = modpackImportError ?: modpackImportStatus,
+                            progress = modpackImportProgress,
+                            isError = modpackImportError != null
+                        )
+                    }
                     if (screen == Screen.SERVER) {
                         configBanner?.let { banner ->
                             BroadcastBanner(
@@ -673,6 +830,80 @@ fun PocketCraftApp(
         }
 
         // Broadcasts are rendered inline within the home screen under the server card.
+    }
+
+    if (showAnnouncementDialog) {
+        AnnouncementDialog.Content(
+            onFinished = {
+                pendingAnnouncementDialog = false
+                showAnnouncementDialog = false
+            }
+        )
+    }
+
+    if (showModpackImportDialog) {
+        val importId = pendingModpackImportId.orEmpty()
+        val importUrl = pendingModpackImportPageUrl.orEmpty()
+        ServerModpackPickerBottomSheet(
+            modpackId = importId,
+            pageUrl = importUrl,
+            onDismiss = {
+                showModpackImportDialog = false
+                pendingModpackImportId = null
+                pendingModpackImportPageUrl = null
+            },
+            onZipSelected = { uri ->
+                showModpackImportDialog = false
+                scope.launch {
+                    modpackImportInProgress = true
+                    modpackImportError = null
+                    modpackImportId = importId
+                    modpackImportStatus = "Starting modpack import..."
+                    modpackImportProgress = 1
+                    val activeWorld = stateHolder.activeWorld.ifBlank { "world" }
+                    val result = ModpackManager.importModpackZip(
+                        context = context,
+                        zipUri = uri,
+                        worldName = activeWorld,
+                        modpackId = importId,
+                        onStatus = { status ->
+                            scope.launch {
+                                modpackImportStatus = status
+                            }
+                        },
+                        onProgress = { progress ->
+                            scope.launch {
+                                modpackImportProgress = progress.coerceIn(0, 100)
+                            }
+                        }
+                    )
+                    if (result.isSuccess) {
+                        Toast.makeText(context, "Modpack imported successfully!", Toast.LENGTH_LONG).show()
+                        modpackImportProgress = 100
+                        modpackImportStatus = "Import complete. Preparing server..."
+                        val currentConfig = stateHolder.config
+                        val newConfig = currentConfig.copy(
+                            serverType = ServerType.MODPACK,
+                            gameVersion = importId,
+                            customJarPath = importId
+                        )
+                        stateHolder.saveSettings(newConfig)
+                        AppPreferencesStore.setSelectedServerType(context, ServerType.MODPACK.name)
+                        AppPreferencesStore.setSelectedVersion(context, importId)
+                        downloadedVersions = scanDownloadedRuntimeKeys(context.applicationContext)
+                        requestVersionChange(ServerType.MODPACK, importId)
+                        delay(1_500)
+                        modpackImportInProgress = false
+                        modpackImportId = null
+                    } else {
+                        val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+                        modpackImportError = "Import failed: $errorMsg"
+                        modpackImportInProgress = false
+                        Toast.makeText(context, "Import failed. Check progress card for details.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        )
     }
 
     if (showVersionPickerDialog) {
@@ -705,7 +936,11 @@ fun PocketCraftApp(
                             ServerType.MODPACK -> customJar ?: currentConfig.gameVersion
                             else -> version ?: currentConfig.gameVersion
                         }
-                        val shouldWarn = currentConfig.serverType != type || currentConfig.gameVersion != resolvedVersion
+                        val shouldWarn = if (type == ServerType.MODPACK) {
+                            currentConfig.serverType != type || currentConfig.customJarPath != customJar
+                        } else {
+                            currentConfig.serverType != type || currentConfig.gameVersion != resolvedVersion
+                        }
                         if (shouldWarn) {
                             pendingVersionRollbackConfig = Triple(
                                 currentConfig.serverType,
@@ -947,104 +1182,6 @@ fun PocketCraftApp(
         }
     }
 
-    if (showCommunityDialog) {
-        val communitySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(
-            onDismissRequest = {
-                scope.launch {
-                    communitySheetState.hide()
-                    showCommunityDialog = false
-                }
-            },
-            sheetState = communitySheetState,
-            dragHandle = null,
-            containerColor = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-        ) {
-            androidx.compose.foundation.layout.Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(18.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = popupAccentContainerColor,
-                    tonalElevation = 0.dp
-                ) {
-                    Box(
-                        modifier = Modifier.size(72.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.discord_social),
-                            contentDescription = "Discord",
-                            modifier = Modifier.size(36.dp),
-                            tint = Color.Unspecified
-                        )
-                    }
-                }
-
-                androidx.compose.foundation.layout.Column(
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "Join our Discord",
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 22.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Connect with the PocketCraft community, share your worlds, and get tips from other players",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                }
-
-                DuoButton(
-                    text = "JOIN DISCORD",
-                    icon = null,
-                    onClick = {
-                        val opened = FeedbackService.openDiscord(context)
-                        if (opened) {
-                            preferences.socialLinksJoined = true
-                        }
-                        scope.launch {
-                            communitySheetState.hide()
-                            showCommunityDialog = false
-                            if (showInstagramButtonFromRemoteConfig) {
-                                pendingInstagramDialog = true
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            communitySheetState.hide()
-                            showCommunityDialog = false
-                            if (showInstagramButtonFromRemoteConfig) {
-                                pendingInstagramDialog = true
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        "Maybe later",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-        }
-    }
-
     if (showInstagramDialog) {
         val instagramSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(
@@ -1235,32 +1372,275 @@ fun PocketCraftApp(
             }
         }
     }
+
+    if (showRatingPromptDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showRatingPromptDialog = false
+            },
+            icon = {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = popupAccentContainerColor,
+                    border = BorderStroke(1.dp, PocketColors.Primary.copy(alpha = 0.28f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .padding(10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                            contentDescription = null,
+                            modifier = Modifier.size(42.dp),
+                            tint = Color.Unspecified
+                        )
+                    }
+                }
+            },
+            title = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "Enjoying PocketCraft?",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 21.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Text(
+                        text = "Your rating helps the app grow.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            },
+            text = {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = popupAccentContainerColor.copy(alpha = 0.58f)
+                ) {
+                    Text(
+                        text = "A quick Play Store rating helps more players discover PocketCraft servers.",
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        fontSize = 14.sp,
+                        lineHeight = 19.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            },
+            confirmButton = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    DuoButton(
+                        text = "RATE ON PLAY STORE",
+                        onClick = {
+                            showRatingPromptDialog = false
+                            preferences.ratingPopupDismissedForever = true
+                            openPlayStoreListing(context)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                showRatingPromptDialog = false
+                            }
+                        ) {
+                            Text(
+                                text = "Maybe later",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                            )
+                        }
+                        TextButton(
+                            onClick = {
+                                preferences.ratingPopupDismissedForever = true
+                                showRatingPromptDialog = false
+                            }
+                        ) {
+                            Text(
+                                text = "No thanks",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                            )
+                        }
+                    }
+                }
+            },
+            dismissButton = {
+                Spacer(modifier = Modifier.size(0.dp))
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(26.dp)
+        )
+    }
 }
 
 
 private fun scanDownloadedRuntimeKeys(context: Context): Set<String> {
     // JARs now live at files/servers/binaries/<version>/<type>-<version>.jar
-    val serversRoot = File(context.filesDir, "servers/binaries")
-    if (!serversRoot.isDirectory) return emptySet()
     val keys = mutableSetOf<String>()
-    serversRoot.listFiles()?.forEach { versionDir ->
-        if (!versionDir.isDirectory) return@forEach
-        versionDir.listFiles()?.forEach { jar ->
-            if (!jar.isFile) return@forEach
-            if (!jar.extension.equals("jar", ignoreCase = true)) return@forEach
-            if (jar.length() <= 50_000L) return@forEach
-            // jar name is "<type>-<version>.jar" where version matches parent dir
-            val nameWithout = jar.nameWithoutExtension
-            val typePrefix = nameWithout.substringBefore('-', "").takeIf { it.isNotBlank() } ?: return@forEach
-            val version = nameWithout.substringAfter('-', "").takeIf { it.isNotBlank() } ?: return@forEach
-            keys.add("${typePrefix.uppercase()}::$version")
+
+    val binariesRoot = File(context.filesDir, "servers/binaries")
+    binariesRoot.listFiles()?.forEach { versionDir ->
+        if (versionDir.isDirectory) {
+            versionDir.listFiles()?.forEach { jar ->
+                if (!jar.isFile) return@forEach
+                if (!jar.extension.equals("jar", ignoreCase = true)) return@forEach
+                if (jar.length() <= 50_000L) return@forEach
+                // jar name is "<type>-<version>.jar" where version matches parent dir
+                val nameWithout = jar.nameWithoutExtension
+                val typePrefix = nameWithout.substringBefore('-', "").takeIf { it.isNotBlank() } ?: return@forEach
+                val version = nameWithout.substringAfter('-', "").takeIf { it.isNotBlank() } ?: return@forEach
+                keys.add("${typePrefix.uppercase()}::$version")
+            }
         }
     }
+
+    val worldsRoot = File(context.filesDir, "servers/worlds")
+    worldsRoot.listFiles()?.forEach { worldDir ->
+        if (!worldDir.isDirectory) return@forEach
+        val props = com.pocketcraft.server.service.ServerPropertiesHelper.readProperties(worldDir)
+        if (ServerType.fromString(props.getProperty("pocketcraft-server-type")) != ServerType.MODPACK) return@forEach
+        val modpackId = props.getProperty("pocketcraft-modpack-id")
+            ?: props.getProperty("pocketcraft-custom-jar-path")
+            ?: return@forEach
+        if (modpackId.isBlank()) return@forEach
+        val launchTarget = ServerFileManager.readLaunchTarget(worldDir) ?: return@forEach
+        if (launchTarget.file.exists() && launchTarget.file.isFile && launchTarget.file.length() > 0L) {
+            keys.add(runtimeDownloadKey(ServerType.MODPACK, modpackId))
+        }
+    }
+
     return keys
 }
 
 private fun runtimeDownloadKey(type: ServerType, version: String): String {
     return "${type.name}::$version"
+}
+
+private fun isLikelyModpackRuntimeId(value: String): Boolean {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return false
+    if (trimmed.matches(Regex("""\d+(?:\.\d+){1,3}(?:[-+][A-Za-z0-9_.-]+)?"""))) return false
+    return trimmed.any { it.isLetter() } && trimmed.any { it == '-' || it == '_' }
+}
+
+@Composable
+private fun ModpackImportProgressCard(
+    modpackId: String,
+    status: String,
+    progress: Int,
+    isError: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val cardColor = if (isError) {
+        MaterialTheme.colorScheme.errorContainer
+    } else {
+        PocketColors.SurfaceCard
+    }
+    val borderColor = if (isError) {
+        MaterialTheme.colorScheme.error.copy(alpha = 0.45f)
+    } else {
+        PocketColors.Primary.copy(alpha = 0.45f)
+    }
+    val titleColor = if (isError) {
+        MaterialTheme.colorScheme.onErrorContainer
+    } else {
+        PocketColors.TextPrimary
+    }
+    val detailColor = if (isError) {
+        MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.84f)
+    } else {
+        PocketColors.TextSecondary
+    }
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .card3d(
+                elevation = 6.dp,
+                cornerRadius = 20.dp,
+                borderColor = borderColor,
+                depthColor = borderColor.copy(alpha = (borderColor.alpha * 1.3f).coerceAtMost(1f))
+            ),
+        shape = RoundedCornerShape(20.dp),
+        color = cardColor,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        text = if (isError) "Modpack import needs attention" else "Importing modpack",
+                        color = titleColor,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = modpackId.ifBlank { "Selected modpack" },
+                        color = detailColor,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                        maxLines = 1
+                    )
+                }
+
+                if (!isError) {
+                    Text(
+                        text = "${progress.coerceIn(0, 100)}%",
+                        color = PocketColors.Primary,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp
+                    )
+                }
+            }
+
+            if (!isError) {
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0, 100) / 100f },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(9.dp),
+                    color = PocketColors.Primary,
+                    trackColor = PocketColors.Primary.copy(alpha = 0.18f),
+                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                )
+            }
+
+            Text(
+                text = status,
+                color = detailColor,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
 }
 
 private fun latestDownloadedVersionForType(
@@ -1316,6 +1696,19 @@ private fun openExternalUrl(context: Context, url: String): Boolean {
         context.startActivity(intent)
         true
     }.getOrDefault(false)
+}
+
+private fun openPlayStoreListing(context: Context): Boolean {
+    val packageName = context.packageName
+    val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName")).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    val openedMarket = runCatching {
+        context.startActivity(marketIntent)
+        true
+    }.getOrDefault(false)
+    if (openedMarket) return true
+    return openExternalUrl(context, "https://play.google.com/store/apps/details?id=$packageName")
 }
 
 private fun parseCreatedWorldName(message: String): String? {

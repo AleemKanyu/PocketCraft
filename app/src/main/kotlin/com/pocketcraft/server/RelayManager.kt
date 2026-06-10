@@ -871,8 +871,9 @@ class RelayManager(private val context: Context) {
             } catch (e: Exception) {
                 android.util.Log.e("RelayManager", "RelayToLocal error: ${e.message}")
             } finally {
-                runCatching { localSocket.close() }
-                runCatching { relaySocket.close() }
+                // Half-close only: full close() here kills the relay tunnel socket and
+                // drains the phone pool (connection reset by peer for the next player).
+                runCatching { localSocket.shutdownOutput() }
             }
         }
         relayToLocalThread.name = "JavaRelayToLocal"
@@ -906,8 +907,7 @@ class RelayManager(private val context: Context) {
             } catch (e: Exception) {
                 android.util.Log.e("RelayManager", "LocalToRelay error: ${e.message}")
             } finally {
-                runCatching { localSocket.close() }
-                runCatching { relaySocket.close() }
+                runCatching { relaySocket.shutdownOutput() }
             }
         }
         localToRelayThread.name = "JavaLocalToRelay"
