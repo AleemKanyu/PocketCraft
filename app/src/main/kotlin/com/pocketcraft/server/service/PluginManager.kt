@@ -49,7 +49,6 @@ object PluginManager {
     private val incompatiblePluginTokens = listOf(
         "fastleafdecay",
         "inventoryprofiles",
-        "viaversion",
         "viabackwards",
         "viarewind"
     )
