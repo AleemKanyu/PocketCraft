@@ -112,6 +112,7 @@ object ServerFileManager {
         props.setProperty("level-name", resolvedWorldName)
         props.setProperty("server-ip", "")                 // bind all interfaces
         props.setProperty("online-mode", "false")
+        props.setProperty("enforce-secure-profile", "false")
         // Ensure RCON is enabled for in-app console commands
         props.setProperty("enable-rcon", "true")
         props.setProperty("rcon.port", "25575")

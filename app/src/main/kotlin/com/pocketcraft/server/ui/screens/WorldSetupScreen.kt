@@ -268,7 +268,8 @@ fun WorldSetupScreen(
             serverType = selectedServerType,
             customJarPath = selectedCustomJarPath,
             maxPlayers = maxPlayersValue.roundToInt(),
-            viewDistance = 6
+            viewDistance = stateHolder.config.viewDistance.coerceIn(3, 32),
+            simulationDistance = stateHolder.config.simulationDistance.coerceIn(3, 32)
         )
         stateHolder.saveSettings(updatedConfig, targetWorldName = targetWorld)
 
@@ -552,8 +553,8 @@ fun WorldSetupScreen(
                     Slider(
                         value = maxPlayersValue,
                         onValueChange = { maxPlayersValue = it },
-                        valueRange = 1f..20f,
-                        steps = 18
+                        valueRange = 1f..50f,
+                        steps = 48
                     )
                 }
 

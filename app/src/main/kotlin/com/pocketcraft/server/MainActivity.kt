@@ -97,11 +97,15 @@ class MainActivity : ComponentActivity() {
         PocketColors.activeMobTheme = initialMobTheme
         PocketColors.isDark = initialDarkTheme
 
-        val splashBackgroundColor = ContextCompat.getColor(this, R.color.splash_background)
+        val splashBackgroundColor = if (initialDarkTheme) {
+            PocketColors.BgDark.toArgb()
+        } else {
+            ContextCompat.getColor(this, R.color.splash_background)
+        }
         val initialSystemBarColor = splashBackgroundColor
         val initialNavBarColor = splashBackgroundColor
-        val initialLightSystemBars = true
-        val initialLightNavBar = true
+        val initialLightSystemBars = !initialDarkTheme
+        val initialLightNavBar = !initialDarkTheme
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = initialSystemBarColor
         window.navigationBarColor = initialNavBarColor
@@ -174,7 +178,11 @@ class MainActivity : ComponentActivity() {
 
                 SideEffect {
                     val onSplash = jreError == null && !jreReady
-                    val splashBackgroundColor = ContextCompat.getColor(this@MainActivity, R.color.splash_background)
+                    val splashBackgroundColor = if (darkTheme) {
+                        PocketColors.BgDark.toArgb()
+                    } else {
+                        ContextCompat.getColor(this@MainActivity, R.color.splash_background)
+                    }
                     val statusBarColor = if (onSplash) {
                         splashBackgroundColor
                     } else {

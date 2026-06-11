@@ -13,6 +13,8 @@ object ServerPropertiesHelper {
     const val RELAY_READY_COMPRESSION_THRESHOLD = -1
     const val DEFAULT_VIEW_DISTANCE = 6
     const val DEFAULT_SIMULATION_DISTANCE = 4
+    const val DESIRED_VIEW_DISTANCE_KEY = "pocketcraft-desired-view-distance"
+    const val DESIRED_SIMULATION_DISTANCE_KEY = "pocketcraft-desired-simulation-distance"
     const val RELAY_READY_ENTITY_BROADCAST_PERCENT = 35
     const val POCKETCRAFT_JOIN_MESSAGE_TEXT = "hosted on Pocketcraft"
     const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/NGPzXFYp"

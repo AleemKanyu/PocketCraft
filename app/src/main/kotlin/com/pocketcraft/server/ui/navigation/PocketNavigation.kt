@@ -64,13 +64,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.R
@@ -368,12 +373,7 @@ fun PocketBottomNav(
     val navIndicatorShape by AppPreferencesStore.getNavIndicatorShapeFlow(context).collectAsState(initial = "PILL")
 
     val navBgColor = PocketColors.FooterBg
-    val footerContainerShape = RoundedCornerShape(
-        topStart = 20.dp,
-        topEnd = 20.dp,
-        bottomStart = 0.dp,
-        bottomEnd = 0.dp
-    )
+    val footerContainerShape = remember { ReverseCurvedFooterShape() }
 
     val selectedColor = PocketColors.NavActiveText
     val unselectedColor = PocketColors.FooterText
@@ -381,6 +381,7 @@ fun PocketBottomNav(
 
     val navItemSlotWidth = 64.dp
     val navItemSlotHeight = 56.dp
+    val footerCurveHeight = 18.dp
     val navRowHeight = navItemSlotHeight
     val circleSizeDp = 42.dp
 
@@ -406,6 +407,7 @@ fun PocketBottomNav(
             .background(navBgColor)
             .navigationBarsPadding()
     ) {
+        Spacer(Modifier.height(footerCurveHeight))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -481,5 +483,35 @@ fun PocketBottomNav(
                 }
             }
         }
+    }
+}
+
+private class ReverseCurvedFooterShape : Shape {
+    override fun createOutline(
+        size: androidx.compose.ui.geometry.Size,
+        layoutDirection: LayoutDirection,
+        density: Density
+    ): Outline {
+        val curveDepth = with(density) { 18.dp.toPx() }.coerceAtMost(size.height * 0.35f)
+        val curveWidth = with(density) { 52.dp.toPx() }.coerceAtMost(size.width * 0.22f)
+
+        val path = Path().apply {
+            moveTo(0f, curveDepth)
+            cubicTo(
+                curveWidth * 0.20f, curveDepth,
+                curveWidth * 0.34f, 0f,
+                curveWidth, 0f
+            )
+            lineTo(size.width - curveWidth, 0f)
+            cubicTo(
+                size.width - curveWidth * 0.34f, 0f,
+                size.width - curveWidth * 0.20f, curveDepth,
+                size.width, curveDepth
+            )
+            lineTo(size.width, size.height)
+            lineTo(0f, size.height)
+            close()
+        }
+        return Outline.Generic(path)
     }
 }

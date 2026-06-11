@@ -65,15 +65,18 @@ object ServerPropertiesWriter {
     fun overlayManagedValues(props: Properties, prefs: ServerPrefsSnapshot) {
         props["level-name"] = prefs.worldName
         props["level-seed"] = prefs.worldSeed
-        props["max-players"] = prefs.maxPlayers.coerceIn(1, 1000).toString()
+        props["max-players"] = prefs.maxPlayers.coerceIn(1, 50).toString()
         props["server-port"] = "25565"
         props["difficulty"] = prefs.difficulty.lowercase()
         props["gamemode"] = prefs.gameMode.lowercase()
         props["online-mode"] = "false"
+        props["enforce-secure-profile"] = "false"
         props["motd"] = prefs.motd
         props["pvp"] = prefs.pvp.toString()
         props["view-distance"] = prefs.viewDistance.coerceIn(3, 32).toString()
         props["simulation-distance"] = prefs.simulationDistance.coerceIn(3, 32).toString()
+        props[ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY] = prefs.viewDistance.coerceIn(3, 32).toString()
+        props[ServerPropertiesHelper.DESIRED_SIMULATION_DISTANCE_KEY] = prefs.simulationDistance.coerceIn(3, 32).toString()
         props["spawn-protection"] = prefs.spawnProtection.coerceAtLeast(0).toString()
         props["allow-flight"] = prefs.allowFlight.toString()
         props["white-list"] = prefs.whiteList.toString()

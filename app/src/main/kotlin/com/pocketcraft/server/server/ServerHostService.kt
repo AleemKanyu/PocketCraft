@@ -1488,11 +1488,11 @@ class ServerHostService : Service() {
             }
         }
         val motd = props.getProperty("motd", "A PocketCraft Server").trim()
-        val maxPlayers = props.getProperty("max-players", "20").toIntOrNull() ?: 20
+        val maxPlayers = props.getProperty("max-players", "10").toIntOrNull() ?: 10
         relayManager.postServerStatus(
             motd = motd,
             players = relayStatusPlayerCount.get().coerceAtLeast(0),
-            maxPlayers = maxPlayers.coerceAtLeast(1),
+            maxPlayers = maxPlayers.coerceIn(1, 50),
             version = versionId
         )
     }

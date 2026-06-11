@@ -252,15 +252,19 @@ class ServerConfigRepository @Inject constructor(
         return ServerConfig(
             worldName = props["level-name"] ?: defaultName,
             worldSeed = props["level-seed"] ?: "",
-            maxPlayers = (props["max-players"]?.toIntOrNull() ?: 10).coerceIn(1, 1000),
+            maxPlayers = (props["max-players"]?.toIntOrNull() ?: 10).coerceIn(1, 50),
             port = 25565,
             difficulty = props["difficulty"] ?: "normal",
             gameMode = props["gamemode"] ?: "survival",
             onlineMode = props["online-mode"]?.toBoolean() ?: false,
             motd = props["motd"] ?: "A PocketCraft Server",
             pvp = props["pvp"]?.toBoolean() ?: true,
-            viewDistance = props["view-distance"]?.toIntOrNull() ?: 6,
-            simulationDistance = props["simulation-distance"]?.toIntOrNull() ?: 4,
+            viewDistance = props["pocketcraft-desired-view-distance"]?.toIntOrNull()
+                ?: props["view-distance"]?.toIntOrNull()
+                ?: 6,
+            simulationDistance = props["pocketcraft-desired-simulation-distance"]?.toIntOrNull()
+                ?: props["simulation-distance"]?.toIntOrNull()
+                ?: 4,
             spawnProtection = props["spawn-protection"]?.toIntOrNull() ?: 16,
             allowFlight = props["allow-flight"]?.toBoolean() ?: true,
             whiteList = props["white-list"]?.toBoolean() ?: false,

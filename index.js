@@ -656,9 +656,26 @@ function pairSockets(playerSocket, phoneSocket, userId) {
   configureSocket(playerSocket);
   configureSocket(phoneSocket);
 
+  playerSocket.on('data', (chunk) => {
+    if (!phoneSocket.destroyed) {
+      phoneSocket.write(chunk);
+    }
+  });
+
+  phoneSocket.on('data', (chunk) => {
+    if (!playerSocket.destroyed) {
+      playerSocket.write(chunk);
+    }
+  });
+
+  if (playerSocket.initialChunk) {
+    if (!phoneSocket.destroyed) {
+      phoneSocket.write(playerSocket.initialChunk);
+    }
+    playerSocket.initialChunk = null;
+  }
+
   playerSocket.resume();
-  playerSocket.pipe(phoneSocket);
-  phoneSocket.pipe(playerSocket);
 
   let killed = false;
 
@@ -666,8 +683,6 @@ function pairSockets(playerSocket, phoneSocket, userId) {
     if (killed) return;
     killed = true;
     console.log(`[relay] Pairing broken for ${userId} (source: ${src})`);
-    playerSocket.unpipe(phoneSocket);
-    phoneSocket.unpipe(playerSocket);
     if (!playerSocket.destroyed) playerSocket.destroy();
     if (!phoneSocket.destroyed) phoneSocket.destroy();
   };
@@ -926,18 +941,15 @@ app.post('/register', (req, res) => {
     configureSocket(playerSocket);
     
     playerSocket.once('data', (chunk) => {
-      if (handleJavaPing(playerSocket, chunk, port)) {
-        return; // Handled by java-ping
-      }
+      if (handleJavaPing(playerSocket, chunk, tunnel.port)) return;
       
-      playerSocket.pause();
-      playerSocket.unshift(chunk);
-      
+      playerSocket.initialChunk = chunk;
       const phoneSocket = takeNextPhoneSocket(tunnel);
       if (phoneSocket) {
         pairSockets(playerSocket, phoneSocket, userId);
         return;
       }
+      playerSocket.pause();
       queuePlayer(tunnel, userId, playerSocket);
     });
   });
@@ -985,18 +997,15 @@ app.post(['/phone-ready', '/phone_ready', '/ready', '/phoneReady'], (req, res) =
       configureSocket(playerSocket);
       
       playerSocket.once('data', (chunk) => {
-        if (handleJavaPing(playerSocket, chunk, port)) {
-          return; // Handled by java-ping
-        }
+        if (handleJavaPing(playerSocket, chunk, tunnel.port)) return;
         
-        playerSocket.pause();
-        playerSocket.unshift(chunk);
-        
+        playerSocket.initialChunk = chunk;
         const phoneSocket = takeNextPhoneSocket(tunnel);
         if (phoneSocket) {
           pairSockets(playerSocket, phoneSocket, userId);
           return;
         }
+        playerSocket.pause();
         queuePlayer(tunnel, userId, playerSocket);
       });
     });

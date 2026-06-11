@@ -31,7 +31,8 @@ object RelayServers {
         region = "Asia",
         icon = "🌏",
         description = "Optimized for players in India and South Asia",
-        bestFor = "Players in India, Pakistan, Bangladesh, Sri Lanka"
+        bestFor = "Players in India, Pakistan, Bangladesh, Sri Lanka",
+        fallbackIp = "13.201.57.41"
     )
 
     val ALL = listOf(SINGAPORE, MUMBAI)

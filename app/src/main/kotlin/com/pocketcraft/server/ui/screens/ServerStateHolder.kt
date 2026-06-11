@@ -1631,7 +1631,7 @@ class ServerStateHolder(
     suspend fun saveSettings(next: ServerConfig, targetWorldName: String? = null): String = withContext(Dispatchers.IO) {
         val enforced = next.copy(
             port = singleServerPort,
-            maxPlayers = next.maxPlayers.coerceIn(1, 1000),
+            maxPlayers = next.maxPlayers.coerceIn(1, 50),
             viewDistance = next.viewDistance.coerceIn(3, 32),
             simulationDistance = next.simulationDistance.coerceIn(3, 32)
         )
@@ -2580,15 +2580,21 @@ class ServerStateHolder(
         var loaded = ServerConfig(
             worldName = props.getProperty("level-name", activeWorld),
             worldSeed = props.getProperty("level-seed", ""),
-            maxPlayers = (props.getProperty("max-players", adaptiveMaxPlayers().toString()).toIntOrNull() ?: adaptiveMaxPlayers()).coerceIn(1, 1000),
+            maxPlayers = (props.getProperty("max-players", adaptiveMaxPlayers().toString()).toIntOrNull() ?: adaptiveMaxPlayers()).coerceIn(1, 50),
             port = singleServerPort,
             difficulty = props.getProperty("difficulty", "normal"),
             gameMode = props.getProperty("gamemode", "survival"),
             onlineMode = props.getProperty("online-mode", "false").toBoolean(),
             motd = props.getProperty("motd", "A PocketCraft Server"),
             pvp = props.getProperty("pvp", "true").toBoolean(),
-            viewDistance = props.getProperty("view-distance", adaptiveViewDistance().toString()).toIntOrNull() ?: adaptiveViewDistance(),
-            simulationDistance = props.getProperty("simulation-distance", adaptiveSimulationDistance().toString()).toIntOrNull() ?: adaptiveSimulationDistance(),
+            viewDistance = props.getProperty(ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY)
+                ?.toIntOrNull()
+                ?: props.getProperty("view-distance", adaptiveViewDistance().toString()).toIntOrNull()
+                ?: adaptiveViewDistance(),
+            simulationDistance = props.getProperty(ServerPropertiesHelper.DESIRED_SIMULATION_DISTANCE_KEY)
+                ?.toIntOrNull()
+                ?: props.getProperty("simulation-distance", adaptiveSimulationDistance().toString()).toIntOrNull()
+                ?: adaptiveSimulationDistance(),
             spawnProtection = props.getProperty("spawn-protection", "16").toIntOrNull() ?: 16,
             allowFlight = props.getProperty("allow-flight", "false").toBoolean(),
             whiteList = props.getProperty("white-list", "false").toBoolean(),
@@ -2618,7 +2624,7 @@ class ServerStateHolder(
 
     private fun saveConfig(config: ServerConfig, targetDir: File = serverDir) {
         val enforcedConfig = config.copy(
-            maxPlayers = config.maxPlayers.coerceIn(1, 1000),
+            maxPlayers = config.maxPlayers.coerceIn(1, 50),
             viewDistance = config.viewDistance.coerceIn(3, 32),
             simulationDistance = config.simulationDistance.coerceIn(3, 32)
         )
@@ -2635,7 +2641,7 @@ class ServerStateHolder(
 
     private fun adaptiveSimulationDistance(): Int = 4
 
-    private fun adaptiveMaxPlayers(): Int = if (totalRamGb >= 6) 20 else 10
+    private fun adaptiveMaxPlayers(): Int = 10
 
     private fun buildServerMotd(displayName: String, description: String): String {
         val cleanName = displayName.trim()
@@ -2880,8 +2886,11 @@ class ServerStateHolder(
 
         props["view-distance"] = view.coerceIn(3, 32).toString()
         props["simulation-distance"] = simulation.coerceIn(3, 32).toString()
+        props[ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY] = view.coerceIn(3, 32).toString()
+        props[ServerPropertiesHelper.DESIRED_SIMULATION_DISTANCE_KEY] = simulation.coerceIn(3, 32).toString()
         props["sync-chunk-writes"] = "false"
         props["network-compression-threshold"] = ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD.toString()
+        props["enforce-secure-profile"] = "false"
         ServerPropertiesHelper.saveProperties(serverDir, props)
     }
 

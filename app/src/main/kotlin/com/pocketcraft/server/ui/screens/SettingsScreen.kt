@@ -158,7 +158,7 @@ fun SettingsScreen(
 
     LaunchedEffect(stateHolder.config) {
         val loadedState = SettingsState(
-            config = stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, 20)),
+            config = stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, 50)),
             forceGamemode = stateHolder.readServerProperty("force-gamemode")?.toBoolean() ?: false,
             broadcastConsoleToOps = stateHolder.readServerProperty("broadcast-console-to-ops")?.toBoolean() ?: false,
             hideOnlinePlayers = stateHolder.readServerProperty("hide-online-players")?.toBoolean() ?: false,
@@ -310,8 +310,8 @@ fun SettingsScreen(
                                         saveStatus = SaveStatus.SAVING
                                         val normalizedLevelType = normalizeWorldType(currentState.levelType)
                                         val nextConfig = currentState.config.copy(
-                                            viewDistance = currentState.config.viewDistance.coerceAtMost(if (currentState.maxPowerEnabled) 32 else 16),
-                                            simulationDistance = currentState.config.simulationDistance.coerceAtMost(if (currentState.maxPowerEnabled) 16 else 10),
+                                            viewDistance = currentState.config.viewDistance.coerceIn(3, 32),
+                                            simulationDistance = currentState.config.simulationDistance.coerceIn(3, 32),
                                             levelType = normalizedLevelType
                                         )
                                         val result = runCatching {
@@ -416,7 +416,7 @@ fun SettingsScreen(
                         description = activeS.viewDistanceDesc,
                         hint = activeS.viewDistanceHint,
                         min = 3,
-                        max = if (currentState.maxPowerEnabled) 32 else 16,
+                        max = 32,
                         value = currentState.config.viewDistance,
                         onValueChange = { currentState = currentState.copy(config = currentState.config.copy(viewDistance = it)) }
                     )
@@ -427,7 +427,7 @@ fun SettingsScreen(
                         label = activeS.simulationDistance,
                         description = activeS.simulationDistanceDesc,
                         min = 3,
-                        max = if (currentState.maxPowerEnabled) 16 else 10,
+                        max = 32,
                         value = currentState.config.simulationDistance,
                         onValueChange = { currentState = currentState.copy(config = currentState.config.copy(simulationDistance = it)) }
                     )
@@ -594,7 +594,7 @@ fun SettingsScreen(
                     SettingsSliderRow(
                         icon = Icons.Default.Groups,
                         label = activeS.maxPlayers,
-                        min = 1, max = 20,
+                        min = 1, max = 50,
                         value = currentState.config.maxPlayers,
                         onValueChange = { currentState = currentState.copy(config = currentState.config.copy(maxPlayers = it)) }
                     )

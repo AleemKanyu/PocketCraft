@@ -571,8 +571,8 @@ fun ConsoleScreen(
                                     stateHolder.stopServer()
                                 },
                                 enabled = true,
-                                modifier = Modifier.weight(0.34f),
-                                style = PremiumHomeButtonStyle.DangerGhost
+                                modifier = Modifier.weight(0.42f),
+                                style = PremiumHomeButtonStyle.Danger
                             )
 
                             PremiumHomeButton(
@@ -1077,7 +1077,7 @@ private fun StartupProgressCard(
                 onClick = onStop,
                 enabled = !isStopping,
                 modifier = Modifier.fillMaxWidth(),
-                style = PremiumHomeButtonStyle.DangerGhost
+                style = PremiumHomeButtonStyle.Danger
             )
         }
     }
@@ -1820,6 +1820,12 @@ private fun PremiumHomeButton(
                 bottomBorderColor = if (isDark) Color(0xFF682431) else PocketColors.DangerBorderBottom.copy(alpha = 0.50f)
                 contentColor = if (isDark) Color(0xFFFF8A9A) else PocketColors.Offline
             }
+            PremiumHomeButtonStyle.Danger -> {
+                bgColor = Color(0xFFE02424)
+                borderColor = Color(0xFFB91C1C)
+                bottomBorderColor = Color(0xFF7F1D1D)
+                contentColor = Color.White
+            }
         }
     }
 
@@ -1827,12 +1833,14 @@ private fun PremiumHomeButton(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val isDangerGhost = style == PremiumHomeButtonStyle.DangerGhost
+    val isDanger = style == PremiumHomeButtonStyle.Danger
     val restingBorder = when (style) {
         PremiumHomeButtonStyle.DangerGhost -> 2.dp
+        PremiumHomeButtonStyle.Danger -> 4.dp
         PremiumHomeButtonStyle.StartServer -> 3.dp
         else -> 3.dp
     }
-    val targetBorder = if (pressed && enabled) 1.dp else restingBorder
+    val targetBorder = if (pressed && enabled) 1.5.dp else restingBorder
     val targetOffset = if (pressed && enabled && !isDangerGhost) (restingBorder - 1.5.dp) else 0.dp
 
     val offsetY by animateDpAsState(
@@ -1858,14 +1866,14 @@ private fun PremiumHomeButton(
         Box(
             modifier = Modifier
                 .then(widthModifier)
-                .height(52.dp)
+                .height(if (isDanger) 56.dp else 52.dp)
                 // Raised border drawn BEFORE clip — bottom edge stays visible
                 .card3d(
-                    elevation = if (isDangerGhost) 4.dp else 8.dp,
+                    elevation = if (isDangerGhost) 4.dp else if (isDanger) 9.dp else 8.dp,
                     cornerRadius = cornerRadius,
                     borderColor = borderColor,
                     depthColor = bottomBorderColor,
-                    borderWidth = if (isDangerGhost) 1.dp else 1.5.dp,
+                    borderWidth = if (isDangerGhost) 1.dp else if (isDanger) 2.dp else 1.5.dp,
                     depthWidth = bottomBorderDp
                 )
                 .clip(shape)
@@ -1886,7 +1894,7 @@ private fun PremiumHomeButton(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    modifier = Modifier.size(if (style == PremiumHomeButtonStyle.StartServer || style == PremiumHomeButtonStyle.Primary) 17.dp else 16.dp),
+                    modifier = Modifier.size(if (isDanger) 18.dp else if (style == PremiumHomeButtonStyle.StartServer || style == PremiumHomeButtonStyle.Primary) 17.dp else 16.dp),
                     tint = contentColor
                 )
                 Spacer(Modifier.width(8.dp))
@@ -1895,8 +1903,8 @@ private fun PremiumHomeButton(
                     color = contentColor,
                     style = MaterialTheme.typography.labelLarge.copy(
                         fontFamily    = ButtonFont,
-                        fontWeight    = if (isDangerGhost) FontWeight.Normal else FontWeight.Normal,
-                        fontSize      = if (isDangerGhost) 13.sp else 14.5.sp,
+                        fontWeight    = if (isDanger) FontWeight.Bold else FontWeight.Normal,
+                        fontSize      = if (isDanger) 15.sp else if (isDangerGhost) 13.sp else 14.5.sp,
                         letterSpacing = 0.sp
                     ),
                     maxLines = 1,
@@ -1911,7 +1919,8 @@ private enum class PremiumHomeButtonStyle {
     StartServer,
     Primary,
     Secondary,
-    DangerGhost
+    DangerGhost,
+    Danger
 }
 
 private fun shareServerAddresses(

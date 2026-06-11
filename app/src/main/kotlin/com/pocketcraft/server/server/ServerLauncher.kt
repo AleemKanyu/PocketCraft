@@ -349,7 +349,7 @@ class ServerLauncher(private val context: Context) {
             "-XX:+UseStringDeduplication",
             "-XX:+UseG1GC",
             "-XX:+ParallelRefProcEnabled",
-            "-XX:MaxGCPauseMillis=50",
+            "-XX:MaxGCPauseMillis=200",
             "-XX:+DisableExplicitGC",
             "-XX:G1NewSizePercent=30",
             "-XX:G1MaxNewSizePercent=40",
@@ -370,7 +370,7 @@ class ServerLauncher(private val context: Context) {
             "-Dio.netty.recycler.maxCapacity=0",
             "-Dio.netty.recycler.maxCapacityPerThread=0",
             "-Dio.netty.recycler.linkCapacity=1024",
-            "-Dio.netty.allocator.type=pooled",
+            "-Dio.netty.allocator.type=unpooled",
             "-Djdk.lang.Process.launchMechanism=FORK",
         ).apply {
             when (launchMode) {
@@ -560,7 +560,7 @@ class ServerLauncher(private val context: Context) {
         val original = runCatching { paperGlobal.readText() }.getOrDefault("")
 
         var updated = original
-        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "auto-config-send-distance", "false")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "auto-config-send-distance", "true")
         updated = ensureYamlSectionValue(updated, "misc", "io-threads", "2")
         updated = ensureYamlSectionValue(updated, "misc", "worker-threads", "2")
         updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "2")
@@ -613,10 +613,6 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded-range", "10")
         updated = ensureYamlPathValue(updated, listOf("chunks"), "max-auto-save-chunks-per-tick", "4")
         updated = ensureYamlPathValue(updated, listOf("chunks"), "prevent-moving-into-unloaded-chunks", "true")
-        // Cap chunk floods on relay hosting — 5G uplink stalls ~300ms per 16KB write without this.
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading"), "player-max-chunk-send-rate", "8.0")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading"), "target-player-chunk-send-rate", "4.0")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading"), "player-max-concurrent-sends", "1")
         updated = ensureYamlPathValue(updated, listOf("tick-rates"), "mob-spawner", "2")
         updated = ensureYamlPathValue(updated, listOf("tick-rates"), "grass-spread", "4")
         updated = ensureYamlPathValue(updated, listOf("tick-rates"), "container-update", "1")
