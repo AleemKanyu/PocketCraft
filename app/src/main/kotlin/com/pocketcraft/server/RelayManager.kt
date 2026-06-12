@@ -37,8 +37,10 @@ class RelayManager(private val context: Context) {
     companion object {
         const val CONTROL_PORT = 8080
         const val PHONE_TUNNEL_PORT = 9000
-        private const val SOCKET_BUFFER_SIZE = 1024 * 1024
-        private const val PLAYER_BRIDGE_BUFFER_SIZE = 256 * 1024
+        // Keep the Java bridge queues deliberately small. Large socket queues let chunk
+        // traffic sit ahead of keep-alives for seconds before TCP backpressure reaches Paper.
+        private const val SOCKET_BUFFER_SIZE = 64 * 1024
+        private const val PLAYER_BRIDGE_BUFFER_SIZE = 8 * 1024
         private const val LOW_LATENCY_WARMUP_BYTES = 128 * 1024L
         private const val LOW_LATENCY_WARMUP_NS = 4_000_000_000L
         private const val INITIAL_POOL_SIZE = 5
@@ -871,9 +873,8 @@ class RelayManager(private val context: Context) {
             } catch (e: Exception) {
                 android.util.Log.e("RelayManager", "RelayToLocal error: ${e.message}")
             } finally {
-                // Half-close only: full close() here kills the relay tunnel socket and
-                // drains the phone pool (connection reset by peer for the next player).
-                runCatching { localSocket.shutdownOutput() }
+                runCatching { localSocket.close() }
+                runCatching { relaySocket.close() }
             }
         }
         relayToLocalThread.name = "JavaRelayToLocal"
@@ -907,7 +908,8 @@ class RelayManager(private val context: Context) {
             } catch (e: Exception) {
                 android.util.Log.e("RelayManager", "LocalToRelay error: ${e.message}")
             } finally {
-                runCatching { relaySocket.shutdownOutput() }
+                runCatching { localSocket.close() }
+                runCatching { relaySocket.close() }
             }
         }
         localToRelayThread.name = "JavaLocalToRelay"

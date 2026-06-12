@@ -560,9 +560,20 @@ class ServerLauncher(private val context: Context) {
         val original = runCatching { paperGlobal.readText() }.getOrDefault("")
 
         var updated = original
+
+        // Bound chunk bursts so movement cannot queue seconds of terrain ahead of
+        // keep-alives on the phone's relay connection.
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "target-player-chunk-send-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-loading-priority-override")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-loads")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate", "40")
+
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "auto-config-send-distance", "true")
-        updated = ensureYamlSectionValue(updated, "misc", "io-threads", "2")
-        updated = ensureYamlSectionValue(updated, "misc", "worker-threads", "2")
+        updated = removeYamlPathKey(updated, listOf("misc"), "io-threads")
+        updated = removeYamlPathKey(updated, listOf("misc"), "worker-threads")
+        updated = ensureYamlSectionValue(updated, "chunk-system", "io-threads", "2")
+        updated = ensureYamlSectionValue(updated, "chunk-system", "worker-threads", "2")
         updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "2")
 
         // Disable bundled Spark profiler (fails to load native libraries on Android)
@@ -571,7 +582,7 @@ class ServerLauncher(private val context: Context) {
 
         if (updated != original) {
             paperGlobal.writeText(updated)
-            onOutput("[PocketCraft] Paper global tuning applied: adaptive chunk send + dedicated IO/worker threads.")
+            onOutput("[PocketCraft] Paper global tuning applied: 40 chunk/s relay cap + dedicated IO/worker threads.")
         }
     }
 
@@ -605,6 +616,16 @@ class ServerLauncher(private val context: Context) {
         val original = runCatching { paperWorldDefaults.readText() }.getOrDefault("")
 
         var updated = original
+
+        // Clean up any broken chunk limits left over from previous experiments
+        updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-load-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-send-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading"), "target-player-chunk-send-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-concurrent-sends")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "target-player-chunk-send-rate")
+
         // Maintain a small buffer so brief movement doesn't instantly cause chunk shedding.
         updated = ensureYamlPathValue(updated, listOf("chunks"), "delay-chunk-unloads-by", "10s")
         // Keep spawn chunks loaded so the first player to join sees terrain immediately.

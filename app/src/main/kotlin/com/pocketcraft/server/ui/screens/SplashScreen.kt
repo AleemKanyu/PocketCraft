@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
@@ -81,10 +82,11 @@ fun SplashScreen(
         animationSpec = tween(durationMillis = 260),
         label         = "splash_progress"
     )
-    val titleColor    = PocketColors.TextPrimary
-    val statusColor   = PocketColors.TextSecondary
-    val progressColor = PocketColors.Primary
-    val trackColor    = PocketColors.InactiveBg
+    val isDark = PocketColors.isDark
+    val titleColor    = if (isDark) Color.White else PocketColors.TextPrimary
+    val statusColor   = if (isDark) Color.White.copy(alpha = 0.7f) else PocketColors.TextSecondary
+    val progressColor = if (isDark) Color(0xFF81C784) else PocketColors.Primary
+    val trackColor    = if (isDark) Color(0xFF2C362C) else PocketColors.InactiveBg
     val splashBackground = colorResource(id = R.color.splash_background)
 
     Box(

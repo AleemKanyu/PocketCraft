@@ -5,6 +5,8 @@ const express = require('express');
 const dgram   = require('dgram');
 const dns     = require('dns');
 const { startBedrockPing, updateServerStatus } = require('./bedrock-ping');
+const { handleJavaPing } = require('./java-ping');
+
 // Constants
 
 const CONTROL_PORT               = 8080;
@@ -676,7 +678,6 @@ function pairSockets(playerSocket, phoneSocket, userId) {
   configureSocket(playerSocket);
   configureSocket(phoneSocket);
 
-  playerSocket.resume();
   playerSocket.pipe(phoneSocket);
   phoneSocket.pipe(playerSocket);
 
@@ -944,13 +945,19 @@ app.post('/register', (req, res) => {
 
   tunnel.server = net.createServer({ allowHalfOpen: false }, (playerSocket) => {
     configureSocket(playerSocket);
-    playerSocket.pause();
-    const phoneSocket = takeNextPhoneSocket(tunnel);
-    if (phoneSocket) {
-      pairSockets(playerSocket, phoneSocket, userId);
-      return;
-    }
-    queuePlayer(tunnel, userId, playerSocket);
+
+    playerSocket.once('data', (chunk) => {
+      if (handleJavaPing(playerSocket, chunk, tunnel.port)) return;
+
+      playerSocket.pause();
+      playerSocket.unshift(chunk);
+      const phoneSocket = takeNextPhoneSocket(tunnel);
+      if (phoneSocket) {
+        pairSockets(playerSocket, phoneSocket, userId);
+        return;
+      }
+      queuePlayer(tunnel, userId, playerSocket);
+    });
   });
 
   tunnel.server.on('error', (err) => {
@@ -994,13 +1001,19 @@ app.post(['/phone-ready', '/phone_ready', '/ready', '/phoneReady'], (req, res) =
 
     tunnel.server = net.createServer({ allowHalfOpen: false }, (playerSocket) => {
       configureSocket(playerSocket);
-      playerSocket.pause();
-      const phoneSocket = takeNextPhoneSocket(tunnel);
-      if (phoneSocket) {
-        pairSockets(playerSocket, phoneSocket, userId);
-        return;
-      }
-      queuePlayer(tunnel, userId, playerSocket);
+
+      playerSocket.once('data', (chunk) => {
+        if (handleJavaPing(playerSocket, chunk, tunnel.port)) return;
+
+        playerSocket.pause();
+        playerSocket.unshift(chunk);
+        const phoneSocket = takeNextPhoneSocket(tunnel);
+        if (phoneSocket) {
+          pairSockets(playerSocket, phoneSocket, userId);
+          return;
+        }
+        queuePlayer(tunnel, userId, playerSocket);
+      });
     });
 
     tunnel.server.on('error', (err) => {
@@ -1281,4 +1294,3 @@ setInterval(refreshPublicIpv4, 5 * 60 * 1000);
 // Start Bedrock UDP ping responder
 
 startBedrockPing(19132);
-
