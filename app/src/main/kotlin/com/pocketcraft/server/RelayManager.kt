@@ -39,8 +39,9 @@ class RelayManager(private val context: Context) {
         const val PHONE_TUNNEL_PORT = 9000
         // Keep the Java bridge queues deliberately small. Large socket queues let chunk
         // traffic sit ahead of keep-alives for seconds before TCP backpressure reaches Paper.
-        private const val SOCKET_BUFFER_SIZE = 64 * 1024
-        private const val PLAYER_BRIDGE_BUFFER_SIZE = 8 * 1024
+        private const val SOCKET_SEND_BUFFER_SIZE = 32 * 1024
+        private const val SOCKET_RECEIVE_BUFFER_SIZE = 64 * 1024
+        private const val PLAYER_BRIDGE_BUFFER_SIZE = 16 * 1024
         private const val LOW_LATENCY_WARMUP_BYTES = 128 * 1024L
         private const val LOW_LATENCY_WARMUP_NS = 4_000_000_000L
         private const val INITIAL_POOL_SIZE = 5
@@ -613,7 +614,7 @@ class RelayManager(private val context: Context) {
                 }
 
                 socket = Socket()
-                configureSocket(socket)
+                configureWanSocket(socket)
                 android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE)
                 socket.connect(java.net.InetSocketAddress(targetIp, PHONE_TUNNEL_PORT), 10_000)
 
@@ -826,7 +827,7 @@ class RelayManager(private val context: Context) {
         val localSocket = try {
             withContext(Dispatchers.IO) {
                 Socket().apply {
-                    configureSocket(this)
+                    configureLocalSocket(this)
                     connect(java.net.InetSocketAddress("127.0.0.1", localPort), 5000)
                 }
             }
@@ -930,15 +931,27 @@ class RelayManager(private val context: Context) {
         }
     }
 
-    private fun configureSocket(socket: Socket) {
+    private fun configureWanSocket(socket: Socket) {
         runCatching {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = SOCKET_BUFFER_SIZE
-            socket.receiveBufferSize = SOCKET_BUFFER_SIZE
+            // Bound WAN send buffer to prevent buffer bloat during chunk loading/flight.
+            socket.sendBufferSize = SOCKET_SEND_BUFFER_SIZE
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
-            // Latency = 1, Bandwidth = 0, ConnectionTime = 0
+            socket.setPerformancePreferences(0, 1, 0)
+        }
+    }
+
+    private fun configureLocalSocket(socket: Socket) {
+        runCatching {
+            socket.tcpNoDelay = true
+            socket.keepAlive = true
+            socket.reuseAddress = true
+            // Enforce small buffer limits on loopback connections to trigger fast backpressure.
+            socket.sendBufferSize = SOCKET_SEND_BUFFER_SIZE
+            socket.receiveBufferSize = SOCKET_RECEIVE_BUFFER_SIZE
+            socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 1, 0)
         }
     }

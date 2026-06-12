@@ -51,6 +51,13 @@ function configureSocket(socket) {
   socket.setNoDelay(true);
   socket.setKeepAlive(true, SOCKET_KEEPALIVE_MS);
   socket.allowHalfOpen = false;
+  // Limit highWaterMark to prevent buffering large amounts of chunk data.
+  if (socket._readableState) {
+    socket._readableState.highWaterMark = 8192;
+  }
+  if (socket._writableState) {
+    socket._writableState.highWaterMark = 8192;
+  }
 }
 
 // userId validation

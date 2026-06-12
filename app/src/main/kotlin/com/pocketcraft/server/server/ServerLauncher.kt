@@ -10,6 +10,7 @@ import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.service.ServerPropertiesHelper
 import com.pocketcraft.server.server.ServerPropertiesWriter
 import com.pocketcraft.server.setup.JreExtractor
+import com.pocketcraft.server.util.NetworkUtils
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
@@ -558,18 +559,28 @@ class ServerLauncher(private val context: Context) {
         val configDir = File(serverDir, "config").also { it.mkdirs() }
         val paperGlobal = File(configDir, "paper-global.yml")
         val original = runCatching { paperGlobal.readText() }.getOrDefault("")
+        val cellularRelay = NetworkUtils.isCellular(context)
+        val chunkSendRate = if (cellularRelay) 28 else 40
 
         var updated = original
 
         // Bound chunk bursts so movement cannot queue seconds of terrain ahead of
         // keep-alives on the phone's relay connection.
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-generate-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-load-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-send-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading"), "target-player-chunk-send-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-concurrent-sends")
         updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "target-player-chunk-send-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-loading-priority-override")
         updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-loads")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate", "40")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate", "20")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate", "50")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate", chunkSendRate.toString())
 
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "auto-config-send-distance", "true")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-generates", "2")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", "4")
         updated = removeYamlPathKey(updated, listOf("misc"), "io-threads")
         updated = removeYamlPathKey(updated, listOf("misc"), "worker-threads")
         updated = ensureYamlSectionValue(updated, "chunk-system", "io-threads", "2")
@@ -582,7 +593,7 @@ class ServerLauncher(private val context: Context) {
 
         if (updated != original) {
             paperGlobal.writeText(updated)
-            onOutput("[PocketCraft] Paper global tuning applied: 40 chunk/s relay cap + dedicated IO/worker threads.")
+            onOutput("[PocketCraft] Paper global tuning applied: $chunkSendRate chunk/s ${if (cellularRelay) "cellular" else "Wi-Fi"} relay cap + bounded chunk workers.")
         }
     }
 

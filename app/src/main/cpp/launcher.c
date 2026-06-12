@@ -434,6 +434,7 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   os_version_opt,
                   "-Djava.net.preferIPv4Stack=true",
                   "-Djava.net.preferIPv6Addresses=false",
+                  "-Dio.netty.eventLoopThreads=4",
                   "-Dfile.encoding=UTF-8",
                   "-Dusing.aikars.flags=https://mcflags.emc.gs",
                   "-Dpaper.playerconnection.keepalive=90",
