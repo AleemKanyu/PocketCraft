@@ -3,38 +3,31 @@
 Shorter Play Store version:
 
 ```xml
-<en-US>
-- Lower ping and smoother online play.
-- Better server performance and stability.
-- Support for up to 50 players.
-- New themes and smoother animations.
-</en-US>
-
 <de-DE>
-- Niedrigerer Ping und flüssigeres Online-Spiel.
-- Bessere Serverleistung und Stabilität.
-- Unterstützung für bis zu 50 Spieler.
-- Neue Designs und flüssigere Animationen.
+- Neuer Server hinzugefügt: Europa
+- Sie können sich jetzt anmelden, Kontoeinstellungen speichern und Welten in der Cloud sichern
+- Weitere Optimierungen hinzugefügt
+- Systemstabilitäts- und Speicheroptimierungen unter der Haube.
 </de-DE>
 
 <es-ES>
-- Menor ping y juego en línea más fluido.
-- Mejor rendimiento y estabilidad del servidor.
-- Soporte para hasta 50 jugadores.
-- Nuevos temas y animaciones más fluidas.
+- Nuevo servidor añadido: Europa
+- Ahora puedes iniciar sesión, guardar la configuración de tu cuenta y guardar tus mundos en la nube
+- Añadidas más optimizaciones
+- Mejoras de estabilidad y optimizaciones de memoria internas.
 </es-ES>
 
 <ru-RU>
-- Более низкий пинг и более плавная онлайн-игра.
-- Улучшены производительность и стабильность сервера.
-- Поддержка до 50 игроков.
-- Новые темы и более плавные анимации.
+- Добавлен новый сервер: Европа
+- Теперь вы можете войти в систему, сохранить настройки аккаунта и делать резервные копии миров в облаке
+- Добавлено больше оптимизаций
+- Внутренние улучшения стабильности и оптимизация памяти.
 </ru-RU>
 
 <zh-CN>
-- 更低延迟，更流畅联机。
-- 更好的服务器性能与稳定性。
-- 现已支持最多 50 名玩家。
-- 新主题与更流畅的动画。
+- 新增服务器：欧洲
+- 您现在可以登录、保存帐户设置并将世界保存到云端
+- 添加了更多优化
+- 底层稳定性改进和内存优化。
 </zh-CN>
 ```
