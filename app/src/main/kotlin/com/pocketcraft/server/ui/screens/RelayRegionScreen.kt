@@ -18,30 +18,34 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Public
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pocketcraft.server.config.RelayLatencySelector
 import com.pocketcraft.server.config.RelayServerConfig
+import com.pocketcraft.server.config.RemoteConfigManager
 import com.pocketcraft.server.config.RelayServers
 import com.pocketcraft.server.ui.theme.PocketColors
-import com.pocketcraft.server.ui.theme.pocketCardBorderColor
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.DuoButtonVariant
 import com.pocketcraft.server.ui.components.PocketCraftCard
+import kotlinx.coroutines.launch
 
 @Composable
 fun RelayRegionScreen(
@@ -49,7 +53,15 @@ fun RelayRegionScreen(
     onBack: () -> Unit,
     onSelectHost: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val selected = RelayServers.getByHost(selectedHost)
+    val scope = rememberCoroutineScope()
+    val relayRegions by RemoteConfigManager.relayRegions.collectAsState(initial = RelayServers.defaultRegions())
+    var isFindingBestRelay by androidx.compose.runtime.remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        RemoteConfigManager.initialize(context)
+    }
 
     Column(
         modifier = Modifier
@@ -117,14 +129,36 @@ fun RelayRegionScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
+                if (isFindingBestRelay) {
+                    Text(
+                        text = "Finding best server...",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
+
+        DuoButton(
+            text = if (isFindingBestRelay) "Finding best server..." else "Find Best Server",
+            onClick = {
+                if (isFindingBestRelay) return@DuoButton
+                scope.launch {
+                    isFindingBestRelay = true
+                    val fastest = RelayLatencySelector.pickFastestRelay(relayRegions)
+                    onSelectHost(fastest.host)
+                    isFindingBestRelay = false
+                }
+            },
+            variant = DuoButtonVariant.Secondary,
+            modifier = Modifier.fillMaxWidth()
+        )
 
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            items(RelayServers.ALL) { region ->
+            items(RelayServers.ALL.filter { region -> relayRegions.any { it.host == region.host } }) { region ->
                 RelayRegionCard(
                     config = region,
                     selected = region.host == selectedHost,

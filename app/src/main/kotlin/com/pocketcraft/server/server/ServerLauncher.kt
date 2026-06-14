@@ -560,12 +560,11 @@ class ServerLauncher(private val context: Context) {
         val paperGlobal = File(configDir, "paper-global.yml")
         val original = runCatching { paperGlobal.readText() }.getOrDefault("")
         val cellularRelay = NetworkUtils.isCellular(context)
-        val chunkSendRate = if (cellularRelay) 28 else 40
+        val chunkSendRate = if (cellularRelay) 80 else 120
 
         var updated = original
 
-        // Bound chunk bursts so movement cannot queue seconds of terrain ahead of
-        // keep-alives on the phone's relay connection.
+        // Clean up legacy chunk-loading paths if they exist
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-generate-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-load-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-send-rate")
@@ -574,17 +573,20 @@ class ServerLauncher(private val context: Context) {
         updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "target-player-chunk-send-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-loading-priority-override")
         updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-loads")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate", "20")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate", "50")
+
+        // Bound chunk bursts so movement/flight cannot bloat Geyser's internal RakNet queue
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate", "40")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate", "80")
         updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate", chunkSendRate.toString())
 
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "auto-config-send-distance", "true")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-generates", "2")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", "4")
-        updated = removeYamlPathKey(updated, listOf("misc"), "io-threads")
-        updated = removeYamlPathKey(updated, listOf("misc"), "worker-threads")
-        updated = ensureYamlSectionValue(updated, "chunk-system", "io-threads", "2")
-        updated = ensureYamlSectionValue(updated, "chunk-system", "worker-threads", "2")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-generates", "4")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", "8")
+
+        updated = removeYamlPathKey(updated, listOf("chunk-system"), "io-threads")
+        updated = removeYamlPathKey(updated, listOf("chunk-system"), "worker-threads")
+        updated = ensureYamlSectionValue(updated, "misc", "io-threads", "2")
+        updated = ensureYamlSectionValue(updated, "misc", "worker-threads", "2")
         updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "2")
 
         // Disable bundled Spark profiler (fails to load native libraries on Android)
@@ -593,7 +595,7 @@ class ServerLauncher(private val context: Context) {
 
         if (updated != original) {
             paperGlobal.writeText(updated)
-            onOutput("[PocketCraft] Paper global tuning applied: $chunkSendRate chunk/s ${if (cellularRelay) "cellular" else "Wi-Fi"} relay cap + bounded chunk workers.")
+            onOutput("[PocketCraft] Paper global tuning applied: $chunkSendRate chunk/s ${if (cellularRelay) "cellular" else "Wi-Fi"} limit + bounded generates.")
         }
     }
 
@@ -865,20 +867,6 @@ class ServerLauncher(private val context: Context) {
     private fun extractAndPatchJnaLibrary(paperJarPath: String, serverDir: File, shimDir: File): Boolean {
         val nativeLibDir = context.applicationInfo.nativeLibraryDir
         val packagedJna = File(nativeLibDir, "libjnidispatch.so")
-        if (packagedJna.exists()) {
-            val dest = File(shimDir, "libjnidispatch.so")
-            val stampFile = File(shimDir, "libjnidispatch.meta")
-            val expectedStamp = "packaged|${packagedJna.length()}|${packagedJna.lastModified()}"
-            val currentStamp = runCatching { stampFile.readText(Charsets.UTF_8).trim() }.getOrDefault("")
-            if (currentStamp == expectedStamp && dest.exists()) {
-                return false
-            }
-            packagedJna.copyTo(dest, overwrite = true)
-            dest.setExecutable(true)
-            stampFile.writeText(expectedStamp, Charsets.UTF_8)
-            return true
-        }
-
         if (isPatchedJnaCacheCurrent(paperJarPath, shimDir)) {
             return false
         }
@@ -918,7 +906,25 @@ class ServerLauncher(private val context: Context) {
                 }
             }
         }
-        return patched
+        if (patched) {
+            return true
+        }
+
+        if (!packagedJna.exists()) {
+            return false
+        }
+
+        val dest = File(shimDir, "libjnidispatch.so")
+        val stampFile = File(shimDir, "libjnidispatch.meta")
+        val expectedStamp = "packaged|${packagedJna.length()}|${packagedJna.lastModified()}"
+        val currentStamp = runCatching { stampFile.readText(Charsets.UTF_8).trim() }.getOrDefault("")
+        if (currentStamp == expectedStamp && dest.exists()) {
+            return false
+        }
+        packagedJna.copyTo(dest, overwrite = true)
+        dest.setExecutable(true)
+        stampFile.writeText(expectedStamp, Charsets.UTF_8)
+        return true
     }
 
     private fun patchJnaFromBytes(jnaBytes: ByteArray, shimDir: File, cacheKeyPath: String): Boolean {

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,8 +28,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import com.pocketcraft.server.ui.components.PocketDropdownMenu
+import com.pocketcraft.server.ui.components.PocketDropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -89,6 +90,11 @@ import androidx.compose.material3.SnackbarHostState
 
 // Sentinel removed — respawn is null until the server confirms real SpawnX/Y/Z values.
 
+private data class RespawnReadResult(
+    val isAuthoritative: Boolean,
+    val location: PlayerLocation?
+)
+
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun PlayerDetailScreen(
@@ -113,7 +119,6 @@ fun PlayerDetailScreen(
     var stats by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
     var health by remember { mutableStateOf<Float?>(null) }
     var hunger by remember { mutableStateOf<Int?>(null) }
-    var worldSpawnPos by remember { mutableStateOf<PlayerLocation?>(null) }
     var resolvedOfflineUuid by remember { mutableStateOf(player.uuid) }
     val offlineUuid = if (resolvedOfflineUuid.isNotBlank()) resolvedOfflineUuid else player.uuid
 
@@ -175,20 +180,13 @@ fun PlayerDetailScreen(
                 NBTParser.parsePlayerData(datFile)
             }
 
-            val worldSpawn = withContext(Dispatchers.IO) {
-                val levelFile = PlayerDataManager.getLevelDataFile(context, stateHolder.activeWorld)
-                NBTParser.parseLevelData(levelFile)
-            }
-
             offlineSnapshot?.let {
                 currentPos = it.currentPos
-                respawnPos = it.respawnPos ?: worldSpawn
+                respawnPos = it.respawnPos
+                lastDeathPos = it.lastDeathPos
                 health = it.health ?: 20f
                 hunger = it.hunger ?: 20
-            } ?: run {
-                respawnPos = worldSpawn
             }
-            worldSpawnPos = worldSpawn
 
             stats = withContext(Dispatchers.IO) {
                 PlayerDataManager.parseStats(
@@ -211,7 +209,6 @@ fun PlayerDetailScreen(
                         "data get entity $commandTarget foodLevel",
                         "data get entity $commandTarget Pos",
                         "data get entity $commandTarget Dimension",
-                        "data get entity $commandTarget SpawnSet",
                         "data get entity $commandTarget SpawnX",
                         "data get entity $commandTarget SpawnY",
                         "data get entity $commandTarget SpawnZ",
@@ -224,12 +221,11 @@ fun PlayerDetailScreen(
                     val foodLine = rconResponses[1]
                     val posLine = rconResponses[2]
                     val dimLine = rconResponses[3]
-                    val spawnSetLine = rconResponses[4]
-                    val spawnXLine = rconResponses[5]
-                    val spawnYLine = rconResponses[6]
-                    val spawnZLine = rconResponses[7]
-                    val spawnDimLine = rconResponses[8]
-                    val lastDeathLine = rconResponses[9]
+                    val spawnXLine = rconResponses[4]
+                    val spawnYLine = rconResponses[5]
+                    val spawnZLine = rconResponses[6]
+                    val spawnDimLine = rconResponses[7]
+                    val lastDeathLine = rconResponses[8]
 
                     val newHealth = NBTParser.parseDataFloatValue(healthLine) ?: NBTParser.parseFloatValue(healthLine)
                     val newHunger = NBTParser.parseDataIntValue(foodLine) ?: NBTParser.parseIntValue(foodLine)
@@ -239,14 +235,12 @@ fun PlayerDetailScreen(
                         PlayerLocation(parsedPos.first, parsedPos.second, parsedPos.third, NBTParser.parseDimension(dimLine))
                     } else null
 
-                    val spawnSet = NBTParser.parseDataIntValue(spawnSetLine) ?: 0
-                    val respawnX = NBTParser.parseDataIntValue(spawnXLine)?.toDouble()
-                    val respawnY = NBTParser.parseDataIntValue(spawnYLine)?.toDouble()
-                    val respawnZ = NBTParser.parseDataIntValue(spawnZLine)?.toDouble()
-
-                    val newRespawnPos = if (respawnX != null && respawnY != null && respawnZ != null) {
-                        PlayerLocation(respawnX, respawnY, respawnZ, NBTParser.parseDimension(spawnDimLine))
-                    } else null
+                    val respawnRead = readRespawnPosition(
+                        spawnXLine = spawnXLine,
+                        spawnYLine = spawnYLine,
+                        spawnZLine = spawnZLine,
+                        spawnDimLine = spawnDimLine
+                    )
 
                     val newDeathPos = NBTParser.parseLastDeathLocation(lastDeathLine)
 
@@ -254,7 +248,9 @@ fun PlayerDetailScreen(
                         newHealth?.let { health = it.coerceIn(0f, 20f) }
                         newHunger?.let { hunger = it.coerceIn(0, 20) }
                         newCurrentPos?.let { currentPos = it }
-                        respawnPos = newRespawnPos ?: worldSpawnPos
+                        if (respawnRead.isAuthoritative) {
+                            respawnPos = respawnRead.location
+                        }
                         newDeathPos?.let { lastDeathPos = it }
                     }
                 } catch (e: Exception) {
@@ -281,22 +277,23 @@ fun PlayerDetailScreen(
         withContext(Dispatchers.IO) {
             try {
                 if (spawnChanged) {
-                    val spawnSetLine = stateHolder.sendRconCommand("data get entity $commandTarget SpawnSet")
                     val spawnXLine = stateHolder.sendRconCommand("data get entity $commandTarget SpawnX")
                     val spawnYLine = stateHolder.sendRconCommand("data get entity $commandTarget SpawnY")
                     val spawnZLine = stateHolder.sendRconCommand("data get entity $commandTarget SpawnZ")
                     val spawnDimLine = stateHolder.sendRconCommand("data get entity $commandTarget SpawnDimension")
                     
-                    val spawnSet = NBTParser.parseDataIntValue(spawnSetLine) ?: 0
-                    val respawnX = NBTParser.parseDataIntValue(spawnXLine)?.toDouble()
-                    val respawnY = NBTParser.parseDataIntValue(spawnYLine)?.toDouble()
-                    val respawnZ = NBTParser.parseDataIntValue(spawnZLine)?.toDouble()
-                    
-                    val newRespawnPos = if (respawnX != null && respawnY != null && respawnZ != null) {
-                        PlayerLocation(respawnX, respawnY, respawnZ, NBTParser.parseDimension(spawnDimLine))
-                    } else null
-                    
-                    withContext(Dispatchers.Main) { respawnPos = newRespawnPos ?: worldSpawnPos }
+                    val respawnRead = readRespawnPosition(
+                        spawnXLine = spawnXLine,
+                        spawnYLine = spawnYLine,
+                        spawnZLine = spawnZLine,
+                        spawnDimLine = spawnDimLine
+                    )
+
+                    withContext(Dispatchers.Main) {
+                        if (respawnRead.isAuthoritative) {
+                            respawnPos = respawnRead.location
+                        }
+                    }
                 }
                 
                 if (isPlayerDeathLogFor(latest, player.name)) {
@@ -315,8 +312,8 @@ fun PlayerDetailScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(16.dp),
+                .background(MaterialTheme.colorScheme.background),
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
@@ -370,9 +367,9 @@ fun PlayerDetailScreen(
                         OutlinedButton(onClick = { gamemodeExpanded = true }) {
                             Text(gamemode)
                         }
-                        DropdownMenu(expanded = gamemodeExpanded, onDismissRequest = { gamemodeExpanded = false }) {
+                        PocketDropdownMenu(expanded = gamemodeExpanded, onDismissRequest = { gamemodeExpanded = false }) {
                             listOf("survival", "creative", "adventure", "spectator").forEach { mode ->
-                                DropdownMenuItem(text = { Text(mode) }, onClick = {
+                                PocketDropdownMenuItem(text = { Text(mode, fontWeight = FontWeight.Bold) }, onClick = {
                                     gamemode = mode
                                     gamemodeExpanded = false
                                     stateHolder.changePlayerGamemode(player, mode)
@@ -528,14 +525,29 @@ fun PlayerDetailScreen(
                 respawnPos = respawnPos,
                 lastDeathPos = lastDeathPos,
                 onTeleport = { loc, title ->
-                    val cmd = if (loc.dimension == "minecraft:overworld") {
-                        "tp $commandTarget ${loc.x} ${loc.y} ${loc.z}"
+                    if (!isPlayerOnline) {
+                        scope.launch(Dispatchers.IO) {
+                            val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.activeWorld, offlineUuid)
+                            val success = NBTParser.updatePlayerData(datFile, mapOf("Location" to loc))
+                            withContext(Dispatchers.Main) {
+                                if (success) {
+                                    currentPos = loc
+                                    snackbarHostState.showSnackbar("Updated offline player location to $title")
+                                } else {
+                                    snackbarHostState.showSnackbar("Failed to update offline player location")
+                                }
+                            }
+                        }
                     } else {
-                        "execute in ${loc.dimension} run tp $commandTarget ${loc.x} ${loc.y} ${loc.z}"
-                    }
-                    stateHolder.sendCommand(cmd)
-                    scope.launch {
-                        snackbarHostState.showSnackbar("Teleported to $title")
+                        val cmd = if (loc.dimension == "minecraft:overworld") {
+                            "tp $commandTarget ${loc.x} ${loc.y} ${loc.z}"
+                        } else {
+                            "execute in ${loc.dimension} run tp $commandTarget ${loc.x} ${loc.y} ${loc.z}"
+                        }
+                        stateHolder.sendCommand(cmd)
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Teleported to $title")
+                        }
                     }
                 }
             )
@@ -968,19 +980,17 @@ private fun extractPlayerSnapshot(
     val spawnYLine = latestResponseFor("SpawnY") ?: matchingLine("SpawnY")
     val spawnZLine = latestResponseFor("SpawnZ") ?: matchingLine("SpawnZ")
     val spawnDimLine = latestResponseFor("SpawnDimension") ?: matchingLine("SpawnDimension")
-    val spawnSetLine = latestResponseFor("SpawnSet") ?: matchingLine("SpawnSet")
     val lastDeathLine = latestResponseFor("LastDeathLocation") ?: matchingLine("LastDeathLocation")
 
     val currentPos = NBTParser.parsePosition(posLine.orEmpty())?.let { (x, y, z) ->
         PlayerLocation(x, y, z, NBTParser.parseDimension(dimLine.orEmpty().ifBlank { currentDimension }))
     }
 
-    val spawnSet = NBTParser.parseDataIntValue(spawnSetLine.orEmpty()) ?: 0
     val respawnX = NBTParser.parseDataIntValue(spawnXLine.orEmpty())?.toDouble()
     val respawnY = NBTParser.parseDataIntValue(spawnYLine.orEmpty())?.toDouble()
     val respawnZ = NBTParser.parseDataIntValue(spawnZLine.orEmpty())?.toDouble()
-    // Only populate if all three axes were confirmed by the server AND SpawnSet is 1 (custom spawn) — otherwise it's world spawn
-    val respawnPos = if (spawnSet == 1 && respawnX != null && respawnY != null && respawnZ != null) {
+    // Only populate if all three axes were confirmed by the server
+    val respawnPos = if (respawnX != null && respawnY != null && respawnZ != null) {
         PlayerLocation(
             x = respawnX,
             y = respawnY,
@@ -997,6 +1007,40 @@ private fun extractPlayerSnapshot(
         lastDeathPos = lastDeathLine?.let(NBTParser::parseLastDeathLocation),
         health = NBTParser.parseDataFloatValue(healthLine.orEmpty()) ?: NBTParser.parseFloatValue(healthLine.orEmpty()),
         hunger = NBTParser.parseDataIntValue(hungerLine.orEmpty()) ?: NBTParser.parseIntValue(hungerLine.orEmpty())
+    )
+}
+
+private fun readRespawnPosition(
+    spawnXLine: String,
+    spawnYLine: String,
+    spawnZLine: String,
+    spawnDimLine: String
+): RespawnReadResult {
+    val respawnX = NBTParser.parseDataIntValue(spawnXLine)?.toDouble()
+    val respawnY = NBTParser.parseDataIntValue(spawnYLine)?.toDouble()
+    val respawnZ = NBTParser.parseDataIntValue(spawnZLine)?.toDouble()
+    
+    val isNotFound = spawnXLine.contains("Found no tag", ignoreCase = true) || 
+                     spawnXLine.contains("No entity was found", ignoreCase = true) ||
+                     spawnXLine.contains("No tag matches", ignoreCase = true) ||
+                     spawnXLine.isBlank()
+                     
+    if (isNotFound) {
+        return RespawnReadResult(isAuthoritative = true, location = null)
+    }
+
+    if (respawnX == null || respawnY == null || respawnZ == null) {
+        return RespawnReadResult(isAuthoritative = false, location = null)
+    }
+
+    return RespawnReadResult(
+        isAuthoritative = true,
+        location = PlayerLocation(
+            x = respawnX,
+            y = respawnY,
+            z = respawnZ,
+            dimension = NBTParser.parseDimension(spawnDimLine)
+        )
     )
 }
 
@@ -1053,4 +1097,3 @@ private fun formatPlaytime(ticks: Long): String {
         else -> "<1m"
     }
 }
-

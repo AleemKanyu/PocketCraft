@@ -58,7 +58,7 @@ data class ServerConfig(
     // Join message settings
     val joinMessageEnabled: Boolean = true,
     val joinMessageText: String = "hosted on Pocketcraft",
-    val joinMessageUrl: String = "https://discord.gg/NGPzXFYp",
+    val joinMessageUrl: String = "https://discord.gg/7xw3Rd2vs2",
     // Advanced versioning
     val serverType: ServerType = ServerType.PAPER,
     val gameVersion: String = "",

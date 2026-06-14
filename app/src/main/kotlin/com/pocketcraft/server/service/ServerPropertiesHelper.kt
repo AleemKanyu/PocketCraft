@@ -17,7 +17,7 @@ object ServerPropertiesHelper {
     const val DESIRED_SIMULATION_DISTANCE_KEY = "pocketcraft-desired-simulation-distance"
     const val RELAY_READY_ENTITY_BROADCAST_PERCENT = 35
     const val POCKETCRAFT_JOIN_MESSAGE_TEXT = "hosted on Pocketcraft"
-    const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/NGPzXFYp"
+    const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/7xw3Rd2vs2"
 
     fun getServerPropertiesFile(serverDir: File): File {
         return File(serverDir, "server.properties")
@@ -78,10 +78,43 @@ object ServerPropertiesHelper {
             props["rcon.password"] = "pocketcraft-internal-rcon"
             needsPersist = true
         }
+        if (syncDesiredChunkDistances(props)) {
+            needsPersist = true
+        }
         if (needsPersist && persistDefaults) {
             saveProperties(serverDir, props)
         }
         return props
+    }
+
+    private fun syncDesiredChunkDistances(props: Properties): Boolean {
+        var changed = false
+
+        val currentView = props.getProperty("view-distance")?.toIntOrNull()?.coerceIn(3, 32)
+        val desiredView = props.getProperty(DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull()?.coerceIn(3, 32)
+        val resolvedView = desiredView ?: currentView ?: DEFAULT_VIEW_DISTANCE
+        if (desiredView != resolvedView) {
+            props[DESIRED_VIEW_DISTANCE_KEY] = resolvedView.toString()
+            changed = true
+        }
+        if (currentView != resolvedView) {
+            props["view-distance"] = resolvedView.toString()
+            changed = true
+        }
+
+        val currentSimulation = props.getProperty("simulation-distance")?.toIntOrNull()?.coerceIn(3, 32)
+        val desiredSimulation = props.getProperty(DESIRED_SIMULATION_DISTANCE_KEY)?.toIntOrNull()?.coerceIn(3, 32)
+        val resolvedSimulation = desiredSimulation ?: currentSimulation ?: DEFAULT_SIMULATION_DISTANCE
+        if (desiredSimulation != resolvedSimulation) {
+            props[DESIRED_SIMULATION_DISTANCE_KEY] = resolvedSimulation.toString()
+            changed = true
+        }
+        if (currentSimulation != resolvedSimulation) {
+            props["simulation-distance"] = resolvedSimulation.toString()
+            changed = true
+        }
+
+        return changed
     }
 
     fun saveProperties(serverDir: File, props: Properties) {

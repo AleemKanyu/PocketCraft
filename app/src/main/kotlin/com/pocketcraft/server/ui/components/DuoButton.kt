@@ -13,6 +13,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -41,10 +42,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pocketcraft.server.ui.theme.PocketMotion
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.button3d
 
-enum class DuoButtonVariant { StartServer, Primary, Secondary, Danger }
+enum class DuoButtonVariant { StartServer, Primary, Secondary, Danger, Info }
 
 @Composable
 fun DuoButton(
@@ -52,6 +54,7 @@ fun DuoButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
+    iconContent: (@Composable () -> Unit)? = null,
     enabled: Boolean = true,
     variant: DuoButtonVariant = DuoButtonVariant.Primary,
     isLoading: Boolean = false,
@@ -95,6 +98,12 @@ fun DuoButton(
                 bottomBorderColor = PocketColors.DangerBorderBottom
                 contentColor = PocketColors.DangerText
             }
+            DuoButtonVariant.Info -> {
+                bgColor = Color(0xFF2F80ED)
+                borderColor = Color(0xFF1B5EAA)
+                bottomBorderColor = Color(0xFF113867)
+                contentColor = Color.White
+            }
         }
     }
 
@@ -103,17 +112,17 @@ fun DuoButton(
     val pressed by interactionSource.collectIsPressedAsState()
     
     val restingBorder = 3.dp
-    val targetBorder = if (pressed && enabled) 1.5.dp else restingBorder
-    val targetOffset = if (pressed && enabled) (restingBorder - 1.5.dp) else 0.dp
+    val targetBorder = if (pressed && enabled) 2.dp else restingBorder
+    val targetOffset = if (pressed && enabled) (restingBorder - 2.dp) else 0.dp
 
     val offsetY by animateDpAsState(
         targetValue  = targetOffset,
-        animationSpec = tween(80),
+        animationSpec = PocketMotion.softDpTween(durationMillis = 170),
         label = "duo_btn_offset"
     )
     val bottomBorderDp by animateDpAsState(
         targetValue  = targetBorder,
-        animationSpec = tween(80),
+        animationSpec = PocketMotion.softDpTween(durationMillis = 170),
         label = "duo_btn_bottom_border"
     )
 
@@ -157,36 +166,52 @@ fun DuoButton(
                     onClick           = onClick
                 )
         ) {
-            Row(
+            val verticalPadding = if (minHeight < 48.dp) 10.dp else 16.dp
+            val iconSize = if (minHeight < 48.dp) 16.dp else 20.dp
+            val iconGap = if (minHeight < 48.dp) 6.dp else 10.dp
+            BoxWithConstraints(
                 modifier = (if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier)
-                    .padding(horizontal = 22.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment     = Alignment.CenterVertically
+                    .padding(horizontal = 22.dp, vertical = verticalPadding)
             ) {
-                if (icon != null || isLoading) {
-                    val iconToShow = icon ?: Icons.Default.Refresh
-                    Icon(
-                        imageVector     = iconToShow,
-                        contentDescription = null,
-                        tint            = contentColor,
-                        modifier        = Modifier
-                            .size(20.dp)
-                            .then(if (isLoading) Modifier.rotate(rotation) else Modifier)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (iconContent != null || icon != null || isLoading) {
+                        if (iconContent != null) {
+                            iconContent()
+                        } else {
+                            val iconToShow = icon ?: Icons.Default.Refresh
+                            Icon(
+                                imageVector = iconToShow,
+                                contentDescription = null,
+                                tint = contentColor,
+                                modifier = Modifier
+                                    .size(iconSize)
+                                    .then(if (isLoading) Modifier.rotate(rotation) else Modifier)
+                            )
+                        }
+                        androidx.compose.foundation.layout.Spacer(Modifier.size(iconGap))
+                    }
+                    Text(
+                        text = text,
+                        color = contentColor,
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontFamily = ButtonFont,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = if (minHeight < 48.dp) 12.sp else 14.sp,
+                            letterSpacing = 0.sp
+                        ),
+                        maxLines = 2,
+                        softWrap = true,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
-                    androidx.compose.foundation.layout.Spacer(Modifier.size(10.dp))
+                    if (iconContent != null || icon != null || isLoading) {
+                        androidx.compose.foundation.layout.Spacer(Modifier.size(iconGap))
+                        Box(modifier = Modifier.size(iconSize))
+                    }
                 }
-                Text(
-                    text  = text,
-                    color = contentColor,
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontFamily   = ButtonFont,
-                        fontWeight   = FontWeight.Normal,
-                        fontSize     = 14.5.sp,
-                        letterSpacing = 0.sp
-                    ),
-                    maxLines  = 1,
-                    overflow  = TextOverflow.Ellipsis
-                )
             }
         }
     }

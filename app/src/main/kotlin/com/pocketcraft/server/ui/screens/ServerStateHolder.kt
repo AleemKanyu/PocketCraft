@@ -109,7 +109,7 @@ class ServerStateHolder(
         const val DEFAULT_SERVER_DESCRIPTION = "Hosted on Pocketcraft"
         private const val POCKETCRAFT_JOIN_MESSAGE_TEXT =
             "hosted on Pocketcraft"
-        private const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/NGPzXFYp"
+        private const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/7xw3Rd2vs2"
     }
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -384,6 +384,8 @@ class ServerStateHolder(
                         appendLog("[PocketCraft] Starting server again...")
                         delay(1500)
                         startServer(isRestart = true)
+                    } else {
+                        refreshAll()
                     }
                 }
                 return
@@ -639,6 +641,27 @@ class ServerStateHolder(
         crashWasDuringStartup = false
     }
 
+    var showBatteryOptimizationDialog by mutableStateOf(false)
+        private set
+
+    fun dismissBatteryOptimizationDialog() {
+        showBatteryOptimizationDialog = false
+    }
+
+    fun requestBatteryOptimization() {
+        showBatteryOptimizationDialog = false
+        val pm = appContext.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        if (pm != null && !pm.isIgnoringBatteryOptimizations(appContext.packageName)) {
+            runCatching {
+                val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:${appContext.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                appContext.startActivity(intent)
+            }
+        }
+    }
+
     private fun recordServerFailure(reason: String, duringStartup: Boolean) {
         val cleanReason = reason.trim().ifBlank { "The server exited unexpectedly." }
         crashReason = cleanReason
@@ -707,6 +730,15 @@ class ServerStateHolder(
             return
         }
         if (isRunning || (!isRestart && isStarting) || (isStopping && !isRestart)) return
+
+        val pm = appContext.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        if (pm != null && !pm.isIgnoringBatteryOptimizations(appContext.packageName)) {
+            if (!prefs.batteryOptimizationRequested) {
+                prefs.batteryOptimizationRequested = true
+                showBatteryOptimizationDialog = true
+            }
+        }
+
         lastStartRequestedMillis = System.currentTimeMillis()
         stopWatchdogJob?.cancel()
         stopWatchdogJob = null
@@ -1722,7 +1754,9 @@ class ServerStateHolder(
 
         val destination = File(serverPhotosDir, "${normalized}_${UUID.randomUUID().toString().take(8)}.$extension")
         val totalBytes = appContext.contentResolver.openAssetFileDescriptor(sourceUri, "r")?.length ?: -1L
-        appContext.contentResolver.openInputStream(sourceUri)?.use { input ->
+        val inputStream = appContext.contentResolver.openInputStream(sourceUri)
+            ?: throw IllegalStateException("Could not read the selected image.")
+        inputStream.use { input ->
             destination.outputStream().use { output ->
                 val buffer = ByteArray(16 * 1024)
                 var copied = 0L
@@ -1738,7 +1772,12 @@ class ServerStateHolder(
                     bytesRead = input.read(buffer)
                 }
             }
-        } ?: return@withContext ""
+        }
+
+        if (!destination.exists() || destination.length() <= 0L) {
+            destination.delete()
+            throw IllegalStateException("The selected image could not be saved.")
+        }
 
         withContext(Dispatchers.Main) {
             onProgress(100)
@@ -1976,15 +2015,17 @@ class ServerStateHolder(
                 }
 
                 var processedFiles = 0
+                var lastUpdateMillis = 0L
+                var lastProgressPercent = -1
                 entries.forEach { entry ->
-                    withContext(Dispatchers.Main) {
-                        val progress = 10 + ((processedFiles * 85) / fileEntries.size.coerceAtLeast(1))
-                        backupProgressPercent = progress.coerceIn(10, 95)
-                        // Don't show individual file names, just generic progress
-                        if (entry.isDirectory) {
-                            backupStatusMessage = "Preparing backup..."
-                        } else {
-                            backupStatusMessage = "Backing up..."
+                    val progress = (10 + ((processedFiles * 85) / fileEntries.size.coerceAtLeast(1))).coerceIn(10, 95)
+                    val now = System.currentTimeMillis()
+                    if (now - lastUpdateMillis >= 150L || progress != lastProgressPercent) {
+                        lastUpdateMillis = now
+                        lastProgressPercent = progress
+                        withContext(Dispatchers.Main) {
+                            backupProgressPercent = progress
+                            backupStatusMessage = if (entry.isDirectory) "Preparing backup..." else "Backing up..."
                         }
                     }
 
@@ -2065,26 +2106,33 @@ class ServerStateHolder(
             }
 
             ZipFile(tempFile).use { zip ->
-                val allEntries = zip.entries().toList()
-                if (allEntries.isEmpty()) {
+                val totalEntries = zip.size()
+                if (totalEntries == 0) {
                     return@withContext "Selected ZIP is empty."
                 }
 
                 clearServerDirectoryForRestore()
                 // Give the OS a moment to fully release file handles after deletion
                 delay(300)
-                val totalEntries = allEntries.size
                 var processedEntries = 0
+                var lastUpdateMillis = 0L
+                var lastProgressPercent = -1
 
-                allEntries.forEach { zEntry ->
+                val entries = zip.entries()
+                while (entries.hasMoreElements()) {
+                    val zEntry = entries.nextElement()
                     try {
                         unzipEntry(serverDir, zip, zEntry)
                         processedEntries++
                         val progress = (processedEntries * 95 / totalEntries).coerceIn(5, 95)
-                        withContext(Dispatchers.Main) {
-                            restoreProgressPercent = progress
-                            restoreStatusMessage = "Restoring ${zEntry.name}"
-                            if (progress % 10 == 0) delay(50)
+                        val now = System.currentTimeMillis()
+                        if (now - lastUpdateMillis >= 150L || progress != lastProgressPercent) {
+                            lastUpdateMillis = now
+                            lastProgressPercent = progress
+                            withContext(Dispatchers.Main) {
+                                restoreProgressPercent = progress
+                                restoreStatusMessage = "Restoring ${zEntry.name}"
+                            }
                         }
                     } catch (e: Exception) {
                         android.util.Log.e("ServerBackup", "Failed to import ${zEntry.name}", e)
@@ -2141,26 +2189,33 @@ class ServerStateHolder(
             }
 
             java.util.zip.ZipFile(entry.file).use { zip ->
-                val allEntries = zip.entries().toList()
-                if (allEntries.isEmpty()) {
+                val totalEntries = zip.size()
+                if (totalEntries == 0) {
                     return@withContext "Backup is empty."
                 }
                 clearServerDirectoryForRestore()
                 // Give the OS a moment to fully release file handles after deletion
                 delay(300)
-                val totalEntries = allEntries.size
                 var processedEntries = 0
+                var lastUpdateMillis = 0L
+                var lastProgressPercent = -1
 
-                allEntries.forEach { zEntry ->
+                val entries = zip.entries()
+                while (entries.hasMoreElements()) {
+                    val zEntry = entries.nextElement()
                     try {
                         unzipEntry(serverDir, zip, zEntry)
                         processedEntries++
                         val progress = (processedEntries * 95 / totalEntries).coerceIn(5, 95)
 
-                        withContext(Dispatchers.Main) {
-                            restoreProgressPercent = progress
-                            restoreStatusMessage = "Restoring ${zEntry.name}"
-                            if (progress % 10 == 0) delay(50) // Small delay to allow UI updates
+                        val now = System.currentTimeMillis()
+                        if (now - lastUpdateMillis >= 150L || progress != lastProgressPercent) {
+                            lastUpdateMillis = now
+                            lastProgressPercent = progress
+                            withContext(Dispatchers.Main) {
+                                restoreProgressPercent = progress
+                                restoreStatusMessage = "Restoring ${zEntry.name}"
+                            }
                         }
                     } catch (e: Exception) {
                         android.util.Log.e("ServerRestore", "Failed to restore ${zEntry.name}", e)
@@ -2204,8 +2259,65 @@ class ServerStateHolder(
         }
     }
 
+    suspend fun restoreBackupFile(file: File, displayName: String = file.name): String {
+        return restoreBackup(
+            BackupEntry(
+                name = displayName,
+                sizeMb = (file.length() / (1024L * 1024L)).coerceAtLeast(0L),
+                date = "",
+                file = file
+            )
+        )
+    }
+
+    private fun deleteFileFromDownloads(fileName: String, worldName: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+        val safeWorldName = sanitizeWorldName(worldName)
+        val resolver = appContext.contentResolver
+        val projection = arrayOf(android.provider.MediaStore.MediaColumns._ID)
+        val selection = "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${android.provider.MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
+        val selectionArgs = arrayOf(fileName, "Download/PocketCraftWorldBackups/$safeWorldName%")
+        val queryUri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        
+        return try {
+            resolver.query(queryUri, projection, selection, selectionArgs, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns._ID))
+                    val deleteUri = android.content.ContentUris.withAppendedId(queryUri, id)
+                    resolver.delete(deleteUri, null, null) > 0
+                } else false
+            } ?: false
+        } catch (e: Exception) {
+            android.util.Log.e("ServerStateHolder", "Failed to delete from MediaStore", e)
+            false
+        }
+    }
+
     suspend fun deleteBackup(entry: BackupEntry): String = withContext(Dispatchers.IO) {
-        if (!entry.file.exists() || !entry.file.delete()) {
+        val targetName = entry.file.name
+        var deletedAnything = false
+        val candidateFiles = linkedSetOf(
+            entry.file,
+            File(backupsDirForWorld(activeWorld), targetName),
+            File(exportedBackupsDirForWorld(activeWorld), targetName)
+        )
+
+        candidateFiles.forEach { candidate ->
+            if (candidate.exists() && candidate.delete()) {
+                deletedAnything = true
+            }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            runCatching {
+                if (deleteFileFromDownloads(targetName, activeWorld)) {
+                    deletedAnything = true
+                }
+            }
+        }
+
+        val allCopiesGone = candidateFiles.none(File::exists)
+        if (!deletedAnything && !allCopiesGone) {
             return@withContext "Could not delete ${entry.name}."
         }
         withContext(Dispatchers.Main) { refreshAll() }
@@ -2336,11 +2448,16 @@ class ServerStateHolder(
                 FileInputStream(source).use { input ->
                     val buffer = ByteArray(16 * 1024)
                     var copied = 0L
+                    var lastPercent = -1
                     var bytes = input.read(buffer)
                     while (bytes != -1) {
                         output.write(buffer, 0, bytes)
                         copied += bytes
-                        onProgress(((copied * 100L) / totalBytes).toInt().coerceIn(0, 100))
+                        val percent = ((copied * 100L) / totalBytes).toInt().coerceIn(0, 100)
+                        if (percent != lastPercent) {
+                            lastPercent = percent
+                            onProgress(percent)
+                        }
                         bytes = input.read(buffer)
                     }
                 }
@@ -2361,11 +2478,16 @@ class ServerStateHolder(
             FileOutputStream(targetFile).use { output ->
                 val buffer = ByteArray(16 * 1024)
                 var copied = 0L
+                var lastPercent = -1
                 var bytes = input.read(buffer)
                 while (bytes != -1) {
                     output.write(buffer, 0, bytes)
                     copied += bytes
-                    onProgress(((copied * 100L) / totalBytes).toInt().coerceIn(0, 100))
+                    val percent = ((copied * 100L) / totalBytes).toInt().coerceIn(0, 100)
+                    if (percent != lastPercent) {
+                        lastPercent = percent
+                        onProgress(percent)
+                    }
                     bytes = input.read(buffer)
                 }
             }
@@ -2466,6 +2588,10 @@ class ServerStateHolder(
                 if (!isRunning || isStopping) continue
                 runCatching {
                     sendRconCommand("save-all")
+                }.onSuccess {
+                    withContext(Dispatchers.Main) {
+                        refreshAll()
+                    }
                 }.onFailure { error ->
                     withContext(Dispatchers.Main) {
                         appendLog("[PocketCraft] Auto-save failed: ${error.message ?: "unknown error"}")
@@ -2509,18 +2635,20 @@ class ServerStateHolder(
         startupProgressJob?.cancel()
         startupProgressJob = scope.launch {
             while (isStarting) {
-                val elapsedMs = (System.currentTimeMillis() - (startupStartedAtMillis ?: System.currentTimeMillis())).coerceAtLeast(0L)
-                val nextProgress = when {
-                    elapsedMs < 8_000L -> ((elapsedMs / 8_000f) * 18f)
-                    elapsedMs < 20_000L -> 18f + (((elapsedMs - 8_000L) / 12_000f) * 30f)
-                    elapsedMs < 35_000L -> 48f + (((elapsedMs - 20_000L) / 15_000f) * 24f)
-                    elapsedMs < 55_000L -> 72f + (((elapsedMs - 35_000L) / 20_000f) * 20f)
-                    else -> 92f
-                }.toInt().coerceIn(minOf(startupProgressPercent, 92), 92)
+                if (!isStopping) {
+                    val elapsedMs = (System.currentTimeMillis() - (startupStartedAtMillis ?: System.currentTimeMillis())).coerceAtLeast(0L)
+                    val nextProgress = when {
+                        elapsedMs < 8_000L -> ((elapsedMs / 8_000f) * 18f)
+                        elapsedMs < 20_000L -> 18f + (((elapsedMs - 8_000L) / 12_000f) * 30f)
+                        elapsedMs < 35_000L -> 48f + (((elapsedMs - 20_000L) / 15_000f) * 24f)
+                        elapsedMs < 55_000L -> 72f + (((elapsedMs - 35_000L) / 20_000f) * 20f)
+                        else -> 92f
+                    }.toInt().coerceIn(minOf(startupProgressPercent, 92), 92)
 
-                startupProgressPercent = nextProgress
-                if (startupStatusMessage.isBlank() || startupStatusMessage == "Initializing..." || startupStatusMessage == "Preparing server...") {
-                    startupStatusMessage = naturalStartupStatus(elapsedMs)
+                    startupProgressPercent = nextProgress
+                    if (startupStatusMessage.isBlank() || startupStatusMessage == "Initializing..." || startupStatusMessage == "Preparing server...") {
+                        startupStatusMessage = naturalStartupStatus(elapsedMs)
+                    }
                 }
                 delay(700)
             }

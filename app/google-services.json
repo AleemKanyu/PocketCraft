@@ -12,7 +12,20 @@
           "package_name": "com.pocketcraft.server"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "52965868712-0ktqrqredo465t0t9nhq8u0h1fu8big7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pocketcraft.server",
+            "certificate_hash": "ce271228a012376475eb45b5ac571170ad4edd06"
+          }
+        },
+        {
+          "client_id": "52965868712-inmbivc5kji28fpkeon457gg111f2qi2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAmJgiyi9Ri3LiFuCIhFt82pPOB1A3q044"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "52965868712-inmbivc5kji28fpkeon457gg111f2qi2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

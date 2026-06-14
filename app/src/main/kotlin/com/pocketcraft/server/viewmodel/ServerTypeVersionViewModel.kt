@@ -81,6 +81,7 @@ class ServerTypeVersionViewModel @Inject constructor(
     fun setServerType(type: ServerType) {
         _selectedType.value = type
         if (type.supportsVersionSelect) {
+            _selectedVersion.value = null
             fetchVersionsForType(type)
         } else {
             _availableVersions.value = emptyList()
@@ -100,9 +101,7 @@ class ServerTypeVersionViewModel @Inject constructor(
         _selectedType.value = serverType
         _customJarPath.value = customJarPath
         if (serverType.supportsVersionSelect) {
-            if (!gameVersion.isNullOrBlank()) {
-                _selectedVersion.value = gameVersion
-            }
+            _selectedVersion.value = gameVersion?.takeIf { it.isNotBlank() }
             fetchVersionsForType(serverType, preferredVersion = gameVersion)
         } else {
             _selectedVersion.value = null
@@ -235,8 +234,6 @@ class ServerTypeVersionViewModel @Inject constructor(
         _selectedVersion.value = when {
             preferredVersion != null && preferredVersion.isNotBlank() -> preferredVersion
             previousSelection != null && finalVersions.contains(previousSelection) -> previousSelection
-            previousSelection != null && previousSelection.isNotBlank() -> previousSelection
-            finalVersions.isNotEmpty() -> finalVersions.first()
             else -> null
         }
         refreshDownloadedVersions()

@@ -37,8 +37,9 @@ object WorldImporter {
                 // Step 2: Extract from local file using ZipFile (more robust than ZipInputStream)
                 android.util.Log.i("WorldImporter", "Extracting world zip: ${tempFile.length()} bytes")
                 ZipFile(tempFile).use { zip ->
-                    val totalEntries = zip.size().toFloat()
+                    val totalEntries = zip.size().toFloat().coerceAtLeast(1f)
                     var processed = 0
+                    var lastPercent = -1
                     val entries = zip.entries()
                     while (entries.hasMoreElements()) {
                         val entry = entries.nextElement()
@@ -50,12 +51,20 @@ object WorldImporter {
                             .trim()
                         if (normalizedName.isBlank()) {
                             processed++
-                            onProgress(processed / totalEntries)
+                            val currentPercent = (processed * 100 / totalEntries.toInt()).coerceIn(0, 100)
+                            if (currentPercent != lastPercent) {
+                                lastPercent = currentPercent
+                                onProgress(processed / totalEntries)
+                            }
                             continue
                         }
                         if (normalizedName.startsWith("__MACOSX/") || normalizedName.endsWith(".DS_Store")) {
                             processed++
-                            onProgress(processed / totalEntries)
+                            val currentPercent = (processed * 100 / totalEntries.toInt()).coerceIn(0, 100)
+                            if (currentPercent != lastPercent) {
+                                lastPercent = currentPercent
+                                onProgress(processed / totalEntries)
+                            }
                             continue
                         }
 
@@ -78,7 +87,11 @@ object WorldImporter {
                             }
                         }
                         processed++
-                        onProgress(processed / totalEntries)
+                        val currentPercent = (processed * 100 / totalEntries.toInt()).coerceIn(0, 100)
+                        if (currentPercent != lastPercent) {
+                            lastPercent = currentPercent
+                            onProgress(processed / totalEntries)
+                        }
                     }
                 }
 

@@ -1,8 +1,6 @@
 package com.pocketcraft.server.ui.components
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -17,6 +15,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
+import com.pocketcraft.server.ui.theme.PocketMotion
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.card3d
 
@@ -48,10 +47,7 @@ fun GameCard(
     Box(
         modifier = modifier
             .animateContentSize(
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness    = Spring.StiffnessLow
-                )
+                animationSpec = PocketMotion.gentleSpringIntSize()
             )
             .card3d(elevation = 6.dp, cornerRadius = 18.dp)
             .clip(shape)

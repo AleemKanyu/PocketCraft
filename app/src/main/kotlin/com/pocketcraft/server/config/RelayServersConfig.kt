@@ -1,5 +1,7 @@
 package com.pocketcraft.server.config
 
+import com.pocketcraft.server.data.model.RelayRegion
+
 /**
  * Central configuration for all supported relay servers.
  * Used by server location selection dialog, settings, and relay manager.
@@ -15,27 +17,60 @@ data class RelayServerConfig(
 )
 
 object RelayServers {
-    val SINGAPORE = RelayServerConfig(
-        host = "play.pocketcraft.online",
-        displayName = "Global",
-        region = "Global",
-        icon = "🌐",
-        description = "Global CDN with worldwide coverage",
-        bestFor = "Players worldwide, default option",
-        fallbackIp = "13.212.218.219"
-    )
-
     val MUMBAI = RelayServerConfig(
         host = "mine.pocketcraft.online",
-        displayName = "Asia",
-        region = "Asia",
+        displayName = "Asia (India)",
+        region = "Asia (India)",
         icon = "🌏",
         description = "Optimized for players in India and South Asia",
         bestFor = "Players in India, Pakistan, Bangladesh, Sri Lanka",
         fallbackIp = "13.201.57.41"
     )
 
-    val ALL = listOf(SINGAPORE, MUMBAI)
+    val SINGAPORE = RelayServerConfig(
+        host = "play.pocketcraft.online",
+        displayName = "Asia (Singapore)",
+        region = "Asia (Singapore)",
+        icon = "🌐",
+        description = "Keep-live migration relay for global fallback coverage",
+        bestFor = "Global fallback during multi-region rollout",
+        fallbackIp = "13.212.218.219"
+    )
+
+    val EUROPE = RelayServerConfig(
+        host = "eu.pocketcraft.online",
+        displayName = "Europe",
+        region = "Europe",
+        icon = "🇪🇺",
+        description = "Frankfurt relay for lower latency across Europe",
+        bestFor = "Players in Europe, Middle East, and nearby regions",
+        fallbackIp = "54.93.247.2"
+    )
+
+    val AMERICA = RelayServerConfig(
+        host = "us.pocketcraft.online",
+        displayName = "America",
+        region = "America",
+        icon = "🇺🇸",
+        description = "US East relay for North and South America",
+        bestFor = "Players in the Americas"
+    )
+
+    private val defaultRegionConfigs = listOf(MUMBAI, SINGAPORE, EUROPE, AMERICA)
+    private val metadataByHost = defaultRegionConfigs.associateBy { it.host }
+
+    private var dynamicRegions: List<RelayRegion> = defaultRegions()
+    private var dynamicConfigs: List<RelayServerConfig> = buildConfigs(dynamicRegions)
+
+    fun defaultRegions(): List<RelayRegion> = listOf(
+        RelayRegion("Asia (India)", MUMBAI.host),
+        RelayRegion("Asia (Singapore)", SINGAPORE.host),
+        RelayRegion("Europe", EUROPE.host),
+        RelayRegion("America", AMERICA.host)
+    )
+
+    val ALL: List<RelayServerConfig>
+        get() = dynamicConfigs
 
     fun getBestForTimeZone(timeZoneId: String?): RelayServerConfig {
         val tz = timeZoneId.orEmpty().lowercase()
@@ -48,8 +83,27 @@ object RelayServers {
             "asia/colombo",
             "asia/kathmandu"
         )
+        val europeTimeZones = listOf(
+            "europe/",
+            "africa/cairo",
+            "asia/dubai",
+            "asia/riyadh",
+            "asia/jerusalem",
+            "asia/tehran"
+        )
+        val americaTimeZones = listOf(
+            "america/",
+            "us/",
+            "canada/",
+            "mexico/",
+            "brazil/",
+            "chile/",
+            "argentina/"
+        )
 
         if (southAsiaTimeZones.any { tz == it }) return MUMBAI
+        if (europeTimeZones.any { tz.startsWith(it) }) return EUROPE
+        if (americaTimeZones.any { tz.startsWith(it) }) return AMERICA
 
         // Fallback by UTC offset for South Asia users whose devices report alias IDs.
         val offsetMillis = java.util.TimeZone.getTimeZone(timeZoneId).rawOffset
@@ -59,15 +113,75 @@ object RelayServers {
             20_700_000, // UTC+05:45 (Nepal)
             21_600_000  // UTC+06:00 (Bangladesh)
         )
+        val europeOffsets = setOf(
+            0,
+            3_600_000,
+            7_200_000,
+            10_800_000,
+            14_400_000
+        )
+        val americaOffsets = setOf(
+            -36_000_000,
+            -32_400_000,
+            -28_800_000,
+            -25_200_000,
+            -21_600_000,
+            -18_000_000,
+            -14_400_000,
+            -10_800_000
+        )
 
-        return if (offsetMillis in southAsiaOffsets) MUMBAI else SINGAPORE
+        return when {
+            offsetMillis in southAsiaOffsets -> MUMBAI
+            offsetMillis in europeOffsets -> EUROPE
+            offsetMillis in americaOffsets -> AMERICA
+            else -> SINGAPORE
+        }
+    }
+
+    fun updateRegions(regions: List<RelayRegion>) {
+        val normalized = regions
+            .map { RelayRegion(it.label.trim(), it.host.trim()) }
+            .filter { it.label.isNotBlank() && it.host.isNotBlank() }
+            .distinctBy { it.host }
+        if (normalized.isEmpty()) return
+        dynamicRegions = normalized
+        dynamicConfigs = buildConfigs(normalized)
+    }
+
+    fun currentRegions(): List<RelayRegion> = dynamicRegions
+
+    fun resolveBedrockRegion(host: String): String = when (host) {
+        MUMBAI.host -> "MUMBAI"
+        SINGAPORE.host -> "SINGAPORE"
+        EUROPE.host -> "EUROPE"
+        AMERICA.host -> "AMERICA"
+        else -> "MUMBAI"
     }
 
     fun getByHost(host: String?): RelayServerConfig {
-        return ALL.firstOrNull { it.host == host } ?: SINGAPORE
+        return ALL.firstOrNull { it.host == host }
+            ?: metadataByHost[host]
+            ?: MUMBAI
     }
 
     fun getDisplayName(host: String?): String {
         return getByHost(host).displayName
+    }
+
+    private fun buildConfigs(regions: List<RelayRegion>): List<RelayServerConfig> {
+        return regions.map { region ->
+            metadataByHost[region.host]?.copy(
+                displayName = region.label,
+                region = region.label
+            ) ?: RelayServerConfig(
+                host = region.host,
+                displayName = region.label,
+                region = region.label,
+                icon = "🌐",
+                description = "Relay server selected from remote configuration",
+                bestFor = region.label
+            )
+        }
     }
 }

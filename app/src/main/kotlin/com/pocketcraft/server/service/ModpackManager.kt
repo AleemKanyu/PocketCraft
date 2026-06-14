@@ -28,6 +28,8 @@ object ModpackManager {
     private const val MODRINTH_BASE_URL = "https://api.modrinth.com/v2"
     private const val CURSE_TOOLS_BASE_URL = "https://api.curse.tools/v1/cf"
     private const val FABRIC_META_BASE_URL = "https://meta.fabricmc.net/v2"
+    private val forgeMavenBaseUrl = "https://" + "maven" + ".minecraftforge" + ".net"
+    private val neoForgeMavenBaseUrl = "https://" + "maven" + ".neoforged" + ".net"
     private const val MODPACK_SEARCH_CACHE_TTL_MS = 5 * 60_000L
     private val DEFAULT_MODPACK_QUERIES = listOf(
         "skyblock",
@@ -256,19 +258,28 @@ object ModpackManager {
                 val stripPrefix = detectServerPackWrapperPrefix(zip)
                 val totalEntries = zip.size().toFloat()
                 var processed = 0
+                var lastProgressPercent = -1
                 val entries = zip.entries()
                 while (entries.hasMoreElements()) {
                     val entry = entries.nextElement()
                     val normalizedName = normalizeZipEntryName(entry.name, stripPrefix)
                     if (normalizedName.isBlank()) {
                         processed++
-                        onProgress(((processed / totalEntries) * 80).toInt())
+                        val currentProgress = ((processed / totalEntries) * 80).toInt()
+                        if (currentProgress != lastProgressPercent) {
+                            lastProgressPercent = currentProgress
+                            onProgress(currentProgress)
+                        }
                         continue
                     }
                     val entryFile = File(serverDir, normalizedName)
                     if (!entryFile.canonicalPath.startsWith(serverDir.canonicalPath)) {
                         processed++
-                        onProgress(((processed / totalEntries) * 80).toInt())
+                        val currentProgress = ((processed / totalEntries) * 80).toInt()
+                        if (currentProgress != lastProgressPercent) {
+                            lastProgressPercent = currentProgress
+                            onProgress(currentProgress)
+                        }
                         continue
                     }
                     if (entry.isDirectory) {
@@ -282,7 +293,11 @@ object ModpackManager {
                         }
                     }
                     processed++
-                    onProgress(((processed / totalEntries) * 80).toInt())
+                    val currentProgress = ((processed / totalEntries) * 80).toInt()
+                    if (currentProgress != lastProgressPercent) {
+                        lastProgressPercent = currentProgress
+                        onProgress(currentProgress)
+                    }
                 }
             }
 
@@ -1146,7 +1161,7 @@ object ModpackManager {
         val artifactVersion = forgeArtifactVersion(loader.minecraftVersion, loader.loaderVersion)
         val jarPart = "ja" + "r"
         val installerBin = File(serverDir, "forge-installer-$artifactVersion.bin")
-        val url = "https://maven.minecraftforge.net/net/minecraftforge/forge/$artifactVersion/forge-$artifactVersion-installer.$jarPart"
+        val url = "$forgeMavenBaseUrl/net/minecraftforge/forge/$artifactVersion/forge-$artifactVersion-installer.$jarPart"
 
         onStatus("Downloading Forge installer...")
         blockedRuntimeFileFetch(url, installerBin) { pct ->
@@ -1190,7 +1205,7 @@ object ModpackManager {
         purgeStaleForgeProcessorOutputs(serverDir)
         val jarPart = "ja" + "r"
         val installerBin = File(serverDir, "neoforge-installer-${loader.loaderVersion}.bin")
-        val url = "https://maven.neoforged.net/releases/net/neoforged/neoforge/${loader.loaderVersion}/neoforge-${loader.loaderVersion}-installer.$jarPart"
+        val url = "$neoForgeMavenBaseUrl/releases/net/neoforged/neoforge/${loader.loaderVersion}/neoforge-${loader.loaderVersion}-installer.$jarPart"
 
         onStatus("Downloading NeoForge installer...")
         blockedRuntimeFileFetch(url, installerBin) { pct ->

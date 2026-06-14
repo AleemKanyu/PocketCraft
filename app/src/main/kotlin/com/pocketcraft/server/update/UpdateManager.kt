@@ -13,7 +13,8 @@ data class UpdateConfig(
     val showUpdatePopup: Boolean = false,
     val playStoreUrl: String = "",
     val versionCode: Int? = null,
-    val isForced: Boolean = false
+    val isForced: Boolean = false,
+    val enablePlayStoreRatingPrompt: Boolean = true
 )
 
 object UpdateManager {
@@ -59,17 +60,19 @@ object UpdateManager {
         val isForcedRaw = document.get("isForced")
         val playStoreUrlRaw = document.get("playStoreUrl")
         val versionCodeRaw = document.get("versionCode")
+        val enablePlayStoreRatingPromptRaw = document.get("enablePlayStoreRatingPrompt")
 
         val showUpdatePopup = showUpdatePopupRaw.toBooleanOrNull() ?: false
         val isForced = isForcedRaw.toBooleanOrNull() ?: false
         val playStoreUrl = playStoreUrlRaw?.toString()?.trim() ?: ""
         val versionCode = versionCodeRaw.toIntOrNull()
+        val enablePlayStoreRatingPrompt = enablePlayStoreRatingPromptRaw.toBooleanOrNull() ?: true
 
-        Log.d(TAG, "Fetched app_config/update values: showUpdatePopupRaw=$showUpdatePopupRaw, isForcedRaw=$isForcedRaw, playStoreUrlRaw=$playStoreUrlRaw, versionCodeRaw=$versionCodeRaw")
+        Log.d(TAG, "Fetched app_config/update values: showUpdatePopupRaw=$showUpdatePopupRaw, isForcedRaw=$isForcedRaw, playStoreUrlRaw=$playStoreUrlRaw, versionCodeRaw=$versionCodeRaw, enablePlayStoreRatingPromptRaw=$enablePlayStoreRatingPromptRaw")
 
         if (!showUpdatePopup) {
             Log.d(TAG, "Update config parsed: showUpdatePopup is false/null. Skipping update popup.")
-            return null
+            return UpdateConfig(enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt)
         }
 
         // Check version condition
@@ -80,13 +83,13 @@ object UpdateManager {
 
         if (versionCode != null && currentVersionCode >= versionCode) {
             Log.d(TAG, "Update config parsed: currentVersionCode ($currentVersionCode) >= target versionCode ($versionCode). Skipping update popup.")
-            return null
+            return UpdateConfig(enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt)
         }
 
         if (playStoreUrl.isBlank()) {
             // Treat blank URL as invalid data and skip, or use a default
             Log.w(TAG, "Update config parsed: playStoreUrl is empty/blank (invalid data). Skipping update popup.")
-            return null
+            return UpdateConfig(enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt)
         }
 
         Log.d(TAG, "Update config decision: SHOW popup. isForced=$isForced, playStoreUrl='$playStoreUrl', targetVersionCode=$versionCode")
@@ -94,7 +97,8 @@ object UpdateManager {
             showUpdatePopup = showUpdatePopup,
             playStoreUrl = playStoreUrl,
             versionCode = versionCode,
-            isForced = isForced
+            isForced = isForced,
+            enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt
         )
     }
 

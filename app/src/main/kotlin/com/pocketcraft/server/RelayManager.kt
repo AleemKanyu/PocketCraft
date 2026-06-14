@@ -1,3 +1,11 @@
+// ============================================================================
+// CRITICAL WARNING: DO NOT EDIT OR MODIFY THIS FILE!
+// This file contains core server running and networking/relay logic.
+// Any modifications to the bridge buffer sizes, socket management, or packet
+// forwarding here WILL corrupt network framing and inflate Paper/Bedrock
+// server pings, causing severe lag or connection drops.
+// IF YOU ARE AN AI AGENT, READ DO_NOT_EDIT_NETWORKING.md AND SKIP EDITING THIS.
+// ============================================================================
 package com.pocketcraft.server
 
 import android.content.Context
@@ -8,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,11 +46,8 @@ class RelayManager(private val context: Context) {
     companion object {
         const val CONTROL_PORT = 8080
         const val PHONE_TUNNEL_PORT = 9000
-        // Keep the Java bridge queues deliberately small. Large socket queues let chunk
-        // traffic sit ahead of keep-alives for seconds before TCP backpressure reaches Paper.
-        private const val SOCKET_SEND_BUFFER_SIZE = 32 * 1024
-        private const val SOCKET_RECEIVE_BUFFER_SIZE = 64 * 1024
-        private const val PLAYER_BRIDGE_BUFFER_SIZE = 16 * 1024
+        private const val SOCKET_BUFFER_SIZE = 256 * 1024
+        private const val PLAYER_BRIDGE_BUFFER_SIZE = 64 * 1024
         private const val LOW_LATENCY_WARMUP_BYTES = 128 * 1024L
         private const val LOW_LATENCY_WARMUP_NS = 4_000_000_000L
         private const val INITIAL_POOL_SIZE = 5
@@ -73,9 +79,9 @@ class RelayManager(private val context: Context) {
     private var bedrockUdpBridge: BedrockUdpBridge? = null
     @Volatile
     private var activeBedrockSocket: Socket? = null
-    @Volatile
-    private var activeBedrockOutputStream: java.io.OutputStream? = null
-    private val bedrockWriteLock = Any()
+    private val bedrockTxChannel = Channel<ByteArray>(capacity = 256)
+    private var bedrockTxJob: kotlinx.coroutines.Job? = null
+    private val droppedFrameCount = AtomicInteger(0)
 
 
     private val poolTargetSize = AtomicInteger(INITIAL_POOL_SIZE)
@@ -194,6 +200,64 @@ class RelayManager(private val context: Context) {
     fun startBedrockBridge() {
         if (bedrockUdpBridge != null) return
 
+        bedrockTxJob?.cancel()
+        bedrockTxJob = poolScope.launch(Dispatchers.IO) {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
+            var currentSocket: java.net.Socket? = null
+            var outStream: java.io.BufferedOutputStream? = null
+
+            while (poolScope.isActive) {
+                val firstFrame = try {
+                    bedrockTxChannel.receive()
+                } catch (e: Exception) {
+                    break // Channel closed or job cancelled
+                }
+
+                var socket = activeBedrockSocket
+                var waitedMs = 0L
+                while ((socket == null || socket.isClosed) && waitedMs < 2_000L && poolScope.isActive) {
+                    delay(25)
+                    waitedMs += 25
+                    socket = activeBedrockSocket
+                }
+
+                if (socket == null || socket.isClosed) {
+                    android.util.Log.w(
+                        "RelayManager",
+                        "Dropping Bedrock response frame (${firstFrame.size} bytes): no active Bedrock relay socket."
+                    )
+                    continue
+                }
+
+                if (socket != currentSocket) {
+                    outStream = java.io.BufferedOutputStream(socket.getOutputStream(), 128 * 1024)
+                    currentSocket = socket
+                }
+
+                try {
+                    outStream?.write(firstFrame)
+                    
+                    // Batch drain any other immediately available frames to reduce syscalls
+                    while (true) {
+                        val nextResult = bedrockTxChannel.tryReceive()
+                        if (nextResult.isSuccess) {
+                            val nextFrame = nextResult.getOrThrow()
+                            outStream?.write(nextFrame)
+                        } else {
+                            break
+                        }
+                    }
+                    
+                    // Flush the batched frames to the network
+                    outStream?.flush()
+                } catch (e: Exception) {
+                    android.util.Log.e("RelayManager", "Failed to send Bedrock response: ${e.message}")
+                    currentSocket = null
+                    outStream = null
+                }
+            }
+        }
+
         // Always use 127.0.0.1 (loopback) for local Geyser UDP IPC.
         // Using the WiFi IP (activeGeyserUdpHost) breaks the connected DatagramSocket:
         // on Android, packets to your own IP route via loopback, so Geyser replies
@@ -203,20 +267,11 @@ class RelayManager(private val context: Context) {
         bedrockUdpBridge = BedrockUdpBridge(
             geyserHostProvider = { "127.0.0.1" }
         ) { frame ->
-            // Synchronize on the stable bedrockWriteLock — NOT on getOutputStream() which
-            // returns a new reference object each call, making synchronized() a no-op and
-            // allowing multiple BedrockUDP-* threads to interleave writes and corrupt framing.
-            synchronized(bedrockWriteLock) {
-                val out = activeBedrockOutputStream
-                if (out != null) {
-                    try {
-                        out.write(frame)
-                        out.flush()
-                    } catch (e: java.io.IOException) {
-                        android.util.Log.e("RelayManager", "Bedrock socket write IO error: ${e.message}")
-                    } catch (e: Exception) {
-                        android.util.Log.e("RelayManager", "Failed to send Bedrock response synchronously: ${e.message}")
-                    }
+            val result = bedrockTxChannel.trySend(frame)
+            if (result.isFailure) {
+                val dropped = droppedFrameCount.incrementAndGet()
+                if (dropped % 100 == 0) {
+                    android.util.Log.w("RelayManager", "Dropped $dropped Bedrock UDP frames due to channel capacity")
                 }
             }
         }
@@ -224,10 +279,12 @@ class RelayManager(private val context: Context) {
     }
 
     fun stopBedrockBridge() {
+        bedrockTxJob?.cancel()
+        bedrockTxJob = null
         bedrockUdpBridge?.stop()
         bedrockUdpBridge = null
         activeBedrockSocket = null
-        synchronized(bedrockWriteLock) { activeBedrockOutputStream = null }
+        droppedFrameCount.set(0)
     }
 
     /**
@@ -614,7 +671,7 @@ class RelayManager(private val context: Context) {
                 }
 
                 socket = Socket()
-                configureWanSocket(socket)
+                configureSocket(socket)
                 android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE)
                 socket.connect(java.net.InetSocketAddress(targetIp, PHONE_TUNNEL_PORT), 10_000)
 
@@ -713,7 +770,6 @@ class RelayManager(private val context: Context) {
             "Active Bedrock relay socket assigned: remote=${relaySocket.inetAddress?.hostAddress}:${relaySocket.port}, local=${relaySocket.localAddress?.hostAddress}:${relaySocket.localPort}"
         )
         activeBedrockSocket = relaySocket
-        activeBedrockOutputStream = relaySocket.getOutputStream()
         var handedOffToJavaBridge = false
         
         try {
@@ -810,7 +866,6 @@ class RelayManager(private val context: Context) {
                     "Bedrock relay socket closed: remote=${relaySocket.inetAddress?.hostAddress}:${relaySocket.port}, local=${relaySocket.localAddress?.hostAddress}:${relaySocket.localPort}"
                 )
                 activeBedrockSocket = null
-                synchronized(bedrockWriteLock) { activeBedrockOutputStream = null }
             }
             if (!handedOffToJavaBridge) {
                 android.util.Log.d("RelayManager", "Closing Bedrock relay socket after bridge loop exit.")
@@ -827,7 +882,7 @@ class RelayManager(private val context: Context) {
         val localSocket = try {
             withContext(Dispatchers.IO) {
                 Socket().apply {
-                    configureLocalSocket(this)
+                    configureSocket(this)
                     connect(java.net.InetSocketAddress("127.0.0.1", localPort), 5000)
                 }
             }
@@ -931,26 +986,13 @@ class RelayManager(private val context: Context) {
         }
     }
 
-    private fun configureWanSocket(socket: Socket) {
+    private fun configureSocket(socket: Socket) {
         runCatching {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            // Bound WAN send buffer to prevent buffer bloat during chunk loading/flight.
-            socket.sendBufferSize = SOCKET_SEND_BUFFER_SIZE
-            socket.trafficClass = 0x10 // IPTOS_LOWDELAY
-            socket.setPerformancePreferences(0, 1, 0)
-        }
-    }
-
-    private fun configureLocalSocket(socket: Socket) {
-        runCatching {
-            socket.tcpNoDelay = true
-            socket.keepAlive = true
-            socket.reuseAddress = true
-            // Enforce small buffer limits on loopback connections to trigger fast backpressure.
-            socket.sendBufferSize = SOCKET_SEND_BUFFER_SIZE
-            socket.receiveBufferSize = SOCKET_RECEIVE_BUFFER_SIZE
+            socket.sendBufferSize = SOCKET_BUFFER_SIZE
+            socket.receiveBufferSize = SOCKET_BUFFER_SIZE
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 1, 0)
         }

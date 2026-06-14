@@ -70,8 +70,8 @@ android {
         applicationId = "com.pocketcraft.server"
         minSdk = 26
         targetSdk = 35
-        versionCode = autoVersionCode
-        versionName = "1.5.0"
+        versionCode = 29687737
+        versionName = "1.5.2"
 
         buildConfigField("String", "RELAY_PUBLIC_DOMAIN", "\"joinmc.link\"")
         buildConfigField("String", "GITHUB_REPO_OWNER", "\"$githubRepoOwner\"")
@@ -125,7 +125,7 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             
             isMinifyEnabled = true
             isShrinkResources = true
@@ -158,7 +158,18 @@ android {
         }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/INDEX.LIST"
+            excludes += "META-INF/DEPENDENCIES"
         }
+    }
+}
+
+configurations.all {
+    resolutionStrategy {
+        force(
+            "io.grpc:grpc-api:1.57.2",
+            "io.grpc:grpc-context:1.57.2",
+        )
     }
 }
 
@@ -171,7 +182,9 @@ kotlin {
 dependencies {
     implementation("com.google.android.gms:play-services-oss-licenses:17.1.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
-    implementation("org.apache.commons:commons-compress:1.26.1")
+    implementation("org.apache.commons:commons-compress:1.26.1") {
+        exclude(group = "commons-codec", module = "commons-codec")
+    }
     implementation("org.tukaani:xz:1.9")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -214,11 +227,18 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.crashlytics)
+    implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-messaging-ktx")
     implementation("com.google.firebase:firebase-config-ktx")
     implementation("com.google.firebase:firebase-inappmessaging-display-ktx")
+    implementation("io.grpc:grpc-api:1.57.2")
+    implementation("io.grpc:grpc-context:1.57.2")
     implementation("com.google.android.play:review-ktx:2.0.2")
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
+    implementation("com.google.api-client:google-api-client-android:2.7.0")
+    implementation("com.google.http-client:google-http-client-android:1.45.0")
+    implementation("com.google.apis:google-api-services-drive:v3-rev20240809-2.0.0")
 
     implementation("com.google.zxing:core:3.5.3")
     implementation("androidx.graphics:graphics-path:1.0.1")

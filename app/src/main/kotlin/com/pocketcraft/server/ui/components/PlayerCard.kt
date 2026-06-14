@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -121,16 +119,17 @@ fun PlayerCard(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    DropdownMenu(
+                    PocketDropdownMenu(
                         expanded = expanded,
                         onDismissRequest = { expanded = false }
                     ) {
                         actions.forEach { action ->
-                            DropdownMenuItem(
+                            PocketDropdownMenuItem(
                                 text = {
                                     Text(
                                         text = action.label,
-                                        color = action.tint ?: MaterialTheme.colorScheme.onSurface
+                                        color = action.tint ?: MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 },
                                 onClick = {

@@ -24,7 +24,7 @@ import java.util.concurrent.TimeoutException
 object FeedbackService {
 
     private const val FEEDBACK_COLLECTION = "beta_feedback"
-    private const val DISCORD_WEB_URL = "https://discord.gg/nc7ceYWVfT"
+    private const val DISCORD_WEB_URL = "https://discord.gg/7xw3Rd2vs2"
     private const val DISCORD_APP_URL = "discord://invite/nc7ceYWVfT"
     private const val INSTAGRAM_WEB_URL = "https://www.instagram.com/pocketcraftmc?igsh=NTRnZGI4MHFuYXd3&utm_source=qr"
     private const val INSTAGRAM_APP_URL = "instagram://user?username=pocketcraftmc"

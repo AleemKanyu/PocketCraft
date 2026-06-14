@@ -1,6 +1,7 @@
 package com.pocketcraft.server.ui.navigation
 
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -10,11 +11,16 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.geometry.Offset
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
+import com.pocketcraft.server.config.RelayServers
+import com.pocketcraft.server.config.RemoteConfigManager
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -32,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
@@ -44,9 +51,10 @@ import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import com.pocketcraft.server.ui.components.PocketDropdownMenu
+import com.pocketcraft.server.ui.components.PocketDropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -73,17 +81,29 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pocketcraft.server.data.model.RelayRegion
 import com.pocketcraft.server.R
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.PocketMotion
 import com.pocketcraft.server.ui.theme.pocketGlassControlBrush
 import com.pocketcraft.server.ui.theme.raisedBorder
 import com.pocketcraft.server.ui.util.MobTheme
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import com.pocketcraft.server.ui.util.playTickHaptic
 
 import com.pocketcraft.server.util.LocalAppStrings
 
@@ -145,10 +165,8 @@ fun PocketTopBar(
 ) {
     var relayMenuExpanded by remember { mutableStateOf(false) }
     var themeMenuExpanded by remember { mutableStateOf(false) }
-    val relayOptions = mapOf(
-        "play.pocketcraft.online" to "Global",
-        "mine.pocketcraft.online" to "Asia"
-    )
+    val relayRegions by RemoteConfigManager.relayRegions.collectAsState(initial = RelayServers.defaultRegions())
+    val relayOptions = relayRegions
     val glassButtonBorder = PocketColors.IconBtnBorder
     val glassButtonDepth = PocketColors.IconBtnBorderBottom
     val subduedIconTint = PocketColors.IconBtnIcon
@@ -216,7 +234,7 @@ fun PocketTopBar(
                         .clip(RoundedCornerShape(17.dp))
                         .background(PocketColors.IconBtnBg)
                         .clickable {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.gg/pocketcraft"))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(context.getString(R.string.discord_invite_url)))
                             context.startActivity(intent)
                         },
                     contentAlignment = Alignment.Center
@@ -252,31 +270,20 @@ fun PocketTopBar(
                             tint = subduedIconTint.copy(alpha = 0.86f)
                         )
                     }
-                    DropdownMenu(
+                    PocketDropdownMenu(
                         expanded = themeMenuExpanded,
-                        onDismissRequest = { themeMenuExpanded = false },
-                        shape = RoundedCornerShape(22.dp),
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        shadowElevation = 10.dp
+                        onDismissRequest = { themeMenuExpanded = false }
                     ) {
+                        MenuHeader(
+                            title = "Theme Studio",
+                            subtitle = "Tune PocketCraft's vibe"
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                         MobTheme.entries.forEach { theme ->
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text(theme.themeName)
-                                        if (theme == currentMobTheme) {
-                                            Icon(
-                                                imageVector = Icons.Filled.CheckCircle,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(14.dp),
-                                                tint = PocketColors.Primary
-                                            )
-                                        }
-                                    }
-                                },
+                            PremiumDropdownItem(
+                                title = theme.themeName,
+                                subtitle = if (theme == currentMobTheme) "Currently active" else "Apply this theme",
+                                selected = theme == currentMobTheme,
                                 onClick = {
                                     themeMenuExpanded = false
                                     onMobThemeChange(theme)
@@ -309,48 +316,38 @@ fun PocketTopBar(
                             tint = if (relayLocked) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f) else accentTint.copy(alpha = 0.86f)
                         )
                     }
-                    DropdownMenu(
+                    PocketDropdownMenu(
                         expanded = relayMenuExpanded,
-                        onDismissRequest = { relayMenuExpanded = false },
-                        shape = RoundedCornerShape(22.dp),
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        shadowElevation = 10.dp
+                        onDismissRequest = { relayMenuExpanded = false }
                     ) {
-                        relayOptions.forEach { (host, label) ->
-                            DropdownMenuItem(
-                                text = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(label)
-                                        if (host == relayHost) {
-                                            Icon(
-                                                imageVector = Icons.Filled.CheckCircle,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(14.dp),
-                                                tint = PocketColors.Primary
-                                            )
-                                        }
-                                    }
+                        MenuHeader(
+                            title = "Relay Regions",
+                            subtitle = "Choose the best route for your players"
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+                        relayOptions.forEach { region ->
+                            val isComingSoon = region.host == RelayServers.AMERICA.host
+                            PremiumDropdownItem(
+                                title = region.label,
+                                subtitle = if (isComingSoon) {
+                                    "America region is coming soon"
+                                } else if (region.host == relayHost) {
+                                    "Currently selected"
+                                } else {
+                                    "Tap to switch relay region"
                                 },
+                                selected = region.host == relayHost,
+                                locked = isComingSoon,
                                 onClick = {
                                     relayMenuExpanded = false
-                                    if (!relayLocked) {
-                                        onRelayHostChange(host)
+                                    if (isComingSoon) {
+                                        Toast.makeText(context, "America server coming soon", Toast.LENGTH_SHORT).show()
+                                    } else if (!relayLocked) {
+                                        onRelayHostChange(region.host)
                                     }
                                 }
                             )
                         }
-                        androidx.compose.material3.HorizontalDivider()
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    "More servers coming soon...",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            },
-                            onClick = { relayMenuExpanded = false },
-                            enabled = false
-                        )
                     }
                 }
             }
@@ -361,6 +358,123 @@ fun PocketTopBar(
             actionIconContentColor = PocketColors.IconBtnIcon
         )
     )
+}
+
+@Composable
+private fun MenuHeader(
+    title: String,
+    subtitle: String
+) {
+    Column(
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = title,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 15.sp,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = subtitle,
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun PremiumDropdownItem(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    locked: Boolean = false,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(enabled = !locked, onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    when {
+                        selected -> Brush.horizontalGradient(
+                            listOf(
+                                PocketColors.Primary.copy(alpha = 0.18f),
+                                PocketColors.PrimaryMuted.copy(alpha = 0.42f)
+                            )
+                        )
+                        locked -> Brush.horizontalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f),
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f)
+                            )
+                        )
+                        else -> Brush.horizontalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0f),
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.08f)
+                            )
+                        )
+                    }
+                )
+                .border(
+                    width = if (selected) 1.2.dp else 1.dp,
+                    color = when {
+                        selected -> PocketColors.Primary.copy(alpha = 0.42f)
+                        locked -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                        else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.16f)
+                    },
+                    shape = RoundedCornerShape(20.dp)
+                )
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = subtitle,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            when {
+                locked -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Lock,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = PocketColors.PrimaryDark
+                    )
+                    Text(
+                        text = "Soon",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = PocketColors.PrimaryDark
+                    )
+                }
+                selected -> Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = PocketColors.Primary
+                )
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -379,11 +493,11 @@ fun PocketBottomNav(
     val unselectedColor = PocketColors.FooterText
     val tabTextShadow = Shadow(color = Color.Transparent, offset = Offset.Zero, blurRadius = 0f)
 
-    val navItemSlotWidth = 64.dp
     val navItemSlotHeight = 56.dp
-    val footerCurveHeight = 18.dp
+    val footerCurveHeight = 20.dp
     val navRowHeight = navItemSlotHeight
     val circleSizeDp = 42.dp
+    val navBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     val targetCornerRadius = when (navIndicatorShape) {
         "BLOCK" -> 10.dp
@@ -391,7 +505,7 @@ fun PocketBottomNav(
     }
     val animatedCornerRadius by animateDpAsState(
         targetValue = targetCornerRadius,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)
+        animationSpec = PocketMotion.gentleSpringDp(stiffness = Spring.StiffnessMediumLow)
     )
 
     val indicatorShape = RoundedCornerShape(animatedCornerRadius)
@@ -400,42 +514,74 @@ fun PocketBottomNav(
     val indicatorBorder = PocketColors.NavActivePillBorder
     val indicatorDepth = PocketColors.NavActivePillBorderBottom
 
+    var rowWidth by remember { mutableStateOf(0) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .curvedFooterBorder(PocketColors.NavActivePillBorder.copy(alpha = 0.5f), 1.2.dp)
             .clip(footerContainerShape)
-            .background(navBgColor)
-            .navigationBarsPadding()
+            .background(Brush.verticalGradient(colors = listOf(navBgColor.copy(alpha = 0.95f), navBgColor)))
     ) {
         Spacer(Modifier.height(footerCurveHeight))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(navRowHeight)
-                .padding(horizontal = 8.dp, vertical = 7.dp),
+                .padding(horizontal = 8.dp, vertical = 7.dp)
+                .onGloballyPositioned { coordinates ->
+                    rowWidth = coordinates.size.width
+                }
+                .pointerInput(rowWidth) {
+                    if (rowWidth <= 0) return@pointerInput
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        val initialIndex = ((down.position.x / rowWidth) * bottomNavTabs.size)
+                            .toInt()
+                            .coerceIn(0, bottomNavTabs.lastIndex)
+                        
+                        playTickHaptic(context)
+                        onTabSelected(bottomNavTabs[initialIndex])
+                        
+                        var lastIndex = initialIndex
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val anyDown = event.changes.any { it.pressed }
+                            if (!anyDown) break
+                            
+                            val change = event.changes.firstOrNull() ?: continue
+                            val index = ((change.position.x / rowWidth) * bottomNavTabs.size)
+                                .toInt()
+                                .coerceIn(0, bottomNavTabs.lastIndex)
+                            
+                            if (index != lastIndex) {
+                                lastIndex = index
+                                playTickHaptic(context)
+                                onTabSelected(bottomNavTabs[index])
+                            }
+                            change.consume()
+                        }
+                    }
+                },
             verticalAlignment = Alignment.CenterVertically
         ) {
             bottomNavTabs.forEach { tab ->
                 val selected = currentTab == tab
                 val tabScale by animateFloatAsState(
-                    targetValue = if (selected) 1.06f else 1f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    ),
+                    targetValue = if (selected) 1.03f else 1f,
+                    animationSpec = PocketMotion.gentleSpringFloat(stiffness = Spring.StiffnessMediumLow),
                     label = "bottom_nav_tab_scale"
+                )
+                val tabOffset by animateDpAsState(
+                    targetValue = if (selected) (-2).dp else 0.dp,
+                    animationSpec = PocketMotion.gentleSpringDp(stiffness = Spring.StiffnessMediumLow),
+                    label = "bottom_nav_tab_offset"
                 )
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .height(navRowHeight)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            onTabSelected(tab)
-                        },
+                        .height(navRowHeight),
                     contentAlignment = Alignment.Center
                 ) {
                     if (selected) {
@@ -444,7 +590,10 @@ fun PocketBottomNav(
                                 .fillMaxWidth()
                                 .height(navItemSlotHeight)
                             "CIRCLE" -> Modifier.size(circleSizeDp)
-                            else -> Modifier.size(navItemSlotWidth, navItemSlotHeight)
+                            else -> Modifier
+                                .fillMaxWidth()
+                                .height(navItemSlotHeight)
+                                .padding(horizontal = 2.dp)
                         }
                         Box(
                             modifier = indicatorModifier
@@ -460,7 +609,9 @@ fun PocketBottomNav(
                         )
                     }
                     Column(
-                        modifier = Modifier.scale(tabScale),
+                        modifier = Modifier
+                            .scale(tabScale)
+                            .offset(y = tabOffset),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
@@ -472,41 +623,46 @@ fun PocketBottomNav(
                         )
                         Text(
                             text = tab.label(),
-                            fontSize = 9.5.sp,
+                            modifier = Modifier.fillMaxWidth(),
+                            fontSize = 9.sp,
                             fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
                             color = if (selected) selectedColor else unselectedColor,
                             style = MaterialTheme.typography.labelSmall.copy(shadow = tabTextShadow),
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            softWrap = false,
                             textAlign = TextAlign.Center
                         )
                     }
                 }
             }
         }
+        Spacer(Modifier.height(navBottomInset))
     }
 }
 
-private class ReverseCurvedFooterShape : Shape {
+class ReverseCurvedFooterShape : Shape {
     override fun createOutline(
         size: androidx.compose.ui.geometry.Size,
         layoutDirection: LayoutDirection,
         density: Density
     ): Outline {
-        val curveDepth = with(density) { 18.dp.toPx() }.coerceAtMost(size.height * 0.35f)
-        val curveWidth = with(density) { 52.dp.toPx() }.coerceAtMost(size.width * 0.22f)
+        val r = with(density) { 20.dp.toPx() }.coerceAtMost(size.height * 0.35f).coerceAtMost(size.width * 0.15f)
 
         val path = Path().apply {
-            moveTo(0f, curveDepth)
-            cubicTo(
-                curveWidth * 0.20f, curveDepth,
-                curveWidth * 0.34f, 0f,
-                curveWidth, 0f
+            moveTo(0f, 0f)
+            arcTo(
+                rect = androidx.compose.ui.geometry.Rect(0f, -r, 2 * r, r),
+                startAngleDegrees = 180f,
+                sweepAngleDegrees = -90f,
+                forceMoveTo = false
             )
-            lineTo(size.width - curveWidth, 0f)
-            cubicTo(
-                size.width - curveWidth * 0.34f, 0f,
-                size.width - curveWidth * 0.20f, curveDepth,
-                size.width, curveDepth
+            lineTo(size.width - r, r)
+            arcTo(
+                rect = androidx.compose.ui.geometry.Rect(size.width - 2 * r, -r, size.width, r),
+                startAngleDegrees = 90f,
+                sweepAngleDegrees = -90f,
+                forceMoveTo = false
             )
             lineTo(size.width, size.height)
             lineTo(0f, size.height)
@@ -514,4 +670,60 @@ private class ReverseCurvedFooterShape : Shape {
         }
         return Outline.Generic(path)
     }
+}
+
+fun Modifier.curvedFooterBorder(
+    color: Color,
+    strokeWidth: Dp = 1.dp
+): Modifier = this.drawWithContent {
+    drawContent()
+    val r = 20.dp.toPx().coerceAtMost(size.height * 0.35f).coerceAtMost(size.width * 0.15f)
+    val strokeWidthPx = strokeWidth.toPx()
+
+    val path = Path().apply {
+        moveTo(0f, 0f)
+        arcTo(
+            rect = androidx.compose.ui.geometry.Rect(0f, -r, 2 * r, r),
+            startAngleDegrees = 180f,
+            sweepAngleDegrees = -90f,
+            forceMoveTo = false
+        )
+        lineTo(size.width - r, r)
+        arcTo(
+            rect = androidx.compose.ui.geometry.Rect(size.width - 2 * r, -r, size.width, r),
+            startAngleDegrees = 90f,
+            sweepAngleDegrees = -90f,
+            forceMoveTo = false
+        )
+    }
+
+    val glowColor = color
+    val borderBrush = Brush.horizontalGradient(
+        colors = listOf(
+            glowColor.copy(alpha = 0.3f),
+            glowColor,
+            glowColor.copy(alpha = 0.3f)
+        )
+    )
+
+    // Soft outer neon glow
+    drawPath(
+        path = path,
+        brush = borderBrush,
+        alpha = 0.12f,
+        style = Stroke(width = strokeWidthPx * 4f, cap = StrokeCap.Round)
+    )
+    drawPath(
+        path = path,
+        brush = borderBrush,
+        alpha = 0.06f,
+        style = Stroke(width = strokeWidthPx * 7f, cap = StrokeCap.Round)
+    )
+
+    // Crisp main border line
+    drawPath(
+        path = path,
+        brush = borderBrush,
+        style = Stroke(width = strokeWidthPx, cap = StrokeCap.Round)
+    )
 }

@@ -43,3 +43,26 @@ private fun pulse(context: Context, hapticFeedback: HapticFeedback) {
         }
     }
 }
+
+fun playTickHaptic(context: Context) {
+    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val manager = context.getSystemService(VibratorManager::class.java)
+        manager?.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+    } ?: return
+
+    if (!vibrator.hasVibrator()) return
+
+    runCatching {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(12, 180))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(12)
+        }
+    }
+}

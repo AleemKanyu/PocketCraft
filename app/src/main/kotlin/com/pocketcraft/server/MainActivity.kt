@@ -39,6 +39,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import android.net.Uri
 import android.content.Intent
 import android.util.Log
@@ -88,6 +90,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        var initialJreReady = false
+        runBlocking {
+            try {
+                withTimeout(150) {
+                    val selectedVersion = AppPreferencesStore
+                        .getSelectedVersionFlow(applicationContext)
+                        .first()
+                        .orEmpty()
+                    val runtime = JreExtractor.runtimeForVersion(selectedVersion)
+                    initialJreReady = JreExtractor.isExtracted(applicationContext, runtime)
+                }
+            } catch (e: Exception) {
+                // Ignore timeout or other errors, fallback to false
+            }
+        }
+
         val preferences = AppPreferences(this)
         val onboardingCompleted = preferences.onboardingCompleted
         preferences.recordAppLaunch()
@@ -97,16 +115,16 @@ class MainActivity : ComponentActivity() {
         PocketColors.activeMobTheme = initialMobTheme
         PocketColors.isDark = initialDarkTheme
 
-        val splashBackgroundColor = if (initialDarkTheme) {
-            PocketColors.BgDark.toArgb()
-        } else {
-            ContextCompat.getColor(this, R.color.splash_background)
-        }
+        val splashBackgroundColor = PocketColors.FooterBg.toArgb()
         val initialSystemBarColor = splashBackgroundColor
         val initialNavBarColor = splashBackgroundColor
-        val initialLightSystemBars = !initialDarkTheme
-        val initialLightNavBar = !initialDarkTheme
+        val initialLightSystemBars = false
+        val initialLightNavBar = false
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            window.decorView.isForceDarkAllowed = false
+            window.isNavigationBarContrastEnforced = false
+        }
         window.statusBarColor = initialSystemBarColor
         window.navigationBarColor = initialNavBarColor
         WindowInsetsControllerCompat(window, window.decorView).apply {
@@ -132,7 +150,7 @@ class MainActivity : ComponentActivity() {
             }
 
             runCatching {
-                Firebase.crashlytics.setCrashlyticsCollectionEnabled(crashDiagnosticsConsent)
+                Firebase.crashlytics.setCrashlyticsCollectionEnabled(analyticsConsent)
             }
         }
 
@@ -143,6 +161,7 @@ class MainActivity : ComponentActivity() {
             val darkTheme = themePreference.resolve(systemDark = systemDarkTheme)
 
             var updateConfig by remember { mutableStateOf<UpdateConfig?>(null) }
+            var playStoreRatingPromptEnabled by remember { mutableStateOf(true) }
             var dismissedUpdateVersion by remember { mutableStateOf<Int?>(null) }
             var dismissedUpdateShowFlag by remember { mutableStateOf(false) }
 
@@ -150,6 +169,7 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(updateConfigFlow) {
                 updateConfigFlow.collect { config ->
                     Log.d("MainActivity", "Received update config from flow: $config")
+                    playStoreRatingPromptEnabled = config?.enablePlayStoreRatingPrompt ?: true
                     if (config != null && config.showUpdatePopup) {
                         val alreadyDismissed = !config.isForced && 
                             dismissedUpdateShowFlag && 
@@ -171,18 +191,14 @@ class MainActivity : ComponentActivity() {
             val appStrings = appStringsFor(AppPreferences(this@MainActivity).appLanguage)
             CompositionLocalProvider(LocalAppStrings provides appStrings) {
             PocketCraftTheme(darkTheme = darkTheme, mobTheme = mobTheme) {
-                var jreReady by remember { mutableStateOf(false) }
+                var jreReady by remember { mutableStateOf(initialJreReady) }
                 var jreError by remember { mutableStateOf<String?>(null) }
                 var jreProgress by remember { mutableStateOf(0) }
                 var jreStatus by remember { mutableStateOf("Preparing Minecraft Runtime...") }
 
                 SideEffect {
                     val onSplash = jreError == null && !jreReady
-                    val splashBackgroundColor = if (darkTheme) {
-                        PocketColors.BgDark.toArgb()
-                    } else {
-                        ContextCompat.getColor(this@MainActivity, R.color.splash_background)
-                    }
+                    val splashBackgroundColor = PocketColors.FooterBg.toArgb()
                     val statusBarColor = if (onSplash) {
                         splashBackgroundColor
                     } else {
@@ -193,11 +209,15 @@ class MainActivity : ComponentActivity() {
                     } else {
                         PocketColors.FooterBg.toArgb()
                     }
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        window.decorView.isForceDarkAllowed = false
+                        window.isNavigationBarContrastEnforced = false
+                    }
                     window.statusBarColor = statusBarColor
                     window.navigationBarColor = navBarColor
                     WindowInsetsControllerCompat(window, window.decorView).apply {
-                        isAppearanceLightStatusBars = androidx.compose.ui.graphics.Color(statusBarColor).luminance() >= 0.5f
-                        isAppearanceLightNavigationBars = androidx.compose.ui.graphics.Color(navBarColor).luminance() >= 0.5f
+                        isAppearanceLightStatusBars = if (onSplash) false else androidx.compose.ui.graphics.Color(statusBarColor).luminance() >= 0.5f
+                        isAppearanceLightNavigationBars = if (onSplash) false else androidx.compose.ui.graphics.Color(navBarColor).luminance() >= 0.5f
                     }
                 }
 
@@ -226,8 +246,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                LaunchedEffect(jreReady, onboardingCompleted, updateConfig) {
-                    if (jreReady && onboardingCompleted && updateConfig == null) {
+                LaunchedEffect(jreReady, onboardingCompleted, updateConfig, playStoreRatingPromptEnabled) {
+                    if (playStoreRatingPromptEnabled && jreReady && onboardingCompleted && updateConfig == null) {
                         maybeRequestPlayStoreRating(preferences)
                     }
                 }
@@ -253,6 +273,7 @@ class MainActivity : ComponentActivity() {
                     }
                     else -> PocketCraftApp(
                         isDarkTheme = darkTheme,
+                        isPlayStoreRatingPromptEnabled = playStoreRatingPromptEnabled,
                         currentMobTheme = mobTheme,
                         onDarkThemeChange = { enabled ->
                             val nextPreference = if (enabled) ThemePreference.DARK else ThemePreference.LIGHT

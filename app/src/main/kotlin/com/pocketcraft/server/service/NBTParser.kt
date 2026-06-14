@@ -209,6 +209,46 @@ object NBTParser {
             val health = findFloatTag(bytes, "Health")
             val hunger = findIntTag(bytes, "foodLevel")
 
+            val deathIdx = indexOfTag(bytes, "LastDeathLocation", 10)
+            val lastDeathPos = if (deathIdx != -1) {
+                val searchEnd = (deathIdx + 200).coerceAtMost(bytes.size)
+                val posIdx = indexOfTagInRange(bytes, "pos", 11, deathIdx, searchEnd)
+                val dimIdx = indexOfTagInRange(bytes, "dimension", 8, deathIdx, searchEnd)
+                
+                val p = if (posIdx != -1) {
+                    val start = posIdx + 1 + 2 + 3 + 4 // type(1) + nameLen(2) + "pos"(3) + arraySize(4)
+                    if (start + 12 <= bytes.size) {
+                        val dx = (((bytes[start].toInt() and 0xFF) shl 24) or
+                                 ((bytes[start + 1].toInt() and 0xFF) shl 16) or
+                                 ((bytes[start + 2].toInt() and 0xFF) shl 8) or
+                                 (bytes[start + 3].toInt() and 0xFF)).toDouble()
+                        val dy = (((bytes[start + 4].toInt() and 0xFF) shl 24) or
+                                 ((bytes[start + 5].toInt() and 0xFF) shl 16) or
+                                 ((bytes[start + 6].toInt() and 0xFF) shl 8) or
+                                 (bytes[start + 7].toInt() and 0xFF)).toDouble()
+                        val dz = (((bytes[start + 8].toInt() and 0xFF) shl 24) or
+                                 ((bytes[start + 9].toInt() and 0xFF) shl 16) or
+                                 ((bytes[start + 10].toInt() and 0xFF) shl 8) or
+                                 (bytes[start + 11].toInt() and 0xFF)).toDouble()
+                        Triple(dx, dy, dz)
+                    } else null
+                } else null
+
+                val d = if (dimIdx != -1) {
+                    val start = dimIdx + 1 + 2 + 9 // type(1) + nameLen(2) + "dimension"(9)
+                    if (start + 2 <= bytes.size) {
+                        val len = ((bytes[start].toInt() and 0xFF) shl 8) or (bytes[start + 1].toInt() and 0xFF)
+                        if (start + 2 + len <= bytes.size) {
+                            String(bytes, start + 2, len)
+                        } else null
+                    } else null
+                } else null
+
+                if (p != null) {
+                    PlayerLocation(p.first, p.second, p.third, d ?: "minecraft:overworld")
+                } else null
+            } else null
+
             val invIndex = indexOfTag(bytes, "Inventory", 9)
             val inventory = if (invIndex != -1) {
                 // Skip tag header to reach list content
@@ -218,6 +258,7 @@ object NBTParser {
             PlayerLiveSnapshot(
                 currentPos = currentPos?.copy(dimension = dimension),
                 respawnPos = respawnPos,
+                lastDeathPos = lastDeathPos,
                 health = health,
                 hunger = hunger,
                 inventory = inventory
@@ -236,7 +277,7 @@ object NBTParser {
         var success = false
         try {
             val bytes = GZIPInputStream(FileInputStream(datFile)).use { it.readBytes() }
-            val mutableBytes = bytes.copyOf()
+            var mutableBytes = bytes.copyOf()
             var modified = false
             
             updates.forEach { (name, value) ->
@@ -268,6 +309,52 @@ object NBTParser {
                             }
                         }
                     }
+                    is PlayerLocation -> {
+                        // 1. Update Pos (List of 3 Doubles)
+                        val posIdx = indexOfTag(mutableBytes, "Pos", 9)
+                        if (posIdx != -1) {
+                            val start = posIdx + 1 + 2 + 3 + 1 + 4
+                            if (start + 24 <= mutableBytes.size) {
+                                val xBits = java.lang.Double.doubleToRawLongBits(value.x)
+                                for (b in 0..7) {
+                                    mutableBytes[start + b] = (xBits shr (56 - b * 8)).toByte()
+                                }
+                                val yBits = java.lang.Double.doubleToRawLongBits(value.y)
+                                for (b in 0..7) {
+                                    mutableBytes[start + 8 + b] = (yBits shr (56 - b * 8)).toByte()
+                                }
+                                val zBits = java.lang.Double.doubleToRawLongBits(value.z)
+                                for (b in 0..7) {
+                                    mutableBytes[start + 16 + b] = (zBits shr (56 - b * 8)).toByte()
+                                }
+                                modified = true
+                            }
+                        }
+                        
+                        // 2. Update Dimension (String)
+                        val dimIdx = indexOfTag(mutableBytes, "Dimension", 8)
+                        if (dimIdx != -1) {
+                            val start = dimIdx + 1 + 2 + 9 // "Dimension".length = 9
+                            if (start + 2 <= mutableBytes.size) {
+                                val oldLen = ((mutableBytes[start].toInt() and 0xFF) shl 8) or (mutableBytes[start + 1].toInt() and 0xFF)
+                                val oldEnd = start + 2 + oldLen
+                                if (oldEnd <= mutableBytes.size) {
+                                    val newBytes = value.dimension.toByteArray(Charsets.UTF_8)
+                                    val newLen = newBytes.size
+                                    
+                                    val prefix = mutableBytes.copyOfRange(0, start)
+                                    val lenBytes = byteArrayOf(
+                                        (newLen shr 8).toByte(),
+                                        newLen.toByte()
+                                    )
+                                    val suffix = mutableBytes.copyOfRange(oldEnd, mutableBytes.size)
+                                    
+                                    mutableBytes = prefix + lenBytes + newBytes + suffix
+                                    modified = true
+                                }
+                            }
+                        }
+                    }
                 }
             }
             
@@ -294,6 +381,19 @@ object NBTParser {
             if (sx != null && sy != null && sz != null) {
                 PlayerLocation(sx.toDouble(), sy.toDouble(), sz.toDouble(), "minecraft:overworld")
             } else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun parseLevelDay(levelFile: File): Long? {
+        if (!levelFile.exists()) return null
+        return try {
+            val bytes = GZIPInputStream(FileInputStream(levelFile)).use { it.readBytes() }
+            // "Time" is the cumulative world age in ticks.
+            // "DayTime" is the current day-cycle position and can be very small on an old world.
+            val worldTime = findLongTag(bytes, "Time") ?: findLongTag(bytes, "DayTime") ?: return null
+            (worldTime / 24000L).coerceAtLeast(0L)
         } catch (e: Exception) {
             null
         }
@@ -340,6 +440,22 @@ object NBTParser {
                     ((data[start + 1].toInt() and 0xFF) shl 16) or
                     ((data[start + 2].toInt() and 0xFF) shl 8) or
                     (data[start + 3].toInt() and 0xFF)
+        } else null
+    }
+
+    private fun findLongTag(data: ByteArray, name: String): Long? {
+        val idx = indexOfTag(data, name, 4)
+        if (idx == -1) return null
+        val start = idx + 1 + 2 + name.length
+        return if (start + 8 <= data.size) {
+            ((data[start].toLong() and 0xFF) shl 56) or
+                ((data[start + 1].toLong() and 0xFF) shl 48) or
+                ((data[start + 2].toLong() and 0xFF) shl 40) or
+                ((data[start + 3].toLong() and 0xFF) shl 32) or
+                ((data[start + 4].toLong() and 0xFF) shl 24) or
+                ((data[start + 5].toLong() and 0xFF) shl 16) or
+                ((data[start + 6].toLong() and 0xFF) shl 8) or
+                (data[start + 7].toLong() and 0xFF)
         } else null
     }
 

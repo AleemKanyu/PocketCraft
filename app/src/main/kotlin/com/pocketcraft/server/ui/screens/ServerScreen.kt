@@ -8,10 +8,16 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,11 +26,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -60,12 +68,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -84,16 +94,33 @@ import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.ui.components.ChunkyProgressBanner
 import com.pocketcraft.server.ui.navigation.PocketBottomNav
+import com.pocketcraft.server.ui.navigation.ReverseCurvedFooterShape
 import com.pocketcraft.server.ui.navigation.PocketTab
 import com.pocketcraft.server.ui.navigation.PocketTopBar
+import com.pocketcraft.server.ui.theme.Monocraft
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.PocketMotion
 import com.pocketcraft.server.ui.theme.pocketCardBorderColor
 import com.pocketcraft.server.ui.theme.pocketDecoratedBackground
 import com.pocketcraft.server.ui.theme.pocketGlassCardBrush
 import com.pocketcraft.server.ui.theme.pocketGlassControlBrush
 import com.pocketcraft.server.ui.theme.card3d
 import com.pocketcraft.server.ui.theme.pocketPremiumActionBrush
+import com.pocketcraft.server.ui.theme.pocketIsDarkTheme
+import com.pocketcraft.server.ui.theme.button3d
+import com.pocketcraft.server.ui.theme.buttonDropShadow
 import com.pocketcraft.server.ui.util.MobTheme
+import com.pocketcraft.server.ui.util.playAppHaptic
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.InfiniteRepeatableSpec
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.ui.platform.LocalHapticFeedback
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -118,6 +145,9 @@ fun ServerScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val isFloatingChatEnabled by AppPreferencesStore.isFloatingChatEnabledFlow(context).collectAsState(initial = false)
+    val isFloatingChatFirstTimeShown by AppPreferencesStore.isFloatingChatFirstTimeShownFlow(context).collectAsState(initial = false)
+    val appFeedbackEnabled by AppPreferencesStore.isSoundEnabledFlow(context).collectAsState(initial = true)
     var currentTab by remember { mutableStateOf(PocketTab.HOME) }
     var selectedPlayer by remember { mutableStateOf<PlayerInfo?>(null) }
     var showWorldSetupPage by remember { mutableStateOf(false) }
@@ -242,17 +272,21 @@ fun ServerScreen(
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { padding ->
+        val topPadding = padding.calculateTopPadding()
+        val bottomPadding = padding.calculateBottomPadding()
+
         // Full-screen box — nav floats as an overlay at the bottom
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
         ) {
             Surface(
                 modifier = Modifier
                     .fillMaxSize()
+                    .padding(top = topPadding)
                     .pocketDecoratedBackground(),
                 color = Color.Transparent
             ) {
@@ -295,78 +329,98 @@ fun ServerScreen(
                             onMessage = showMessage
                         )
 
-                        else -> when (currentTab) {
-                            PocketTab.HOME,
-                            PocketTab.CONSOLE -> ConsoleScreen(
-                                stateHolder = stateHolder,
-                                onViewAllPlayers = { currentTab = PocketTab.PLAYERS },
-                                onChangeVersion = {
-                                    if (stateHolder.isNavigationLocked) {
-                                        showMessage("Stop the server before changing versions.")
+                        else -> {
+                            AnimatedContent(
+                                targetState = currentTab,
+                                transitionSpec = {
+                                    if (targetState.ordinal > initialState.ordinal) {
+                                        slideInHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 480)) { it / 12 } +
+                                            fadeIn(PocketMotion.softFloatTween(durationMillis = 380)) togetherWith
+                                            slideOutHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 420)) { -it / 14 } +
+                                            fadeOut(PocketMotion.softFloatTween(durationMillis = 240))
                                     } else {
-                                        onChangeVersion()
+                                        slideInHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 480)) { -it / 12 } +
+                                            fadeIn(PocketMotion.softFloatTween(durationMillis = 380)) togetherWith
+                                            slideOutHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 420)) { it / 14 } +
+                                            fadeOut(PocketMotion.softFloatTween(durationMillis = 240))
                                     }
                                 },
-                                onInstallCurrentVersion = {
-                                    if (stateHolder.isNavigationLocked) {
-                                        showMessage("Stop the server before installing.")
-                                    } else {
-                                        onInstallCurrentVersion()
-                                    }
-                                },
-                                onPlayerSelected = { player ->
-                                    selectedPlayer = player
-                                },
-                                onOpenServerDetails = {
-                                    showServerDetailsPage = true
-                                    currentTab = PocketTab.HOME
-                                },
-                                onAddWorld = {
-                                    openWorldSetup(createMode = true)
-                                    currentTab = PocketTab.HOME
-                                },
-                                topContentBelowServerCard = homeTopContent
-                            )
+                                label = "tab-navigation"
+                            ) { targetTab ->
+                                when (targetTab) {
+                                    PocketTab.HOME,
+                                    PocketTab.CONSOLE -> ConsoleScreen(
+                                        stateHolder = stateHolder,
+                                        onViewAllPlayers = { currentTab = PocketTab.PLAYERS },
+                                        onChangeVersion = {
+                                            if (stateHolder.isNavigationLocked) {
+                                                showMessage("Stop the server before changing versions.")
+                                            } else {
+                                                onChangeVersion()
+                                            }
+                                        },
+                                        onInstallCurrentVersion = {
+                                            if (stateHolder.isNavigationLocked) {
+                                                showMessage("Stop the server before installing.")
+                                            } else {
+                                                onInstallCurrentVersion()
+                                            }
+                                        },
+                                        onPlayerSelected = { player ->
+                                            selectedPlayer = player
+                                        },
+                                        onOpenServerDetails = {
+                                            showServerDetailsPage = true
+                                            currentTab = PocketTab.HOME
+                                        },
+                                        onAddWorld = {
+                                            openWorldSetup(createMode = true)
+                                            currentTab = PocketTab.HOME
+                                        },
+                                        topContentBelowServerCard = homeTopContent
+                                    )
 
-                            PocketTab.PLAYERS -> PlayersScreen(
-                                stateHolder = stateHolder,
-                                onPlayerSelected = { player -> selectedPlayer = player }
-                            )
+                                    PocketTab.PLAYERS -> PlayersScreen(
+                                        stateHolder = stateHolder,
+                                        onPlayerSelected = { player -> selectedPlayer = player }
+                                    )
 
-                            PocketTab.STORAGE -> StorageScreen(
-                                stateHolder = stateHolder,
-                                onOpenWorldSetup = { createMode ->
-                                    openWorldSetup(createMode)
-                                    selectedPlayer = null
-                                    currentTab = PocketTab.HOME
-                                },
-                                onMessage = showMessage,
-                                onChangeVersion = {
-                                    if (stateHolder.isNavigationLocked) {
-                                        showMessage("Stop the server before changing versions.")
-                                    } else {
-                                        onChangeVersion()
-                                    }
+                                    PocketTab.STORAGE -> StorageScreen(
+                                        stateHolder = stateHolder,
+                                        onOpenWorldSetup = { createMode ->
+                                            openWorldSetup(createMode)
+                                            selectedPlayer = null
+                                            currentTab = PocketTab.HOME
+                                        },
+                                        onMessage = showMessage,
+                                        onChangeVersion = {
+                                            if (stateHolder.isNavigationLocked) {
+                                                showMessage("Stop the server before changing versions.")
+                                            } else {
+                                                onChangeVersion()
+                                            }
+                                        }
+                                    )
+
+                                    PocketTab.MODS -> PluginsHubScreen(
+                                        stateHolder = stateHolder,
+                                        onMessage = showMessage
+                                    )
+
+                                    PocketTab.SETTINGS -> SettingsScreen(
+                                        stateHolder = stateHolder,
+                                        onMessage = showMessage,
+                                        onOpenConfigEditor = { showConfigEditor = true },
+                                        onOpenLegalPage = {
+                                            showLegalPage = true
+                                            selectedPlayer = null
+                                        },
+                                        onDarkThemeChange = onDarkThemeChange,
+                                        currentMobTheme = currentMobTheme,
+                                        onMobThemeChange = onMobThemeChange
+                                    )
                                 }
-                            )
-
-                            PocketTab.MODS -> PluginsHubScreen(
-                                stateHolder = stateHolder,
-                                onMessage = showMessage
-                            )
-
-                            PocketTab.SETTINGS -> SettingsScreen(
-                                stateHolder = stateHolder,
-                                onMessage = showMessage,
-                                onOpenConfigEditor = { showConfigEditor = true },
-                                onOpenLegalPage = {
-                                    showLegalPage = true
-                                    selectedPlayer = null
-                                },
-                                onDarkThemeChange = onDarkThemeChange,
-                                currentMobTheme = currentMobTheme,
-                                onMobThemeChange = onMobThemeChange
-                            )
+                            }
                         }
                     }
 
@@ -406,12 +460,234 @@ fun ServerScreen(
                     )
                 }
             }
+            val isServerActive = stateHolder.status == ServerStatus.ONLINE
+            val showFloatingBubble = (currentTab == PocketTab.PLAYERS || 
+                                      isFloatingChatEnabled || 
+                                      (currentTab == PocketTab.HOME && isServerActive))
+            
+            if (showFloatingBubble) {
+                var showFloatingChatSheet by remember { mutableStateOf(false) }
+                // First-time intro dialog — shown when user taps the FAB for the first time
+                var showFirstTimeChatIntro by remember { mutableStateOf(false) }
+                
+                if (showFirstTimeChatIntro) {
+                    AlertDialog(
+                        onDismissRequest = {
+                            showFirstTimeChatIntro = false
+                            scope.launch { AppPreferencesStore.setFloatingChatFirstTimeShown(context, true) }
+                            showFloatingChatSheet = true
+                        },
+                        icon = { Icon(Icons.Default.Forum, contentDescription = null, tint = PocketColors.Primary) },
+                        title = { Text("Chat with Your Players", fontFamily = Monocraft, fontWeight = FontWeight.Bold) },
+                        text = {
+                            Text(
+                                "This chat bubble lets you talk directly with anyone on the server as the Server Operator — send messages, whisper to players, and broadcast announcements, all without leaving the app."
+                            )
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    showFirstTimeChatIntro = false
+                                    scope.launch { AppPreferencesStore.setFloatingChatFirstTimeShown(context, true) }
+                                    showFloatingChatSheet = true
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Primary)
+                            ) {
+                                Text("Open Chat 💬", color = Color.Black, fontWeight = FontWeight.ExtraBold)
+                            }
+                        }
+                    )
+                }
+
+                // Chat Notification & Animation Logic
+                var chatNotificationCount by remember { mutableIntStateOf(0) }
+                var lastLogSize by remember { mutableIntStateOf(stateHolder.logs.size) }
+                val scale = remember { Animatable(1f) }
+
+                // Reset notification count when overlay is opened
+                LaunchedEffect(showFloatingChatSheet) {
+                    if (showFloatingChatSheet) {
+                        chatNotificationCount = 0
+                    }
+                }
+
+                // Log observer for incoming chat messages
+                LaunchedEffect(stateHolder.logs.size) {
+                    val currentSize = stateHolder.logs.size
+                    if (currentSize > lastLogSize) {
+                        if (!showFloatingChatSheet) {
+                            val chatRegex = Regex("""<(\w+)>\s+(.*)""")
+                            val broadcastRegex = Regex("""\[Server\]\s+(.*)""")
+                            val consoleWhisperRegex = Regex("""\[(?:Server|console):\s+Whispered\s+(.*)\s+to\s+(\w+)\]""")
+                            val playerWhisperRegex = Regex("""(\w+)\s+whispered\s+to\s+you:\s+(.*)""")
+
+                            var newChatsCount = 0
+                            for (i in lastLogSize until currentSize) {
+                                val line = stateHolder.logs.getOrNull(i) ?: continue
+                                val cleanLine = com.pocketcraft.server.service.ConsoleParser.parse(line).text.trim()
+                                val isChat = chatRegex.containsMatchIn(cleanLine) ||
+                                             broadcastRegex.containsMatchIn(cleanLine) ||
+                                             consoleWhisperRegex.containsMatchIn(cleanLine) ||
+                                             playerWhisperRegex.containsMatchIn(cleanLine)
+                                if (isChat) {
+                                    newChatsCount++
+                                }
+                            }
+                            if (newChatsCount > 0) {
+                                chatNotificationCount += newChatsCount
+                                
+                                // Pop/bounce animation
+                                scale.animateTo(1.2f, tween(100, easing = LinearEasing))
+                                scale.animateTo(0.9f, tween(100, easing = LinearEasing))
+                                scale.animateTo(1.05f, tween(80, easing = LinearEasing))
+                                scale.animateTo(1f, tween(80, easing = LinearEasing))
+                            }
+                        }
+                        lastLogSize = currentSize
+                    } else if (currentSize < lastLogSize) {
+                        lastLogSize = currentSize
+                    }
+                }
+
+                val hapticFeedback = LocalHapticFeedback.current
+                val isDark = pocketIsDarkTheme()
+                val interactionSource = remember { MutableInteractionSource() }
+                val pressed by interactionSource.collectIsPressedAsState()
+                
+                val restingBorder = 3.dp
+                val targetBorder = if (pressed) 1.5.dp else restingBorder
+                val targetOffsetY = if (pressed) (restingBorder - 1.5.dp) else 0.dp
+                
+                val fabOffsetY by animateDpAsState(
+                    targetValue = targetOffsetY,
+                    animationSpec = PocketMotion.softDpTween(durationMillis = 150),
+                    label = "fab_press_offset"
+                )
+                val fabBottomBorder by animateDpAsState(
+                    targetValue = targetBorder,
+                    animationSpec = PocketMotion.softDpTween(durationMillis = 150),
+                    label = "fab_bottom_border"
+                )
+                // Pulse only on first server start (discovery hint) — stops permanently after first tap
+                val showAttentionPulse = isServerActive && !isFloatingChatFirstTimeShown && chatNotificationCount == 0 && !showFloatingChatSheet
+                val infiniteTransition = rememberInfiniteTransition(label = "chat_fab_pulse")
+                val pulseScale by infiniteTransition.animateFloat(
+                    initialValue = 1f,
+                    targetValue = 1.45f,
+                    animationSpec = InfiniteRepeatableSpec(
+                        animation = tween(900, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "pulse_scale"
+                )
+                val pulseAlpha by infiniteTransition.animateFloat(
+                    initialValue = 0.55f,
+                    targetValue = 0f,
+                    animationSpec = InfiniteRepeatableSpec(
+                        animation = tween(900, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "pulse_alpha"
+                )
+
+                
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 20.dp, bottom = bottomPadding + 88.dp + fabOffsetY)
+                ) {
+                    // Attention pulse ring
+                    if (showAttentionPulse) {
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .align(Alignment.Center)
+                                .graphicsLayer(
+                                    scaleX = pulseScale,
+                                    scaleY = pulseScale,
+                                    alpha = pulseAlpha
+                                )
+                                .background(PocketColors.Primary.copy(alpha = 0.5f), CircleShape)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .buttonDropShadow(isDark = isDark, shadowColor = PocketColors.Primary.copy(alpha = 0.25f), cornerRadius = 28.dp)
+                            .button3d(
+                                elevation = 8.dp,
+                                borderColor = PocketColors.PrimaryBorder,
+                                depthColor = PocketColors.PrimaryBorderBottom,
+                                depthWidth = fabBottomBorder
+                            )
+                            .graphicsLayer(
+                                scaleX = scale.value,
+                                scaleY = scale.value
+                            )
+                            .clip(CircleShape)
+                            .background(PocketColors.Primary)
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null,
+                                onClick = {
+                                    if (appFeedbackEnabled) {
+                                        scope.launch { playAppHaptic(context, hapticFeedback, false) }
+                                    }
+                                    if (!isFloatingChatFirstTimeShown) {
+                                        // First time: show the feature intro dialog, which will open chat on dismiss
+                                        showFirstTimeChatIntro = true
+                                    } else {
+                                        showFloatingChatSheet = true
+                                    }
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Forum,
+                            contentDescription = "Open Chat",
+                            tint = Color.Black,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    // Red notification badge overlay
+                    if (chatNotificationCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 4.dp, y = (-4).dp)
+                                .background(Color.Red, CircleShape)
+                                .border(1.5.dp, Color.White, CircleShape)
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (chatNotificationCount > 99) "99+" else chatNotificationCount.toString(),
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = Monocraft
+                            )
+                        }
+                    }
+                }
+                
+                if (showFloatingChatSheet) {
+                    FloatingChatBottomSheet(
+                        stateHolder = stateHolder,
+                        onDismissRequest = { showFloatingChatSheet = false }
+                    )
+                }
+            }
+
             // ── Floating nav — footer bg extends through system nav bar inset ──
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .background(PocketColors.FooterBg)
+                    .padding(bottom = bottomPadding)
+                    .background(color = PocketColors.FooterBg, shape = ReverseCurvedFooterShape())
             ) {
                 PocketBottomNav(
                     currentTab = currentTab,
@@ -453,6 +729,15 @@ fun ServerScreen(
             details = stateHolder.crashDetails,
             duringStartup = stateHolder.crashWasDuringStartup,
             onDismiss = { stateHolder.dismissCrashDialog() }
+        )
+    }
+
+    if (stateHolder.showBatteryOptimizationDialog) {
+        BatteryOptimizationDialog(
+            onAccept = {
+                stateHolder.requestBatteryOptimization()
+            },
+            onDismiss = { stateHolder.dismissBatteryOptimizationDialog() }
         )
     }
 }
@@ -883,5 +1168,98 @@ private fun serverFailureSummary(
             }.take(220),
             fix = "Try again after checking RAM, storage, and recent mod or plugin changes. If it repeats, copy the full issue for support."
         )
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Premium Battery Optimization Dialog
+// ──────────────────────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BatteryOptimizationDialog(onAccept: () -> Unit, onDismiss: () -> Unit) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        dragHandle = null
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp)
+                .padding(top = 28.dp, bottom = 36.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(PocketColors.PrimaryMuted, Color.Transparent)
+                            ),
+                            CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("🔋", fontSize = 32.sp)
+                }
+                Text(
+                    text = "Background Server Hosting",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "To keep your Minecraft server running reliably in the background when players are connected, Android requires disabling battery optimization for PocketCraft.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 20.sp
+                )
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(PocketColors.Primary, Color(0xFF4CAF50))
+                        )
+                    )
+                    .clickable(onClick = onAccept)
+                    .padding(vertical = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "✓  Allow Background Access",
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 15.sp
+                )
+            }
+
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Not Now",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
     }
 }

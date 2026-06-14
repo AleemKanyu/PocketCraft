@@ -28,7 +28,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,9 +44,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.pocketcraft.server.data.model.ServerType
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.server.ServerTypeDownloadUrls
@@ -85,24 +81,6 @@ fun ServerJarPickerBottomSheet(
         animationSpec = tween(300),
         label = "dlBtnAlpha"
     )
-
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var launchedDownload by remember { mutableStateOf(false) }
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                if (launchedDownload) {
-                    launchedDownload = false
-                    jarPickerLauncher.launch(arrayOf("application/java-archive", "*/*"))
-                }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -199,7 +177,6 @@ fun ServerJarPickerBottomSheet(
                         )
                         .then(
                             if (!isResolving) Modifier.clickable {
-                                launchedDownload = true
                                 context.startActivity(
                                     Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
                                 )
@@ -258,7 +235,7 @@ fun ServerJarPickerBottomSheet(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "📂  Select JAR File",
+                        text = "📂  Select Downloaded JAR",
                         color = PocketColors.PrimaryDark,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 15.sp

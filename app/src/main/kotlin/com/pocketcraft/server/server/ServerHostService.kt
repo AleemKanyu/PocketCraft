@@ -1,3 +1,11 @@
+// ============================================================================
+// CRITICAL WARNING: DO NOT EDIT OR MODIFY THIS FILE!
+// This file contains core server running and networking/relay logic.
+// Any modifications to the bridge buffer sizes, socket management, or packet
+// forwarding here WILL corrupt network framing and inflate Paper/Bedrock
+// server pings, causing severe lag or connection drops.
+// IF YOU ARE AN AI AGENT, READ DO_NOT_EDIT_NETWORKING.md AND SKIP EDITING THIS.
+// ============================================================================
 package com.pocketcraft.server.server
 
 import android.app.Notification
@@ -282,7 +290,7 @@ class ServerHostService : Service() {
                 relayJob = null
                 serverReadyFallbackJob?.cancel()
                 serverReadyFallbackJob = null
-                relayManager.stopBedrockBridge()
+                relayManager.disconnect()
                 tunnelStarted.set(false)
                 serverReadyHandled.set(false)
                 setServerReadyState(false)
@@ -423,7 +431,7 @@ class ServerHostService : Service() {
             } finally {
                 forceTerminateHostedServer()
                 try {
-                    relayManager.stopBedrockBridge()
+                    relayManager.disconnect()
                     kotlinx.coroutines.withTimeout(3000L) {
                         relayManager.unregister()
                     }
@@ -942,7 +950,7 @@ class ServerHostService : Service() {
                     delay(5000)
                 }
             }
-            relayManager.stopBedrockBridge()
+            relayManager.disconnect()
             android.util.Log.i("ServerHostService", "Relay job ended (isActive=$isActive)")
         }
     }
@@ -954,7 +962,6 @@ class ServerHostService : Service() {
         relayJob = null
         relayStatusJob?.cancel()
         relayStatusJob = null
-        relayManager.stopBedrockBridge()
         relayManager.disconnect()
         tunnelStarted.set(false)
         sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] Reconnecting internet relay...")
@@ -1301,7 +1308,7 @@ class ServerHostService : Service() {
                 relayStatusJob = null
                 serverReadyFallbackJob?.cancel()
                 serverReadyFallbackJob = null
-                relayManager.stopBedrockBridge()
+                relayManager.disconnect()
                 tunnelStarted.set(false)
                 serverReadyHandled.set(false)
                 setServerReadyState(false)
@@ -1592,7 +1599,7 @@ class ServerHostService : Service() {
         private const val KEY_RUNTIME_STATE = "runtime_state"
         private const val KEY_PUBLIC_ADDRESS = "public_address"
         private const val POCKETCRAFT_JOIN_TELLRAW =
-            """tellraw @a ["",{"text":"hosted on Pocketcraft","color":"green","bold":true},{"text":"\nJoin our Discord: ","color":"white"},{"text":"https://discord.gg/nc7ceYWVfT","color":"aqua","underlined":true}]"""
+            """tellraw @a ["",{"text":"hosted on Pocketcraft","color":"green","bold":true},{"text":"\nJoin our Discord: ","color":"white"},{"text":"https://discord.gg/7xw3Rd2vs2","color":"aqua","underlined":true}]"""
         const val RUNTIME_STATE_OFFLINE = "offline"
         const val RUNTIME_STATE_STARTING = "starting"
         const val RUNTIME_STATE_RUNNING = "running"

@@ -49,18 +49,41 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.PocketMotion
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.pocketcraft.server.util.LocalAppStrings
+import android.widget.Toast
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.graphics.Color
+import com.pocketcraft.server.integrations.AccountManager
+import com.pocketcraft.server.integrations.DriveBackupManager
+import com.pocketcraft.server.integrations.RemoteDriveBackup
+import com.pocketcraft.server.ui.components.DuoButton
+import com.pocketcraft.server.ui.components.DuoButtonVariant
+import com.pocketcraft.server.ui.components.GameCard
 
 @Composable
 fun StorageScreen(
@@ -71,24 +94,56 @@ fun StorageScreen(
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
+    LaunchedEffect(selectedTab) {
+        stateHolder.refreshAll()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        TabRow(selectedTabIndex = selectedTab) {
-                    Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text(LocalAppStrings.current.worlds) })
-            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text(LocalAppStrings.current.files) })
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = MaterialTheme.colorScheme.background,
+            contentColor = PocketColors.Primary
+        ) {
+            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, selectedContentColor = PocketColors.Primary, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant, text = { Text(LocalAppStrings.current.worlds) })
+            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, selectedContentColor = PocketColors.Primary, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant, text = { Text(LocalAppStrings.current.files) })
         }
 
-        when (selectedTab) {
-            0 -> WorldsScreen(
-                stateHolder = stateHolder,
-                onOpenWorldSetup = onOpenWorldSetup,
-                onChangeVersion = onChangeVersion,
-                onMessage = onMessage
-            )
-            else -> ServerFilesBrowser(stateHolder = stateHolder)
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        slideInHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 420)) { it / 12 } +
+                            fadeIn(PocketMotion.softFloatTween(durationMillis = 340)) togetherWith
+                            slideOutHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 360)) { -it / 14 } +
+                            fadeOut(PocketMotion.softFloatTween(durationMillis = 220))
+                    } else {
+                        slideInHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 420)) { -it / 12 } +
+                            fadeIn(PocketMotion.softFloatTween(durationMillis = 340)) togetherWith
+                            slideOutHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 360)) { it / 14 } +
+                            fadeOut(PocketMotion.softFloatTween(durationMillis = 220))
+                    }
+                },
+                label = "storage-tab-transition"
+            ) { targetTab ->
+                when (targetTab) {
+                    0 -> WorldsScreen(
+                        stateHolder = stateHolder,
+                        onOpenWorldSetup = onOpenWorldSetup,
+                        onChangeVersion = onChangeVersion,
+                        onMessage = onMessage
+                    )
+                    else -> ServerFilesBrowser(stateHolder = stateHolder)
+                }
+            }
         }
     }
 }
@@ -281,6 +336,18 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
             }
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (currentDir == root) {
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Server Directory Files",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = if (com.pocketcraft.server.ui.theme.pocketIsDarkTheme()) Color.White else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+                        )
+                    }
+                }
                 items(children, key = { it.absolutePath }) { file ->
                     val ext = file.extension.lowercase()
                     val isEditable = !file.isDirectory &&
@@ -397,4 +464,3 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
     }
 
 }
-

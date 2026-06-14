@@ -36,12 +36,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -54,6 +56,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Extension
@@ -62,12 +65,11 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Forest
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -105,29 +107,38 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.pocketcraft.server.MainActivity
+import com.pocketcraft.server.config.RelayLatencySelector
+import com.pocketcraft.server.config.RemoteConfigManager
 import com.pocketcraft.server.config.RelayServers
+import com.pocketcraft.server.data.model.RelayRegion
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.data.model.ServerType
 import com.pocketcraft.server.data.repository.ServerConfigRepository
+import com.pocketcraft.server.integrations.AccountManager
 import com.pocketcraft.server.R
 import com.pocketcraft.server.ui.screens.ServerTypeVersionBottomSheet
+import com.pocketcraft.server.ui.components.DuoButton
+import com.pocketcraft.server.ui.components.DuoButtonVariant
 import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
-import com.pocketcraft.server.ui.theme.PocketColors
-import com.pocketcraft.server.ui.theme.ButtonFont
 import com.pocketcraft.server.ui.theme.Monocraft
+import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.PocketMotion
 import com.pocketcraft.server.ui.theme.PocketCraftTheme
 import com.pocketcraft.server.ui.theme.card3d
 import com.pocketcraft.server.ui.theme.pocketIsDarkTheme
@@ -140,6 +151,22 @@ import kotlin.math.roundToInt
 
 private val OnboardingGreenLight = Color(0xFF3DDC84)
 private val OnboardingGoldLight = Color(0xFFFFB142)
+
+private fun Dp.scaled(factor: Float): Dp = (value * factor).dp
+private fun TextUnit.scaledSp(factor: Float): TextUnit = (value * factor).sp
+
+@Composable
+private fun onboardingCompactScale(): Float {
+    val configuration = LocalConfiguration.current
+    return when {
+        configuration.screenHeightDp <= 690 || configuration.screenWidthDp <= 360 -> 0.82f
+        configuration.screenHeightDp <= 760 || configuration.screenWidthDp <= 392 -> 0.9f
+        else -> 1f
+    }
+}
+
+@Composable
+private fun onboardingIsCompact(): Boolean = onboardingCompactScale() < 1f
 
 @Composable
 private fun onboardingAccentPurple(): Color = PocketColors.Primary
@@ -262,12 +289,20 @@ class OnboardingActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            window.decorView.isForceDarkAllowed = false
+            window.isNavigationBarContrastEnforced = false
+        }
         val initialThemePreference = ThemePreferenceStore.load(this)
 
         setContent {
             val darkTheme = initialThemePreference.resolve(systemDark = isSystemInDarkTheme())
             PocketCraftTheme(darkTheme = darkTheme) {
                 SideEffect {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        window.decorView.isForceDarkAllowed = false
+                        window.isNavigationBarContrastEnforced = false
+                    }
                     window.statusBarColor = PocketColors.BgApp.toArgb()
                     window.navigationBarColor = PocketColors.BgApp.toArgb()
                     WindowInsetsControllerCompat(window, window.decorView).apply {
@@ -314,38 +349,57 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
     var setupRelayHost by rememberSaveable {
         mutableStateOf(AppPreferences(context).relayHost)
     }
+    var relayAutoSelectionChecked by rememberSaveable { mutableStateOf(false) }
+    var relayAutoSelectedByLatency by rememberSaveable { mutableStateOf(false) }
+    var relaySelectionChangedManually by rememberSaveable { mutableStateOf(false) }
+    var isFindingBestRelay by rememberSaveable { mutableStateOf(false) }
+    var relayRecommendation by rememberSaveable { mutableStateOf<String?>(null) }
     var setupShowVersionDialog by remember { mutableStateOf(false) }
     var setupFormError by rememberSaveable { mutableStateOf("") }
     var versionSelectionError by rememberSaveable { mutableStateOf(false) }
     var versionShakeTick by rememberSaveable { mutableIntStateOf(0) }
-    var backgroundPermissionGranted by remember { mutableStateOf(isBackgroundPermissionGranted(context)) }
     var notificationsPermissionGranted by remember { mutableStateOf(isNotificationPermissionGranted(context)) }
     var permissionStepError by rememberSaveable { mutableStateOf("") }
     var permissionWarningTick by rememberSaveable { mutableIntStateOf(0) }
+    var signedInAccountEmail by rememberSaveable { mutableStateOf(AccountManager.currentDriveAccount(context)?.email.orEmpty()) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         notificationsPermissionGranted = granted || isNotificationPermissionGranted(context)
-        if (permissionStepError.isNotBlank() && backgroundPermissionGranted && notificationsPermissionGranted) {
+        if (permissionStepError.isNotBlank() && notificationsPermissionGranted) {
             permissionStepError = ""
+        }
+    }
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        AccountManager.completeGoogleSignIn(context, result.data) { account, user, _ ->
+            signedInAccountEmail = account?.email ?: user?.email.orEmpty()
         }
     }
 
-    val batteryPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) {
-        backgroundPermissionGranted = isBackgroundPermissionGranted(context)
-        if (permissionStepError.isNotBlank() && backgroundPermissionGranted && notificationsPermissionGranted) {
-            permissionStepError = ""
-        }
-    }
+    val relayRegions by RemoteConfigManager.relayRegions.collectAsState(initial = RelayServers.defaultRegions())
 
     LaunchedEffect(Unit) {
         setupVersion = ""
         setupSeed = AppPreferencesStore.getWorldSeedFlow(context).first()
-        backgroundPermissionGranted = isBackgroundPermissionGranted(context)
         notificationsPermissionGranted = isNotificationPermissionGranted(context)
+        RemoteConfigManager.initialize(context)
+    }
+
+    LaunchedEffect(currentStep, relayRegions) {
+        if (currentStep != 5 || relayAutoSelectionChecked || relayRegions.isEmpty()) return@LaunchedEffect
+        relayAutoSelectionChecked = true
+        relayRecommendation = RelayServers.getDisplayName(setupRelayHost)
+        if (preferences.relayAutoSelectedOnce || preferences.relayHostUserOverridden) return@LaunchedEffect
+
+        isFindingBestRelay = true
+        val fastest = RelayLatencySelector.pickFastestRelay(relayRegions)
+        setupRelayHost = fastest.host
+        relayRecommendation = fastest.label
+        relayAutoSelectedByLatency = true
+        isFindingBestRelay = false
     }
 
     fun playHaptic(doublePulse: Boolean = false) {
@@ -361,24 +415,34 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
 
     val progress by animateFloatAsState(
         targetValue = (currentStep + 1) / steps.size.toFloat(),
-        animationSpec = tween(durationMillis = 280)
+        animationSpec = PocketMotion.softFloatTween(durationMillis = 420)
     )
+    val scrollState = rememberScrollState()
 
-    Box(
+    LaunchedEffect(currentStep) {
+        scrollState.scrollTo(0)
+    }
+
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(brush = onboardingBackgroundBrush())
     ) {
+        val compact = maxHeight < 760.dp || maxWidth < 392.dp
+        val outerPadding = if (compact) 14.dp else 18.dp
+        val verticalPadding = if (compact) 8.dp else 12.dp
+        val contentSpacing = if (compact) 10.dp else 14.dp
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 18.dp, vertical = 12.dp),
+                .verticalScroll(scrollState)
+                .padding(horizontal = outerPadding, vertical = verticalPadding),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(contentSpacing)) {
                 TopHeader(
                     progress = progress,
                     step = currentStep + 1,
@@ -393,19 +457,19 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                         targetState = currentStep,
                         transitionSpec = {
                             if (targetState > initialState) {
-                                slideInHorizontally(animationSpec = tween(420, easing = FastOutSlowInEasing)) { it / 5 } +
-                                    fadeIn(tween(380, easing = FastOutSlowInEasing)) +
-                                    scaleIn(initialScale = 0.95f, animationSpec = tween(380, easing = FastOutSlowInEasing)) togetherWith
-                                    slideOutHorizontally(animationSpec = tween(340, easing = FastOutSlowInEasing)) { -it / 7 } +
-                                    fadeOut(tween(320, easing = FastOutSlowInEasing)) +
-                                    scaleOut(targetScale = 1.015f, animationSpec = tween(320, easing = FastOutSlowInEasing))
+                                slideInHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 520)) { it / 12 } +
+                                    fadeIn(PocketMotion.softFloatTween(durationMillis = 440)) +
+                                    scaleIn(initialScale = 0.985f, animationSpec = PocketMotion.softFloatTween(durationMillis = 500)) togetherWith
+                                    slideOutHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 440)) { -it / 14 } +
+                                    fadeOut(PocketMotion.softFloatTween(durationMillis = 320)) +
+                                    scaleOut(targetScale = 1.005f, animationSpec = PocketMotion.softFloatTween(durationMillis = 380))
                             } else {
-                                slideInHorizontally(animationSpec = tween(420, easing = FastOutSlowInEasing)) { -it / 5 } +
-                                    fadeIn(tween(380, easing = FastOutSlowInEasing)) +
-                                    scaleIn(initialScale = 0.95f, animationSpec = tween(380, easing = FastOutSlowInEasing)) togetherWith
-                                    slideOutHorizontally(animationSpec = tween(340, easing = FastOutSlowInEasing)) { it / 7 } +
-                                    fadeOut(tween(320, easing = FastOutSlowInEasing)) +
-                                    scaleOut(targetScale = 1.015f, animationSpec = tween(320, easing = FastOutSlowInEasing))
+                                slideInHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 520)) { -it / 12 } +
+                                    fadeIn(PocketMotion.softFloatTween(durationMillis = 440)) +
+                                    scaleIn(initialScale = 0.985f, animationSpec = PocketMotion.softFloatTween(durationMillis = 500)) togetherWith
+                                    slideOutHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 440)) { it / 14 } +
+                                    fadeOut(PocketMotion.softFloatTween(durationMillis = 320)) +
+                                    scaleOut(targetScale = 1.005f, animationSpec = PocketMotion.softFloatTween(durationMillis = 380))
                             }
                         },
                         label = "onboarding-page"
@@ -416,6 +480,9 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                                 onPrivacyChange = { privacyAccepted = it },
                                 onOpenPrivacy = {
                                     openExternalUrl(context, BuildConfig.PRIVACY_POLICY_URL)
+                                },
+                                onOpenTerms = {
+                                    openExternalUrl(context, BuildConfig.TERMS_OF_USE_URL)
                                 }
                             )
                             1 -> HowItWorksScreen()
@@ -424,18 +491,18 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                             4 -> CrossPlayScreen()
                             5 -> RelayRegionOnboardingScreen(
                                 selectedHost = setupRelayHost,
-                                onSelectHost = { setupRelayHost = it }
+                                regions = relayRegions,
+                                isFindingBestRelay = isFindingBestRelay,
+                                recommendation = relayRecommendation,
+                                onSelectHost = {
+                                    setupRelayHost = it
+                                    relayRecommendation = RelayServers.getDisplayName(it)
+                                    relaySelectionChangedManually = true
+                                    relayAutoSelectedByLatency = false
+                                }
                             )
                             6 -> PermissionsScreen(
-                                backgroundPermissionGranted = backgroundPermissionGranted,
                                 notificationsPermissionGranted = notificationsPermissionGranted,
-                                onAllowBackground = {
-                                    playHaptic()
-                                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                                        data = Uri.parse("package:${context.packageName}")
-                                    }
-                                    batteryPermissionLauncher.launch(intent)
-                                },
                                 onAllowNotifications = {
                                     playHaptic()
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -446,6 +513,13 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                                 },
                                 errorText = permissionStepError,
                                 warningTick = permissionWarningTick
+                            )
+                            7 -> OnboardingGoogleSignInScreen(
+                                signedInAccountEmail = signedInAccountEmail,
+                                onSignInClick = {
+                                    playHaptic()
+                                    googleSignInLauncher.launch(AccountManager.googleSignInIntent(context))
+                                }
                             )
                             else -> OnboardingSetupScreen(
                                 serverName = setupServerName,
@@ -505,15 +579,15 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                         )
                     }
 
-                    val missingPermissionStep = currentStep == 6 && (!backgroundPermissionGranted || !notificationsPermissionGranted)
+                    val missingPermissionStep = currentStep == 6 && !notificationsPermissionGranted
 
                     PrimaryButton(
                         modifier = Modifier.weight(1.25f),
-                        text = if (currentStep == steps.lastIndex) "Finish setup" else "Next",
+                        text = if (currentStep == steps.lastIndex) "Finish setup" else if (currentStep == 7) "Skip" else "Next",
                         enabled = if (currentStep == 0) privacyAccepted else true,
                         onClick = {
                             if (missingPermissionStep) {
-                                permissionStepError = "Allow both background and notification permissions to continue."
+                                permissionStepError = "Allow notification permission to continue."
                                 permissionWarningTick++
                                 playHaptic(doublePulse = true)
                                 return@PrimaryButton
@@ -534,8 +608,14 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                                 scope.launch {
                                     val selectedVersion = setupVersion.trim()
                                     AppPreferences(context).apply {
-                                        bedrockRelayRegion = if (setupRelayHost.contains("mine")) "MUMBAI" else "SINGAPORE"
-                                        relayHost = setupRelayHost
+                                        if (relaySelectionChangedManually) {
+                                            setManualRelayHost(setupRelayHost)
+                                        } else if (relayAutoSelectedByLatency || !relayAutoSelectedOnce) {
+                                            setAutoSelectedRelayHost(setupRelayHost)
+                                        } else {
+                                            relayHost = setupRelayHost
+                                            updateBedrockRelayRegionForHost(setupRelayHost)
+                                        }
                                     }
                                     AppPreferencesStore.setRelayHost(context, setupRelayHost)
                                     AppPreferencesStore.setSelectedServerType(context, setupServerType.name)
@@ -564,6 +644,34 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                                 currentStep++
                             }
                         }
+                    )
+                }
+            }
+        }
+
+        if (scrollState.maxValue > 0 && scrollState.canScrollForward) {
+            Surface(
+                onClick = {
+                    scope.launch {
+                        scrollState.animateScrollTo((scrollState.value + 280).coerceAtMost(scrollState.maxValue))
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 20.dp, bottom = 18.dp)
+                    .size(46.dp),
+                shape = CircleShape,
+                color = PocketColors.Primary,
+                border = BorderStroke(1.5.dp, PocketColors.PrimaryBorder),
+                shadowElevation = 0.dp
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        contentDescription = "Scroll down",
+                        tint = PocketColors.PrimaryText,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
@@ -627,44 +735,122 @@ private fun onboardingSteps(): List<OnboardingStep> {
         OnboardingStep("CROSS-PLAY READY"),
         OnboardingStep("PICK REGION"),
         OnboardingStep("PERMISSIONS"),
+        OnboardingStep("GOOGLE SIGN-IN"),
         OnboardingStep("SETUP")
     )
 }
 
 @Composable
-private fun RelayRegionOnboardingScreen(
-    selectedHost: String,
-    onSelectHost: (String) -> Unit
+private fun OnboardingGoogleSignInScreen(
+    signedInAccountEmail: String,
+    onSignInClick: () -> Unit
 ) {
+    val scale = onboardingCompactScale()
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
+    ) {
+        HaloIconBox(
+            accent = onboardingAccentPurple(),
+            icon = Icons.Filled.AccountCircle
+        )
+
+        Text(
+            text = "Optional Google sign-in",
+            fontSize = 21.sp.scaledSp(scale),
+            color = onboardingTextPrimary(),
+            fontWeight = FontWeight.ExtraBold,
+            fontFamily = Monocraft,
+            textAlign = TextAlign.Center
+        )
+
+        Text(
+            text = "Sign in now to enable private Google Drive backups. You can skip this and finish setup first.",
+            fontSize = 13.sp.scaledSp(scale),
+            lineHeight = 19.sp.scaledSp(scale),
+            color = onboardingTextSecondary(),
+            textAlign = TextAlign.Center
+        )
+
+        ScreenCard(
+            accent = onboardingAccentGold(),
+            title = if (signedInAccountEmail.isBlank()) "Not signed in" else "Signed in",
+            subtitle = if (signedInAccountEmail.isBlank()) {
+                "PocketCraft will only use your private Drive app data folder."
+            } else {
+                signedInAccountEmail
+            }
+        )
+
+        DuoButton(
+            text = if (signedInAccountEmail.isBlank()) "SIGN IN WITH GOOGLE" else "SIGNED IN",
+            onClick = onSignInClick,
+            enabled = signedInAccountEmail.isBlank(),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Text(
+            text = "You can press Next without signing in.",
+            fontSize = 11.sp.scaledSp(scale),
+            color = onboardingTextMuted(),
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun RelayRegionOnboardingScreen(
+    selectedHost: String,
+    regions: List<RelayRegion>,
+    isFindingBestRelay: Boolean,
+    recommendation: String?,
+    onSelectHost: (String) -> Unit
+) {
+    val scale = onboardingCompactScale()
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(14.dp.scaled(scale))
     ) {
         Text(
             text = "Choose your relay region",
-            fontSize = 24.sp,
+            fontSize = 24.sp.scaledSp(scale),
             fontWeight = FontWeight.ExtraBold,
             color = onboardingTextPrimary(),
             fontFamily = Monocraft
         )
         Text(
             text = "Pick the relay server closest to your players. You can change this later from the dashboard too.",
-            fontSize = 13.sp,
+            fontSize = 13.sp.scaledSp(scale),
             color = onboardingTextSecondary(),
-            lineHeight = 18.sp
+            lineHeight = 18.sp.scaledSp(scale)
         )
-        RelayServers.ALL.forEach { server ->
+        if (isFindingBestRelay) {
+            Text(
+                text = "Finding best server...",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = onboardingAccentPurpleDark()
+            )
+        } else if (!recommendation.isNullOrBlank()) {
+            Text(
+                text = "Recommended: $recommendation. You can still change it below.",
+                fontSize = 12.sp,
+                color = onboardingTextSecondary()
+            )
+        }
+        RelayServers.ALL.filter { server -> regions.any { it.host == server.host } && server.host != RelayServers.AMERICA.host }.forEach { server ->
             val selected = server.host == selectedHost
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onSelectHost(server.host) },
-                shape = RoundedCornerShape(22.dp),
+                shape = RoundedCornerShape(22.dp.scaled(scale)),
                 color = if (selected) onboardingAccentPurpleMuted() else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
                 border = BorderStroke(1.dp, if (selected) onboardingAccentPurple() else onboardingBorderColor())
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp.scaled(scale), vertical = 14.dp.scaled(scale)),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -778,33 +964,35 @@ private fun OnboardingPhoneFrame(
     totalSteps: Int,
     content: @Composable () -> Unit
 ) {
+    val scale = onboardingCompactScale()
+    val compact = onboardingIsCompact()
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(34.dp))
+            .clip(RoundedCornerShape(34.dp.scaled(scale)))
             .background(brush = onboardingPhoneOuterBrush())
-            .border(1.5.dp, onboardingBorderColor().copy(alpha = 0.8f), RoundedCornerShape(34.dp))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .border(1.5.dp, onboardingBorderColor().copy(alpha = 0.8f), RoundedCornerShape(34.dp.scaled(scale)))
+            .padding(horizontal = 14.dp.scaled(scale), vertical = 12.dp.scaled(scale)),
+        verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 70.dp)
-                .height(22.dp)
-                .clip(RoundedCornerShape(0.dp, 0.dp, 12.dp, 12.dp))
+                .padding(horizontal = if (compact) 54.dp else 70.dp)
+                .height(20.dp.scaled(scale))
+                .clip(RoundedCornerShape(0.dp, 0.dp, 12.dp.scaled(scale), 12.dp.scaled(scale)))
                 .background(if (pocketIsDarkTheme()) MaterialTheme.colorScheme.surface.copy(alpha = 0.92f) else Color(0xFFF6F8F1))
-                .border(1.dp, onboardingBorderColor().copy(alpha = 0.85f), RoundedCornerShape(0.dp, 0.dp, 12.dp, 12.dp))
+                .border(1.dp, onboardingBorderColor().copy(alpha = 0.85f), RoundedCornerShape(0.dp, 0.dp, 12.dp.scaled(scale), 12.dp.scaled(scale)))
         )
 
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(474.dp)
-                .clip(RoundedCornerShape(26.dp))
+                .heightIn(min = if (compact) 390.dp else 474.dp)
+                .clip(RoundedCornerShape(26.dp.scaled(scale)))
                 .background(brush = onboardingPhoneInnerBrush())
-                .border(1.dp, onboardingBorderColor().copy(alpha = 0.8f), RoundedCornerShape(26.dp))
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                .border(1.dp, onboardingBorderColor().copy(alpha = 0.8f), RoundedCornerShape(26.dp.scaled(scale)))
+                .padding(horizontal = 20.dp.scaled(scale), vertical = 16.dp.scaled(scale)),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Box(modifier = Modifier.fillMaxWidth()) {
@@ -844,12 +1032,14 @@ private fun StepDots(currentStep: Int, totalSteps: Int) {
 private fun WelcomeScreen(
     privacyAccepted: Boolean,
     onPrivacyChange: (Boolean) -> Unit,
-    onOpenPrivacy: () -> Unit
+    onOpenPrivacy: () -> Unit,
+    onOpenTerms: () -> Unit
 ) {
+    val scale = onboardingCompactScale()
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
     ) {
         HaloIconBox(
             accent = onboardingAccentGreen(),
@@ -862,17 +1052,17 @@ private fun WelcomeScreen(
         ) {
             Text(
                 text = "Beta",
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.padding(horizontal = 12.dp.scaled(scale), vertical = 6.dp.scaled(scale)),
                 color = onboardingAccentPurple(),
-                fontSize = 10.sp,
+                fontSize = 10.sp.scaledSp(scale),
                 fontWeight = FontWeight.Bold
             )
         }
 
         Text(
             text = "Your phone is now a Minecraft server",
-            fontSize = 21.sp,
-            lineHeight = 24.sp,
+            fontSize = 21.sp.scaledSp(scale),
+            lineHeight = 24.sp.scaledSp(scale),
             color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
             fontFamily = Monocraft,
@@ -881,8 +1071,8 @@ private fun WelcomeScreen(
 
         Text(
             text = "Host Java Edition servers for free. No PC required. Share with friends anywhere in the world.",
-            fontSize = 13.sp,
-            lineHeight = 19.sp,
+            fontSize = 13.sp.scaledSp(scale),
+            lineHeight = 19.sp.scaledSp(scale),
             color = onboardingTextSecondary(),
             textAlign = TextAlign.Center,
             maxLines = 3
@@ -892,33 +1082,110 @@ private fun WelcomeScreen(
             items = listOf("Free to host", "No PC", "Invite friends")
         )
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 4.dp)
-                .clickable { onPrivacyChange(!privacyAccepted) }
+                .padding(top = 6.dp),
+            shape = RoundedCornerShape(18.dp),
+            color = if (privacyAccepted) {
+                onboardingAccentGreen().copy(alpha = 0.14f)
+            } else {
+                onboardingAccentGold().copy(alpha = 0.12f)
+            },
+            border = BorderStroke(
+                1.5.dp,
+                if (privacyAccepted) onboardingAccentGreen().copy(alpha = 0.5f) else onboardingAccentGold().copy(alpha = 0.55f)
+            )
         ) {
-            Checkbox(
-                checked = privacyAccepted,
-                onCheckedChange = onPrivacyChange,
-                colors = CheckboxDefaults.colors(
-                    checkedColor = PocketColors.Primary,
-                    uncheckedColor = onboardingBorderColor()
-                )
-            )
-            Text(
-                text = buildAnnotatedString {
-                    append("I agree to the ")
-                    withStyle(style = SpanStyle(color = PocketColors.Primary, fontWeight = FontWeight.Bold)) {
-                        append("Privacy Policy")
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onPrivacyChange(!privacyAccepted) }
+                    .padding(horizontal = 14.dp.scaled(scale), vertical = 14.dp.scaled(scale)),
+                verticalArrangement = Arrangement.spacedBy(10.dp.scaled(scale))
+            ) {
+                Surface(
+                    color = if (privacyAccepted) onboardingAccentGreen().copy(alpha = 0.2f) else onboardingAccentGold().copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(999.dp)
+                ) {
+                    Text(
+                        text = if (privacyAccepted) "Required step completed" else "Required before continuing",
+                        modifier = Modifier.padding(horizontal = 10.dp.scaled(scale), vertical = 5.dp.scaled(scale)),
+                        color = if (privacyAccepted) onboardingAccentGreen() else onboardingAccentPurpleDark(),
+                        fontSize = 10.sp.scaledSp(scale),
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = Monocraft
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp.scaled(scale))
+                ) {
+                    Checkbox(
+                        checked = privacyAccepted,
+                        onCheckedChange = onPrivacyChange,
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = PocketColors.Primary,
+                            uncheckedColor = onboardingBorderColor()
+                        )
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp.scaled(scale))
+                    ) {
+                        Text(
+                            text = "Agree to PocketCraft's Privacy Policy and Terms of Use",
+                            fontSize = 12.sp.scaledSp(scale),
+                            color = onboardingTextPrimary(),
+                            fontWeight = FontWeight.ExtraBold,
+                            lineHeight = 17.sp.scaledSp(scale)
+                        )
+                        Text(
+                            text = "Tap the checkbox after reviewing the links below. The Next button stays locked until this is checked.",
+                            fontSize = 11.sp.scaledSp(scale),
+                            color = onboardingTextSecondary(),
+                            lineHeight = 16.sp.scaledSp(scale)
+                        )
                     }
-                },
-                fontSize = 11.sp,
-                color = onboardingTextSecondary(),
-                modifier = Modifier.clickable { onOpenPrivacy() }
-            )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(
+                        onClick = onOpenPrivacy,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Privacy Policy", fontWeight = FontWeight.Bold)
+                    }
+                    TextButton(
+                        onClick = onOpenTerms,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Terms of Use", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        if (!privacyAccepted) {
+            Surface(
+                color = onboardingAccentGold().copy(alpha = 0.1f),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, onboardingAccentGold().copy(alpha = 0.45f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Check the agreement box to unlock the Next button.",
+                    modifier = Modifier.padding(horizontal = 14.dp.scaled(scale), vertical = 10.dp.scaled(scale)),
+                    color = onboardingTextPrimary(),
+                    fontSize = 11.sp.scaledSp(scale),
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
 
         ScreenCard(
@@ -931,14 +1198,15 @@ private fun WelcomeScreen(
 
 @Composable
 private fun HowItWorksScreen() {
+    val scale = onboardingCompactScale()
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
     ) {
         Text(
             text = "How it works",
-            fontSize = 21.sp,
+            fontSize = 21.sp.scaledSp(scale),
             color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
             fontFamily = Monocraft
@@ -969,10 +1237,11 @@ private fun HowItWorksScreen() {
 
 @Composable
 private fun ImportScreen() {
+    val scale = onboardingCompactScale()
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
     ) {
         HaloIconBox(
             accent = onboardingAccentGold(),
@@ -981,7 +1250,7 @@ private fun ImportScreen() {
 
         Text(
             text = "Moving from Aternos or Minehut?",
-            fontSize = 20.sp,
+            fontSize = 20.sp.scaledSp(scale),
             color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
             fontFamily = Monocraft,
@@ -990,8 +1259,8 @@ private fun ImportScreen() {
 
         Text(
             text = "Bring your world, plugins, and config with you. No starting over.",
-            fontSize = 13.sp,
-            lineHeight = 19.sp,
+            fontSize = 13.sp.scaledSp(scale),
+            lineHeight = 19.sp.scaledSp(scale),
             color = onboardingTextSecondary(),
             textAlign = TextAlign.Center,
             maxLines = 3
@@ -1010,10 +1279,11 @@ private fun ImportScreen() {
 
 @Composable
 private fun FeaturesScreen() {
+    val scale = onboardingCompactScale()
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp.scaled(scale))
     ) {
         HaloIconBox(
             accent = onboardingAccentGreen(),
@@ -1022,7 +1292,7 @@ private fun FeaturesScreen() {
 
         Text(
             text = "Full control, right in your pocket",
-            fontSize = 20.sp,
+            fontSize = 20.sp.scaledSp(scale),
             color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
             fontFamily = Monocraft,
@@ -1031,8 +1301,8 @@ private fun FeaturesScreen() {
 
         Text(
             text = "Not a stripped-down app. This is the real server toolkit.",
-            fontSize = 13.sp,
-            lineHeight = 18.sp,
+            fontSize = 13.sp.scaledSp(scale),
+            lineHeight = 18.sp.scaledSp(scale),
             color = onboardingTextSecondary(),
             textAlign = TextAlign.Center,
             maxLines = 2
@@ -1044,9 +1314,9 @@ private fun FeaturesScreen() {
         ) {
             Text(
                 text = "Everything you need in one place",
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.padding(horizontal = 12.dp.scaled(scale), vertical = 6.dp.scaled(scale)),
                 color = onboardingAccentPurpleDark(),
-                fontSize = 10.sp,
+                fontSize = 10.sp.scaledSp(scale),
                 fontWeight = FontWeight.Bold,
                 fontFamily = Monocraft
             )
@@ -1065,10 +1335,11 @@ private fun FeaturesScreen() {
 
 @Composable
 private fun CrossPlayScreen() {
+    val scale = onboardingCompactScale()
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
     ) {
         HaloIconBox(
             accent = onboardingAccentGreen(),
@@ -1077,7 +1348,7 @@ private fun CrossPlayScreen() {
 
         Text(
             text = "Cross-play is supported",
-            fontSize = 20.sp,
+            fontSize = 20.sp.scaledSp(scale),
             color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
             fontFamily = Monocraft,
@@ -1086,8 +1357,8 @@ private fun CrossPlayScreen() {
 
         Text(
             text = "PocketCraft supports Java and Bedrock cross-play when the bridge is enabled in your server setup.",
-            fontSize = 13.sp,
-            lineHeight = 18.sp,
+            fontSize = 13.sp.scaledSp(scale),
+            lineHeight = 18.sp.scaledSp(scale),
             color = onboardingTextSecondary(),
             textAlign = TextAlign.Center,
             maxLines = 3
@@ -1114,10 +1385,10 @@ private fun CrossPlayScreen() {
         ) {
             Text(
                 text = "⚠️ Beta Feature - Play at Your Own Discretion\n\nCross-play is still in beta development. Bugs and stability issues may occur as this feature is not yet officially supported. Use at your own risk.",
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                modifier = Modifier.padding(horizontal = 14.dp.scaled(scale), vertical = 12.dp.scaled(scale)),
                 color = onboardingTextPrimary(),
-                fontSize = 11.sp,
-                lineHeight = 16.sp,
+                fontSize = 11.sp.scaledSp(scale),
+                lineHeight = 16.sp.scaledSp(scale),
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 5
             )
@@ -1133,26 +1404,14 @@ private data class FeatureItem(
 
 @Composable
 private fun PermissionsScreen(
-    backgroundPermissionGranted: Boolean,
     notificationsPermissionGranted: Boolean,
-    onAllowBackground: () -> Unit,
     onAllowNotifications: () -> Unit,
     errorText: String,
     warningTick: Int
 ) {
-    val backgroundShakeOffset = remember { Animatable(0f) }
     val notificationsShakeOffset = remember { Animatable(0f) }
 
-    fun shouldWarnBackground(): Boolean = warningTick > 0 && !backgroundPermissionGranted
     fun shouldWarnNotifications(): Boolean = warningTick > 0 && !notificationsPermissionGranted
-
-    LaunchedEffect(warningTick, backgroundPermissionGranted) {
-        if (!shouldWarnBackground()) return@LaunchedEffect
-        val keyframes = listOf(0f, -8f, 8f, -6f, 6f, -3f, 3f, 0f)
-        keyframes.forEach { x ->
-            backgroundShakeOffset.animateTo(x, animationSpec = tween(durationMillis = 32))
-        }
-    }
 
     LaunchedEffect(warningTick, notificationsPermissionGranted) {
         if (!shouldWarnNotifications()) return@LaunchedEffect
@@ -1167,8 +1426,26 @@ private fun PermissionsScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Surface(
+            color = if (notificationsPermissionGranted) {
+                onboardingAccentGreen().copy(alpha = 0.14f)
+            } else {
+                onboardingAccentGold().copy(alpha = 0.14f)
+            },
+            shape = RoundedCornerShape(999.dp)
+        ) {
+            Text(
+                text = if (notificationsPermissionGranted) "Permission complete" else "Required before continuing",
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                color = if (notificationsPermissionGranted) onboardingAccentGreen() else onboardingAccentPurpleDark(),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontFamily = Monocraft
+            )
+        }
+
         Text(
-            text = "Two quick things",
+            text = "Allow notifications",
             fontSize = 21.sp,
             color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
@@ -1177,53 +1454,13 @@ private fun PermissionsScreen(
         )
 
         Text(
-            text = "These keep your server running without interruption.",
+            text = "This is used for server status, player count, and important background updates while your server is running.",
             fontSize = 13.sp,
             lineHeight = 19.sp,
             color = onboardingTextSecondary(),
             textAlign = TextAlign.Center,
-            maxLines = 2
+            maxLines = 3
         )
-
-        PermissionCard(
-            accent = onboardingAccentGreen(),
-            icon = Icons.Filled.Shield,
-            title = "Background battery access",
-            body = "Prevents Android from stopping your server after a few minutes of inactivity."
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset(x = backgroundShakeOffset.value.dp)
-        ) {
-            Surface(
-                onClick = onAllowBackground,
-                shape = RoundedCornerShape(14.dp),
-                color = when {
-                    backgroundPermissionGranted -> onboardingAccentGreen().copy(alpha = 0.16f)
-                    shouldWarnBackground() -> Color(0xFFFFECEA)
-                    else -> onboardingSurfaceColor()
-                },
-                border = BorderStroke(
-                    1.dp,
-                    when {
-                        backgroundPermissionGranted -> onboardingAccentGreen().copy(alpha = 0.35f)
-                        shouldWarnBackground() -> Color(0xFFE85A5A)
-                        else -> onboardingAccentGreen().copy(alpha = 0.35f)
-                    }
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = if (backgroundPermissionGranted) "Background access granted" else "Allow background access",
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    color = if (shouldWarnBackground()) Color(0xFFB42318) else onboardingTextPrimary(),
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2
-                )
-            }
-        }
 
         PermissionCard(
             accent = onboardingAccentPurple(),
@@ -1236,33 +1473,46 @@ private fun PermissionsScreen(
                 .fillMaxWidth()
                 .offset(x = notificationsShakeOffset.value.dp)
         ) {
-            Surface(
+            DuoButton(
+                text = if (notificationsPermissionGranted) "NOTIFICATIONS ENABLED" else "ALLOW NOTIFICATIONS",
                 onClick = onAllowNotifications,
-                shape = RoundedCornerShape(14.dp),
-                color = when {
-                    notificationsPermissionGranted -> onboardingAccentGreen().copy(alpha = 0.16f)
-                    shouldWarnNotifications() -> Color(0xFFFFECEA)
-                    else -> onboardingSurfaceColor()
+                enabled = !notificationsPermissionGranted,
+                variant = if (notificationsPermissionGranted) DuoButtonVariant.Secondary else DuoButtonVariant.Primary,
+                modifier = Modifier.fillMaxWidth(),
+                minHeight = 52.dp
+            )
+        }
+
+        Surface(
+            color = when {
+                notificationsPermissionGranted -> onboardingAccentGreen().copy(alpha = 0.1f)
+                shouldWarnNotifications() -> Color(0xFFFFF1F0)
+                else -> onboardingSurfaceSoftColor()
+            },
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(
+                1.dp,
+                when {
+                    notificationsPermissionGranted -> onboardingAccentGreen().copy(alpha = 0.35f)
+                    shouldWarnNotifications() -> Color(0xFFFFB3AE)
+                    else -> onboardingBorderColor().copy(alpha = 0.8f)
+                }
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = when {
+                    notificationsPermissionGranted -> "You're all set. Tap Next to keep going."
+                    shouldWarnNotifications() -> "Notification access is required on this step. Tap the button above, then allow it in Android."
+                    else -> "Tap the button above, then accept the Android permission prompt to unlock Next."
                 },
-                border = BorderStroke(
-                    1.dp,
-                    when {
-                        notificationsPermissionGranted -> onboardingAccentGreen().copy(alpha = 0.35f)
-                        shouldWarnNotifications() -> Color(0xFFE85A5A)
-                        else -> onboardingAccentGreen().copy(alpha = 0.35f)
-                    }
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = if (notificationsPermissionGranted) "Notification permission granted" else "Allow notifications",
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    color = if (shouldWarnNotifications()) Color(0xFFB42318) else onboardingTextPrimary(),
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2
-                )
-            }
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                color = if (shouldWarnNotifications()) Color(0xFF9F2D2D) else onboardingTextPrimary(),
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
         }
 
         if (errorText.isNotBlank()) {
@@ -1628,25 +1878,26 @@ private fun FeaturePillRow(items: List<String>) {
 
 @Composable
 private fun ScreenCard(accent: Color, title: String, subtitle: String) {
+    val scale = onboardingCompactScale()
     Surface(
         color = onboardingSurfaceColor(),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(18.dp.scaled(scale)),
         shadowElevation = 0.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .card3d(elevation = 4.dp, cornerRadius = 18.dp)
+            .card3d(elevation = 4.dp.scaled(scale), cornerRadius = 18.dp.scaled(scale))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+                .padding(14.dp.scaled(scale)),
+            verticalArrangement = Arrangement.spacedBy(6.dp.scaled(scale))
         ) {
-            Text(text = title, color = onboardingTextPrimary(), fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-            Text(text = subtitle, color = onboardingTextSecondary(), fontSize = 12.sp, lineHeight = 17.sp, maxLines = 3)
+            Text(text = title, color = onboardingTextPrimary(), fontSize = 14.sp.scaledSp(scale), fontWeight = FontWeight.Bold, maxLines = 2)
+            Text(text = subtitle, color = onboardingTextSecondary(), fontSize = 12.sp.scaledSp(scale), lineHeight = 17.sp.scaledSp(scale), maxLines = 3)
             Box(
                 modifier = Modifier
-                    .height(4.dp)
+                    .height(4.dp.scaled(scale))
                     .fillMaxWidth(0.38f)
                     .clip(RoundedCornerShape(999.dp))
                     .background(accent)
@@ -1657,23 +1908,24 @@ private fun ScreenCard(accent: Color, title: String, subtitle: String) {
 
 @Composable
 private fun DetailCard(accent: Color, title: String, body: String, icon: ImageVector? = null) {
+    val scale = onboardingCompactScale()
     Surface(
         color = onboardingSurfaceColor(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(16.dp.scaled(scale)),
         shadowElevation = 0.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .card3d(elevation = 4.dp, cornerRadius = 16.dp)
+            .card3d(elevation = 4.dp.scaled(scale), cornerRadius = 16.dp.scaled(scale))
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(14.dp.scaled(scale)),
+            horizontalArrangement = Arrangement.spacedBy(12.dp.scaled(scale)),
             verticalAlignment = Alignment.Top
         ) {
             Box(
                 modifier = Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .size(28.dp.scaled(scale))
+                    .clip(RoundedCornerShape(10.dp.scaled(scale)))
                     .background(accent.copy(alpha = 0.18f)),
                 contentAlignment = Alignment.Center
             ) {
@@ -1682,15 +1934,15 @@ private fun DetailCard(accent: Color, title: String, body: String, icon: ImageVe
                         imageVector = icon,
                         contentDescription = null,
                         tint = accent,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(16.dp.scaled(scale))
                     )
                 } else {
-                    Text(text = "•", color = accent, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                    Text(text = "•", color = accent, fontSize = 20.sp.scaledSp(scale), fontWeight = FontWeight.Black)
                 }
             }
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(text = title, color = onboardingTextPrimary(), fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-                Text(text = body, color = onboardingTextSecondary(), fontSize = 11.sp, lineHeight = 16.sp, maxLines = 3)
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp.scaled(scale))) {
+                Text(text = title, color = onboardingTextPrimary(), fontSize = 13.sp.scaledSp(scale), fontWeight = FontWeight.Bold, maxLines = 2)
+                Text(text = body, color = onboardingTextSecondary(), fontSize = 11.sp.scaledSp(scale), lineHeight = 16.sp.scaledSp(scale), maxLines = 3)
             }
         }
     }
@@ -1698,30 +1950,31 @@ private fun DetailCard(accent: Color, title: String, body: String, icon: ImageVe
 
 @Composable
 private fun FeatureListCard(accent: Color, entries: List<Pair<String, String>>) {
+    val scale = onboardingCompactScale()
     Surface(
         color = onboardingSurfaceColor(),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(18.dp.scaled(scale)),
         shadowElevation = 0.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .card3d(elevation = 4.dp, cornerRadius = 18.dp)
+            .card3d(elevation = 4.dp.scaled(scale), cornerRadius = 18.dp.scaled(scale))
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(14.dp.scaled(scale)),
+            verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
         ) {
             entries.forEach { (title, body) ->
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp.scaled(scale)), modifier = Modifier.fillMaxWidth()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp.scaled(scale)), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         Box(
                             modifier = Modifier
-                                .size(10.dp)
+                                .size(10.dp.scaled(scale))
                                 .clip(CircleShape)
                                 .background(accent)
                         )
-                        Text(text = title, color = onboardingTextPrimary(), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(text = title, color = onboardingTextPrimary(), fontSize = 12.sp.scaledSp(scale), fontWeight = FontWeight.Bold)
                     }
-                    Text(text = body, color = onboardingTextSecondary(), fontSize = 11.sp, lineHeight = 16.sp)
+                    Text(text = body, color = onboardingTextSecondary(), fontSize = 11.sp.scaledSp(scale), lineHeight = 16.sp.scaledSp(scale))
                 }
             }
         }
@@ -1846,82 +2099,36 @@ private fun StatCard(modifier: Modifier = Modifier, value: String, label: String
 
 @Composable
 private fun PrimaryButton(modifier: Modifier = Modifier, text: String, enabled: Boolean = true, onClick: () -> Unit) {
-    Box(modifier = modifier.height(56.dp)) {
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .padding(top = 6.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(
-                    if (enabled) {
-                        if (pocketIsDarkTheme()) Color(0xFF3E8A0A) else Color(0xFF57B900)
-                    } else {
-                        if (pocketIsDarkTheme()) Color(0xFF4C5E4F) else Color(0xFFB7C6A5)
-                    }
-                )
-        )
-        Button(
-            onClick = onClick,
-            enabled = enabled,
-            modifier = Modifier.matchParentSize(),
-            shape = RoundedCornerShape(18.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (enabled) PocketColors.Primary else if (pocketIsDarkTheme()) Color(0xFF5C6E5F) else Color(0xFFC9D5BC),
-                contentColor = Color.White,
-                disabledContainerColor = if (pocketIsDarkTheme()) Color(0xFF5C6E5F) else Color(0xFFC9D5BC),
-                disabledContentColor = Color.White
-            ),
-            border = BorderStroke(
-                2.dp,
-                if (enabled) {
-                    if (pocketIsDarkTheme()) Color(0xFF3E8A0A) else Color(0xFF57B900)
-                } else {
-                    if (pocketIsDarkTheme()) Color(0xFF4C5E4F) else Color(0xFFB7C6A5)
-                }
-            )
-        ) {
-            Text(text = text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, fontFamily = ButtonFont, color = Color.White)
-        }
-    }
+    DuoButton(
+        text = text,
+        onClick = onClick,
+        enabled = enabled,
+        variant = DuoButtonVariant.Primary,
+        minHeight = 56.dp,
+        modifier = modifier
+    )
 }
 
 @Composable
 private fun OutlineButton(modifier: Modifier = Modifier, text: String, onClick: () -> Unit) {
-    Box(modifier = modifier.height(56.dp)) {
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .padding(top = 5.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(if (pocketIsDarkTheme()) Color(0xFF1B2B26) else Color(0xFFD8DDD1))
-        )
-        Surface(
-            onClick = onClick,
-            shape = RoundedCornerShape(18.dp),
-            color = if (pocketIsDarkTheme()) onboardingSurfaceColor() else Color(0xFFF8FAF5),
-            modifier = Modifier.matchParentSize(),
-            border = BorderStroke(1.5.dp, onboardingBorderColor())
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(text = text, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, fontFamily = ButtonFont, color = onboardingTextDark())
-            }
-        }
-    }
+    DuoButton(
+        text = text,
+        onClick = onClick,
+        variant = DuoButtonVariant.Secondary,
+        minHeight = 56.dp,
+        modifier = modifier
+    )
 }
 
 @Composable
 private fun SkipButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Surface(
+    DuoButton(
+        text = "Skip",
         onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = onboardingSurfaceColor(),
-        modifier = modifier.height(56.dp),
-        border = BorderStroke(1.dp, onboardingBorderColor())
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(text = "Skip", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, fontFamily = ButtonFont, color = onboardingTextMuted())
-        }
-    }
+        variant = DuoButtonVariant.Secondary,
+        minHeight = 56.dp,
+        modifier = modifier
+    )
 }
 
 private fun openExternalUrl(context: android.content.Context, url: String): Boolean {

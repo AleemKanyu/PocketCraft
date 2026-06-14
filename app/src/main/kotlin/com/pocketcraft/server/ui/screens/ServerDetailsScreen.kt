@@ -3,6 +3,8 @@ package com.pocketcraft.server.ui.screens
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,8 +25,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,27 +38,33 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pocketcraft.server.data.model.ServerType
+import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.components.ServerDescriptionField
 import com.pocketcraft.server.ui.components.ServerPhotoUpload
+import com.pocketcraft.server.ui.screens.ServerTypeVersionBottomSheet
 import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ServerDetailsScreen(
     stateHolder: ServerStateHolder,
     onBack: () -> Unit,
     onMessage: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val activeWorld = stateHolder.activeWorld
     var serverName by remember(stateHolder.serverName, stateHolder.activeWorld) {
@@ -69,8 +79,19 @@ fun ServerDetailsScreen(
         )
     }
     var photoChanged by remember(stateHolder.serverPhotoUrl) { mutableStateOf(false) }
+    var selectedVersion by remember(stateHolder.config.gameVersion) {
+        mutableStateOf(stateHolder.config.gameVersion)
+    }
+    var selectedServerType by remember(stateHolder.config.serverType) {
+        mutableStateOf(stateHolder.config.serverType)
+    }
+    var selectedCustomJarPath by remember(stateHolder.config.customJarPath) {
+        mutableStateOf(stateHolder.config.customJarPath)
+    }
+    var showVersionDialog by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     var saveProgress by remember { mutableStateOf(0f) }
+    val versionFieldInteractionSource = remember { MutableInteractionSource() }
 
     suspend fun persistDetails(showMessage: Boolean, closeAfterSave: Boolean) {
         if (isSaving) return
@@ -105,7 +126,10 @@ fun ServerDetailsScreen(
         val nothingChanged =
             trimmedName == stateHolder.serverName.trim() &&
                 trimmedDescription == stateHolder.serverDescription.trim() &&
-                photoUrlToSave == existingPhoto
+                photoUrlToSave == existingPhoto &&
+                selectedVersion.trim() == stateHolder.config.gameVersion &&
+                selectedServerType == stateHolder.config.serverType &&
+                selectedCustomJarPath == stateHolder.config.customJarPath
 
         if (nothingChanged) {
             isSaving = false
@@ -121,6 +145,15 @@ fun ServerDetailsScreen(
             photoUrl = photoUrlToSave,
             description = trimmedDescription
         )
+        stateHolder.saveSettings(
+            stateHolder.config.copy(
+                gameVersion = selectedVersion.trim(),
+                serverType = selectedServerType,
+                customJarPath = selectedCustomJarPath
+            )
+        )
+        AppPreferencesStore.setSelectedServerType(context, selectedServerType.name)
+        AppPreferencesStore.setSelectedVersion(context, selectedVersion.trim())
         photoChanged = false
         saveProgress = 1f
         if (showMessage) {
@@ -133,11 +166,35 @@ fun ServerDetailsScreen(
         }
     }
 
-    LaunchedEffect(serverName, serverDescription, serverPhotoUri, photoChanged, activeWorld) {
+    LaunchedEffect(versionFieldInteractionSource) {
+        versionFieldInteractionSource.interactions.collect { interaction ->
+            if (interaction is PressInteraction.Release) {
+                if (stateHolder.isNavigationLocked) {
+                    onMessage("Stop the server before changing versions.")
+                } else {
+                    showVersionDialog = true
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(
+        serverName,
+        serverDescription,
+        serverPhotoUri,
+        photoChanged,
+        selectedVersion,
+        selectedServerType,
+        selectedCustomJarPath,
+        activeWorld
+    ) {
         val hasUnsavedChanges =
             serverName.trim() != stateHolder.serverName.trim() ||
                 serverDescription.trim() != stateHolder.serverDescription.trim() ||
-                photoChanged
+                photoChanged ||
+                selectedVersion.trim() != stateHolder.config.gameVersion ||
+                selectedServerType != stateHolder.config.serverType ||
+                selectedCustomJarPath != stateHolder.config.customJarPath
 
         if (hasUnsavedChanges) {
             delay(450)
@@ -241,6 +298,37 @@ fun ServerDetailsScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                val hasSelectedVersion = selectedVersion.isNotBlank()
+                val selectedRuntimeLabel = when {
+                    selectedServerType.supportsVersionSelect ->
+                        if (hasSelectedVersion) "${selectedServerType.displayName} $selectedVersion" else ""
+                    selectedServerType == ServerType.MODPACK ->
+                        selectedCustomJarPath
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { "${selectedServerType.displayName} $it" }
+                            ?: ""
+                    else -> "${selectedServerType.displayName} (Custom JAR)"
+                }
+                OutlinedTextField(
+                    value = selectedRuntimeLabel,
+                    onValueChange = {},
+                    singleLine = true,
+                    readOnly = true,
+                    enabled = true,
+                    interactionSource = versionFieldInteractionSource,
+                    label = { Text("Game version") },
+                    trailingIcon = {
+                        Icon(
+                            imageVector = Icons.Filled.Dns,
+                            contentDescription = null,
+                            tint = PocketColors.PrimaryDark
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = duoTextFieldShape(),
+                    colors = duoOutlinedTextFieldColors()
+                )
+
                 ServerPhotoUpload(
                     photoUri = serverPhotoUri,
                     onPhotoSelected = { uri ->
@@ -283,6 +371,48 @@ fun ServerDetailsScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
+        }
+        Spacer(modifier = Modifier.height(96.dp))
+    }
+
+    if (showVersionDialog) {
+        val versionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    versionSheetState.hide()
+                    showVersionDialog = false
+                }
+            },
+            sheetState = versionSheetState,
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            ServerTypeVersionBottomSheet(
+                onDismissRequest = {
+                    scope.launch {
+                        versionSheetState.hide()
+                        showVersionDialog = false
+                    }
+                },
+                onConfirm = { type, version, customJar ->
+                    scope.launch {
+                        selectedServerType = type
+                        selectedCustomJarPath = customJar
+                        selectedVersion = when (type) {
+                            ServerType.MODPACK -> customJar.orEmpty()
+                            else -> version.orEmpty()
+                        }
+                        versionSheetState.hide()
+                        showVersionDialog = false
+                        onMessage("Version updated.")
+                    }
+                },
+                currentServerType = selectedServerType,
+                currentGameVersion = selectedVersion,
+                currentCustomJarPath = selectedCustomJarPath
+            )
         }
     }
 }

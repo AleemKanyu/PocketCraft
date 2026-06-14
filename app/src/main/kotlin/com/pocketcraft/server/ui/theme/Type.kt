@@ -8,12 +8,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.R
 
-val PlusJakartaSans = FontFamily(
-    Font(R.font.plus_jakarta_sans_variable, weight = FontWeight.Normal),
-    Font(R.font.plus_jakarta_sans_variable, weight = FontWeight.Medium),
-    Font(R.font.plus_jakarta_sans_variable, weight = FontWeight.SemiBold),
-    Font(R.font.plus_jakarta_sans_variable, weight = FontWeight.Bold),
-    Font(R.font.plus_jakarta_sans_variable, weight = FontWeight.ExtraBold)
+val Outfit = FontFamily(
+    Font(R.font.outfit_regular, weight = FontWeight.Normal),
+    Font(R.font.outfit_medium, weight = FontWeight.Medium),
+    Font(R.font.outfit_semibold, weight = FontWeight.SemiBold),
+    Font(R.font.outfit_bold, weight = FontWeight.Bold),
+    Font(R.font.outfit_extrabold, weight = FontWeight.ExtraBold)
 )
 
 /** Pixel font for all in-app buttons. */
@@ -22,10 +22,10 @@ val Monocraft = FontFamily(
 )
 
 /** Playfair Display — headings (serif fallback on device). */
-val PlayfairDisplay = FontFamily.Serif
+val PlayfairDisplay = Outfit
 
 /** DM Sans — body copy (bundled Plus Jakarta as close stand-in). */
-val DMSans = PlusJakartaSans
+val DMSans = Outfit
 
 /** DM Mono — uppercase labels and console output. */
 val DMMono = FontFamily.Monospace

@@ -30,8 +30,12 @@ object AppPreferencesKeys {
     val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
     val AUTO_RESTART = booleanPreferencesKey("auto_restart")
     val AUTO_RESTART_DELAY_SECONDS = stringPreferencesKey("auto_restart_delay_seconds")
-    val RELAY_HOST = stringPreferencesKey("relay_host")
+    val RELAY_HOST = stringPreferencesKey("selected_relay_host")
+    val LEGACY_RELAY_HOST = stringPreferencesKey("relay_host")
     val RELAY_HOST_REGION_MIGRATED = booleanPreferencesKey("relay_host_region_migrated")
+    val CACHED_RELAY_SERVERS_JSON = stringPreferencesKey("cached_relay_servers_json")
+    val RELAY_HOST_USER_OVERRIDDEN = booleanPreferencesKey("relay_host_user_overridden")
+    val RELAY_AUTO_SELECTED_ONCE = booleanPreferencesKey("relay_auto_selected_once")
     val OPEN_SERVER_RISK_ACKNOWLEDGED = booleanPreferencesKey("open_server_risk_acknowledged")
     val INITIAL_WORLD_SETUP_SHOWN = booleanPreferencesKey("initial_world_setup_shown")
     val PENDING_AUTO_DOWNLOAD_VERSION = stringPreferencesKey("pending_auto_download_version")
@@ -51,6 +55,8 @@ object AppPreferencesKeys {
     val FIRST_BOOT_COMPLETE = booleanPreferencesKey("first_boot_complete")
     val NAV_INDICATOR_SHAPE = stringPreferencesKey("nav_indicator_shape")
     val SERVER_TYPE_SETUP_GUIDE_SHOWN = booleanPreferencesKey("server_type_setup_guide_shown")
+    val FLOATING_CHAT_ENABLED = booleanPreferencesKey("floating_chat_enabled")
+    val FLOATING_CHAT_FIRST_TIME_SHOWN = booleanPreferencesKey("floating_chat_first_time_shown")
 }
 
 class AppPreferences(context: Context) {
@@ -174,20 +180,64 @@ class AppPreferences(context: Context) {
         set(value) = prefs.edit().putString("bedrock_relay_region", value).apply()
 
     var relayHost: String
-        get() = prefs.getString("relay_host", null)
+        get() = prefs.getString("selected_relay_host", null)
+            ?: prefs.getString("relay_host", null)
             ?: RelayServers.getBestForTimeZone(java.util.TimeZone.getDefault().id).host
-        set(value) = prefs.edit().putString("relay_host", value).apply()
+        set(value) = prefs.edit()
+            .putString("selected_relay_host", value)
+            .putString("relay_host", value)
+            .apply()
+
+    var cachedRelayServersJson: String?
+        get() = prefs.getString("cached_relay_servers_json", null)
+        set(value) = prefs.edit().apply {
+            if (value.isNullOrBlank()) {
+                remove("cached_relay_servers_json")
+            } else {
+                putString("cached_relay_servers_json", value)
+            }
+        }.apply()
+
+    var relayHostUserOverridden: Boolean
+        get() = prefs.getBoolean("relay_host_user_overridden", false)
+        set(value) = prefs.edit().putBoolean("relay_host_user_overridden", value).apply()
+
+    var relayAutoSelectedOnce: Boolean
+        get() = prefs.getBoolean("relay_auto_selected_once", false)
+        set(value) = prefs.edit().putBoolean("relay_auto_selected_once", value).apply()
+
+    fun setManualRelayHost(host: String) {
+        relayHost = host
+        relayHostUserOverridden = true
+        relayAutoSelectedOnce = true
+        updateBedrockRelayRegionForHost(host)
+    }
+
+    fun setAutoSelectedRelayHost(host: String) {
+        relayHost = host
+        relayHostUserOverridden = false
+        relayAutoSelectedOnce = true
+        updateBedrockRelayRegionForHost(host)
+    }
+
+    fun updateBedrockRelayRegionForHost(host: String) {
+        bedrockRelayRegion = RelayServers.resolveBedrockRegion(host)
+    }
 
     fun migrateLegacyRelayHostForRegion() {
         if (prefs.getBoolean("relay_host_region_migrated", false)) return
 
         val bestHost = RelayServers.getBestForTimeZone(java.util.TimeZone.getDefault().id).host
-        val currentHost = prefs.getString("relay_host", null)
+        val currentHost = prefs.getString("selected_relay_host", null)
+            ?: prefs.getString("relay_host", null)
         prefs.edit().apply {
             if (bestHost != RelayServers.SINGAPORE.host &&
                 (currentHost == null || currentHost == RelayServers.SINGAPORE.host)
             ) {
+                putString("selected_relay_host", bestHost)
                 putString("relay_host", bestHost)
+            } else if (!currentHost.isNullOrBlank()) {
+                putString("selected_relay_host", currentHost)
             }
             putBoolean("relay_host_region_migrated", true)
         }.apply()
@@ -313,6 +363,18 @@ class AppPreferences(context: Context) {
     fun setFirstLaunchAfterOnboarding(isFirst: Boolean) {
         prefs.edit().putBoolean("first_launch_after_onboarding", isFirst).apply()
     }
+
+    var batteryOptimizationRequested: Boolean
+        get() = prefs.getBoolean("battery_optimization_requested", false)
+        set(value) = prefs.edit().putBoolean("battery_optimization_requested", value).apply()
+
+    var isFloatingChatEnabled: Boolean
+        get() = prefs.getBoolean("floating_chat_enabled", false)
+        set(value) = prefs.edit().putBoolean("floating_chat_enabled", value).apply()
+
+    var isFloatingChatFirstTimeShown: Boolean
+        get() = prefs.getBoolean("floating_chat_first_time_shown", false)
+        set(value) = prefs.edit().putBoolean("floating_chat_first_time_shown", value).apply()
 }
 
 // Keep object-based API for backward compatibility with existing code
@@ -458,12 +520,14 @@ object AppPreferencesStore {
     fun getRelayHostFlow(context: Context): Flow<String> =
         context.appPreferencesDataStore.data.map { prefs ->
             prefs[AppPreferencesKeys.RELAY_HOST]
+                ?: prefs[AppPreferencesKeys.LEGACY_RELAY_HOST]
                 ?: RelayServers.getBestForTimeZone(java.util.TimeZone.getDefault().id).host
         }
 
     suspend fun setRelayHost(context: Context, host: String) {
         context.appPreferencesDataStore.edit { prefs ->
             prefs[AppPreferencesKeys.RELAY_HOST] = host
+            prefs[AppPreferencesKeys.LEGACY_RELAY_HOST] = host
         }
     }
 
@@ -473,10 +537,14 @@ object AppPreferencesStore {
             if (prefs[AppPreferencesKeys.RELAY_HOST_REGION_MIGRATED] == true) return@edit
 
             val currentHost = prefs[AppPreferencesKeys.RELAY_HOST]
+                ?: prefs[AppPreferencesKeys.LEGACY_RELAY_HOST]
             if (bestHost != RelayServers.SINGAPORE.host &&
                 (currentHost == null || currentHost == RelayServers.SINGAPORE.host)
             ) {
                 prefs[AppPreferencesKeys.RELAY_HOST] = bestHost
+                prefs[AppPreferencesKeys.LEGACY_RELAY_HOST] = bestHost
+            } else if (!currentHost.isNullOrBlank()) {
+                prefs[AppPreferencesKeys.RELAY_HOST] = currentHost
             }
             prefs[AppPreferencesKeys.RELAY_HOST_REGION_MIGRATED] = true
         }
@@ -650,6 +718,28 @@ object AppPreferencesStore {
     suspend fun setServerTypeSetupGuideShown(context: Context, shown: Boolean) {
         context.appPreferencesDataStore.edit { prefs ->
             prefs[AppPreferencesKeys.SERVER_TYPE_SETUP_GUIDE_SHOWN] = shown
+        }
+    }
+
+    fun isFloatingChatEnabledFlow(context: Context): Flow<Boolean> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.FLOATING_CHAT_ENABLED] ?: false
+        }
+
+    suspend fun setFloatingChatEnabled(context: Context, enabled: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.FLOATING_CHAT_ENABLED] = enabled
+        }
+    }
+
+    fun isFloatingChatFirstTimeShownFlow(context: Context): Flow<Boolean> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.FLOATING_CHAT_FIRST_TIME_SHOWN] ?: false
+        }
+
+    suspend fun setFloatingChatFirstTimeShown(context: Context, shown: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.FLOATING_CHAT_FIRST_TIME_SHOWN] = shown
         }
     }
 

@@ -12,16 +12,34 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.pocketcraft.server.ui.components.AnimatedEntranceContainer
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.VideogameAsset
@@ -50,12 +68,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -67,6 +87,7 @@ import com.pocketcraft.server.ui.components.PlayerCardAction
 import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.PocketMotion
 import com.pocketcraft.server.util.LocalAppStrings
 import kotlinx.coroutines.launch
 
@@ -91,7 +112,7 @@ fun PlayersScreen(
     ) {
         androidx.compose.material3.ScrollableTabRow(
             selectedTabIndex = selected,
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = MaterialTheme.colorScheme.background,
             divider = {}
         ) {
             tabs.forEachIndexed { index, label ->
@@ -134,53 +155,78 @@ fun PlayersScreen(
             }
         }
 
-        when (selected) {
-            0 -> PlayersOnlineTab(
-                stateHolder = stateHolder,
-                onPlayerSelected = onPlayerSelected
-            )
-            1 -> PlayersListTab(
-                players = stateHolder.knownPlayers,
-                emptyTitle = "No known players",
-                emptySubtitle = "Players will appear here once they join your server.",
-                onPlayerSelected = onPlayerSelected,
-                actionLists = { _ -> emptyList() }
-            )
-            2 -> WhitelistTab(
-                stateHolder = stateHolder,
-                players = stateHolder.whitelistPlayers,
-                onPlayerSelected = onPlayerSelected
-            )
-            3 -> PlayersListTab(
-                players = stateHolder.opPlayers,
-                emptyTitle = "No operators yet",
-                emptySubtitle = "Promote a player from the Online tab to grant OP access.",
-                onPlayerSelected = onPlayerSelected,
-                actionLists = { player ->
-                    listOf(
-                        PlayerCardAction(
-                            label = "Remove OP",
-                            onClick = { stateHolder.removeOp(player.name) },
-                            tint = PocketColors.Offline
-                        )
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+            AnimatedContent(
+                targetState = selected,
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        slideInHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 420)) { it / 12 } +
+                            fadeIn(PocketMotion.softFloatTween(durationMillis = 340)) togetherWith
+                            slideOutHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 360)) { -it / 14 } +
+                            fadeOut(PocketMotion.softFloatTween(durationMillis = 220))
+                    } else {
+                        slideInHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 420)) { -it / 12 } +
+                            fadeIn(PocketMotion.softFloatTween(durationMillis = 340)) togetherWith
+                            slideOutHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 360)) { it / 14 } +
+                            fadeOut(PocketMotion.softFloatTween(durationMillis = 220))
+                    }
+                },
+                label = "players-tab-transition"
+            ) { targetTab ->
+                when (targetTab) {
+                    0 -> PlayersOnlineTab(
+                        stateHolder = stateHolder,
+                        onPlayerSelected = onPlayerSelected
                     )
-                }
-            )
-            4 -> PlayersListTab(
-                players = stateHolder.bannedPlayers,
-                emptyTitle = "Ban list is empty",
-                emptySubtitle = "Banned players are stored in `banned-players.json`.",
-                onPlayerSelected = onPlayerSelected,
-                actionLists = { player ->
-                    listOf(
-                        PlayerCardAction(
-                            label = "Unban",
-                            onClick = { stateHolder.unbanPlayer(player.name) },
-                            tint = PocketColors.Primary
-                        )
+                    1 -> PlayersListTab(
+                        players = stateHolder.knownPlayers,
+                        emptyTitle = "No known players",
+                        emptySubtitle = "Players will appear here once they join your server.",
+                        onPlayerSelected = onPlayerSelected,
+                        actionLists = { _ -> emptyList() }
                     )
+                    2 -> WhitelistTab(
+                        stateHolder = stateHolder,
+                        players = stateHolder.whitelistPlayers,
+                        onPlayerSelected = onPlayerSelected
+                    )
+                    3 -> PlayersListTab(
+                        players = stateHolder.opPlayers,
+                        emptyTitle = "No operators yet",
+                        emptySubtitle = "Promote a player from the Online tab to grant OP access.",
+                        onPlayerSelected = onPlayerSelected,
+                        actionLists = { player ->
+                            listOf(
+                                PlayerCardAction(
+                                    label = "Remove OP",
+                                    onClick = { stateHolder.removeOp(player.name) },
+                                    tint = PocketColors.Offline
+                                )
+                            )
+                        }
+                    )
+                    4 -> PlayersListTab(
+                        players = stateHolder.bannedPlayers,
+                        emptyTitle = "Ban list is empty",
+                        emptySubtitle = "Banned players are stored in `banned-players.json`.",
+                        onPlayerSelected = onPlayerSelected,
+                        actionLists = { player ->
+                            listOf(
+                                PlayerCardAction(
+                                    label = "Unban",
+                                    onClick = { stateHolder.unbanPlayer(player.name) },
+                                    tint = PocketColors.Primary
+                                )
+                            )
+                        }
+                    )
+                    else -> Box(Modifier.fillMaxSize())
                 }
-            )
+            }
         }
     }
 }
@@ -312,22 +358,24 @@ fun PlayersOnlineTab(
         // Player list
         LazyColumn(
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(horizontal = 16.dp),
+            contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
-            items(filtered.take(visibleCount)) { player ->
+            itemsIndexed(filtered.take(visibleCount)) { idx, player ->
                 val isOnline = stateHolder.onlinePlayers.any { canonicalPlayerName(it.name) == canonicalPlayerName(player.name) }
-                PlayerOnlineCard(
-                    player = player,
-                    isOnline = isOnline,
-                    isServerRunning = stateHolder.isRunning,
-                    onOpenDetails = { onPlayerSelected(player) },
-                    onKick = { stateHolder.kickPlayer(player.name) },
-                    onBan = { stateHolder.banPlayer(player.name) },
-                    onOp = {
-                        if (player.isOp) stateHolder.removeOp(player.name) else stateHolder.opPlayer(player.name)
-                    }
-                )
+                AnimatedEntranceContainer(index = minOf(idx, 8)) {
+                    PlayerOnlineCard(
+                        player = player,
+                        isOnline = isOnline,
+                        isServerRunning = stateHolder.isRunning,
+                        onOpenDetails = { onPlayerSelected(player) },
+                        onKick = { stateHolder.kickPlayer(player.name) },
+                        onBan = { stateHolder.banPlayer(player.name) },
+                        onOp = {
+                            if (player.isOp) stateHolder.removeOp(player.name) else stateHolder.opPlayer(player.name)
+                        }
+                    )
+                }
             }
         }
 
@@ -406,7 +454,7 @@ fun WhitelistTab(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
@@ -476,24 +524,26 @@ fun WhitelistTab(
                 }
             }
         } else {
-            items(filteredPlayers, key = { it.name }) { player ->
-                PlayerCard(
-                    username = player.name,
-                    subtitle = "Whitelisted player",
-                    badgeText = "WHITELISTED",
-                    badgeColor = PocketColors.Primary,
-                    onClick = { onPlayerSelected(player) },
-                    actions = listOf(
-                        PlayerCardAction(
-                            label = "Remove",
-                            onClick = {
-                                stateHolder.removeWhitelistPlayer(player.name)
-                                FirebaseAnalyticsManager.logPlayerWhitelistRemoved(player.name)
-                            },
-                            tint = PocketColors.Offline
+            itemsIndexed(filteredPlayers, key = { _, player -> player.name }) { idx, player ->
+                AnimatedEntranceContainer(index = minOf(idx, 8)) {
+                    PlayerCard(
+                        username = player.name,
+                        subtitle = "Whitelisted player",
+                        badgeText = "WHITELISTED",
+                        badgeColor = PocketColors.Primary,
+                        onClick = { onPlayerSelected(player) },
+                        actions = listOf(
+                            PlayerCardAction(
+                                label = "Remove",
+                                onClick = {
+                                    stateHolder.removeWhitelistPlayer(player.name)
+                                    FirebaseAnalyticsManager.logPlayerWhitelistRemoved(player.name)
+                                },
+                                tint = PocketColors.Offline
+                            )
                         )
                     )
-                )
+                }
             }
         }
     }
@@ -610,20 +660,24 @@ fun PlayersListTab(
     } else {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(dedupedPlayers) { player ->
-                PlayerCard(
-                    username = player.name,
-                    subtitle = if (player.uuid.isNotEmpty()) player.uuid.take(8) else "Player info",
-                    avatarUrl = "https://mc-heads.net/avatar/${player.name}/64",
-                    badgeText = if (player.isOp) "OPED" else "MANAGED",
-                    badgeColor = if (player.isOp) PocketColors.PrimaryDark else PocketColors.Primary,
-                    onClick = { onPlayerSelected(player) },
-                    actions = actionLists(player)
-                )
+            itemsIndexed(dedupedPlayers) { idx, player ->
+                AnimatedEntranceContainer(index = minOf(idx, 8)) {
+                    PlayerCard(
+                        username = player.name,
+                        subtitle = if (player.uuid.isNotEmpty()) player.uuid.take(8) else "Player info",
+                        avatarUrl = "https://mc-heads.net/avatar/${player.name}/64",
+                        badgeText = if (player.isOp) "OPED" else "MANAGED",
+                        badgeColor = if (player.isOp) PocketColors.PrimaryDark else PocketColors.Primary,
+                        onClick = { onPlayerSelected(player) },
+                        actions = actionLists(player)
+                    )
+                }
             }
         }
     }
 }
+
+

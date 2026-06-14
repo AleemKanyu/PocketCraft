@@ -35,7 +35,7 @@ open class PocketCraftApp : Application(), Configuration.Provider {
         AppPreferences.init(this)
         runCatching {
             FirebaseApp.initializeApp(this)
-            Firebase.crashlytics.setCrashlyticsCollectionEnabled(true)
+            Firebase.crashlytics.setCrashlyticsCollectionEnabled(false)
             Firebase.crashlytics.setCustomKey("app_process", currentProcessName())
             Firebase.crashlytics.setCustomKey("app_version", BuildConfig.VERSION_NAME)
         }

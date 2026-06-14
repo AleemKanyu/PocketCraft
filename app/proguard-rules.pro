@@ -76,6 +76,24 @@
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken
 
+# Google API Client / Drive models
+# Drive's generated File model uses Data.nullOf(ContentRestriction.class) in a
+# static initializer so R8 must not strip or reshape these reflective model types.
+-keep class com.google.api.client.util.Key { *; }
+-keep class com.google.api.client.util.GenericData { *; }
+-keep class com.google.api.client.json.GenericJson { *; }
+-keep class com.google.api.client.util.Data { *; }
+-keep class com.google.api.client.util.ArrayMap { *; }
+-keep class com.google.api.client.googleapis.json.GoogleJsonError { *; }
+-keep class com.google.api.client.googleapis.json.GoogleJsonErrorContainer { *; }
+-keep class com.google.api.client.googleapis.json.** { *; }
+-keep class com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential { *; }
+-keep class com.google.api.client.http.** { *; }
+-keep class com.google.api.services.drive.** { *; }
+-keep class com.google.api.services.drive.model.** { *; }
+-dontwarn com.google.api.client.**
+-dontwarn com.google.api.services.drive.**
+
 # Kotlin — preserve metadata so coroutines, StateFlow, and companion objects
 # function correctly in release builds.
 -keep class kotlin.Metadata { *; }
@@ -92,3 +110,12 @@
 -keepclassmembers class kotlinx.coroutines.** {
     volatile <fields>;
 }
+
+# gRPC Rules
+-keep class io.grpc.** { *; }
+-keep interface io.grpc.** { *; }
+-dontwarn io.grpc.**
+
+# Protobuf Rules
+-keep class com.google.protobuf.** { *; }
+-dontwarn com.google.protobuf.**

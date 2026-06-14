@@ -284,7 +284,7 @@ object SimpleDarkTheme : BaseThemePalette() {
 
 
 object PocketColors {
-    var activeMobTheme = MobTheme.SKELETON
+    var activeMobTheme = MobTheme.CREEPER
     var isDark = false
 
     val currentPalette: ThemePalette

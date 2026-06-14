@@ -110,7 +110,10 @@ fun PlayerActionButton(
                     fontWeight = FontWeight.Normal,
                     fontSize = 14.sp,
                     letterSpacing = 0.sp
-                )
+                ),
+                maxLines = 2,
+                softWrap = true,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
         }
     }

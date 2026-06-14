@@ -1,5 +1,6 @@
 package com.pocketcraft.server.ui.components
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -29,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.pocketcraft.server.ui.theme.PocketColors
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun ServerPhotoUpload(
@@ -36,10 +39,19 @@ fun ServerPhotoUpload(
     onPhotoSelected: (Uri) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        uri?.let { onPhotoSelected(it) }
+        uri?.let {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            onPhotoSelected(it)
+        }
     }
 
     Column(
@@ -60,13 +72,13 @@ fun ServerPhotoUpload(
                 .clip(RoundedCornerShape(24.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .border(2.dp, PocketColors.Primary.copy(alpha = 0.25f), RoundedCornerShape(24.dp))
-                .clickable { imagePickerLauncher.launch("image/*") }
+                .clickable { imagePickerLauncher.launch(arrayOf("image/*")) }
         ) {
             if (photoUri != null) {
                 AsyncImage(
                     model = photoUri,
                     contentDescription = "Server photo",
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
             } else {

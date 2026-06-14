@@ -194,11 +194,17 @@ fun DownloadedPluginsScreen(
             )
         }
 
-        TabRow(selectedTabIndex = selectedTab) {
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = MaterialTheme.colorScheme.background,
+            contentColor = PocketColors.Primary
+        ) {
             DownloadedContentTab.entries.forEachIndexed { index, tab ->
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },
+                    selectedContentColor = PocketColors.Primary,
+                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     text = { Text(tab.label(s)) }
                 )
             }

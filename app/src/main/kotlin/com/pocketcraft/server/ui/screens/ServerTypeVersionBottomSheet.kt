@@ -293,7 +293,7 @@ fun ServerTypeVersionBottomSheet(
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
 
-                    if (selectedVersion == null) {
+                    if (isLoading && availableVersions.isEmpty()) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -553,6 +553,18 @@ fun ServerTypeVersionBottomSheet(
                             }
                         }
                     }
+
+                    val selectedVersionNeedsImport =
+                        selectedVersion != null && !downloadedVersions.contains(selectedVersion)
+                    if (selectedVersionNeedsImport) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "Download and select the server JAR for $selectedVersion before continuing.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
 
                 if (selectedType == ServerType.MODPACK) {
@@ -717,8 +729,7 @@ fun ServerTypeVersionBottomSheet(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 val isConfirmEnabled = if (selectedType.supportsVersionSelect) {
-                    // Allow confirming any selected version — downloading happens after
-                    selectedVersion != null
+                    selectedVersion != null && downloadedVersions.contains(selectedVersion)
                 } else {
                     // MODPACK: requires a modpack to be selected
                     selectedModpackId != null

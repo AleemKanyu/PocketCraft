@@ -3,6 +3,7 @@ package com.pocketcraft.server.ui.components
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -81,22 +82,12 @@ fun VersionUpgradeCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Box(modifier = Modifier.size(18.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .size(9.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(PocketColors.Primary)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .size(9.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(PocketColors.PrimaryLight)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Filled.SportsEsports,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = PocketColors.Primary
+                )
                 Column(modifier = Modifier.weight(1f)) {
                     val displayVersion = if (currentVersion.isBlank()) "Select Version" else "$serverTypeName $currentVersion"
                     Text(

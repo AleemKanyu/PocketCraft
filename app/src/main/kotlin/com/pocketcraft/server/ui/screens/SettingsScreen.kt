@@ -2,39 +2,58 @@ package com.pocketcraft.server.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.pocketcraft.server.ui.components.PocketDropdownMenu
+import com.pocketcraft.server.ui.components.PocketDropdownMenuItem
 import com.pocketcraft.server.BuildConfig
 import com.pocketcraft.server.R
+import com.pocketcraft.server.config.RelayServers
+import com.pocketcraft.server.config.RemoteConfigManager
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
+import com.pocketcraft.server.integrations.AccountManager
+import com.pocketcraft.server.integrations.DriveBackupManager
 import com.pocketcraft.server.ui.components.*
 import com.pocketcraft.server.ui.theme.Monocraft
 import com.pocketcraft.server.ui.util.MobTheme
@@ -50,6 +69,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import com.pocketcraft.server.util.LocalAppStrings
+import androidx.compose.ui.text.input.KeyboardType
 
 data class LevelTypeOption(val displayName: String, val propertyValue: String)
 
@@ -111,7 +131,55 @@ fun SettingsScreen(
     
     val activeS = LocalAppStrings.current
     var activeTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf(activeS.settingsServer, activeS.settingsApp, activeS.settingsAbout)
+    val tabs = listOf(activeS.settingsServer, activeS.settingsApp, "Account", activeS.settingsAbout)
+    var firebaseUser by remember { mutableStateOf(AccountManager.currentUser()) }
+    var signedInAccount by remember { mutableStateOf(AccountManager.currentDriveAccount(context)) }
+    var emailInput by rememberSaveable { mutableStateOf(firebaseUser?.email.orEmpty()) }
+    var passwordInput by rememberSaveable { mutableStateOf("") }
+    var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    var authBusy by remember { mutableStateOf(false) }
+    var driveActionBusy by remember { mutableStateOf(false) }
+    var driveStatus by remember { mutableStateOf("") }
+    var authTab by rememberSaveable { mutableStateOf(0) }
+    var showSignOutConfirm by remember { mutableStateOf(false) }
+    var showDeleteAccountConfirm by remember { mutableStateOf(false) }
+    var accountActionError by remember { mutableStateOf("") }
+    android.util.Log.d("POCKETCRAFT_TEST", "SettingsScreen composition! showSignOutConfirm=$showSignOutConfirm")
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        authBusy = true
+        AccountManager.completeGoogleSignIn(context, result.data) { account, user, errorMessage ->
+            signedInAccount = account ?: AccountManager.currentDriveAccount(context)
+            firebaseUser = user ?: AccountManager.currentUser()
+            if (firebaseUser?.email?.isNullOrBlank() == false) {
+                emailInput = firebaseUser?.email.orEmpty()
+            }
+            driveStatus = when {
+                errorMessage != null -> errorMessage
+                signedInAccount != null -> "Signed in with Google as ${signedInAccount?.email ?: signedInAccount?.displayName.orEmpty()}."
+                else -> "Google sign-in completed, but Drive access is not available yet."
+            }
+            if (signedInAccount != null) {
+                scope.launch {
+                    try {
+                        driveStatus = "Synchronizing app settings..."
+                        val restored = DriveBackupManager.restoreAppSettings(context, signedInAccount!!)
+                        if (restored) {
+                            driveStatus = "Restored app settings from cloud backup."
+                            context.findActivity()?.recreate()
+                        } else {
+                            DriveBackupManager.uploadAppSettings(context, signedInAccount!!)
+                            driveStatus = "Signed in with Google as ${signedInAccount?.email ?: signedInAccount?.displayName.orEmpty()}. Settings backed up to cloud."
+                        }
+                    } catch (e: Exception) {
+                        driveStatus = "Signed in, but settings sync failed: ${e.message}"
+                    }
+                }
+            }
+            authBusy = false
+        }
+    }
 
     var currentState by remember { mutableStateOf(SettingsState()) }
     var savedState by remember { mutableStateOf(SettingsState()) }
@@ -219,167 +287,20 @@ fun SettingsScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            AnimatedVisibility(
-                visible = saveStatus != SaveStatus.IDLE,
-                enter = fadeIn() + slideInVertically { -it },
-                exit = fadeOut() + slideOutVertically { -it }
-            ) {
-                Surface(
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .card3d(elevation = 4.dp, cornerRadius = 0.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            when (saveStatus) {
-                                SaveStatus.DIRTY -> {
-                                    Icon(
-                                        imageVector = Icons.Default.Warning,
-                                        contentDescription = null,
-                                        tint = PocketColors.PrimaryDark,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Text(
-                                        text = "Unsaved Changes",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                SaveStatus.SAVING -> {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        strokeWidth = 2.dp,
-                                        color = PocketColors.Primary
-                                    )
-                                    Text(
-                                        text = LocalAppStrings.current.saving,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                SaveStatus.SAVED -> {
-                                    Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = null,
-                                        tint = Color(0xFF2ED573),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Text(
-                                        text = LocalAppStrings.current.saved,
-                                        color = Color(0xFF2ED573),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                SaveStatus.FAILED -> {
-                                    Icon(
-                                        imageVector = Icons.Default.Error,
-                                        contentDescription = null,
-                                        tint = Color(0xFFFF4757),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Text(
-                                        text = "Failed to Save",
-                                        color = Color(0xFFFF4757),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                else -> {}
-                            }
-                        }
-                        
-                        if (saveStatus == SaveStatus.DIRTY || saveStatus == SaveStatus.SAVING || saveStatus == SaveStatus.FAILED) {
-                            Button(
-                                onClick = {
-                                    playHaptic(doublePulse = true)
-                                    scope.launch {
-                                        saveStatus = SaveStatus.SAVING
-                                        val normalizedLevelType = normalizeWorldType(currentState.levelType)
-                                        val nextConfig = currentState.config.copy(
-                                            viewDistance = currentState.config.viewDistance.coerceIn(3, 32),
-                                            simulationDistance = currentState.config.simulationDistance.coerceIn(3, 32),
-                                            levelType = normalizedLevelType
-                                        )
-                                        val result = runCatching {
-                                            stateHolder.saveSettings(nextConfig)
-                                        }
-                                        if (result.isSuccess) {
-                                            withContext(Dispatchers.IO) {
-                                                stateHolder.writeServerProperty("force-gamemode", currentState.forceGamemode.toString())
-                                                stateHolder.writeServerProperty("broadcast-console-to-ops", currentState.broadcastConsoleToOps.toString())
-                                                stateHolder.writeServerProperty("hide-online-players", currentState.hideOnlinePlayers.toString())
-                                                stateHolder.applyOptimizationPreset(currentState.optimizationPreset)
-                                            }
-                                            preferences.autoRestart = currentState.autoRestartEnabled
-                                            preferences.isMaxPowerMode = currentState.maxPowerEnabled
-                                            preferences.forceExternalJvm = currentState.forceExternalJvm
-                                            
-                                            val savedStateSnapshot = currentState.copy(
-                                                config = nextConfig,
-                                                levelType = normalizedLevelType,
-                                                autoRestartEnabled = currentState.autoRestartEnabled,
-                                                maxPowerEnabled = currentState.maxPowerEnabled,
-                                                forceExternalJvm = currentState.forceExternalJvm
-                                            )
-                                            currentState = savedStateSnapshot
-                                            savedState = savedStateSnapshot
-                                            saveStatus = SaveStatus.SAVED
-                                            delay(1500)
-                                            if (saveStatus == SaveStatus.SAVED) {
-                                                saveStatus = SaveStatus.IDLE
-                                            }
-                                        } else {
-                                            saveStatus = SaveStatus.FAILED
-                                            onMessage(result.exceptionOrNull()?.message ?: "Failed to save settings")
-                                        }
-                                    }
-                                },
-                                enabled = saveStatus != SaveStatus.SAVING,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (saveStatus == SaveStatus.FAILED) Color(0xFFFF4757) else PocketColors.Primary
-                                ),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text(
-                                    text = when (saveStatus) {
-                                        SaveStatus.SAVING -> LocalAppStrings.current.saving
-                                        SaveStatus.FAILED -> "Retry"
-                                        else -> LocalAppStrings.current.save
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    ) { paddingValues ->
+    Box(modifier = Modifier.fillMaxSize()) {
+        android.util.Log.d("POCKETCRAFT_TEST", "SettingsScreen Box block is composed!")
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
         ) {
-            TabRow(
+            ScrollableTabRow(
                 selectedTabIndex = activeTab,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp),
                 containerColor = Color.Transparent,
                 contentColor = PocketColors.Primary,
+                edgePadding = 0.dp,
                 indicator = { tabPositions ->
                     TabRowDefaults.SecondaryIndicator(
                         modifier = Modifier.tabIndicatorOffset(tabPositions[activeTab]),
@@ -392,7 +313,7 @@ fun SettingsScreen(
                     Tab(
                         selected = activeTab == index,
                         onClick = { playHaptic(); activeTab = index },
-                        text = { Text(title, fontWeight = if (activeTab == index) FontWeight.ExtraBold else FontWeight.Bold, fontSize = 13.sp) }
+                        text = { Text(title, fontWeight = if (activeTab == index) FontWeight.ExtraBold else FontWeight.Bold, fontSize = 13.sp, maxLines = 1, softWrap = false) }
                     )
                 }
             }
@@ -403,389 +324,511 @@ fun SettingsScreen(
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 24.dp),
+                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Top)
             ) {
             // --- TAB 0: SERVER ---
             if (activeTab == 0) {
-                item { SettingsSection(activeS.performance, Icons.Default.Memory, isFirstSection = true) }
                 item {
-                    SettingsSliderRow(
-                        icon = Icons.Default.Visibility,
-                        label = activeS.viewDistance,
-                        description = activeS.viewDistanceDesc,
-                        hint = activeS.viewDistanceHint,
-                        min = 3,
-                        max = 32,
-                        value = currentState.config.viewDistance,
-                        onValueChange = { currentState = currentState.copy(config = currentState.config.copy(viewDistance = it)) }
-                    )
+                    AnimatedEntranceContainer(index = 0) {
+                        SettingsSection(activeS.performance, Icons.Default.Memory, isFirstSection = true)
+                    }
                 }
                 item {
-                    SettingsSliderRow(
-                        icon = Icons.Default.Speed,
-                        label = activeS.simulationDistance,
-                        description = activeS.simulationDistanceDesc,
-                        min = 3,
-                        max = 32,
-                        value = currentState.config.simulationDistance,
-                        onValueChange = { currentState = currentState.copy(config = currentState.config.copy(simulationDistance = it)) }
-                    )
+                    AnimatedEntranceContainer(index = 1) {
+                        SettingsSliderRow(
+                            icon = Icons.Default.Visibility,
+                            label = activeS.viewDistance,
+                            description = activeS.viewDistanceDesc,
+                            hint = activeS.viewDistanceHint,
+                            min = 3,
+                            max = 32,
+                            value = currentState.config.viewDistance,
+                            onValueChange = { currentState = currentState.copy(config = currentState.config.copy(viewDistance = it)) }
+                        )
+                    }
                 }
                 item {
-                    SettingsToggleRow(
-                        icon = "⚡",
-                        label = activeS.maxPowerMode,
-                        description = activeS.maxPowerModeDesc,
-                        checked = currentState.maxPowerEnabled,
-                        onToggle = { 
-                            if (it) {
-                                showMaxPowerWarning = true
-                            } else {
-                                currentState = currentState.copy(maxPowerEnabled = false)
+                    AnimatedEntranceContainer(index = 2) {
+                        SettingsSliderRow(
+                            icon = Icons.Default.Speed,
+                            label = activeS.simulationDistance,
+                            description = activeS.simulationDistanceDesc,
+                            min = 3,
+                            max = 32,
+                            value = currentState.config.simulationDistance,
+                            onValueChange = { currentState = currentState.copy(config = currentState.config.copy(simulationDistance = it)) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 3) {
+                        SettingsToggleRow(
+                            icon = "⚡",
+                            label = activeS.maxPowerMode,
+                            description = activeS.maxPowerModeDesc,
+                            checked = currentState.maxPowerEnabled,
+                            onToggle = { 
+                                if (it) {
+                                    showMaxPowerWarning = true
+                                } else {
+                                    currentState = currentState.copy(maxPowerEnabled = false)
+                                }
+                                playHaptic() 
                             }
-                            playHaptic() 
-                        }
-                    )
+                        )
+                    }
                 }
                 item {
-                    SettingsDropdownRow(
-                        icon = Icons.Default.AutoGraph,
-                        label = activeS.mobSpawning,
-                        description = activeS.mobSpawningDesc,
-                        options = listOf("none", "lite", "balanced", "performance"),
-                        optionLabels = mapOf(
-                            "none" to activeS.mobSpawningStandard,
-                            "lite" to "Lite (Recommended)",
-                            "balanced" to "Balanced",
-                            "performance" to "Aggressive"
-                        ),
-                        selected = currentState.optimizationPreset,
-                        onSelected = { currentState = currentState.copy(optimizationPreset = it) }
-                    )
-                }
-
-                item { SettingsSection(activeS.worldSettings, Icons.Default.Public) }
-                item {
-                    val currentLevelType = sanitizeLevelType(currentState.levelType)
-                    SettingsDropdownRow(
-                        icon = Icons.Default.Terrain,
-                        label = "World Type",
-                        options = levelTypeOptions.map { it.propertyValue },
-                        optionLabels = levelTypeOptions.associate { it.propertyValue to it.displayName },
-                        selected = currentLevelType,
-                        onSelected = { currentState = currentState.copy(levelType = it) }
-                    )
-                }
-                item {
-                    SettingsDropdownRow(
-                        icon = Icons.Default.SignalCellularAlt,
-                        label = activeS.difficulty,
-                        options = listOf("peaceful", "easy", "normal", "hard"),
-                        selected = currentState.config.difficulty,
-                        onSelected = { currentState = currentState.copy(config = currentState.config.copy(difficulty = it)) }
-                    )
-                }
-                item {
-                    SettingsDropdownRow(
-                        icon = Icons.Default.VideogameAsset,
-                        label = "Game Mode",
-                        options = listOf("survival", "creative", "adventure", "spectator"),
-                        selected = currentState.config.gameMode,
-                        onSelected = { currentState = currentState.copy(config = currentState.config.copy(gameMode = it)) }
-                    )
-                }
-                item {
-                    SettingsSliderRow(
-                        icon = Icons.Default.Height,
-                        label = "Max Build Height",
-                        min = 64, max = 320, step = 16,
-                        value = currentState.config.maxBuildHeight,
-                        onValueChange = { currentState = currentState.copy(config = currentState.config.copy(maxBuildHeight = it)) }
-                    )
-                }
-                item {
-                    SettingsToggleRow(
-                        icon = "💀",
-                        label = "Hardcore Mode",
-                        description = "Players are banned upon death",
-                        checked = currentState.config.hardcore,
-                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(hardcore = it)) }
-                    )
-                }
-                item {
-                    SettingsToggleRow(
-                        icon = "🔥",
-                        label = "Nether Enabled",
-                        checked = currentState.config.netherEnabled,
-                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(netherEnabled = it)) }
-                    )
-                }
-                item {
-                    SettingsToggleRow(
-                        icon = "👻",
-                        label = "Spawn Monsters",
-                        checked = currentState.config.spawnMonsters,
-                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(spawnMonsters = it)) }
-                    )
-                }
-                item {
-                    SettingsToggleRow(
-                        icon = "🐷",
-                        label = "Spawn Animals",
-                        checked = currentState.config.spawnAnimals,
-                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(spawnAnimals = it)) }
-                    )
-                }
-                item {
-                    SettingsToggleRow(
-                        icon = "🧑‍🌾",
-                        label = "Spawn NPCs (Villagers)",
-                        checked = currentState.config.spawnNpcs,
-                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(spawnNpcs = it)) }
-                    )
-                }
-                item {
-                    SettingsToggleRow(
-                        icon = "📜",
-                        label = "Whitelist",
-                        description = "Only allowed players can join",
-                        checked = currentState.config.whiteList,
-                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(whiteList = it)) }
-                    )
-                }
-                item {
-                    SettingsToggleRow(
-                        icon = "🚫",
-                        label = "Enforce Whitelist",
-                        description = "Kick players not on whitelist upon reload",
-                        checked = currentState.config.enforceWhitelist,
-                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(enforceWhitelist = it)) }
-                    )
-                }
-                item {
-                    SettingsToggleRow(
-                        icon = "🏠",
-                        label = "Generate Structures",
-                        checked = currentState.config.generateStructures,
-                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(generateStructures = it)) }
-                    )
+                    AnimatedEntranceContainer(index = 4) {
+                        SettingsDropdownRow(
+                            icon = Icons.Default.AutoGraph,
+                            label = activeS.mobSpawning,
+                            description = activeS.mobSpawningDesc,
+                            options = listOf("none", "lite", "balanced", "performance"),
+                            optionLabels = mapOf(
+                                "none" to activeS.mobSpawningStandard,
+                                "lite" to "Lite (Recommended)",
+                                "balanced" to "Balanced",
+                                "performance" to "Aggressive"
+                            ),
+                            selected = currentState.optimizationPreset,
+                            onSelected = { currentState = currentState.copy(optimizationPreset = it) }
+                        )
+                    }
                 }
 
-                item { SettingsSection(activeS.networking, Icons.Default.VpnLock) }
                 item {
-                    val relayOptions = mapOf(
-                        "play.pocketcraft.online" to "Global (Standard)",
-                        "mine.pocketcraft.online" to "Asia (India/Mumbai)"
-                    )
-                    SettingsDropdownRow(
-                        icon = Icons.Default.Router,
-                        label = "Relay Server",
-                        description = "Closest location for best ping",
-                        options = relayOptions.keys.toList(),
-                        optionLabels = relayOptions,
-                        selected = stateHolder.relayHost,
-                        onSelected = { host -> scope.launch { onMessage(stateHolder.updateRelayHost(host)) } }
-                    )
+                    AnimatedEntranceContainer(index = 5) {
+                        SettingsSection(activeS.worldSettings, Icons.Default.Public)
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 6) {
+                        val currentLevelType = sanitizeLevelType(currentState.levelType)
+                        SettingsDropdownRow(
+                            icon = Icons.Default.Terrain,
+                            label = "World Type",
+                            options = levelTypeOptions.map { it.propertyValue },
+                            optionLabels = levelTypeOptions.associate { it.propertyValue to it.displayName },
+                            selected = currentLevelType,
+                            onSelected = { currentState = currentState.copy(levelType = it) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 7) {
+                        SettingsDropdownRow(
+                            icon = Icons.Default.SignalCellularAlt,
+                            label = activeS.difficulty,
+                            options = listOf("peaceful", "easy", "normal", "hard"),
+                            selected = currentState.config.difficulty,
+                            onSelected = { currentState = currentState.copy(config = currentState.config.copy(difficulty = it)) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsDropdownRow(
+                            icon = Icons.Default.VideogameAsset,
+                            label = "Game Mode",
+                            options = listOf("survival", "creative", "adventure", "spectator"),
+                            selected = currentState.config.gameMode,
+                            onSelected = { currentState = currentState.copy(config = currentState.config.copy(gameMode = it)) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsSliderRow(
+                            icon = Icons.Default.Height,
+                            label = "Max Build Height",
+                            min = 64, max = 320, step = 16,
+                            value = currentState.config.maxBuildHeight,
+                            onValueChange = { currentState = currentState.copy(config = currentState.config.copy(maxBuildHeight = it)) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsToggleRow(
+                            icon = "💀",
+                            label = "Hardcore Mode",
+                            description = "Players are banned upon death",
+                            checked = currentState.config.hardcore,
+                            onToggle = { currentState = currentState.copy(config = currentState.config.copy(hardcore = it)) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsToggleRow(
+                            icon = "🔥",
+                            label = "Nether Enabled",
+                            checked = currentState.config.netherEnabled,
+                            onToggle = { currentState = currentState.copy(config = currentState.config.copy(netherEnabled = it)) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsToggleRow(
+                            icon = "👻",
+                            label = "Spawn Monsters",
+                            checked = currentState.config.spawnMonsters,
+                            onToggle = { currentState = currentState.copy(config = currentState.config.copy(spawnMonsters = it)) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsToggleRow(
+                            icon = "🐷",
+                            label = "Spawn Animals",
+                            checked = currentState.config.spawnAnimals,
+                            onToggle = { currentState = currentState.copy(config = currentState.config.copy(spawnAnimals = it)) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsToggleRow(
+                            icon = "🧑‍🌾",
+                            label = "Spawn NPCs (Villagers)",
+                            checked = currentState.config.spawnNpcs,
+                            onToggle = { currentState = currentState.copy(config = currentState.config.copy(spawnNpcs = it)) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsToggleRow(
+                            icon = "📜",
+                            label = "Whitelist",
+                            description = "Only allowed players can join",
+                            checked = currentState.config.whiteList,
+                            onToggle = { currentState = currentState.copy(config = currentState.config.copy(whiteList = it)) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsToggleRow(
+                            icon = "🚫",
+                            label = "Enforce Whitelist",
+                            description = "Kick players not on whitelist upon reload",
+                            checked = currentState.config.enforceWhitelist,
+                            onToggle = { currentState = currentState.copy(config = currentState.config.copy(enforceWhitelist = it)) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsToggleRow(
+                            icon = "🏠",
+                            label = "Generate Structures",
+                            checked = currentState.config.generateStructures,
+                            onToggle = { currentState = currentState.copy(config = currentState.config.copy(generateStructures = it)) }
+                        )
+                    }
                 }
 
-                item { SettingsSection("EXTRA SERVER OPTIONS", Icons.Default.Settings) }
                 item {
-                    SettingsSliderRow(
-                        icon = Icons.Default.Groups,
-                        label = activeS.maxPlayers,
-                        min = 1, max = 50,
-                        value = currentState.config.maxPlayers,
-                        onValueChange = { currentState = currentState.copy(config = currentState.config.copy(maxPlayers = it)) }
-                    )
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsSection(activeS.networking, Icons.Default.VpnLock)
+                    }
                 }
                 item {
-                    SettingsToggleRow(
-                        icon = "⚔️",
-                        label = "Player vs Player (PVP)",
-                        checked = currentState.config.pvp,
-                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(pvp = it)) }
-                    )
-                }
-                item {
-                    SettingsToggleRow(
-                        icon = "✈️",
-                        label = "Allow Flight",
-                        checked = currentState.config.allowFlight,
-                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(allowFlight = it)) }
-                    )
-                }
-                item {
-                    SettingsToggleRow(
-                        icon = "⚙️",
-                        label = "Command Blocks",
-                        checked = currentState.config.commandBlocks,
-                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(commandBlocks = it)) }
-                    )
-                }
-                item {
-                    SettingsToggleRow(
-                        icon = "📣",
-                        label = activeS.broadcastConsole,
-                        checked = currentState.broadcastConsoleToOps,
-                        onToggle = { currentState = currentState.copy(broadcastConsoleToOps = it) }
-                    )
+                    AnimatedEntranceContainer(index = 8) {
+                        val relayRegions by RemoteConfigManager.relayRegions.collectAsState(initial = RelayServers.defaultRegions())
+                        val relayOptions = relayRegions.associate { it.host to it.label }
+                        SettingsDropdownRow(
+                            icon = Icons.Default.Router,
+                            label = "Relay Server",
+                            description = "Closest location for best ping",
+                            options = relayOptions.keys.toList(),
+                            optionLabels = relayOptions,
+                            selected = stateHolder.relayHost,
+                            onSelected = { host -> scope.launch { onMessage(stateHolder.updateRelayHost(host)) } }
+                        )
+                    }
                 }
 
-                item { SettingsSection("ADVANCED SETTINGS", Icons.Default.Tune) }
                 item {
-                    SettingsSliderRow(
-                        icon = Icons.Default.Shield,
-                        label = "Spawn Protection",
-                        description = "Radius of protected blocks at spawn",
-                        min = 0, max = 100,
-                        value = currentState.config.spawnProtection,
-                        onValueChange = { currentState = currentState.copy(config = currentState.config.copy(spawnProtection = it)) }
-                    )
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsSection("EXTRA SERVER OPTIONS", Icons.Default.Settings)
+                    }
                 }
                 item {
-                    SettingsSliderRow(
-                        icon = Icons.Default.Timer,
-                        label = "Player Idle Timeout",
-                        description = "Minutes before kicking idle players",
-                        min = 0, max = 120,
-                        value = currentState.config.playerIdleTimeout,
-                        onValueChange = { currentState = currentState.copy(config = currentState.config.copy(playerIdleTimeout = it)) }
-                    )
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsSliderRow(
+                            icon = Icons.Default.Groups,
+                            label = activeS.maxPlayers,
+                            min = 1, max = 50,
+                            value = currentState.config.maxPlayers,
+                            onValueChange = { currentState = currentState.copy(config = currentState.config.copy(maxPlayers = it)) }
+                        )
+                    }
                 }
                 item {
-                    SettingsSliderRow(
-                        icon = Icons.Default.Person,
-                        label = "Entity Broadcast Range",
-                        description = "How far entities are visible (%)",
-                        min = 10, max = 100, step = 10,
-                        value = currentState.config.entityBroadcastRangePercentage,
-                        onValueChange = { currentState = currentState.copy(config = currentState.config.copy(entityBroadcastRangePercentage = it)) }
-                    )
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsToggleRow(
+                            icon = "⚔️",
+                            label = "Player vs Player (PVP)",
+                            checked = currentState.config.pvp,
+                            onToggle = { currentState = currentState.copy(config = currentState.config.copy(pvp = it)) }
+                        )
+                    }
                 }
                 item {
-                    SettingsDropdownRow(
-                        icon = Icons.Default.AdminPanelSettings,
-                        label = "Op Permission Level",
-                        options = listOf("1", "2", "3", "4"),
-                        optionLabels = mapOf("1" to "Level 1 (Bypass)", "2" to "Level 2 (Commands)", "3" to "Level 3 (Management)", "4" to "Level 4 (Owner)"),
-                        selected = currentState.config.opPermissionLevel.toString(),
-                        onSelected = { currentState = currentState.copy(config = currentState.config.copy(opPermissionLevel = it.toInt())) }
-                    )
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsToggleRow(
+                            icon = "✈️",
+                            label = "Allow Flight",
+                            checked = currentState.config.allowFlight,
+                            onToggle = { currentState = currentState.copy(config = currentState.config.copy(allowFlight = it)) }
+                        )
+                    }
                 }
                 item {
-                    SettingsToggleRow(
-                        icon = "🔒",
-                        label = activeS.onlineMode,
-                        description = "Verify players with Mojang (Auth)",
-                        checked = currentState.config.onlineMode,
-                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(onlineMode = it)) }
-                    )
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsToggleRow(
+                            icon = "⚙️",
+                            label = "Command Blocks",
+                            checked = currentState.config.commandBlocks,
+                            onToggle = { currentState = currentState.copy(config = currentState.config.copy(commandBlocks = it)) }
+                        )
+                    }
                 }
                 item {
-                    SettingsToggleRow(
-                        icon = "🌐",
-                        label = "Native Transport",
-                        description = "Optimized Linux networking",
-                        checked = currentState.config.useNativeTransport,
-                        onToggle = { currentState = currentState.copy(config = currentState.config.copy(useNativeTransport = it)) }
-                    )
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsToggleRow(
+                            icon = "📣",
+                            label = activeS.broadcastConsole,
+                            checked = currentState.broadcastConsoleToOps,
+                            onToggle = { currentState = currentState.copy(broadcastConsoleToOps = it) }
+                        )
+                    }
+                }
+
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsSection("ADVANCED SETTINGS", Icons.Default.Tune)
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsSliderRow(
+                            icon = Icons.Default.Shield,
+                            label = "Spawn Protection",
+                            description = "Radius of protected blocks at spawn",
+                            min = 0, max = 100,
+                            value = currentState.config.spawnProtection,
+                            onValueChange = { currentState = currentState.copy(config = currentState.config.copy(spawnProtection = it)) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsSliderRow(
+                            icon = Icons.Default.Timer,
+                            label = "Player Idle Timeout",
+                            description = "Minutes before kicking idle players",
+                            min = 0, max = 120,
+                            value = currentState.config.playerIdleTimeout,
+                            onValueChange = { currentState = currentState.copy(config = currentState.config.copy(playerIdleTimeout = it)) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsSliderRow(
+                            icon = Icons.Default.Person,
+                            label = "Entity Broadcast Range",
+                            description = "How far entities are visible (%)",
+                            min = 10, max = 100, step = 10,
+                            value = currentState.config.entityBroadcastRangePercentage,
+                            onValueChange = { currentState = currentState.copy(config = currentState.config.copy(entityBroadcastRangePercentage = it)) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsDropdownRow(
+                            icon = Icons.Default.AdminPanelSettings,
+                            label = "Op Permission Level",
+                            options = listOf("1", "2", "3", "4"),
+                            optionLabels = mapOf("1" to "Level 1 (Bypass)", "2" to "Level 2 (Commands)", "3" to "Level 3 (Management)", "4" to "Level 4 (Owner)"),
+                            selected = currentState.config.opPermissionLevel.toString(),
+                            onSelected = { currentState = currentState.copy(config = currentState.config.copy(opPermissionLevel = it.toInt())) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsToggleRow(
+                            icon = "🔒",
+                            label = activeS.onlineMode,
+                            description = "Verify players with Mojang (Auth)",
+                            checked = currentState.config.onlineMode,
+                            onToggle = { currentState = currentState.copy(config = currentState.config.copy(onlineMode = it)) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsToggleRow(
+                            icon = "🌐",
+                            label = "Native Transport",
+                            description = "Optimized Linux networking",
+                            checked = currentState.config.useNativeTransport,
+                            onToggle = { currentState = currentState.copy(config = currentState.config.copy(useNativeTransport = it)) }
+                        )
+                    }
                 }
             }
 
             // --- TAB 1: APP ---
             if (activeTab == 1) {
-                item { SettingsSection(activeS.appPreferences, Icons.Default.Tune, isFirstSection = true) }
                 item {
-                    SettingsDropdownRow(
-                        icon = Icons.Default.Palette,
-                        label = "Mob Theme",
-                        description = "Choose the app's Minecraft mob color palette",
-                        options = MobTheme.entries.map { it.id },
-                        optionLabels = MobTheme.entries.associate { it.id to it.themeName },
-                        selected = currentMobTheme.id,
-                        onSelected = { selectedId ->
-                            onMobThemeChange(MobTheme.fromId(selectedId))
-                            playHaptic()
-                        }
-                    )
+                    AnimatedEntranceContainer(index = 0) {
+                        SettingsSection(activeS.appPreferences, Icons.Default.Tune, isFirstSection = true)
+                    }
                 }
                 item {
-                    GameCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onMessage("More themes coming soon!") },
-                        contentPadding = PaddingValues(vertical = 16.dp)
-                    ) {
-                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Text("More themes coming soon...", fontWeight = FontWeight.SemiBold)
+                    AnimatedEntranceContainer(index = 1) {
+                        SettingsDropdownRow(
+                            icon = Icons.Default.Palette,
+                            label = "Mob Theme",
+                            description = "Choose the app's Minecraft mob color palette",
+                            options = MobTheme.entries.map { it.id },
+                            optionLabels = MobTheme.entries.associate { it.id to it.themeName },
+                            selected = currentMobTheme.id,
+                            onSelected = { selectedId ->
+                                onMobThemeChange(MobTheme.fromId(selectedId))
+                                playHaptic()
+                            }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 2) {
+                        GameCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onMessage("More themes coming soon!") },
+                            contentPadding = PaddingValues(vertical = 16.dp)
+                        ) {
+                            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Text("More themes coming soon...", fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
                 }
                 item {
-                    SettingsToggleRow(
-                        icon = "📳",
-                        label = "Haptic Feedback",
-                        description = "Vibrations for UI interactions",
-                        checked = appFeedbackEnabled,
-                        onToggle = { enabled ->
-                            scope.launch { AppPreferencesStore.setSoundEnabled(context, enabled) }
-                            playHaptic()
-                        }
-                    )
-                }
-                item {
-                    var currentLanguage by remember { mutableStateOf(preferences.appLanguage) }
-                    var pendingRecreate by remember { mutableStateOf(false) }
-
-                    LaunchedEffect(pendingRecreate) {
-                        if (pendingRecreate) {
-                            // Wait for the DropdownMenu dismiss animation to finish
-                            kotlinx.coroutines.delay(180)
-                            context.findActivity()?.recreate()
-                        }
+                    AnimatedEntranceContainer(index = 3) {
+                        SettingsToggleRow(
+                            icon = "📳",
+                            label = "Haptic Feedback",
+                            description = "Vibrations for UI interactions",
+                            checked = appFeedbackEnabled,
+                            onToggle = { enabled ->
+                                scope.launch { AppPreferencesStore.setSoundEnabled(context, enabled) }
+                                playHaptic()
+                            }
+                        )
                     }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 4) {
+                        val isFloatingChatFlowState by AppPreferencesStore.isFloatingChatEnabledFlow(context).collectAsState(initial = preferences.isFloatingChatEnabled)
+                        SettingsToggleRow(
+                            icon = "💬",
+                            label = "Floating Chat on All Screens",
+                            description = "Enable access to game chat overlay from any screen",
+                            checked = isFloatingChatFlowState,
+                            onToggle = { enabled ->
+                                preferences.isFloatingChatEnabled = enabled
+                                scope.launch {
+                                    AppPreferencesStore.setFloatingChatEnabled(context, enabled)
+                                    if (firebaseUser != null) {
+                                        try {
+                                            DriveBackupManager.uploadAppSettingsToFirebase(context, firebaseUser!!)
+                                        } catch (e: Exception) {
+                                            // Silent fail
+                                        }
+                                    }
+                                    if (signedInAccount != null) {
+                                        try {
+                                            DriveBackupManager.uploadAppSettings(context, signedInAccount!!)
+                                        } catch (e: Exception) {
+                                            // Silent fail
+                                        }
+                                    }
+                                }
+                                playHaptic()
+                            }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 5) {
+                        var currentLanguage by remember { mutableStateOf(preferences.appLanguage) }
+                        var pendingRecreate by remember { mutableStateOf(false) }
 
-                    SettingsDropdownRow(
-                        icon = Icons.Default.Translate,
-                        label = activeS.appLanguage,
-                        description = activeS.chooseLanguage,
-                        options = listOf("system", "en", "de", "es", "ru", "zh"),
-                        optionLabels = mapOf(
-                            "system" to "System Default",
-                            "en" to "English (US)",
-                            "de" to "Deutsch (German)",
-                            "es" to "Español (Spanish)",
-                            "ru" to "Русский (Russian)",
-                            "zh" to "简体中文 (Chinese)"
-                        ),
-                        selected = currentLanguage,
-                        onSelected = { selectedLang ->
-                            currentLanguage = selectedLang
-                            preferences.appLanguage = selectedLang
-                            playHaptic()
-                            pendingRecreate = true
+                        LaunchedEffect(pendingRecreate) {
+                            if (pendingRecreate) {
+                                // Wait for the DropdownMenu dismiss animation to finish
+                                kotlinx.coroutines.delay(180)
+                                context.findActivity()?.recreate()
+                            }
                         }
-                    )
+
+                        SettingsDropdownRow(
+                            icon = Icons.Default.Translate,
+                            label = activeS.appLanguage,
+                            description = activeS.chooseLanguage,
+                            options = listOf("system", "en", "de", "es", "ru", "zh"),
+                            optionLabels = mapOf(
+                                "system" to "System Default",
+                                "en" to "English (US)",
+                                "de" to "Deutsch (German)",
+                                "es" to "Español (Spanish)",
+                                "ru" to "Русский (Russian)",
+                                "zh" to "简体中文 (Chinese)"
+                            ),
+                            selected = currentLanguage,
+                            onSelected = { selectedLang ->
+                                currentLanguage = selectedLang
+                                preferences.appLanguage = selectedLang
+                                playHaptic()
+                                pendingRecreate = true
+                            }
+                        )
+                    }
                 }
 
-
-
-                item { SettingsSection(activeS.sectionDeviceStorage, Icons.Default.Storage) }
                 item {
-                    GameCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Manage Server Versions", fontWeight = FontWeight.Bold)
-                            Text("Remove unused downloads to free up space.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            DuoButton(
-                                text = "MANAGE VERSIONS",
-                                onClick = {
-                                    installedVersions = scanInstalledVersions(context)
-                                    selectedForDeletion = emptySet()
-                                    showStorageManager = true
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                    AnimatedEntranceContainer(index = 6) {
+                        SettingsSection(activeS.sectionDeviceStorage, Icons.Default.Storage)
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 7) {
+                        GameCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Manage Server Versions", fontWeight = FontWeight.Bold)
+                                Text("Remove unused downloads to free up space.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                DuoButton(
+                                    text = "MANAGE VERSIONS",
+                                    onClick = {
+                                        installedVersions = scanInstalledVersions(context)
+                                        selectedForDeletion = emptySet()
+                                        showStorageManager = true
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 }
@@ -793,125 +836,518 @@ fun SettingsScreen(
 
             // --- TAB 2: ABOUT ---
             if (activeTab == 2) {
-                item { SettingsSection("FIND US ONLINE", Icons.Default.Share, isFirstSection = true) }
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Discord
-                        GameCard(modifier = Modifier.weight(1f).clickable {
-                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.gg/nc7ceYWVfT"))) }
-                        }) {
+                    AnimatedEntranceContainer(index = 0) {
+                        SettingsSection("GOOGLE ACCOUNT", Icons.Default.AccountCircle, isFirstSection = true)
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 1) {
+                        GameCard(modifier = Modifier.fillMaxWidth()) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Box(
-                                    modifier = Modifier.size(44.dp)
-                                        .background(Color(0xFF5865F2).copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(
+                                            Brush.verticalGradient(
+                                                listOf(
+                                                    PocketColors.Primary.copy(alpha = 0.18f),
+                                                    PocketColors.PrimaryMuted.copy(alpha = 0.30f)
+                                                )
+                                            )
+                                        )
+                                        .border(1.dp, PocketColors.Primary.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.Default.Forum, contentDescription = "Discord", tint = Color(0xFF5865F2), modifier = Modifier.size(24.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Login,
+                                        contentDescription = null,
+                                        tint = PocketColors.Primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
-                                Text("Discord", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                Text("Join community", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                        // Instagram
-                        GameCard(modifier = Modifier.weight(1f).clickable {
-                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/pocketcraftmc/?hl=en"))) }
-                        }) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier.size(44.dp)
-                                        .background(Color(0xFFE4405F).copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.CameraAlt, contentDescription = "Instagram", tint = Color(0xFFE4405F), modifier = Modifier.size(24.dp))
-                                }
-                                Text("Instagram", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                Text("Follow us", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                }
 
-                item { SettingsSection("FEEDBACK & COMMUNITY", Icons.Default.Forum) }
-                item {
-                    GameCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("Send Feedback", fontWeight = FontWeight.Bold)
-                            OutlinedTextField(
-                                value = feedbackText,
-                                onValueChange = { feedbackText = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text("How can we improve?") },
-                                shape = duoTextFieldShape(),
-                                colors = duoOutlinedTextFieldColors()
-                            )
-                            DuoButton(
-                                text = if (submittingFeedback) "SENDING..." else "SEND",
-                                enabled = feedbackText.isNotBlank() && !submittingFeedback,
-                                onClick = {
-                                    scope.launch {
-                                        submittingFeedback = true
-                                        delay(1000)
-                                        feedbackText = ""
-                                        submittingFeedback = false
-                                        onMessage("Feedback sent! Thank you.")
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-                }
-
-                item { SettingsSection("HELP & LINKS", Icons.Default.Help) }
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SettingsLinkRow(icon = Icons.Default.Policy, label = activeS.legalCenter, description = activeS.legalCenterDesc, onClick = onOpenLegalPage)
-                        SettingsLinkRow(icon = Icons.Default.BugReport, label = "Report a Bug", description = "Report on our Discord server", onClick = {
-                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.gg/nc7ceYWVfT"))) }
-                                .onFailure { onMessage("Could not open Discord link.") }
-                        })
-                        SettingsLinkRow(icon = Icons.Default.Warning, label = "Report Abuse", description = "Report policy violations or harmful content", onClick = {
-                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("mailto:support@pocketcraft.online?subject=Report%20Abuse"))) }
-                                .onFailure { onMessage("Could not open email client.") }
-                        })
-                        SettingsLinkRow(icon = Icons.Default.Description, label = "Open Source Licenses", description = "Third-party software licenses", onClick = {
-                            runCatching {
-                                com.google.android.gms.oss.licenses.OssLicensesMenuActivity.setActivityTitle("Open Source Licenses")
-                                context.startActivity(Intent(context, com.google.android.gms.oss.licenses.OssLicensesMenuActivity::class.java))
-                            }.onFailure { onMessage("Could not open licenses.") }
-                        })
-                    }
-                }
-
-                item { SettingsSection(activeS.sectionAbout, Icons.Default.Info) }
-                item {
-                    GameCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                androidx.compose.foundation.Image(
-                                    painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_launcher_foreground),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
+                                AccountStatusChip(
+                                    label = if (firebaseUser == null) "Secure account access" else "Account active",
+                                    tone = if (firebaseUser == null) PocketColors.Primary else PocketColors.PrimaryDark
                                 )
-                                Column {
-                                    Text("PocketCraft", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, fontFamily = Monocraft)
-                                    Text("Version ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                                Text(
+                                    text = if (firebaseUser == null) "Sign in to PocketCraft" else "Account connected",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 15.sp,
+                                    fontFamily = Monocraft
+                                )
+                                Text(
+                                    text = if (firebaseUser == null) {
+                                        "Use email or Google. Google sign-in also unlocks private Drive backups."
+                                    } else {
+                                        firebaseUser?.email ?: firebaseUser?.displayName ?: "Signed in"
+                                    },
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = 14.sp
+                                )
+
+                                if (firebaseUser == null) {
+                                    // Redesigned modern Tab switcher
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                            .padding(4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        val activeColor = PocketColors.Primary
+                                        val activeContentColor = Color.Black
+                                        val inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                        
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(36.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(if (authTab == 0) activeColor else Color.Transparent)
+                                                .clickable { playHaptic(); authTab = 0 },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                "SIGN IN",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp,
+                                                color = if (authTab == 0) activeContentColor else inactiveContentColor
+                                            )
+                                        }
+                                        
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(36.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(if (authTab == 1) activeColor else Color.Transparent)
+                                                .clickable { playHaptic(); authTab = 1 },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                "SIGN UP",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp,
+                                                color = if (authTab == 1) activeContentColor else inactiveContentColor
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    // Render the auth status banner if present
+                                    if (driveStatus.isNotBlank()) {
+                                        androidx.compose.material3.Surface(
+                                            color = if (driveStatus.contains("fail", ignoreCase = true) || driveStatus.contains("error", ignoreCase = true) || driveStatus.contains("Could not", ignoreCase = true)) {
+                                                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f)
+                                            } else {
+                                                PocketColors.PrimaryMuted.copy(alpha = 0.2f)
+                                            },
+                                            border = androidx.compose.foundation.BorderStroke(
+                                                1.dp,
+                                                if (driveStatus.contains("fail", ignoreCase = true) || driveStatus.contains("error", ignoreCase = true) || driveStatus.contains("Could not", ignoreCase = true)) {
+                                                    MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                                                } else {
+                                                    PocketColors.Primary.copy(alpha = 0.4f)
+                                                }
+                                            ),
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                        ) {
+                                            Text(
+                                                text = driveStatus,
+                                                fontSize = 12.sp,
+                                                color = if (driveStatus.contains("fail", ignoreCase = true) || driveStatus.contains("error", ignoreCase = true) || driveStatus.contains("Could not", ignoreCase = true)) {
+                                                    MaterialTheme.colorScheme.error
+                                                } else {
+                                                    if (com.pocketcraft.server.ui.theme.pocketIsDarkTheme()) Color.White else Color.Black
+                                                },
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                lineHeight = 16.sp
+                                            )
+                                        }
+                                    }
+
+                                    ThemedAccountField(
+                                        value = emailInput,
+                                        onValueChange = { emailInput = it },
+                                        label = "Email",
+                                        leadingIcon = Icons.Default.Email,
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    ThemedAccountField(
+                                        value = passwordInput,
+                                        onValueChange = { passwordInput = it },
+                                        label = "Password",
+                                        leadingIcon = Icons.Default.Lock,
+                                        trailingIcon = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        onTrailingIconClick = { passwordVisible = !passwordVisible },
+                                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    if (authTab == 0) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.End
+                                        ) {
+                                            TextButton(
+                                                enabled = emailInput.isNotBlank() && !authBusy,
+                                                onClick = {
+                                                    authBusy = true
+                                                    AccountManager.sendPasswordReset(emailInput) { result ->
+                                                        driveStatus = result.fold(
+                                                            onSuccess = { "Password reset email sent to ${emailInput.trim()}. If you didn't receive it, please check your spam folder." },
+                                                            onFailure = { it.message ?: "Could not send password reset email." }
+                                                        )
+                                                        authBusy = false
+                                                    }
+                                                }
+                                            ) {
+                                                Text("Forgot password?", fontSize = 11.5.sp)
+                                            }
+                                        }
+
+                                        DuoButton(
+                                            text = if (authBusy) "SIGNING IN..." else "SIGN IN WITH EMAIL",
+                                            enabled = !authBusy && emailInput.isNotBlank() && passwordInput.isNotBlank(),
+                                            onClick = {
+                                                authBusy = true
+                                                try {
+                                                    AccountManager.signInWithEmail(emailInput.trim(), passwordInput) { result ->
+                                                        result
+                                                            .onSuccess { user ->
+                                                                firebaseUser = user
+                                                                driveStatus = "Signed in as ${user.email ?: user.displayName.orEmpty()}."
+                                                                passwordInput = ""
+                                                                scope.launch {
+                                                                    try {
+                                                                        driveStatus = "Synchronizing app settings..."
+                                                                        val restored = DriveBackupManager.restoreAppSettingsFromFirebase(context, user)
+                                                                        if (restored) {
+                                                                            driveStatus = "Restored app settings from cloud backup."
+                                                                            context.findActivity()?.recreate()
+                                                                        } else {
+                                                                            DriveBackupManager.uploadAppSettingsToFirebase(context, user)
+                                                                            driveStatus = "Signed in as ${user.email ?: user.displayName.orEmpty()}. Settings backed up to cloud."
+                                                                        }
+                                                                    } catch (e: Exception) {
+                                                                        driveStatus = "Signed in, but settings sync failed: ${e.message}"
+                                                                    }
+                                                                }
+                                                            }
+                                                            .onFailure { error ->
+                                                                driveStatus = error.message ?: "Email sign-in failed."
+                                                            }
+                                                        authBusy = false
+                                                    }
+                                                } catch (e: Exception) {
+                                                    driveStatus = e.message ?: "Login process error."
+                                                    authBusy = false
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            minHeight = 40.dp
+                                        )
+                                    } else {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        
+                                        DuoButton(
+                                            text = if (authBusy) "CREATING ACCOUNT..." else "REGISTER ACCOUNT",
+                                            enabled = !authBusy && emailInput.isNotBlank() && passwordInput.length >= 6,
+                                            onClick = {
+                                                authBusy = true
+                                                try {
+                                                    AccountManager.createAccountWithEmail(emailInput.trim(), passwordInput) { result ->
+                                                        result
+                                                            .onSuccess { user ->
+                                                                firebaseUser = user
+                                                                driveStatus = "Account created for ${user.email ?: emailInput.trim()}."
+                                                                passwordInput = ""
+                                                                scope.launch {
+                                                                    try {
+                                                                        driveStatus = "Synchronizing app settings..."
+                                                                        DriveBackupManager.uploadAppSettingsToFirebase(context, user)
+                                                                        driveStatus = "Account created for ${user.email ?: emailInput.trim()}. Settings backed up to cloud."
+                                                                    } catch (e: Exception) {
+                                                                        driveStatus = "Account created, but settings sync failed: ${e.message}"
+                                                                    }
+                                                                }
+                                                            }
+                                                            .onFailure { error ->
+                                                                driveStatus = error.message ?: "Could not create account."
+                                                            }
+                                                        authBusy = false
+                                                    }
+                                                } catch (e: Exception) {
+                                                    driveStatus = e.message ?: "Registration process error."
+                                                    authBusy = false
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            minHeight = 40.dp
+                                        )
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+                                        Text(
+                                            "OR CONTINUE WITH",
+                                            fontSize = 9.5.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+                                    }
+
+                                    DuoButton(
+                                        text = if (authBusy) "CONNECTING..." else "SIGN IN WITH GOOGLE",
+                                        enabled = !authBusy,
+                                        onClick = {
+                                            authBusy = true
+                                            googleSignInLauncher.launch(AccountManager.googleSignInIntent(context))
+                                        },
+                                        iconContent = { GoogleGLogo(Modifier.size(16.dp)) },
+                                        variant = DuoButtonVariant.Info,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        minHeight = 40.dp
+                                    )
+                                } else {
+                                    AccountStatusChip(
+                                        label = if (signedInAccount != null) "Google Drive backup ready" else "Signed in with email only",
+                                        tone = if (signedInAccount != null) PocketColors.Primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = if (signedInAccount != null) {
+                                            "Your Google account is connected and Drive backups are enabled."
+                                        } else {
+                                            "Drive backups require Google sign-in. You can connect Google below without adding any other providers."
+                                        },
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+
+                                    if (signedInAccount == null) {
+                                        DuoButton(
+                                            text = if (authBusy) "CONNECTING..." else "CONNECT GOOGLE",
+                                            enabled = !authBusy,
+                                            onClick = {
+                                                authBusy = true
+                                                googleSignInLauncher.launch(AccountManager.googleSignInIntent(context))
+                                            },
+                                            iconContent = { GoogleGLogo(Modifier.size(16.dp)) },
+                                            variant = DuoButtonVariant.Info,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            minHeight = 40.dp
+                                        )
+                                    }
+
+                                    // Show any account action errors (e.g. delete failed)
+                                    if (accountActionError.isNotBlank()) {
+                                        androidx.compose.material3.Surface(
+                                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
+                                            border = androidx.compose.foundation.BorderStroke(
+                                                1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                                            ),
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = accountActionError,
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                lineHeight = 16.sp
+                                            )
+                                        }
+                                    }
+
+                                    DuoButton(
+                                        text = if (authBusy) "SIGNING OUT..." else "SIGN OUT",
+                                        onClick = {
+                                            android.util.Log.d("POCKETCRAFT_TEST", "SIGN OUT button onClick triggered")
+                                            accountActionError = ""
+                                            showSignOutConfirm = true
+                                        },
+                                        enabled = !authBusy && !driveActionBusy,
+                                        variant = DuoButtonVariant.Danger,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        minHeight = 40.dp
+                                    )
+                                    DuoButton(
+                                        text = if (authBusy) "WORKING..." else "DELETE ACCOUNT",
+                                        onClick = {
+                                            android.util.Log.d("POCKETCRAFT_TEST", "DELETE ACCOUNT button onClick triggered")
+                                            accountActionError = ""
+                                            showDeleteAccountConfirm = true
+                                        },
+                                        enabled = !authBusy && !driveActionBusy,
+                                        variant = DuoButtonVariant.Secondary,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        minHeight = 40.dp
+                                    )
                                 }
                             }
-                            Text("Run full Minecraft Java Edition servers directly on your Android device.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
-                            Text("Made with ❤️ by the PocketCraft Team", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PocketColors.PrimaryDark)
+                        }
+                    }
+                }
+
+            }
+
+            // --- TAB 3: ABOUT ---
+            if (activeTab == 3) {
+                item {
+                    AnimatedEntranceContainer(index = 0) {
+                        SettingsSection("FIND US ONLINE", Icons.Default.Share, isFirstSection = true)
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 1) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Discord
+                            GameCard(modifier = Modifier.weight(1f).clickable {
+                                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(context.getString(R.string.discord_invite_url)))) }
+                            }) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier.size(44.dp)
+                                            .background(Color(0xFF5865F2).copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Forum, contentDescription = "Discord", tint = Color(0xFF5865F2), modifier = Modifier.size(24.dp))
+                                    }
+                                    Text("Discord", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("Join community", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            // Instagram
+                            GameCard(modifier = Modifier.weight(1f).clickable {
+                                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/pocketcraftmc/?hl=en"))) }
+                            }) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier.size(44.dp)
+                                            .background(Color(0xFFE4405F).copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.CameraAlt, contentDescription = "Instagram", tint = Color(0xFFE4405F), modifier = Modifier.size(24.dp))
+                                    }
+                                    Text("Instagram", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("Follow us", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    AnimatedEntranceContainer(index = 2) {
+                        SettingsSection("FEEDBACK & COMMUNITY", Icons.Default.Forum)
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 3) {
+                        GameCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("Send Feedback", fontWeight = FontWeight.Bold)
+                                OutlinedTextField(
+                                    value = feedbackText,
+                                    onValueChange = { feedbackText = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text("How can we improve?") },
+                                    shape = duoTextFieldShape(),
+                                    colors = duoOutlinedTextFieldColors()
+                                )
+                                DuoButton(
+                                    text = if (submittingFeedback) "SENDING..." else "SEND",
+                                    enabled = feedbackText.isNotBlank() && !submittingFeedback,
+                                    onClick = {
+                                        scope.launch {
+                                            submittingFeedback = true
+                                            delay(1000)
+                                            feedbackText = ""
+                                            submittingFeedback = false
+                                            onMessage("Feedback sent! Thank you.")
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    AnimatedEntranceContainer(index = 4) {
+                        SettingsSection("HELP & LINKS", Icons.Default.Help)
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 5) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SettingsLinkRow(icon = Icons.Default.Policy, label = activeS.legalCenter, description = activeS.legalCenterDesc, onClick = onOpenLegalPage)
+                            SettingsLinkRow(icon = Icons.Default.BugReport, label = "Report a Bug", description = "Report on our Discord server", onClick = {
+                                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(context.getString(R.string.discord_invite_url)))) }
+                                    .onFailure { onMessage("Could not open Discord link.") }
+                            })
+                            SettingsLinkRow(icon = Icons.Default.Description, label = "Open Source Licenses", description = "Third-party software licenses", onClick = {
+                                runCatching {
+                                    com.google.android.gms.oss.licenses.OssLicensesMenuActivity.setActivityTitle("Open Source Licenses")
+                                    context.startActivity(Intent(context, com.google.android.gms.oss.licenses.OssLicensesMenuActivity::class.java))
+                                }.onFailure { onMessage("Could not open licenses.") }
+                            })
+                        }
+                    }
+                }
+
+                item {
+                    AnimatedEntranceContainer(index = 6) {
+                        SettingsSection(activeS.sectionAbout, Icons.Default.Info)
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 7) {
+                        GameCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    androidx.compose.foundation.Image(
+                                        painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_launcher_foreground),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
+                                    )
+                                    Column {
+                                        Text("PocketCraft", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, fontFamily = Monocraft)
+                                        Text("Version ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                                Text("Run full Minecraft Java Edition servers directly on your Android device.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                                Text("Made with ❤️ by the PocketCraft Team", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PocketColors.PrimaryDark)
+                            }
                         }
                     }
                 }
@@ -920,7 +1356,155 @@ fun SettingsScreen(
             item { Spacer(modifier = Modifier.height(32.dp)) }
             }
         }
+
+        AnimatedVisibility(
+            visible = saveStatus != SaveStatus.IDLE,
+            enter = fadeIn() + slideInVertically { -it },
+            exit = fadeOut() + slideOutVertically { -it },
+            modifier = Modifier.align(Alignment.TopCenter)
+        ) {
+            Surface(
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .card3d(elevation = 4.dp, cornerRadius = 0.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        when (saveStatus) {
+                            SaveStatus.DIRTY -> {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = PocketColors.PrimaryDark,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "Unsaved Changes",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            SaveStatus.SAVING -> {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = PocketColors.Primary
+                                )
+                                Text(
+                                    text = LocalAppStrings.current.saving,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            SaveStatus.SAVED -> {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = Color(0xFF2ED573),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = LocalAppStrings.current.saved,
+                                    color = Color(0xFF2ED573),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            SaveStatus.FAILED -> {
+                                Icon(
+                                    imageVector = Icons.Default.Error,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF4757),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "Failed to Save",
+                                    color = Color(0xFFFF4757),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            else -> {}
+                        }
+                    }
+                    
+                    if (saveStatus == SaveStatus.DIRTY || saveStatus == SaveStatus.SAVING || saveStatus == SaveStatus.FAILED) {
+                        Button(
+                            onClick = {
+                                playHaptic(doublePulse = true)
+                                scope.launch {
+                                    saveStatus = SaveStatus.SAVING
+                                    val normalizedLevelType = normalizeWorldType(currentState.levelType)
+                                    val nextConfig = currentState.config.copy(
+                                        viewDistance = currentState.config.viewDistance.coerceIn(3, 32),
+                                        simulationDistance = currentState.config.simulationDistance.coerceIn(3, 32),
+                                        levelType = normalizedLevelType
+                                    )
+                                    val result = runCatching {
+                                        stateHolder.saveSettings(nextConfig)
+                                    }
+                                    if (result.isSuccess) {
+                                        withContext(Dispatchers.IO) {
+                                            stateHolder.writeServerProperty("force-gamemode", currentState.forceGamemode.toString())
+                                            stateHolder.writeServerProperty("broadcast-console-to-ops", currentState.broadcastConsoleToOps.toString())
+                                            stateHolder.writeServerProperty("hide-online-players", currentState.hideOnlinePlayers.toString())
+                                            stateHolder.applyOptimizationPreset(currentState.optimizationPreset)
+                                        }
+                                        preferences.autoRestart = currentState.autoRestartEnabled
+                                        preferences.isMaxPowerMode = currentState.maxPowerEnabled
+                                        preferences.forceExternalJvm = currentState.forceExternalJvm
+                                        
+                                        val savedStateSnapshot = currentState.copy(
+                                            config = nextConfig,
+                                            levelType = normalizedLevelType,
+                                            autoRestartEnabled = currentState.autoRestartEnabled,
+                                            maxPowerEnabled = currentState.maxPowerEnabled,
+                                            forceExternalJvm = currentState.forceExternalJvm
+                                        )
+                                        currentState = savedStateSnapshot
+                                        savedState = savedStateSnapshot
+                                        saveStatus = SaveStatus.SAVED
+                                        delay(1500)
+                                        if (saveStatus == SaveStatus.SAVED) {
+                                            saveStatus = SaveStatus.IDLE
+                                        }
+                                    } else {
+                                        saveStatus = SaveStatus.FAILED
+                                        onMessage(result.exceptionOrNull()?.message ?: "Failed to save settings")
+                                    }
+                                }
+                            },
+                            enabled = saveStatus != SaveStatus.SAVING,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (saveStatus == SaveStatus.FAILED) Color(0xFFFF4757) else PocketColors.Primary
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = when (saveStatus) {
+                                    SaveStatus.SAVING -> LocalAppStrings.current.saving
+                                    SaveStatus.FAILED -> "Retry"
+                                    else -> LocalAppStrings.current.save
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
+    android.util.Log.d("POCKETCRAFT_TEST", "SettingsScreen after Box block is composed! showSignOutConfirm=$showSignOutConfirm")
 
     // Storage Manager Bottom Sheet
     if (showStorageManager) {
@@ -1028,6 +1612,212 @@ fun SettingsScreen(
             }
         }
     }
+        if (showSignOutConfirm) {
+            android.util.Log.d("POCKETCRAFT_TEST", "Sign Out Dialog block is composed!")
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { 
+                    android.util.Log.d("POCKETCRAFT_TEST", "Sign Out Dialog onDismissRequest called")
+                    showSignOutConfirm = false 
+                },
+                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .clickable { 
+                            android.util.Log.d("POCKETCRAFT_TEST", "Sign Out Dialog Box scrim clicked")
+                            showSignOutConfirm = false 
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = showSignOutConfirm,
+                        enter = androidx.compose.animation.fadeIn(tween(300)) + androidx.compose.animation.scaleIn(
+                            animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                            initialScale = 0.9f
+                        ),
+                        exit = androidx.compose.animation.fadeOut(tween(200)) + androidx.compose.animation.scaleOut(
+                            targetScale = 0.9f
+                        )
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .width(280.dp)
+                                .clickable(
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                    indication = null
+                                ) {}
+                                .border(1.dp, PocketColors.Primary.copy(alpha = 0.15f), RoundedCornerShape(20.dp)),
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 6.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                Text(
+                                    "Sign Out",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 17.sp,
+                                    fontFamily = Monocraft,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    "Are you sure you want to sign out? You will need to log back in to access cloud backups.",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    lineHeight = 18.sp
+                                )
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    DuoButton(
+                                        text = "CANCEL",
+                                        onClick = { showSignOutConfirm = false },
+                                        variant = DuoButtonVariant.Secondary,
+                                        modifier = Modifier.weight(1f),
+                                        minHeight = 36.dp
+                                    )
+                                    DuoButton(
+                                        text = "SIGN OUT",
+                                        onClick = {
+                                            showSignOutConfirm = false
+                                            // signOut calls onComplete() synchronously after
+                                            // Firebase.signOut(), so state is guaranteed to update.
+                                            AccountManager.signOut(context) {
+                                                firebaseUser = null
+                                                signedInAccount = null
+                                                passwordInput = ""
+                                                accountActionError = ""
+                                                driveStatus = "Signed out successfully."
+                                            }
+                                        },
+                                        variant = DuoButtonVariant.Danger,
+                                        modifier = Modifier.weight(1f),
+                                        minHeight = 36.dp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (showDeleteAccountConfirm) {
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { showDeleteAccountConfirm = false },
+                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .clickable { showDeleteAccountConfirm = false },
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = showDeleteAccountConfirm,
+                        enter = androidx.compose.animation.fadeIn(tween(300)) + androidx.compose.animation.scaleIn(
+                            animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                            initialScale = 0.9f
+                        ),
+                        exit = androidx.compose.animation.fadeOut(tween(200)) + androidx.compose.animation.scaleOut(
+                            targetScale = 0.9f
+                        )
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .width(300.dp)
+                                .clickable(
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                    indication = null
+                                ) {}
+                                .border(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.18f), RoundedCornerShape(20.dp)),
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 8.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                Text(
+                                    "Delete Account",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp,
+                                    fontFamily = Monocraft,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    "This permanently deletes your PocketCraft account access on this device and removes synced settings. This cannot be undone.",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    lineHeight = 18.sp
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    DuoButton(
+                                        text = "CANCEL",
+                                        onClick = { showDeleteAccountConfirm = false },
+                                        variant = DuoButtonVariant.Secondary,
+                                        modifier = Modifier.weight(1f),
+                                        minHeight = 36.dp
+                                    )
+                                    DuoButton(
+                                        text = "DELETE",
+                                        onClick = {
+                                            showDeleteAccountConfirm = false
+                                            authBusy = true
+                                            accountActionError = ""
+                                            scope.launch {
+                                                val result = AccountManager.deleteAccount(context)
+                                                result.fold(
+                                                    onSuccess = { message ->
+                                                        firebaseUser = null
+                                                        signedInAccount = null
+                                                        passwordInput = ""
+                                                        emailInput = ""
+                                                        accountActionError = ""
+                                                        driveStatus = message
+                                                        onMessage(message)
+                                                    },
+                                                    onFailure = { error ->
+                                                        // Show the error visibly in the signed-in
+                                                        // section AND as a snackbar so it's always seen.
+                                                        val msg = when (error) {
+                                                            is com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException ->
+                                                                "For security, sign out and sign back in before deleting your account."
+                                                            else -> error.message ?: "Could not delete account. Please try again."
+                                                        }
+                                                        accountActionError = msg
+                                                        onMessage(msg)
+                                                    }
+                                                )
+                                                authBusy = false
+                                            }
+                                        },
+                                        variant = DuoButtonVariant.Danger,
+                                        modifier = Modifier.weight(1f),
+                                        minHeight = 36.dp
+                                    )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 private fun sanitizeLevelType(raw: String): String {
@@ -1068,6 +1858,75 @@ fun SettingsSection(
             fontSize = 11.sp,
             letterSpacing = 0.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+        )
+    }
+}
+
+@Composable
+private fun ThemedAccountField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    trailingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    onTrailingIconClick: (() -> Unit)? = null,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.heightIn(min = 44.dp),
+        singleLine = true,
+        shape = RoundedCornerShape(14.dp),
+        label = { Text(label) },
+        leadingIcon = {
+            Icon(
+                imageVector = leadingIcon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        trailingIcon = if (trailingIcon != null && onTrailingIconClick != null) {
+            {
+                IconButton(onClick = onTrailingIconClick) {
+                    Icon(
+                        imageVector = trailingIcon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        } else null,
+        keyboardOptions = keyboardOptions,
+        visualTransformation = visualTransformation,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = PocketColors.PrimaryMuted.copy(alpha = 0.28f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.24f),
+            focusedBorderColor = PocketColors.Primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)
+        )
+    )
+}
+
+@Composable
+private fun AccountStatusChip(
+    label: String,
+    tone: Color
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(tone.copy(alpha = 0.12f))
+            .border(1.dp, tone.copy(alpha = 0.28f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = label,
+            color = tone,
+            fontWeight = FontWeight.Bold,
+            fontSize = 10.5.sp
         )
     }
 }
@@ -1179,6 +2038,7 @@ private fun SettingsDropdownRow(
     onSelected: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val displayValue = optionLabels[selected] ?: selected.replaceFirstChar { it.uppercase() }
 
     GameCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(8.dp)) {
@@ -1203,38 +2063,81 @@ private fun SettingsDropdownRow(
                 )
             }
             Box {
-                val displayValue = optionLabels[selected] ?: selected.replaceFirstChar { it.uppercase() }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    PocketColors.PrimaryMuted.copy(alpha = 0.55f),
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+                                )
+                            ),
+                            RoundedCornerShape(16.dp)
+                        )
+                        .border(
+                            1.2.dp,
+                            if (enabled) PocketColors.Primary.copy(alpha = 0.26f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
+                            RoundedCornerShape(16.dp)
+                        )
                         .clickable(enabled = enabled) { expanded = true }
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = displayValue,
-                        color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Selected",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = displayValue,
+                            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Filled.ArrowDropDown,
+                        contentDescription = null,
+                        tint = PocketColors.PrimaryDark
                     )
-                    Icon(imageVector = Icons.Filled.ArrowDropDown, contentDescription = null)
                 }
-                DropdownMenu(
+                PocketDropdownMenu(
                     expanded = expanded && enabled,
-                    onDismissRequest = { expanded = false },
-                    modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+                    onDismissRequest = { expanded = false }
                 ) {
                     options.forEach { option ->
-                        DropdownMenuItem(
-                            text = { 
-                                Text(
-                                    text = optionLabels[option] ?: option,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = FontWeight.Medium
-                                ) 
+                        val optionSelected = option == selected
+                        PocketDropdownMenuItem(
+                            text = {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(
+                                            if (optionSelected) PocketColors.PrimaryMuted.copy(alpha = 0.34f) else Color.Transparent
+                                        )
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = optionLabels[option] ?: option,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = if (optionSelected) FontWeight.ExtraBold else FontWeight.Medium
+                                    )
+                                    if (optionSelected) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = PocketColors.Primary
+                                        )
+                                    }
+                                }
                             },
                             onClick = {
                                 expanded = false
@@ -1425,4 +2328,62 @@ private tailrec fun android.content.Context.findActivity(): android.app.Activity
     is android.app.Activity -> this
     is android.content.ContextWrapper -> baseContext.findActivity()
     else -> null
+}
+
+@Composable
+private fun GoogleGLogo(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val sizePx = size.minDimension
+        val halfSize = sizePx / 2f
+        val strokeWidth = sizePx * 0.22f
+        val rect = androidx.compose.ui.geometry.Rect(strokeWidth / 2f, strokeWidth / 2f, sizePx - strokeWidth / 2f, sizePx - strokeWidth / 2f)
+
+        // 1. Red (top segment)
+        drawArc(
+            color = Color(0xFFEA4335),
+            startAngle = 190f,
+            sweepAngle = 150f,
+            useCenter = false,
+            topLeft = rect.topLeft,
+            size = rect.size,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+        )
+        // 2. Blue (right segment)
+        drawArc(
+            color = Color(0xFF4285F4),
+            startAngle = 340f,
+            sweepAngle = 65f,
+            useCenter = false,
+            topLeft = rect.topLeft,
+            size = rect.size,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+        )
+        // 3. Green (bottom segment)
+        drawArc(
+            color = Color(0xFF34A853),
+            startAngle = 45f,
+            sweepAngle = 95f,
+            useCenter = false,
+            topLeft = rect.topLeft,
+            size = rect.size,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+        )
+        // 4. Yellow (left segment)
+        drawArc(
+            color = Color(0xFFFBBC05),
+            startAngle = 140f,
+            sweepAngle = 50f,
+            useCenter = false,
+            topLeft = rect.topLeft,
+            size = rect.size,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+        )
+        // 5. Horizontal bar of G (Blue)
+        drawLine(
+            color = Color(0xFF4285F4),
+            start = androidx.compose.ui.geometry.Offset(halfSize, halfSize),
+            end = androidx.compose.ui.geometry.Offset(sizePx - strokeWidth / 2f, halfSize),
+            strokeWidth = strokeWidth
+        )
+    }
 }

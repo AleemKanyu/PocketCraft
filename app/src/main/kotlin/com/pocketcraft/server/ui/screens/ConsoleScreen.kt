@@ -23,8 +23,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +47,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Dns
@@ -61,6 +64,10 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.ui.text.style.TextAlign
+import android.content.ClipboardManager
+import android.content.ClipData
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -117,6 +124,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.ui.components.FlatEmojiIcon
+import com.pocketcraft.server.ui.components.AnimatedEntranceContainer
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import coil.compose.AsyncImage
@@ -127,6 +135,8 @@ import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.server.ServerHostService
 import com.pocketcraft.server.service.ServerFileManager
+import com.pocketcraft.server.service.NBTParser
+import com.pocketcraft.server.service.PlayerDataManager
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.DuoButtonVariant
 import com.pocketcraft.server.ui.components.GameCard
@@ -163,6 +173,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.graphics.graphicsLayer
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -197,6 +208,7 @@ fun ConsoleScreen(
     val configuredRuntime = stateHolder.config.customJarPath
         ?.takeIf { it.isNotBlank() }
         ?: stateHolder.config.gameVersion
+    val activeRuntimeVersion = stateHolder.versionId.takeIf { it.isNotBlank() }.orEmpty()
     val effectiveServerType = if (
         stateHolder.config.serverType == ServerType.MODPACK ||
         (stateHolder.config.serverType.supportsVersionSelect && isLikelyModpackRuntimeId(configuredRuntime))
@@ -206,14 +218,19 @@ fun ConsoleScreen(
         stateHolder.config.serverType
     }
     val displayedRuntimeVersion = if (effectiveServerType == ServerType.MODPACK) {
-        configuredRuntime
+        configuredRuntime.ifBlank { activeRuntimeVersion }
     } else {
-        stateHolder.config.gameVersion
+        stateHolder.config.gameVersion.ifBlank { activeRuntimeVersion }
     }
+    val hasActiveRuntimeSession = stateHolder.isNavigationLocked && displayedRuntimeVersion.isNotBlank()
     val isVersionDownloaded = if (effectiveServerType == ServerType.MODPACK) {
-        ServerFileManager.isModpackReady(context, stateHolder.activeWorld, configuredRuntime)
+        ServerFileManager.isModpackReady(context, stateHolder.activeWorld, displayedRuntimeVersion) ||
+            hasActiveRuntimeSession
     } else {
-        ServerFileManager.isServerJarReady(context, stateHolder.config.gameVersion, effectiveServerType)
+        displayedRuntimeVersion.isNotBlank() && (
+            ServerFileManager.isServerJarReady(context, displayedRuntimeVersion, effectiveServerType) ||
+                hasActiveRuntimeSession
+        )
     }
     val animatedStartupProgress by animateFloatAsState(
         targetValue = (stateHolder.startupProgressPercent / 100f).coerceIn(0f, 1f),
@@ -330,14 +347,16 @@ fun ConsoleScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            ServerIdentityCard(
-                stateHolder = stateHolder,
-                onChangeVersion = onChangeVersion,
-                onOpenServerDetails = onOpenServerDetails,
-                onAddWorld = onAddWorld,
-                onOpenBedrockHelp = { showBedrockHelpDialog = true },
-                topContentBetweenServerAndAddress = topContentBelowServerCard
-            )
+            AnimatedEntranceContainer(index = 0) {
+                ServerIdentityCard(
+                    stateHolder = stateHolder,
+                    onChangeVersion = onChangeVersion,
+                    onOpenServerDetails = onOpenServerDetails,
+                    onAddWorld = onAddWorld,
+                    onOpenBedrockHelp = { showBedrockHelpDialog = true },
+                    topContentBetweenServerAndAddress = topContentBelowServerCard
+                )
+            }
         }
         if (stateHolder.status == ServerStatus.STARTING && !stateHolder.firstBootComplete && !firstBootWarningSessionDismissed) {
             item(key = "first_boot_warning") {
@@ -364,69 +383,71 @@ fun ConsoleScreen(
                     val bodyColor = if (isDark) Color(0xFFFFE7D6).copy(alpha = 0.88f) else Color(0xFF92400E)
                     val accent = PocketColors.ConsoleWarn
                     
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .card3d(
-                                elevation = 6.dp,
-                                cornerRadius = 16.dp,
-                                borderColor = bannerBorder,
-                                depthColor = bannerBorder.copy(alpha = (bannerBorder.alpha * 1.5f).coerceAtMost(1f))
-                            )
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(bannerColor)
-                    ) {
-                        Box {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.Top,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Warning,
-                                    contentDescription = null,
-                                    tint = accent,
-                                    modifier = Modifier
-                                        .padding(top = 2.dp)
-                                        .size(20.dp)
+                    AnimatedEntranceContainer(index = 1) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .card3d(
+                                    elevation = 6.dp,
+                                    cornerRadius = 16.dp,
+                                    borderColor = bannerBorder,
+                                    depthColor = bannerBorder.copy(alpha = (bannerBorder.alpha * 1.5f).coerceAtMost(1f))
                                 )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "First Start Takes Longer",
-                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
-                                        color = headingColor,
-                                        fontSize = 13.sp
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(bannerColor)
+                        ) {
+                            Box {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.Top,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = accent,
+                                        modifier = Modifier
+                                            .padding(top = 2.dp)
+                                            .size(20.dp)
                                     )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "The first time to start server takes some time to load as it generates the world and downloads files.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = bodyColor,
-                                        fontSize = 12.sp,
-                                        lineHeight = 16.sp
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "First Start Takes Longer",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                            color = headingColor,
+                                            fontSize = 13.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "The first time to start server takes some time to load as it generates the world and downloads files.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = bodyColor,
+                                            fontSize = 12.sp,
+                                            lineHeight = 16.sp
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(24.dp))
+                                }
+                                
+                                IconButton(
+                                    onClick = {
+                                        firstBootWarningSessionDismissed = true
+                                        scope.launch {
+                                            AppPreferencesStore.setFirstBootComplete(context, true)
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(4.dp)
+                                        .size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Dismiss",
+                                        tint = headingColor.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(24.dp))
-                            }
-                            
-                            IconButton(
-                                onClick = {
-                                    firstBootWarningSessionDismissed = true
-                                    scope.launch {
-                                        AppPreferencesStore.setFirstBootComplete(context, true)
-                                    }
-                                },
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(4.dp)
-                                    .size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Dismiss",
-                                    tint = headingColor.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(16.dp)
-                                )
                             }
                         }
                     }
@@ -435,61 +456,63 @@ fun ConsoleScreen(
         }
         if (stateHolder.status == ServerStatus.ONLINE && !stateHolder.config.whiteList && !stateHolder.openServerRiskAcknowledged) {
             item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .card3d(
-                            elevation = 6.dp,
-                            cornerRadius = 16.dp,
-                            borderColor = pocketWarningBorderColor(),
-                            depthColor = pocketWarningBorderColor().copy(alpha = (pocketWarningBorderColor().alpha * 1.5f).coerceAtMost(1f)),
-                            borderWidth = 1.dp
-                        )
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(pocketWarningSurfaceColor())
-                ) {
-                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .background(pocketWarningIconChipColor(), RoundedCornerShape(10.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.Warning,
-                                    contentDescription = null,
-                                    tint = pocketWarningAccentColor(),
-                                    modifier = Modifier.size(16.dp)
+                AnimatedEntranceContainer(index = 2) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .card3d(
+                                elevation = 6.dp,
+                                cornerRadius = 16.dp,
+                                borderColor = pocketWarningBorderColor(),
+                                depthColor = pocketWarningBorderColor().copy(alpha = (pocketWarningBorderColor().alpha * 1.5f).coerceAtMost(1f)),
+                                borderWidth = 1.dp
+                            )
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(pocketWarningSurfaceColor())
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .background(pocketWarningIconChipColor(), RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = pocketWarningAccentColor(),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Text(
+                                    "Open server — anyone can join",
+                                    color = pocketWarningTitleColor(),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 13.sp
                                 )
                             }
+                            Spacer(Modifier.height(6.dp))
                             Text(
-                                "Open server — anyone can join",
-                                color = pocketWarningTitleColor(),
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 13.sp
+                                "Whitelist is off, so any player who knows the address can join until you lock it down.",
+                                color = pocketWarningBodyColor(),
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp
                             )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "Whitelist is off, so any player who knows the address can join until you lock it down.",
-                            color = pocketWarningBodyColor(),
-                            fontSize = 12.sp,
-                            lineHeight = 16.sp
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(
-                                onClick = { stateHolder.enableWhitelist() },
-                                border = androidx.compose.foundation.BorderStroke(1.dp, pocketWarningBorderColor()),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = pocketWarningAccentColor())
-                            ) {
-                                Text("Enable Whitelist", fontSize = 12.sp)
-                            }
-                            TextButton(
-                                onClick = { stateHolder.acknowledgeOpenServerRisk() }
-                            ) {
-                                Text("I understand the risks", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(10.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = { stateHolder.enableWhitelist() },
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, pocketWarningBorderColor()),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = pocketWarningAccentColor())
+                                ) {
+                                    Text("Enable Whitelist", fontSize = 12.sp)
+                                }
+                                TextButton(
+                                    onClick = { stateHolder.acknowledgeOpenServerRisk() }
+                                ) {
+                                    Text("I understand the risks", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                         }
                     }
@@ -498,102 +521,104 @@ fun ConsoleScreen(
         }
 
         item {
-            when (uiState) {
-                ServerUiState.IDLE -> {
-                    PremiumHomeButton(
-                        text = run {
-                            val s = LocalAppStrings.current
-                            if (stateHolder.isRestartingCycle) s.restarting else s.startServer
-                        },
-                        onClick = {
-                            try {
-                                if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
-                                    Toast.makeText(context, "No internet connection. Please check your network.", Toast.LENGTH_LONG).show()
-                                    return@PremiumHomeButton
-                                }
-                                if (isVersionDownloaded) {
-                                    stateHolder.startServer()
-                                } else if (effectiveServerType == ServerType.MODPACK) {
-                                    onInstallCurrentVersion()
-                                } else {
-                                    showDownloadRequiredDialog = true
-                                }
-                            } catch (e: Exception) {
-                                android.util.Log.e("ConsoleScreen", "Start error", e)
-                                Toast.makeText(context, "Error starting server: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        enabled = !stateHolder.isRestarting && !stateHolder.isStopping,
-                        icon = if (stateHolder.isRestarting) Icons.Default.Refresh else Icons.Default.PlayArrow,
-                        modifier = Modifier.fillMaxWidth(),
-                        style = PremiumHomeButtonStyle.StartServer
-                    )
-                }
-                ServerUiState.STARTING -> {
-                    StartupProgressCard(
-                        progress = animatedStartupProgress,
-                        progressPercent = stateHolder.startupProgressPercent,
-                        status = stateHolder.startupStatusMessage.ifBlank { "Initializing server..." },
-                        isStopping = stateHolder.isStopping,
-                        onStop = {
-                            stateHolder.stopServer()
-                        }
-                    )
-                }
-                ServerUiState.RUNNING -> {
-                    if (stateHolder.isStopping && !stateHolder.isRestarting) {
+            AnimatedEntranceContainer(index = 3) {
+                when (uiState) {
+                    ServerUiState.IDLE -> {
                         PremiumHomeButton(
-                            text = LocalAppStrings.current.stopping,
-                            icon = Icons.Default.Stop,
-                            onClick = {},
-                            enabled = false,
-                            modifier = Modifier.fillMaxWidth(),
-                            style = PremiumHomeButtonStyle.DangerGhost
-                        )
-                    } else if (stateHolder.isRestarting) {
-                        PremiumHomeButton(
-                            text = LocalAppStrings.current.restarting,
-                            icon = Icons.Default.Refresh,
-                            onClick = {},
-                            enabled = false,
-                            modifier = Modifier.fillMaxWidth(),
-                            style = PremiumHomeButtonStyle.Primary
-                        )
-                    } else {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            PremiumHomeButton(
-                                text = "Stop",
-                                icon = Icons.Default.Stop,
-                                onClick = {
-                                    stateHolder.stopServer()
-                                },
-                                enabled = true,
-                                modifier = Modifier.weight(0.42f),
-                                style = PremiumHomeButtonStyle.Danger
-                            )
-
-                            PremiumHomeButton(
-                                text = "Restart",
-                                icon = Icons.Default.Refresh,
-                                onClick = {
-                                    try {
-                                        if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
-                                            Toast.makeText(context, "No internet connection. Please check your network.", Toast.LENGTH_LONG).show()
-                                            return@PremiumHomeButton
-                                        }
-                                        stateHolder.restartServer()
-                                    } catch (e: Exception) {
-                                        android.util.Log.e("ConsoleScreen", "Restart error", e)
-                                        Toast.makeText(context, "Error during restart: ${e.message}", Toast.LENGTH_SHORT).show()
+                            text = run {
+                                val s = LocalAppStrings.current
+                                if (stateHolder.isRestartingCycle) s.restarting else s.startServer
+                            },
+                            onClick = {
+                                try {
+                                    if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
+                                        Toast.makeText(context, "No internet connection. Please check your network.", Toast.LENGTH_LONG).show()
+                                        return@PremiumHomeButton
                                     }
-                                },
-                                enabled = true,
-                                modifier = Modifier.weight(0.66f),
+                                    if (isVersionDownloaded) {
+                                        stateHolder.startServer()
+                                    } else if (effectiveServerType == ServerType.MODPACK) {
+                                        onInstallCurrentVersion()
+                                    } else {
+                                        showDownloadRequiredDialog = true
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("ConsoleScreen", "Start error", e)
+                                    Toast.makeText(context, "Error starting server: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            enabled = !stateHolder.isRestarting && !stateHolder.isStopping,
+                            icon = if (stateHolder.isRestarting) Icons.Default.Refresh else Icons.Default.PlayArrow,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = PremiumHomeButtonStyle.StartServer
+                        )
+                    }
+                    ServerUiState.STARTING -> {
+                        StartupProgressCard(
+                            progress = animatedStartupProgress,
+                            progressPercent = stateHolder.startupProgressPercent,
+                            status = stateHolder.startupStatusMessage.ifBlank { "Initializing server..." },
+                            isStopping = stateHolder.isStopping,
+                            onStop = {
+                                stateHolder.stopServer()
+                            }
+                        )
+                    }
+                    ServerUiState.RUNNING -> {
+                        if (stateHolder.isStopping && !stateHolder.isRestarting) {
+                            PremiumHomeButton(
+                                text = LocalAppStrings.current.stopping,
+                                icon = Icons.Default.Stop,
+                                onClick = {},
+                                enabled = false,
+                                modifier = Modifier.fillMaxWidth(),
+                                style = PremiumHomeButtonStyle.DangerGhost
+                            )
+                        } else if (stateHolder.isRestarting) {
+                            PremiumHomeButton(
+                                text = LocalAppStrings.current.restarting,
+                                icon = Icons.Default.Refresh,
+                                onClick = {},
+                                enabled = false,
+                                modifier = Modifier.fillMaxWidth(),
                                 style = PremiumHomeButtonStyle.Primary
                             )
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                PremiumHomeButton(
+                                    text = "Stop",
+                                    icon = Icons.Default.Stop,
+                                    onClick = {
+                                        stateHolder.stopServer()
+                                    },
+                                    enabled = true,
+                                    modifier = Modifier.weight(0.42f),
+                                    style = PremiumHomeButtonStyle.Danger
+                                )
+
+                                PremiumHomeButton(
+                                    text = "Restart",
+                                    icon = Icons.Default.Refresh,
+                                    onClick = {
+                                        try {
+                                            if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
+                                                Toast.makeText(context, "No internet connection. Please check your network.", Toast.LENGTH_LONG).show()
+                                                return@PremiumHomeButton
+                                            }
+                                            stateHolder.restartServer()
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("ConsoleScreen", "Restart error", e)
+                                            Toast.makeText(context, "Error during restart: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    enabled = true,
+                                    modifier = Modifier.weight(0.66f),
+                                    style = PremiumHomeButtonStyle.Primary
+                                )
+                            }
                         }
                     }
                 }
@@ -601,110 +626,124 @@ fun ConsoleScreen(
         }
         if (uiState == ServerUiState.RUNNING && stateHolder.onlinePlayers.isNotEmpty()) {
             item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "${LocalAppStrings.current.players} (${stateHolder.onlinePlayers.size}/${stateHolder.config.maxPlayers})",
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 15.sp,
-                        letterSpacing = 0.sp
-                    )
-                    TextButton(onClick = onViewAllPlayers) {
+                AnimatedEntranceContainer(index = 4) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = LocalAppStrings.current.tabAllPlayers,
-                            color = PocketColors.PrimaryDark,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                            text = "${LocalAppStrings.current.players} (${stateHolder.onlinePlayers.size}/${stateHolder.config.maxPlayers})",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 15.sp,
+                            letterSpacing = 0.sp
                         )
+                        TextButton(onClick = onViewAllPlayers) {
+                            Text(
+                                text = LocalAppStrings.current.tabAllPlayers,
+                                color = PocketColors.PrimaryDark,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
                     }
                 }
             }
-            items(stateHolder.onlinePlayers.take(4)) { player ->
-                OnlinePlayerCard(
-                    player = player,
-                    stateHolder = stateHolder,
-                    onOpenDetails = { onPlayerSelected(player) }
-                )
+            itemsIndexed(stateHolder.onlinePlayers.take(4)) { idx, player ->
+                AnimatedEntranceContainer(index = 5 + idx) {
+                    OnlinePlayerCard(
+                        player = player,
+                        stateHolder = stateHolder,
+                        onOpenDetails = { onPlayerSelected(player) }
+                    )
+                }
             }
         }
         item {
-            VersionUpgradeCard(
-                serverTypeName = effectiveServerType.displayName,
-                currentVersion = displayedRuntimeVersion,
-                availableVersions = availableVersions,
-                onUpgrade = { onChangeVersion() },
-                onInstallCurrent = onInstallCurrentVersion,
-                serverIsRunning = stateHolder.isNavigationLocked,
-                isVersionDownloaded = isVersionDownloaded
-            )
+            AnimatedEntranceContainer(index = 9) {
+                VersionUpgradeCard(
+                    serverTypeName = effectiveServerType.displayName,
+                    currentVersion = displayedRuntimeVersion,
+                    availableVersions = availableVersions,
+                    onUpgrade = { onChangeVersion() },
+                    onInstallCurrent = onInstallCurrentVersion,
+                    serverIsRunning = stateHolder.isNavigationLocked,
+                    isVersionDownloaded = isVersionDownloaded
+                )
+            }
         }
         adContentAfterVersion?.let { adContent ->
             item(key = "home_banner_ad") {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .card3d(elevation = 6.dp, cornerRadius = 20.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (pocketIsDarkTheme()) PocketColors.SurfaceCardDark else PocketColors.SurfaceCard)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                AnimatedEntranceContainer(index = 10) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .card3d(elevation = 6.dp, cornerRadius = 20.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (pocketIsDarkTheme()) PocketColors.SurfaceCardDark else PocketColors.SurfaceCard)
                     ) {
-                        Text(
-                            text = "SPONSORED",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 0.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
-                        adContent()
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "SPONSORED",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 0.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                            adContent()
+                        }
                     }
                 }
             }
         }
         // F3G tip removed UI block
         item {
-            RamSettingsCard(
-                ramMode = ramMode,
-                manualRamMb = manualRamMb,
-                totalRamMb = totalRamMb,
-                serverIsRunning = stateHolder.isNavigationLocked,
-                maxPowerEnabled = prefs.isMaxPowerMode,
-                onRamModeChange = { mode ->
-                    ramMode = mode
-                    prefs.ramMode = mode
-                },
-                onManualRamChange = { mb ->
-                    manualRamMb = mb
-                    prefs.manualRamMb = mb
-                }
-            )
+            AnimatedEntranceContainer(index = 11) {
+                RamSettingsCard(
+                    ramMode = ramMode,
+                    manualRamMb = manualRamMb,
+                    totalRamMb = totalRamMb,
+                    serverIsRunning = stateHolder.isNavigationLocked,
+                    maxPowerEnabled = prefs.isMaxPowerMode,
+                    onRamModeChange = { mode ->
+                        ramMode = mode
+                        prefs.ramMode = mode
+                    },
+                    onManualRamChange = { mb ->
+                        manualRamMb = mb
+                        prefs.manualRamMb = mb
+                    }
+                )
+            }
         }
         if (stateHolder.status == ServerStatus.ONLINE) {
             item {
-                RamUsageCard(usedMb = usedRamMb, maxMb = totalRamMb)
+                AnimatedEntranceContainer(index = 12) {
+                    RamUsageCard(usedMb = usedRamMb, maxMb = totalRamMb)
+                }
             }
         }
         item {
-            ConsoleCard(
-                stateHolder = stateHolder,
-                command = command,
-                onCommandChange = { command = it },
-                onSend = {
-                    if (command.isNotBlank()) {
-                        stateHolder.sendCommand(command)
-                        command = ""
-                    }
-                },
-                logListState = logListState
-            )
+            AnimatedEntranceContainer(index = 13) {
+                ConsoleCard(
+                    stateHolder = stateHolder,
+                    command = command,
+                    onCommandChange = { command = it },
+                    onSend = {
+                        if (command.isNotBlank()) {
+                            stateHolder.sendCommand(command)
+                            command = ""
+                        }
+                    },
+                    logListState = logListState
+                )
+            }
         }
     }
 
@@ -781,14 +820,17 @@ fun ConsoleScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .navigationBarsPadding(),
                 shape = RoundedCornerShape(28.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 10.dp,
                 border = BorderStroke(1.dp, pocketSheetBorderColor())
             ) {
                 Column(
-                    modifier = Modifier.padding(22.dp),
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(22.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text(
@@ -867,9 +909,21 @@ fun ConsoleScreen(
 
     if (showBedrockHelpDialog) {
         val bedrockHelpSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        val bedrockLanAddress = "${stateHolder.localIp}:19132"
-        val internetJoinAddress = stateHolder.publicAddress?.takeIf { it.isNotBlank() }
-            ?: "Start the server to get your internet join address"
+        val publicAddress = stateHolder.publicAddress?.takeIf { it.isNotBlank() }
+        val hasPublicAddress = publicAddress != null
+        
+        val publicHost = publicAddress?.substringBefore(":") ?: "Offline"
+        val publicPort = publicAddress?.substringAfter(":", "19132") ?: "19132"
+        
+        val wifiHost = stateHolder.localIp
+        
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val copyToClipboard: (String, String) -> Unit = { text, label ->
+            val clip = ClipData.newPlainText(label, text)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(context, "$label copied to clipboard!", Toast.LENGTH_SHORT).show()
+        }
+
         ModalBottomSheet(
             onDismissRequest = {
                 scope.launch {
@@ -896,53 +950,133 @@ fun ConsoleScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text(
-                        text = "How players join",
+                        text = "How to Join",
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = Monocraft,
-                        fontSize = 22.sp,
+                        fontSize = 20.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
                     Text(
-                        text = "Share the address PocketCraft gives you. Java and Bedrock players can both use the same internet relay address, while Wi-Fi players can use your local IP on the same network.",
-                        fontSize = 13.sp,
+                        text = "To let other players join your Minecraft server, share the connection details below:",
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 18.sp
+                        lineHeight = 16.sp
                     )
 
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        JoinStepCard(
-                            step = "Java",
-                            title = "Internet join",
-                            body = "Open Multiplayer, tap Add Server, and enter $internetJoinAddress."
-                        )
-                        JoinStepCard(
-                            step = "Java",
-                            title = "Wi-Fi join",
-                            body = "On the same Wi-Fi, Java players can use ${stateHolder.localIp}:${stateHolder.config.port}."
-                        )
-                        JoinStepCard(
-                            step = "Bedrock",
-                            title = "Internet join",
-                            body = "Open Servers, tap Add Server, and enter the same relay address: $internetJoinAddress."
-                        )
-                        JoinStepCard(
-                            step = "Bedrock",
-                            title = "Wi-Fi join",
-                            body = "On the same Wi-Fi, Bedrock players can use $bedrockLanAddress."
-                        )
+                    if (hasPublicAddress) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("🌐 Internet Connection Details", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PocketColors.Primary)
+                            
+                            // Host Box
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("SERVER ADDRESS (HOST)", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                                        Text(publicHost, fontSize = 13.sp, fontWeight = FontWeight.Bold, fontFamily = Monocraft, color = MaterialTheme.colorScheme.onSurface)
+                                    }
+                                    IconButton(
+                                        onClick = { copyToClipboard(publicHost, "Server Address") },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ContentCopy,
+                                            contentDescription = "Copy Address",
+                                            tint = PocketColors.Primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            // Port Box
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("PORT", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                                        Text(publicPort, fontSize = 13.sp, fontWeight = FontWeight.Bold, fontFamily = Monocraft, color = MaterialTheme.colorScheme.onSurface)
+                                    }
+                                    IconButton(
+                                        onClick = { copyToClipboard(publicPort, "Port") },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ContentCopy,
+                                            contentDescription = "Copy Port",
+                                            tint = PocketColors.Primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.2f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "⚠️ Bedrock players: The Port MUST be entered separately in the Port option inside Minecraft!",
+                                    modifier = Modifier.padding(10.dp),
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontWeight = FontWeight.SemiBold,
+                                    lineHeight = 14.sp
+                                )
+                            }
+                        }
+                    } else {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "Start the server to generate internet join addresses.",
+                                modifier = Modifier.padding(16.dp),
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
 
-                    Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = PocketColors.PrimaryMuted.copy(alpha = 0.65f)
-                    ) {
-                        Text(
-                            text = "If Bedrock briefly says Pinging in the server list, try joining with the same address once PocketCraft shows the server is online.",
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("🎮 How to Connect", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        
+                        JoinStepCard(
+                            step = "Java",
+                            title = "PC/Mac players",
+                            body = "Go to Multiplayer > Add Server. Enter the full Server Address as: $publicHost:$publicPort"
+                        )
+                        JoinStepCard(
+                            step = "Bedrock",
+                            title = "Mobile/Windows 10/Console",
+                            body = "Go to Servers > Add Server. Enter Server Address: $publicHost and Port: $publicPort separately."
+                        )
+                        JoinStepCard(
+                            step = "LAN",
+                            title = "Same Wi-Fi players",
+                            body = "If playing in the same room, Bedrock players can connect using local IP $wifiHost and default Bedrock port 19132."
                         )
                     }
 
@@ -1107,6 +1241,23 @@ private fun ServerIdentityCard(
     var showDeleteWorldDialog by remember { mutableStateOf<WorldEntry?>(null) }
     val activeWorld = stateHolder.worlds.firstOrNull { it.isActive } ?: stateHolder.worlds.firstOrNull()
     val worldItems = stateHolder.worlds
+    var worldDay by remember(stateHolder.activeWorld) { mutableStateOf<Long?>(null) }
+
+    LaunchedEffect(stateHolder.activeWorld, stateHolder.status) {
+        suspend fun loadOfflineDay() {
+            worldDay = withContext(Dispatchers.IO) {
+                NBTParser.parseLevelDay(
+                    PlayerDataManager.getLevelDataFile(context, stateHolder.activeWorld)
+                )
+            }
+        }
+
+        loadOfflineDay()
+        while (stateHolder.status == ServerStatus.ONLINE) {
+            delay(30_000)
+            loadOfflineDay()
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Box(modifier = Modifier.fillMaxWidth()) {
@@ -1130,7 +1281,7 @@ private fun ServerIdentityCard(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(48.dp)
                                 .card3d(
                                     elevation = 4.dp,
                                     cornerRadius = 12.dp,
@@ -1185,32 +1336,63 @@ private fun ServerIdentityCard(
                             Spacer(modifier = Modifier.height(5.dp))
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .pill3d(
-                                        elevation = 4.dp,
-                                        borderColor = if (isDarkTheme) PocketColors.CardBorderDark else PocketColors.TagBorder,
-                                        depthColor = if (isDarkTheme) PocketColors.CardBorderBottomDark else PocketColors.TagBorderBottom,
-                                        borderWidth = 1.5.dp,
-                                        depthWidth = 2.dp
-                                    )
-                                    .clip(RoundedCornerShape(50.dp))
-                                    .background(if (isDarkTheme) PocketColors.SurfaceVarDark else PocketColors.TagBg)
-                                    .padding(horizontal = 9.dp, vertical = 4.dp)
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                val tagTextColor = if (isDarkTheme) PocketColors.TextDark.copy(alpha = 0.86f) else PocketColors.TagText
-                                Icon(
-                                    imageVector = Icons.Filled.Dns,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(12.dp),
-                                    tint = tagTextColor
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = stateHolder.activeWorld.ifBlank { "world" },
-                                    fontSize = 11.sp,
-                                    color = tagTextColor,
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .pill3d(
+                                            elevation = 4.dp,
+                                            borderColor = if (isDarkTheme) PocketColors.CardBorderDark else PocketColors.TagBorder,
+                                            depthColor = if (isDarkTheme) PocketColors.CardBorderBottomDark else PocketColors.TagBorderBottom,
+                                            borderWidth = 1.5.dp,
+                                            depthWidth = 2.dp
+                                        )
+                                        .clip(RoundedCornerShape(50.dp))
+                                        .background(if (isDarkTheme) PocketColors.SurfaceVarDark else PocketColors.TagBg)
+                                        .padding(horizontal = 9.dp, vertical = 4.dp)
+                                ) {
+                                    val tagTextColor = if (isDarkTheme) PocketColors.TextDark.copy(alpha = 0.86f) else PocketColors.TagText
+                                    Icon(
+                                        imageVector = Icons.Filled.Dns,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(12.dp),
+                                        tint = tagTextColor
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = stateHolder.activeWorld.ifBlank { "world" },
+                                        fontSize = 11.sp,
+                                        color = tagTextColor,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+
+                                worldDay?.let { day ->
+                                    val tagTextColor = if (isDarkTheme) PocketColors.TextDark.copy(alpha = 0.86f) else PocketColors.TagText
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .pill3d(
+                                                elevation = 4.dp,
+                                                borderColor = if (isDarkTheme) PocketColors.CardBorderDark else PocketColors.TagBorder,
+                                                depthColor = if (isDarkTheme) PocketColors.CardBorderBottomDark else PocketColors.TagBorderBottom,
+                                                borderWidth = 1.5.dp,
+                                                depthWidth = 2.dp
+                                            )
+                                            .clip(RoundedCornerShape(50.dp))
+                                            .background(if (isDarkTheme) PocketColors.SurfaceVarDark else PocketColors.TagBg)
+                                            .padding(horizontal = 9.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = "Day $day",
+                                            fontSize = 11.sp,
+                                            color = tagTextColor,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1470,7 +1652,7 @@ private fun ServerIdentityCard(
                     )
 
                     PremiumHomeButton(
-                        text = "Bedrock Join Guide",
+                        text = "How to Join",
                         icon = Icons.Filled.Info,
                         onClick = onOpenBedrockHelp,
                         modifier = Modifier.fillMaxWidth(),
@@ -1866,7 +2048,7 @@ private fun PremiumHomeButton(
         Box(
             modifier = Modifier
                 .then(widthModifier)
-                .height(if (isDanger) 56.dp else 52.dp)
+                .heightIn(min = if (isDanger) 56.dp else 52.dp)
                 // Raised border drawn BEFORE clip — bottom edge stays visible
                 .card3d(
                     elevation = if (isDangerGhost) 4.dp else if (isDanger) 9.dp else 8.dp,
@@ -1903,12 +2085,13 @@ private fun PremiumHomeButton(
                     color = contentColor,
                     style = MaterialTheme.typography.labelLarge.copy(
                         fontFamily    = ButtonFont,
-                        fontWeight    = if (isDanger) FontWeight.Bold else FontWeight.Normal,
-                        fontSize      = if (isDanger) 15.sp else if (isDangerGhost) 13.sp else 14.5.sp,
+                        fontWeight    = if (style == PremiumHomeButtonStyle.StartServer || style == PremiumHomeButtonStyle.Primary || style == PremiumHomeButtonStyle.Danger) FontWeight.Bold else FontWeight.Normal,
+                        fontSize      = if (isDanger) 14.sp else if (isDangerGhost) 13.sp else 14.sp,
                         letterSpacing = 0.sp
                     ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    maxLines = 2,
+                    softWrap = true,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
             }
         }

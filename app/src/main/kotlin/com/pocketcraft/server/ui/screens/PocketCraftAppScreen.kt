@@ -34,6 +34,13 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -77,6 +84,7 @@ import com.pocketcraft.server.ui.components.BroadcastBanner
 import com.pocketcraft.server.ui.components.AnnouncementDialog
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.PocketMotion
 import com.pocketcraft.server.ui.theme.card3d
 import com.pocketcraft.server.ui.theme.pocketPopupAccentContainerColor
 import com.pocketcraft.server.ui.util.MobTheme
@@ -109,6 +117,7 @@ private data class PendingVersionChange(
 @Composable
 fun PocketCraftApp(
     isDarkTheme: Boolean,
+    isPlayStoreRatingPromptEnabled: Boolean,
     currentMobTheme: MobTheme,
     onDarkThemeChange: (Boolean) -> Unit,
     onMobThemeChange: (MobTheme) -> Unit
@@ -510,6 +519,7 @@ fun PocketCraftApp(
     }
 
     LaunchedEffect(
+        isPlayStoreRatingPromptEnabled,
         screen,
         homeScreenReady,
         pendingConsentDialog,
@@ -522,10 +532,11 @@ fun PocketCraftApp(
         showExitDialog,
         hasPendingBroadcast
     ) {
+        if (!isPlayStoreRatingPromptEnabled) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
         if (pendingConsentDialog || pendingAnnouncementDialog) return@LaunchedEffect
         if (preferences.ratingPopupDismissedForever) return@LaunchedEffect
-        if (preferences.appLaunchCount < 2) return@LaunchedEffect
+        if (preferences.appLaunchCount < 3) return@LaunchedEffect
         if (preferences.ratingPopupShowCount >= 3) return@LaunchedEffect
         val cooldownMs = 14L * 24L * 60L * 60L * 1000L
         if (System.currentTimeMillis() - preferences.ratingPopupLastShownAt < cooldownMs) return@LaunchedEffect
@@ -545,24 +556,25 @@ fun PocketCraftApp(
 
     SideEffect {
         val window = activity?.window ?: return@SideEffect
-        val splashBackgroundColor = ContextCompat.getColor(context, R.color.splash_background)
+        val splashBackgroundColor = PocketColors.FooterBg.toArgb()
+        val isOnSplash = screen == Screen.LOADING || screen == Screen.DOWNLOADING
         val statusBarColor = when {
             hasBlockingSheet -> colorScheme.surface.toArgb()
-            screen == Screen.LOADING || screen == Screen.DOWNLOADING -> splashBackgroundColor
+            isOnSplash -> splashBackgroundColor
             screen == Screen.SERVER -> colorScheme.surface.toArgb()
             else -> colorScheme.background.toArgb()
         }
         val navBarColor = when {
             hasBlockingSheet -> colorScheme.surface.toArgb()
-            screen == Screen.LOADING || screen == Screen.DOWNLOADING -> splashBackgroundColor
+            isOnSplash -> splashBackgroundColor
             screen == Screen.SERVER -> PocketColors.FooterBg.toArgb()
             else -> PocketColors.FooterBg.toArgb()
         }
         window.statusBarColor = statusBarColor
         window.navigationBarColor = navBarColor
         WindowInsetsControllerCompat(window, window.decorView).apply {
-            isAppearanceLightStatusBars = colorScheme.surface.luminance() > 0.5f
-            isAppearanceLightNavigationBars = Color(navBarColor).luminance() > 0.5f
+            isAppearanceLightStatusBars = if (isOnSplash) false else colorScheme.surface.luminance() > 0.5f
+            isAppearanceLightNavigationBars = if (isOnSplash) false else Color(navBarColor).luminance() > 0.5f
         }
     }
 
@@ -685,11 +697,7 @@ fun PocketCraftApp(
                 )
             }
             if (!jarReady) {
-                Toast.makeText(
-                    context,
-                    "Import ${effectiveType.displayName} $effectiveVersion first from the version picker.",
-                    Toast.LENGTH_LONG
-                ).show()
+                showVersionPickerDialog = true
                 loadingStatus = "Preparing PocketCraft..."
                 versionDownloadProgress = 0
                 transitionTarget = Screen.SERVER
@@ -733,100 +741,115 @@ fun PocketCraftApp(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        when (screen) {
-            Screen.LOADING -> SplashScreen(
-                progress = 0.66f,
-                status = loadingStatus
-            )
+        AnimatedContent(
+            targetState = screen,
+            transitionSpec = {
+                (fadeIn(animationSpec = PocketMotion.softFloatTween(durationMillis = 420)) +
+                    scaleIn(initialScale = 0.985f, animationSpec = PocketMotion.softFloatTween(durationMillis = 480))) togetherWith
+                (fadeOut(animationSpec = PocketMotion.softFloatTween(durationMillis = 240)) +
+                    scaleOut(targetScale = 0.995f, animationSpec = PocketMotion.softFloatTween(durationMillis = 320)))
+            },
+            label = "app_screen_transition"
+        ) { targetScreen ->
+            when (targetScreen) {
+                Screen.LOADING -> SplashScreen(
+                    progress = 0.66f,
+                    status = loadingStatus
+                )
 
-            Screen.DOWNLOADING -> SplashScreen(
-                progress = (versionDownloadProgress / 100f).coerceIn(0f, 1f),
-                status = loadingStatus
-            )
+                Screen.DOWNLOADING -> SplashScreen(
+                    progress = (versionDownloadProgress / 100f).coerceIn(0f, 1f),
+                    status = loadingStatus
+                )
 
-            Screen.SERVER -> ServerScreen(
-                stateHolder = stateHolder,
-                onChangeVersion = { showVersionPickerDialog = true },
-                onInstallCurrentVersion = {
-                    scope.launch {
-                        val currentConfig = stateHolder.config
-                        val configuredRuntime = currentConfig.customJarPath
-                            ?.takeIf { it.isNotBlank() }
-                            ?: currentConfig.gameVersion.takeIf { it.isNotBlank() }
-                        val installType = if (
-                            currentConfig.serverType.supportsVersionSelect &&
-                            isLikelyModpackRuntimeId(configuredRuntime.orEmpty())
-                        ) {
-                            ServerType.MODPACK
-                        } else {
-                            currentConfig.serverType
-                        }
-                        val modpackId = currentConfig.customJarPath
-                            ?.takeIf { it.isNotBlank() }
-                            ?: currentConfig.gameVersion.takeIf { it.isNotBlank() }
-                        if (installType == ServerType.MODPACK && modpackId.isNullOrBlank()) {
-                            Toast.makeText(context, "Please select a modpack first.", Toast.LENGTH_LONG).show()
-                            return@launch
-                        }
-                        val resolvedVersion = if (installType == ServerType.MODPACK) {
-                            modpackId.orEmpty()
-                        } else {
-                            currentConfig.gameVersion
-                        }
-                        val customJar = if (installType == ServerType.MODPACK) {
-                            modpackId
-                        } else {
-                            currentConfig.customJarPath
-                        }
-                        applyVersionChange(
-                            type = installType,
-                            resolvedVersion = resolvedVersion,
-                            customJar = customJar,
-                            createNewWorld = false
-                        )
-                    }
-                },
-                onVersionSelected = { version ->
-                    requestVersionChange(stateHolder.config.serverType, version)
-                },
-                onRequestExit = { showExitDialog = true },
-                isDarkTheme = isDarkTheme,
-                onDarkThemeChange = onDarkThemeChange,
-                currentMobTheme = currentMobTheme,
-                onMobThemeChange = onMobThemeChange,
-                homeTopContent = {
-                    if (modpackImportInProgress || modpackImportError != null) {
-                        ModpackImportProgressCard(
-                            modpackId = modpackImportId.orEmpty(),
-                            status = modpackImportError ?: modpackImportStatus,
-                            progress = modpackImportProgress,
-                            isError = modpackImportError != null
-                        )
-                    }
-                    if (screen == Screen.SERVER) {
-                        configBanner?.let { banner ->
-                            BroadcastBanner(
-                                message = banner,
-                                onDismiss = { broadcastViewModel.dismissConfigBanner() },
-                                enableDetailsSheet = false,
-                                outerPadding = PaddingValues(0.dp),
-                                modifier = Modifier.fillMaxWidth()
+                Screen.SERVER -> ServerScreen(
+                    stateHolder = stateHolder,
+                    onChangeVersion = { showVersionPickerDialog = true },
+                    onInstallCurrentVersion = {
+                        scope.launch {
+                            val currentConfig = stateHolder.config
+                            val configuredRuntime = currentConfig.customJarPath
+                                ?.takeIf { it.isNotBlank() }
+                                ?: currentConfig.gameVersion.takeIf { it.isNotBlank() }
+                            val installType = if (
+                                currentConfig.serverType.supportsVersionSelect &&
+                                isLikelyModpackRuntimeId(configuredRuntime.orEmpty())
+                            ) {
+                                ServerType.MODPACK
+                            } else {
+                                currentConfig.serverType
+                            }
+                            val modpackId = currentConfig.customJarPath
+                                ?.takeIf { it.isNotBlank() }
+                                ?: currentConfig.gameVersion.takeIf { it.isNotBlank() }
+                            if (installType == ServerType.MODPACK && modpackId.isNullOrBlank()) {
+                                Toast.makeText(context, "Please select a modpack first.", Toast.LENGTH_LONG).show()
+                                return@launch
+                            }
+                            val resolvedVersion = if (installType == ServerType.MODPACK) {
+                                modpackId.orEmpty()
+                            } else {
+                                currentConfig.gameVersion
+                            }
+                            if (installType != ServerType.MODPACK && resolvedVersion.isBlank()) {
+                                showVersionPickerDialog = true
+                                return@launch
+                            }
+                            val customJar = if (installType == ServerType.MODPACK) {
+                                modpackId
+                            } else {
+                                currentConfig.customJarPath
+                            }
+                            applyVersionChange(
+                                type = installType,
+                                resolvedVersion = resolvedVersion,
+                                customJar = customJar,
+                                createNewWorld = false
                             )
                         }
-                        broadcasts.forEach { message ->
-                            BroadcastBanner(
-                                message = message,
-                                onDismiss = { broadcastViewModel.dismiss(message.id) },
-                                enableDetailsSheet = false,
-                                outerPadding = PaddingValues(0.dp),
-                                modifier = Modifier.fillMaxWidth()
+                    },
+                    onVersionSelected = { version ->
+                        requestVersionChange(stateHolder.config.serverType, version)
+                    },
+                    onRequestExit = { showExitDialog = true },
+                    isDarkTheme = isDarkTheme,
+                    onDarkThemeChange = onDarkThemeChange,
+                    currentMobTheme = currentMobTheme,
+                    onMobThemeChange = onMobThemeChange,
+                    homeTopContent = {
+                        if (modpackImportInProgress || modpackImportError != null) {
+                            ModpackImportProgressCard(
+                                modpackId = modpackImportId.orEmpty(),
+                                status = modpackImportError ?: modpackImportStatus,
+                                progress = modpackImportProgress,
+                                isError = modpackImportError != null
                             )
                         }
+                        if (targetScreen == Screen.SERVER) {
+                            configBanner?.let { banner ->
+                                BroadcastBanner(
+                                    message = banner,
+                                    onDismiss = { broadcastViewModel.dismissConfigBanner() },
+                                    enableDetailsSheet = false,
+                                    outerPadding = PaddingValues(0.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            broadcasts.forEach { message ->
+                                BroadcastBanner(
+                                    message = message,
+                                    onDismiss = { broadcastViewModel.dismiss(message.id) },
+                                    enableDetailsSheet = false,
+                                    outerPadding = PaddingValues(0.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
                     }
-                }
-            )
+                )
 
-            Screen.VERSION_PICKER -> Unit
+                Screen.VERSION_PICKER -> Unit
+            }
         }
 
         // Broadcasts are rendered inline within the home screen under the server card.
