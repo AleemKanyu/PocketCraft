@@ -64,6 +64,7 @@ object DriveBackupManager {
                 token = token,
                 contentType = "multipart/related; boundary=$boundary"
             )
+            connection.setChunkedStreamingMode(256 * 1024)
             connection.doOutput = true
             connection.outputStream.use { raw ->
                 val output = BufferedOutputStream(raw)

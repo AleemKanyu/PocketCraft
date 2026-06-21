@@ -2,6 +2,10 @@ package com.pocketcraft.server.ui.util
 
 import android.content.Context
 import android.content.res.Configuration
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import com.pocketcraft.server.ui.theme.CustomThemePalette
+import com.pocketcraft.server.billing.BillingManager
 
 enum class ThemePreference {
     SYSTEM,
@@ -25,7 +29,8 @@ enum class MobTheme(val id: String, val themeName: String) {
     SKELETON("theme_skeleton", "Skeleton"),
     CREEPER("theme_creeper", "Creeper"),
     SIMPLE_WHITE("theme_simple_white", "Simple White"),
-    SIMPLE_DARK("theme_simple_dark", "Simple Dark");
+    SIMPLE_DARK("theme_simple_dark", "Simple Dark"),
+    CUSTOM("theme_custom", "Custom");
 
     companion object {
         fun fromId(id: String?): MobTheme {
@@ -58,7 +63,13 @@ object ThemePreferenceStore {
 
     fun loadMobTheme(context: Context): MobTheme {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return MobTheme.fromId(prefs.getString(KEY_MOB_THEME, null))
+        val theme = MobTheme.fromId(prefs.getString(KEY_MOB_THEME, null))
+        val billingManager = BillingManager.getInstance(context)
+        if (theme == MobTheme.CUSTOM && !billingManager.isPremium.value) {
+            saveMobTheme(context, MobTheme.CREEPER)
+            return MobTheme.CREEPER
+        }
+        return theme
     }
 
     fun saveMobTheme(context: Context, theme: MobTheme) {
@@ -66,6 +77,40 @@ object ThemePreferenceStore {
             .edit()
             .putString(KEY_MOB_THEME, theme.id)
             .apply()
+    }
+
+    fun loadCustomColors(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val primaryHex = prefs.getString("custom_primary", null)
+        val bgAppHex = prefs.getString("custom_bg_app", null)
+        val surfaceCardHex = prefs.getString("custom_surface_card", null)
+        val primaryTextHex = prefs.getString("custom_primary_text", null)
+        val textPrimaryHex = prefs.getString("custom_text_primary", null)
+
+        try {
+            if (primaryHex != null) CustomThemePalette.customPrimary = Color(android.graphics.Color.parseColor(primaryHex))
+            if (bgAppHex != null) CustomThemePalette.customBgApp = Color(android.graphics.Color.parseColor(bgAppHex))
+            if (surfaceCardHex != null) CustomThemePalette.customSurfaceCard = Color(android.graphics.Color.parseColor(surfaceCardHex))
+            if (primaryTextHex != null) CustomThemePalette.customPrimaryText = Color(android.graphics.Color.parseColor(primaryTextHex))
+            if (textPrimaryHex != null) CustomThemePalette.customTextPrimary = Color(android.graphics.Color.parseColor(textPrimaryHex))
+        } catch (e: Exception) {
+            // Ignore color parse errors
+        }
+    }
+
+    fun saveCustomColors(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString("custom_primary", toHexString(CustomThemePalette.customPrimary))
+            .putString("custom_bg_app", toHexString(CustomThemePalette.customBgApp))
+            .putString("custom_surface_card", toHexString(CustomThemePalette.customSurfaceCard))
+            .putString("custom_primary_text", toHexString(CustomThemePalette.customPrimaryText))
+            .putString("custom_text_primary", toHexString(CustomThemePalette.customTextPrimary))
+            .apply()
+    }
+
+    private fun toHexString(color: Color): String {
+        return String.format("#%08X", color.toArgb())
     }
 
     fun isSystemDark(context: Context): Boolean {

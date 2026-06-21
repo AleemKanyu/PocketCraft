@@ -51,6 +51,19 @@ object JreExtractor {
     }
 
     fun runtimeForVersion(versionId: String): RuntimeSpec {
+        val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
+        val isArm64 = abi.contains("arm64") || abi.contains("aarch64")
+        val is16KBPageSize = try {
+            android.system.Os.sysconf(android.system.OsConstants._SC_PAGESIZE) == 16384L
+        } catch (_: Exception) {
+            false
+        }
+        val requires16KBAlign = Build.VERSION.SDK_INT >= 35 || is16KBPageSize
+
+        if (isArm64 && requires16KBAlign) {
+            return RUNTIME_JAVA_25
+        }
+
         val minecraftJavaMajor = parseMinecraftJavaMajor(versionId)
         return when {
             minecraftJavaMajor == null -> RUNTIME_JAVA_21
@@ -64,13 +77,17 @@ object JreExtractor {
             .firstOrNull { isExtracted(context, it) }
     }
 
-    fun getJreDir(context: Context, runtime: RuntimeSpec = defaultRuntimeForDevice()): File {
-        val base = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            context.codeCacheDir
+    private fun normalizeAndroidPath(path: String): String {
+        return if (path.startsWith("/data/user/0/")) {
+            path.replaceFirst("/data/user/0/", "/data/data/")
         } else {
-            context.filesDir
+            path
         }
-        return File(base, runtime.extractedDirName)
+    }
+
+    fun getJreDir(context: Context, runtime: RuntimeSpec = defaultRuntimeForDevice()): File {
+        val rawPath = File(context.filesDir, runtime.extractedDirName).absolutePath
+        return File(normalizeAndroidPath(rawPath))
     }
 
     fun getJavaBinary(context: Context, runtime: RuntimeSpec = defaultRuntimeForDevice()): File =
@@ -112,6 +129,7 @@ object JreExtractor {
         }
 
         onProgress(2, "Preparing Minecraft Runtime...")
+        deleteLegacyRuntimeDir(context, runtime)
         if (jreDir.exists()) {
             jreDir.deleteRecursively()
         }
@@ -165,10 +183,57 @@ object JreExtractor {
         onProgress(100, "Minecraft Runtime Ready")
     }
 
+    fun forceReextract(
+        context: Context,
+        runtime: RuntimeSpec = defaultRuntimeForDevice(),
+        onProgress: (Int, String) -> Unit = { _, _ -> }
+    ) {
+        resetRuntime(context, runtime)
+        extractIfNeeded(context, runtime, onProgress)
+    }
+
     private fun hasRequiredRuntimeFiles(jreDir: File): Boolean {
         val libjli = File(jreDir, "lib/libjli.so")
         val libjvm = File(jreDir, "lib/server/libjvm.so")
-        return libjli.exists() && libjvm.exists()
+        val jvmCfg = File(jreDir, "lib/jvm.cfg")
+        return libjli.exists() && libjvm.exists() && jvmCfg.exists()
+    }
+
+    fun launchCandidatesForVersion(versionId: String): List<RuntimeSpec> {
+        val primary = runtimeForVersion(versionId)
+        val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
+        val isArm64 = abi.contains("arm64") || abi.contains("aarch64")
+        val is16KBPageSize = try {
+            android.system.Os.sysconf(android.system.OsConstants._SC_PAGESIZE) == 16384L
+        } catch (_: Exception) {
+            false
+        }
+        val requires16KBAlign = Build.VERSION.SDK_INT >= 35 || is16KBPageSize
+
+        if (isArm64 && requires16KBAlign) {
+            return listOf(RUNTIME_JAVA_25)
+        }
+
+        val defaults = if (isArm64) {
+            listOf(primary, RUNTIME_JAVA_25, RUNTIME_JAVA_21)
+        } else {
+            listOf(primary, RUNTIME_JAVA_21)
+        }
+        return defaults.distinctBy { it.id }
+    }
+
+    private fun resetRuntime(context: Context, runtime: RuntimeSpec) {
+        File(context.filesDir, runtime.markerName).delete()
+        getJreDir(context, runtime).deleteRecursively()
+        deleteLegacyRuntimeDir(context, runtime)
+    }
+
+    private fun deleteLegacyRuntimeDir(context: Context, runtime: RuntimeSpec) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val legacyDir = File(context.codeCacheDir, runtime.extractedDirName)
+        if (legacyDir.exists()) {
+            legacyDir.deleteRecursively()
+        }
     }
 
     private fun hasExpandedRuntimeLayout(assets: AssetManager, assetDir: String): Boolean {
@@ -255,7 +320,9 @@ object JreExtractor {
                 file.setExecutable(true, false)
             } else {
                 file.setExecutable(true, false)
-                file.setWritable(true, false)
+                // JRE files (especially .so libraries) must be read-only on Android 14+ (API 34+)
+                // to comply with W^X (Write or Execute) restrictions and avoid dlopen crashes.
+                file.setWritable(false, false)
             }
         }
     }

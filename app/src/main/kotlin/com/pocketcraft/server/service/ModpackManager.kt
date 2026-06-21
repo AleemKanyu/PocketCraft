@@ -311,11 +311,16 @@ object ModpackManager {
             val relativeLaunchPath = launchTarget.file.relativeTo(serverDir).path
             ServerFileManager.persistLaunchTarget(context, worldName, launchTarget.mode, relativeLaunchPath)
 
+            val detectedLoader = detectImportedLoader(serverDir, relativeLaunchPath)
+            val detectedVersion = detectImportedMinecraftVersion(serverDir)
+
             val props = ServerPropertiesHelper.readProperties(serverDir)
             props.setProperty("pocketcraft-server-type", com.pocketcraft.server.data.model.ServerType.MODPACK.name)
             props.setProperty("pocketcraft-custom-jar-path", modpackId)
             props.setProperty("pocketcraft-modpack-id", modpackId)
             props.setProperty("pocketcraft-modpack-name", modpackId)
+            props.setProperty("pocketcraft-modpack-loader", detectedLoader)
+            props.setProperty("pocketcraft-game-version", detectedVersion)
             ServerPropertiesHelper.saveProperties(serverDir, props)
 
             onStatus("Removing client-only mods for compatibility...")
@@ -1766,6 +1771,79 @@ object ModpackManager {
         if (!file.canExecute()) {
             throw Exception("$label binary is not executable (${file.absolutePath}).")
         }
+    }
+
+    private fun detectImportedLoader(serverDir: File, relativeLaunchPath: String): String {
+        val launchLower = relativeLaunchPath.lowercase()
+        return when {
+            launchLower.contains("quilt") -> "quilt"
+            launchLower.contains("fabric") -> "fabric"
+            launchLower.contains("neoforge") -> "neoforge"
+            launchLower.contains("forge") -> "forge"
+            else -> {
+                val files = serverDir.walkTopDown().maxDepth(4).toList()
+                val hasQuilt = files.any { it.name.lowercase().contains("quilt-loader") }
+                val hasFabric = files.any { it.name.lowercase().contains("fabric-loader") }
+                val hasNeoForge = files.any { it.name.lowercase().contains("neoforge") }
+                val hasForge = files.any { it.name.lowercase().contains("forge") }
+                when {
+                    hasQuilt -> "quilt"
+                    hasFabric -> "fabric"
+                    hasNeoForge -> "neoforge"
+                    hasForge -> "forge"
+                    else -> {
+                        val argFile = files.firstOrNull { it.name.equals("unix_args.txt", ignoreCase = true) }
+                        if (argFile != null) {
+                            val content = runCatching { argFile.readText().lowercase() }.getOrDefault("")
+                            when {
+                                content.contains("neoforged") || content.contains("neoforge") -> "neoforge"
+                                content.contains("minecraftforge") || content.contains("forge") -> "forge"
+                                else -> "unknown"
+                            }
+                        } else {
+                            "unknown"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun detectImportedMinecraftVersion(serverDir: File): String {
+        val minecraftServerDir = File(serverDir, "libraries/net/minecraft/server")
+        if (minecraftServerDir.isDirectory) {
+            val versions = minecraftServerDir.listFiles()?.filter { it.isDirectory }?.map { it.name }
+            val best = versions?.firstOrNull { it.matches(Regex("""^\d+\.\d+(\.\d+)?$""")) }
+            if (best != null) return best
+        }
+
+        val versionsDir = File(serverDir, "versions")
+        if (versionsDir.isDirectory) {
+            val versions = versionsDir.listFiles()?.filter { it.isDirectory }?.map { it.name }
+            val best = versions?.firstOrNull { it.matches(Regex("""^\d+\.\d+(\.\d+)?$""")) }
+            if (best != null) return best
+        }
+
+        val librariesDir = File(serverDir, "libraries")
+        if (librariesDir.isDirectory) {
+            val versionPattern = Regex("""/(\d+\.\d+(?:\.\d+)?)/""")
+            val found = librariesDir.walkTopDown()
+                .filter { it.isFile }
+                .map { it.absolutePath.replace('\\', '/') }
+                .firstNotNullOfOrNull { path ->
+                    versionPattern.find(path)?.groupValues?.get(1)
+                }
+            if (found != null) return found
+        }
+
+        val fallbackPattern = Regex("""\b(1\.\d{2}(?:\.\d+)?)\b""")
+        val match = serverDir.walkTopDown().maxDepth(6)
+            .map { it.name }
+            .firstNotNullOfOrNull { name ->
+                fallbackPattern.find(name)?.groupValues?.get(1)
+            }
+
+        return match ?: "1.20.1"
     }
 
     private fun ensureReadable(file: File, label: String) {

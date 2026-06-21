@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<defaultsMap>
+    <!-- New keys from remote control spec -->
+    <entry>
+        <key>feature_bedrock_crossplay_enabled</key>
+        <value>true</value>
+    </entry>
+    <entry>
+        <key>feature_subdomain_routing_enabled</key>
+        <value>true</value>
+    </entry>
+    <entry>
+        <key>relay_region_disabled_list</key>
+        <value></value>
+    </entry>
+    <entry>
+        <key>min_supported_version_code</key>
+        <value>1</value>
+    </entry>
+    <entry>
+        <key>recommended_version_code</key>
+        <value>1</value>
+    </entry>
+    <entry>
+        <key>review_prompt_min_successful_starts</key>
+        <value>3</value>
+    </entry>
+    <entry>
+        <key>review_prompt_enabled</key>
+        <value>true</value>
+    </entry>
+
+    <!-- Existing keys in RemoteConfigManager -->
+    <entry>
+        <key>show_discord_button</key>
+        <value>true</value>
+    </entry>
+    <entry>
+        <key>show_instagram_button</key>
+        <value>false</value>
+    </entry>
+    <entry>
+        <key>feature_custom_subdomain_enabled</key>
+        <value>false</value>
+    </entry>
+    <entry>
+        <key>feature_premium_purchase_enabled</key>
+        <value>false</value>
+    </entry>
+</defaultsMap>

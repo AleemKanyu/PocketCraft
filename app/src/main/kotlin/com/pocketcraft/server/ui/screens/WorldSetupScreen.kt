@@ -68,11 +68,15 @@ import com.pocketcraft.server.data.model.ServerType
 import com.pocketcraft.server.server.ServerJarManager
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
+import androidx.compose.runtime.collectAsState
+import com.pocketcraft.server.billing.BillingManager
+import com.pocketcraft.server.config.RemoteConfigManager
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.DuoToggle
 import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.components.ServerDescriptionField
 import com.pocketcraft.server.ui.components.ServerPhotoUpload
+import com.pocketcraft.server.ui.components.IpManagerCard
 import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
@@ -91,7 +95,8 @@ fun WorldSetupScreen(
     onVersionSelected: (String) -> Unit = {},
     onBack: () -> Unit,
     onMessage: (String) -> Unit,
-    onComplete: () -> Unit
+    onComplete: () -> Unit,
+    onNavigateToSignUp: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -109,7 +114,21 @@ fun WorldSetupScreen(
     }
     var photoChanged by remember(stateHolder.serverPhotoUrl) { mutableStateOf(false) }
     var worldSeed by remember(stateHolder.config.worldSeed) { mutableStateOf(stateHolder.config.worldSeed) }
-    var maxPlayersValue by remember(stateHolder.config.maxPlayers) { mutableStateOf(stateHolder.config.maxPlayers.toFloat()) }
+    val isPremium = remember {
+
+        val prefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
+        prefs.isPremiumUser || prefs.debugPremiumOverride
+    }
+    val customSubdomainEnabled by RemoteConfigManager.customSubdomainEnabled.collectAsState(initial = false)
+    val billingManager = remember { BillingManager.getInstance(context) }
+    val entitlement by billingManager.entitlement.collectAsState()
+
+    var maxPlayersValue by remember(stateHolder.config.maxPlayers) {
+        val initialVal = stateHolder.config.maxPlayers.toFloat()
+        mutableStateOf(if (!isPremium) initialVal.coerceAtMost(10f) else initialVal)
+    }
+    var showPremiumBottomSheet by remember { mutableStateOf(false) }
+
     var selectedVersion by remember(stateHolder.config.gameVersion) {
         mutableStateOf(if (createMode) "" else stateHolder.config.gameVersion)
     }
@@ -217,7 +236,7 @@ fun WorldSetupScreen(
                 serverType = selectedServerType,
                 serverVersionId = stateHolder.versionLabel,
                 folderName = targetWorld,
-                onProgress = { importProgress = it }
+                onProgress = { progress, _ -> importProgress = progress }
             )
             isImporting = false
             if (importResult.isFailure) {
@@ -234,7 +253,7 @@ fun WorldSetupScreen(
                 serverType = selectedServerType,
                 serverVersionId = stateHolder.versionLabel,
                 folderName = targetWorld, // WorldImporter handles internal mapping to DIM-1 if needed
-                onProgress = { importProgress = it }
+                onProgress = { progress, _ -> importProgress = progress }
             )
             isImporting = false
             if (importResult.isFailure) {
@@ -251,7 +270,7 @@ fun WorldSetupScreen(
                 serverType = selectedServerType,
                 serverVersionId = stateHolder.versionLabel,
                 folderName = targetWorld, // WorldImporter handles internal mapping to DIM1 if needed
-                onProgress = { importProgress = it }
+                onProgress = { progress, _ -> importProgress = progress }
             )
             isImporting = false
             if (importResult.isFailure) {
@@ -552,11 +571,30 @@ fun WorldSetupScreen(
                     Text("Max players: ${maxPlayersValue.roundToInt()}", fontWeight = FontWeight.SemiBold)
                     Slider(
                         value = maxPlayersValue,
-                        onValueChange = { maxPlayersValue = it },
+                        onValueChange = { newValue ->
+                            val rounded = newValue.roundToInt()
+                            if (rounded > 10 && !isPremium) {
+                                maxPlayersValue = 10f
+                                showPremiumBottomSheet = true
+                            } else {
+                                maxPlayersValue = newValue
+                            }
+                        },
                         valueRange = 1f..50f,
                         steps = 48
                     )
                 }
+
+                if (!createMode) {
+                    IpManagerCard(
+                        entitlement = entitlement,
+                        isPremiumUnlocked = isPremium,
+                        rolloutEnabled = customSubdomainEnabled,
+                        onMessage = onMessage,
+                        onNavigateToSignUp = onNavigateToSignUp
+                    )
+                }
+
 
 
                 SurfaceInfoText()
@@ -730,7 +768,15 @@ fun WorldSetupScreen(
             )
         }
     }
+
+    if (showPremiumBottomSheet) {
+        com.pocketcraft.server.ui.components.PremiumUpgradeBottomSheet(
+            onDismissRequest = { showPremiumBottomSheet = false },
+            onNavigateToSignUp = onNavigateToSignUp
+        )
+    }
 }
+
 
 @Composable
 private fun SurfaceInfoText() {

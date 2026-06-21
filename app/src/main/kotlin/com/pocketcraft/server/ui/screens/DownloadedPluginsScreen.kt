@@ -78,7 +78,7 @@ private enum class DownloadedContentTab(
 ) {
     MODS(
         icon = Icons.Default.Extension,
-        type = PluginManager.ContentType.PLUGINS
+        type = PluginManager.ContentType.MODS
     ),
     RESOURCE_PACKS(
         icon = Icons.Default.FolderZip,
@@ -117,39 +117,74 @@ fun DownloadedPluginsScreen(
     var isUploading by remember { mutableStateOf(false) }
     var isDownloading by remember { mutableStateOf(false) }
     var items by remember(stateHolder.activeWorld, selectedTab) { mutableStateOf<List<Plugin>>(emptyList()) }
-    val runtimeKey = remember(stateHolder.config.serverType, stateHolder.config.gameVersion) {
-        "${stateHolder.config.serverType.name.lowercase(Locale.US)}-${stateHolder.config.gameVersion}"
+    val runtimeKey = remember(stateHolder.activeWorld) {
+        PluginManager.getRuntimeKeyForWorld(context, stateHolder.activeWorld)
     }
 
-    fun currentTab(): DownloadedContentTab = DownloadedContentTab.entries[selectedTab]
+    val availableTabs = remember(stateHolder.config.serverType) {
+        when (stateHolder.config.serverType) {
+            com.pocketcraft.server.data.model.ServerType.FABRIC,
+            com.pocketcraft.server.data.model.ServerType.MODPACK -> DownloadedContentTab.entries.toList()
+            com.pocketcraft.server.data.model.ServerType.PAPER,
+            com.pocketcraft.server.data.model.ServerType.PURPUR -> listOf(DownloadedContentTab.RESOURCE_PACKS)
+        }
+    }
+
+    fun currentTab(): DownloadedContentTab = availableTabs[selectedTab.coerceIn(0, availableTabs.lastIndex)]
+
+    LaunchedEffect(availableTabs) {
+        if (selectedTab > availableTabs.lastIndex) {
+            selectedTab = 0
+        }
+    }
 
     fun refresh() {
-        items = when (currentTab().type) {
+        val rawItems = when (currentTab().type) {
             PluginManager.ContentType.PLUGINS -> PluginManager.listPlugins(context, stateHolder.activeWorld)
             PluginManager.ContentType.MODS -> PluginManager.listMods(context, stateHolder.activeWorld)
             PluginManager.ContentType.RESOURCE_PACKS -> PluginManager.listResourcePacks(context, stateHolder.activeWorld)
         }
+        items = rawItems.filterNot { plugin ->
+            plugin.name.contains("floodgate", ignoreCase = true) ||
+            plugin.fileName.contains("floodgate", ignoreCase = true)
+        }
     }
 
-    val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (uris.isNullOrEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
             isUploading = true
-            uploadProgress = 0
-            val result = PluginManager.installFromUri(
-                context = context,
-                uri = uri,
-                worldName = stateHolder.activeWorld,
-                type = currentTab().type,
-                runtimeKey = runtimeKey,
-                onProgress = { uploadProgress = it.coerceIn(0, 100) }
-            )
+            var successCount = 0
+            var failCount = 0
+            var lastErrorMessage: String? = null
+            uris.forEachIndexed { index, uri ->
+                uploadProgress = (index * 100) / uris.size
+                val result = PluginManager.installFromUri(
+                    context = context,
+                    uri = uri,
+                    worldName = stateHolder.activeWorld,
+                    type = currentTab().type,
+                    runtimeKey = runtimeKey,
+                    onProgress = { currentFileProgress ->
+                        uploadProgress = ((index * 100) + currentFileProgress) / uris.size
+                    }
+                )
+                result.onSuccess {
+                    successCount++
+                }.onFailure {
+                    failCount++
+                    lastErrorMessage = it.message
+                }
+            }
             isUploading = false
-            result.onSuccess {
-                refresh()
-                onMessage("${currentTab().label(s).dropLastWhile { it == 's' }} added. Restart the server to apply changes.")
-            }.onFailure {
-                onMessage(it.message ?: "Could not add file.")
+            refresh()
+            val label = currentTab().label(s).lowercase()
+            if (successCount > 0 && failCount == 0) {
+                onMessage("Successfully added $successCount $label. Restart the server to apply changes.")
+            } else if (successCount > 0 && failCount > 0) {
+                onMessage("Added $successCount $label, but $failCount failed (last error: ${lastErrorMessage ?: "unknown"}). Restart the server to apply changes.")
+            } else {
+                onMessage("Failed to add files: ${lastErrorMessage ?: "unknown"}")
             }
         }
     }
@@ -199,7 +234,7 @@ fun DownloadedPluginsScreen(
             containerColor = MaterialTheme.colorScheme.background,
             contentColor = PocketColors.Primary
         ) {
-            DownloadedContentTab.entries.forEachIndexed { index, tab ->
+            availableTabs.forEachIndexed { index, tab ->
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },

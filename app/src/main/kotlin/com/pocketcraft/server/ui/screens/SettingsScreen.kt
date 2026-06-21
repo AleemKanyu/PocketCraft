@@ -1,7 +1,9 @@
 package com.pocketcraft.server.ui.screens
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import com.pocketcraft.server.billing.BillingManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
@@ -31,6 +33,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -62,6 +65,7 @@ import com.pocketcraft.server.ui.util.ThemePreferenceStore
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.card3d
 import com.pocketcraft.server.ui.util.playAppHaptic
+import com.pocketcraft.server.ui.util.playTickHaptic
 import com.pocketcraft.server.util.RamUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -70,6 +74,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import com.pocketcraft.server.util.LocalAppStrings
 import androidx.compose.ui.text.input.KeyboardType
+import com.pocketcraft.server.feedback.FeedbackService
 
 data class LevelTypeOption(val displayName: String, val propertyValue: String)
 
@@ -121,11 +126,18 @@ fun SettingsScreen(
     onOpenLegalPage: () -> Unit = {},
     onDarkThemeChange: (Boolean) -> Unit = {},
     currentMobTheme: MobTheme = MobTheme.SKELETON,
-    onMobThemeChange: (MobTheme) -> Unit = {}
+    onMobThemeChange: (MobTheme) -> Unit = {},
+    initialActiveTab: Int? = null,
+    initialAuthTab: Int? = null
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val preferences = remember { AppPreferences(context) }
+    val billingManager = remember { BillingManager.getInstance(context) }
+    val isPremium by billingManager.isPremium.collectAsState()
+    val entitlement by billingManager.entitlement.collectAsState()
+    val premiumPurchaseEnabled by RemoteConfigManager.premiumPurchaseEnabled.collectAsState(initial = false)
+    val customSubdomainEnabled by RemoteConfigManager.customSubdomainEnabled.collectAsState(initial = false)
     val hapticFeedback = LocalHapticFeedback.current
     val appFeedbackEnabled by AppPreferencesStore.isSoundEnabledFlow(context).collectAsState(initial = true)
     
@@ -141,8 +153,23 @@ fun SettingsScreen(
     var driveActionBusy by remember { mutableStateOf(false) }
     var driveStatus by remember { mutableStateOf("") }
     var authTab by rememberSaveable { mutableStateOf(0) }
+
+    LaunchedEffect(initialActiveTab) {
+        initialActiveTab?.let { activeTab = it }
+    }
+    LaunchedEffect(initialAuthTab) {
+        initialAuthTab?.let { authTab = it }
+    }
+
     var showSignOutConfirm by remember { mutableStateOf(false) }
     var showDeleteAccountConfirm by remember { mutableStateOf(false) }
+    var showEmailVerifyDialog by remember { mutableStateOf(false) }
+    var emailVerifyBusy by remember { mutableStateOf(false) }
+    var emailVerifyError by remember { mutableStateOf("") }
+    var showDeleteReAuthDialog by remember { mutableStateOf(false) }
+    var deleteReAuthPassword by rememberSaveable { mutableStateOf("") }
+    var deleteReAuthPasswordVisible by rememberSaveable { mutableStateOf(false) }
+    var deleteReAuthError by remember { mutableStateOf("") }
     var accountActionError by remember { mutableStateOf("") }
     android.util.Log.d("POCKETCRAFT_TEST", "SettingsScreen composition! showSignOutConfirm=$showSignOutConfirm")
     val googleSignInLauncher = rememberLauncherForActivityResult(
@@ -191,9 +218,13 @@ fun SettingsScreen(
     var showUnsavedDialog by remember { mutableStateOf(false) }
     var showStorageManager by remember { mutableStateOf(false) }
     var showMaxPowerWarning by remember { mutableStateOf(false) }
+    var showBuildHeightWarning by remember { mutableStateOf(false) }
+    var pendingBuildHeightValue by remember { mutableIntStateOf(320) }
     var installedVersions by remember { mutableStateOf(scanInstalledVersions(context)) }
     var selectedForDeletion by remember { mutableStateOf<Set<String>>(emptySet()) }
     var isDeletingVersions by remember { mutableStateOf(false) }
+    var showThemeMaker by remember { mutableStateOf(false) }
+    var showPremiumBottomSheet by remember { mutableStateOf(false) }
 
     val hasUnsavedChanges by remember(currentState, savedState) {
         derivedStateOf {
@@ -220,13 +251,19 @@ fun SettingsScreen(
         }
     }
 
+    fun playTabHaptic() {
+        if (!appFeedbackEnabled) return
+        playTickHaptic(context)
+    }
+
     LaunchedEffect(Unit) {
         stateHolder.refreshAll()
     }
 
-    LaunchedEffect(stateHolder.config) {
+    LaunchedEffect(stateHolder.config, isPremium) {
+        val maxPlayersLimit = if (isPremium) 50 else 10
         val loadedState = SettingsState(
-            config = stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, 50)),
+            config = stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, maxPlayersLimit)),
             forceGamemode = stateHolder.readServerProperty("force-gamemode")?.toBoolean() ?: false,
             broadcastConsoleToOps = stateHolder.readServerProperty("broadcast-console-to-ops")?.toBoolean() ?: false,
             hideOnlinePlayers = stateHolder.readServerProperty("hide-online-players")?.toBoolean() ?: false,
@@ -245,6 +282,7 @@ fun SettingsScreen(
         }
     }
 
+
     BackHandler(enabled = hasUnsavedChanges) {
         showUnsavedDialog = true
     }
@@ -253,12 +291,17 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showUnsavedDialog = false },
             title = { Text("Unsaved Changes") },
-            text = { Text("You have unsaved settings. Revert back to original state?") },
+            text = { Text("You have unsaved settings. Undo changes and revert back to original state?") },
             confirmButton = {
-                TextButton(onClick = {
-                    showUnsavedDialog = false
-                    currentState = savedState
-                }) { Text("Revert") }
+                TextButton(
+                    onClick = {
+                        showUnsavedDialog = false
+                        currentState = savedState
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFFF4757))
+                ) {
+                    Text("Undo", color = Color(0xFFFF4757), fontWeight = FontWeight.Bold)
+                }
             },
             dismissButton = {
                 TextButton(onClick = { showUnsavedDialog = false }) {
@@ -287,6 +330,48 @@ fun SettingsScreen(
         )
     }
 
+    if (showBuildHeightWarning) {
+        AlertDialog(
+            onDismissRequest = { showBuildHeightWarning = false },
+            title = { Text("Extreme Build Height") },
+            text = { Text("Warning: Setting the maximum building height to more than 1000 might break your world, cause chunk generation failures, or result in severe performance issues/crashes. Do you want to proceed?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBuildHeightWarning = false
+                    currentState = currentState.copy(config = currentState.config.copy(maxBuildHeight = pendingBuildHeightValue))
+                }) {
+                    Text("Proceed", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBuildHeightWarning = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showThemeMaker) {
+        ThemeMakerBottomSheet(
+            onDismiss = { showThemeMaker = false },
+            onThemeApplied = { nextTheme ->
+                onMobThemeChange(nextTheme)
+            }
+        )
+    }
+
+    if (showPremiumBottomSheet) {
+        com.pocketcraft.server.ui.components.PremiumUpgradeBottomSheet(
+            onDismissRequest = { showPremiumBottomSheet = false },
+            onNavigateToSignUp = {
+                activeTab = 2
+                authTab = 1
+                showPremiumBottomSheet = false
+            }
+        )
+    }
+
+
     Box(modifier = Modifier.fillMaxSize()) {
         android.util.Log.d("POCKETCRAFT_TEST", "SettingsScreen Box block is composed!")
         Column(
@@ -312,7 +397,7 @@ fun SettingsScreen(
                 tabs.forEachIndexed { index, title ->
                     Tab(
                         selected = activeTab == index,
-                        onClick = { playHaptic(); activeTab = index },
+                        onClick = { playTabHaptic(); activeTab = index },
                         text = { Text(title, fontWeight = if (activeTab == index) FontWeight.ExtraBold else FontWeight.Bold, fontSize = 13.sp, maxLines = 1, softWrap = false) }
                     )
                 }
@@ -443,9 +528,19 @@ fun SettingsScreen(
                         SettingsSliderRow(
                             icon = Icons.Default.Height,
                             label = "Max Build Height",
-                            min = 64, max = 320, step = 16,
+                            min = 64, max = 2048, step = 16,
                             value = currentState.config.maxBuildHeight,
-                            onValueChange = { currentState = currentState.copy(config = currentState.config.copy(maxBuildHeight = it)) }
+                            warning = if (currentState.config.maxBuildHeight > 1000) {
+                                "⚠️ Warning: Building height > 1000 might break the world or cause performance issues."
+                            } else null,
+                            onValueChange = { height ->
+                                if (height > 1000 && currentState.config.maxBuildHeight <= 1000) {
+                                    pendingBuildHeightValue = height
+                                    showBuildHeightWarning = true
+                                } else {
+                                    currentState = currentState.copy(config = currentState.config.copy(maxBuildHeight = height))
+                                }
+                            }
                         )
                     }
                 }
@@ -554,6 +649,7 @@ fun SettingsScreen(
                     }
                 }
 
+
                 item {
                     AnimatedEntranceContainer(index = 8) {
                         SettingsSection("EXTRA SERVER OPTIONS", Icons.Default.Settings)
@@ -566,10 +662,18 @@ fun SettingsScreen(
                             label = activeS.maxPlayers,
                             min = 1, max = 50,
                             value = currentState.config.maxPlayers,
-                            onValueChange = { currentState = currentState.copy(config = currentState.config.copy(maxPlayers = it)) }
+                            onValueChange = { 
+                                if (it > 10 && !isPremium) {
+                                    showPremiumBottomSheet = true
+                                    currentState = currentState.copy(config = currentState.config.copy(maxPlayers = 10))
+                                } else {
+                                    currentState = currentState.copy(config = currentState.config.copy(maxPlayers = it))
+                                }
+                            }
                         )
                     }
                 }
+
                 item {
                     AnimatedEntranceContainer(index = 8) {
                         SettingsToggleRow(
@@ -705,8 +809,13 @@ fun SettingsScreen(
                             optionLabels = MobTheme.entries.associate { it.id to it.themeName },
                             selected = currentMobTheme.id,
                             onSelected = { selectedId ->
-                                onMobThemeChange(MobTheme.fromId(selectedId))
-                                playHaptic()
+                                val selectedTheme = MobTheme.fromId(selectedId)
+                                if (selectedTheme == MobTheme.CUSTOM && !isPremium) {
+                                    showPremiumBottomSheet = true
+                                } else {
+                                    onMobThemeChange(selectedTheme)
+                                    playHaptic()
+                                }
                             }
                         )
                     }
@@ -716,15 +825,42 @@ fun SettingsScreen(
                         GameCard(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onMessage("More themes coming soon!") },
+                                .clickable {
+                                    if (isPremium) {
+                                        showThemeMaker = true
+                                    } else {
+                                        showPremiumBottomSheet = true
+                                    }
+                                },
                             contentPadding = PaddingValues(vertical = 16.dp)
                         ) {
                             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Text("More themes coming soon...", fontWeight = FontWeight.SemiBold)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Palette,
+                                        contentDescription = null,
+                                        tint = PocketColors.Primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text("Custom Theme Maker", fontWeight = FontWeight.SemiBold, color = PocketColors.TextPrimary)
+                                    if (!isPremium) {
+                                        Spacer(Modifier.width(4.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = "Locked",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
+
                 item {
                     AnimatedEntranceContainer(index = 3) {
                         SettingsToggleRow(
@@ -746,23 +882,27 @@ fun SettingsScreen(
                             icon = "💬",
                             label = "Floating Chat on All Screens",
                             description = "Enable access to game chat overlay from any screen",
-                            checked = isFloatingChatFlowState,
+                            checked = isFloatingChatFlowState && isPremium,
                             onToggle = { enabled ->
-                                preferences.isFloatingChatEnabled = enabled
-                                scope.launch {
-                                    AppPreferencesStore.setFloatingChatEnabled(context, enabled)
-                                    if (firebaseUser != null) {
-                                        try {
-                                            DriveBackupManager.uploadAppSettingsToFirebase(context, firebaseUser!!)
-                                        } catch (e: Exception) {
-                                            // Silent fail
+                                if (!isPremium) {
+                                    showPremiumBottomSheet = true
+                                } else {
+                                    preferences.isFloatingChatEnabled = enabled
+                                    scope.launch {
+                                        AppPreferencesStore.setFloatingChatEnabled(context, enabled)
+                                        if (firebaseUser != null) {
+                                            try {
+                                                DriveBackupManager.uploadAppSettingsToFirebase(context, firebaseUser!!)
+                                            } catch (e: Exception) {
+                                                // Silent fail
+                                            }
                                         }
-                                    }
-                                    if (signedInAccount != null) {
-                                        try {
-                                            DriveBackupManager.uploadAppSettings(context, signedInAccount!!)
-                                        } catch (e: Exception) {
-                                            // Silent fail
+                                        if (signedInAccount != null) {
+                                            try {
+                                                DriveBackupManager.uploadAppSettings(context, signedInAccount!!)
+                                            } catch (e: Exception) {
+                                                // Silent fail
+                                            }
                                         }
                                     }
                                 }
@@ -834,15 +974,177 @@ fun SettingsScreen(
                 }
             }
 
-            // --- TAB 2: ABOUT ---
+            // --- TAB 2: ACCOUNT ---
             if (activeTab == 2) {
                 item {
                     AnimatedEntranceContainer(index = 0) {
-                        SettingsSection("GOOGLE ACCOUNT", Icons.Default.AccountCircle, isFirstSection = true)
+                        SettingsSection("MEMBERSHIP SUBSCRIPTION", Icons.Default.Star, isFirstSection = true)
                     }
                 }
                 item {
                     AnimatedEntranceContainer(index = 1) {
+                        GameCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(
+                                            Brush.verticalGradient(
+                                                listOf(
+                                                    PocketColors.Primary.copy(alpha = 0.18f),
+                                                    PocketColors.PrimaryMuted.copy(alpha = 0.30f)
+                                                )
+                                            )
+                                        )
+                                        .border(1.dp, PocketColors.Primary.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Star,
+                                        contentDescription = null,
+                                        tint = PocketColors.Primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                AccountStatusChip(
+                                    label = if (isPremium) {
+                                        if (entitlement.isSupportive) "Member Active" else "Pro Active"
+                                    } else "Free Tier",
+                                    tone = if (isPremium) PocketColors.Primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                Text(
+                                    text = if (isPremium) {
+                                        if (entitlement.isSupportive) "Member Plan" else "Pro Plan"
+                                    } else "Upgrade Membership",
+                                    modifier = Modifier.fillMaxWidth(),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 15.sp,
+                                    fontFamily = Monocraft,
+                                    textAlign = TextAlign.Center
+                                )
+
+                                if (isPremium) {
+                                    val expiryDate = entitlement.expiresAtEpochMillis?.let {
+                                        val date = java.util.Date(it)
+                                        java.text.SimpleDateFormat("MMMM dd, yyyy", java.util.Locale.getDefault()).format(date)
+                                    }
+                                    if (expiryDate != null) {
+                                        Text(
+                                            text = "Renews on: $expiryDate",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PocketColors.Primary,
+                                            fontFamily = Monocraft,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Text(
+                                    text = if (isPremium) {
+                                        if (entitlement.isSupportive) {
+                                            "Thank you for becoming a Member. Your support helps us maintain PocketCraft and keep improving the project."
+                                        } else {
+                                            "You are on Pro. Upgrade to Member any time if you would like to support PocketCraft more directly."
+                                        }
+                                    } else {
+                                        "Support server maintenance & cover hosting costs. Unlock up to 50 players, unlimited worlds, and custom theme customization."
+                                    },
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = 14.sp,
+                                    textAlign = TextAlign.Center
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                if (entitlement.isSupportive) {
+                                    DuoButton(
+                                        text = "MANAGE SUBSCRIPTION",
+                                        onClick = {
+                                            val subscriptionSku = when {
+                                                entitlement.isSupportive -> BillingManager.PRODUCT_SUPPORTIVE
+                                                else -> BillingManager.PRODUCT_PREMIUM
+                                            }
+                                            runCatching {
+                                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                                    data = Uri.parse("https://play.google.com/store/account/subscriptions?package=${context.packageName}&sku=$subscriptionSku")
+                                                }
+                                                context.startActivity(intent)
+                                            }.onFailure {
+                                                runCatching {
+                                                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                                                        data = Uri.parse("https://play.google.com/store/account/subscriptions")
+                                                    }
+                                                    context.startActivity(intent)
+                                                }.onFailure {
+                                                    onMessage("Could not open Play Store subscription page.")
+                                                }
+                                            }
+                                        },
+                                        variant = DuoButtonVariant.Secondary,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        minHeight = 40.dp
+                                    )
+                                } else if (isPremium && premiumPurchaseEnabled) {
+                                    DuoButton(
+                                        text = "UPGRADE TO MEMBER",
+                                        onClick = {
+                                            val activity = context as? Activity
+                                            if (activity != null) {
+                                                showPremiumBottomSheet = true
+                                            } else {
+                                                onMessage("Could not launch purchase: invalid activity.")
+                                            }
+                                        },
+                                        variant = DuoButtonVariant.Primary,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        minHeight = 40.dp
+                                    )
+                                } else if (premiumPurchaseEnabled) {
+                                    DuoButton(
+                                        text = "VIEW MEMBERSHIP TIERS",
+                                        onClick = {
+                                            val activity = context as? Activity
+                                            if (activity != null) {
+                                                showPremiumBottomSheet = true
+                                            } else {
+                                                onMessage("Could not launch purchase: invalid activity.")
+                                            }
+                                        },
+                                        variant = DuoButtonVariant.Primary,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        minHeight = 40.dp
+                                    )
+                                } else {
+                                    Text(
+                                        text = "Subscriptions are still in staged rollout.",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+
+                item {
+                    AnimatedEntranceContainer(index = 2) {
+                        SettingsSection("GOOGLE ACCOUNT", Icons.Default.AccountCircle, isFirstSection = false)
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 3) {
                         GameCard(modifier = Modifier.fillMaxWidth()) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -1028,8 +1330,19 @@ fun SettingsScreen(
                                                         result
                                                             .onSuccess { user ->
                                                                 firebaseUser = user
-                                                                driveStatus = "Signed in as ${user.email ?: user.displayName.orEmpty()}."
                                                                 passwordInput = ""
+                                                                // Send verification email, then show verify dialog
+                                                                AccountManager.sendEmailVerification { verifyResult ->
+                                                                    verifyResult
+                                                                        .onSuccess {
+                                                                            driveStatus = "Verification email sent to ${user.email ?: emailInput.trim()}. Please verify before continuing. If you don't see it, check your spam folder too."
+                                                                            showEmailVerifyDialog = true
+                                                                        }
+                                                                        .onFailure {
+                                                                            driveStatus = "Account created. Verification email could not be sent: ${it.message}"
+                                                                        }
+                                                                    authBusy = false
+                                                                }
                                                                 scope.launch {
                                                                     try {
                                                                         driveStatus = "Synchronizing app settings..."
@@ -1072,22 +1385,27 @@ fun SettingsScreen(
                                                         result
                                                             .onSuccess { user ->
                                                                 firebaseUser = user
-                                                                driveStatus = "Account created for ${user.email ?: emailInput.trim()}."
                                                                 passwordInput = ""
-                                                                scope.launch {
-                                                                    try {
-                                                                        driveStatus = "Synchronizing app settings..."
-                                                                        DriveBackupManager.uploadAppSettingsToFirebase(context, user)
-                                                                        driveStatus = "Account created for ${user.email ?: emailInput.trim()}. Settings backed up to cloud."
-                                                                    } catch (e: Exception) {
-                                                                        driveStatus = "Account created, but settings sync failed: ${e.message}"
-                                                                    }
+                                                                // Send verification email, then prompt user to confirm
+                                                                AccountManager.sendEmailVerification { verifyResult ->
+                                                                    verifyResult
+                                                                        .onSuccess {
+                                                                            driveStatus = "Verification email sent to ${user.email ?: emailInput.trim()}. Please verify to activate your account. If you don't see it, check your spam folder too."
+                                                                            showEmailVerifyDialog = true
+                                                                        }
+                                                                        .onFailure {
+                                                                            driveStatus = "Account created. Verification email could not be sent: ${it.message}"
+                                                                            scope.launch {
+                                                                                try { DriveBackupManager.uploadAppSettingsToFirebase(context, user) } catch (_: Exception) {}
+                                                                            }
+                                                                        }
+                                                                    authBusy = false
                                                                 }
                                                             }
                                                             .onFailure { error ->
                                                                 driveStatus = error.message ?: "Could not create account."
+                                                                authBusy = false
                                                             }
-                                                        authBusy = false
                                                     }
                                                 } catch (e: Exception) {
                                                     driveStatus = e.message ?: "Registration process error."
@@ -1191,11 +1509,13 @@ fun SettingsScreen(
                                         text = if (authBusy) "WORKING..." else "DELETE ACCOUNT",
                                         onClick = {
                                             android.util.Log.d("POCKETCRAFT_TEST", "DELETE ACCOUNT button onClick triggered")
-                                            accountActionError = ""
-                                            showDeleteAccountConfirm = true
+                                            deleteReAuthPassword = ""
+                                            deleteReAuthError = ""
+                                            deleteReAuthPasswordVisible = false
+                                            showDeleteReAuthDialog = true
                                         },
                                         enabled = !authBusy && !driveActionBusy,
-                                        variant = DuoButtonVariant.Secondary,
+                                        variant = DuoButtonVariant.Warning,
                                         modifier = Modifier.fillMaxWidth(),
                                         minHeight = 40.dp
                                     )
@@ -1205,6 +1525,27 @@ fun SettingsScreen(
                     }
                 }
 
+                if (entitlement.isPremium && !entitlement.isSupportive) {
+                    item {
+                        AnimatedEntranceContainer(index = 4) {
+                            ProDiscordCard(
+                                entitlement = entitlement,
+                                onMessage = onMessage
+                            )
+                        }
+                    }
+                }
+
+                if (entitlement.isSupportive) {
+                    item {
+                        AnimatedEntranceContainer(index = 4) {
+                            SupportiveToolsCard(
+                                entitlement = entitlement,
+                                onMessage = onMessage
+                            )
+                        }
+                    }
+                }
             }
 
             // --- TAB 3: ABOUT ---
@@ -1288,10 +1629,20 @@ fun SettingsScreen(
                                     onClick = {
                                         scope.launch {
                                             submittingFeedback = true
-                                            delay(1000)
-                                            feedbackText = ""
+                                            val result = FeedbackService.submitFeedback(
+                                                context = context,
+                                                message = feedbackText,
+                                                serverVersion = stateHolder.config.gameVersion.ifBlank { "unknown" }
+                                            )
                                             submittingFeedback = false
-                                            onMessage("Feedback sent! Thank you.")
+                                            result
+                                                .onSuccess {
+                                                    feedbackText = ""
+                                                    onMessage("Feedback sent with app logs. Thank you.")
+                                                }
+                                                .onFailure { error ->
+                                                    onMessage(error.message ?: "Could not send feedback right now.")
+                                                }
                                         }
                                     },
                                     modifier = Modifier.fillMaxWidth()
@@ -1342,6 +1693,10 @@ fun SettingsScreen(
                                     Column {
                                         Text("PocketCraft", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, fontFamily = Monocraft)
                                         Text("Version ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        firebaseUser?.let {
+                                            androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(2.dp))
+                                            Text("UID: ${it.uid}", fontSize = 9.sp, fontFamily = Monocraft, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                                        }
                                     }
                                 }
                                 Text("Run full Minecraft Java Edition servers directly on your Android device.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1440,64 +1795,85 @@ fun SettingsScreen(
                     }
                     
                     if (saveStatus == SaveStatus.DIRTY || saveStatus == SaveStatus.SAVING || saveStatus == SaveStatus.FAILED) {
-                        Button(
-                            onClick = {
-                                playHaptic(doublePulse = true)
-                                scope.launch {
-                                    saveStatus = SaveStatus.SAVING
-                                    val normalizedLevelType = normalizeWorldType(currentState.levelType)
-                                    val nextConfig = currentState.config.copy(
-                                        viewDistance = currentState.config.viewDistance.coerceIn(3, 32),
-                                        simulationDistance = currentState.config.simulationDistance.coerceIn(3, 32),
-                                        levelType = normalizedLevelType
-                                    )
-                                    val result = runCatching {
-                                        stateHolder.saveSettings(nextConfig)
-                                    }
-                                    if (result.isSuccess) {
-                                        withContext(Dispatchers.IO) {
-                                            stateHolder.writeServerProperty("force-gamemode", currentState.forceGamemode.toString())
-                                            stateHolder.writeServerProperty("broadcast-console-to-ops", currentState.broadcastConsoleToOps.toString())
-                                            stateHolder.writeServerProperty("hide-online-players", currentState.hideOnlinePlayers.toString())
-                                            stateHolder.applyOptimizationPreset(currentState.optimizationPreset)
-                                        }
-                                        preferences.autoRestart = currentState.autoRestartEnabled
-                                        preferences.isMaxPowerMode = currentState.maxPowerEnabled
-                                        preferences.forceExternalJvm = currentState.forceExternalJvm
-                                        
-                                        val savedStateSnapshot = currentState.copy(
-                                            config = nextConfig,
-                                            levelType = normalizedLevelType,
-                                            autoRestartEnabled = currentState.autoRestartEnabled,
-                                            maxPowerEnabled = currentState.maxPowerEnabled,
-                                            forceExternalJvm = currentState.forceExternalJvm
-                                        )
-                                        currentState = savedStateSnapshot
-                                        savedState = savedStateSnapshot
-                                        saveStatus = SaveStatus.SAVED
-                                        delay(1500)
-                                        if (saveStatus == SaveStatus.SAVED) {
-                                            saveStatus = SaveStatus.IDLE
-                                        }
-                                    } else {
-                                        saveStatus = SaveStatus.FAILED
-                                        onMessage(result.exceptionOrNull()?.message ?: "Failed to save settings")
-                                    }
-                                }
-                            },
-                            enabled = saveStatus != SaveStatus.SAVING,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (saveStatus == SaveStatus.FAILED) Color(0xFFFF4757) else PocketColors.Primary
-                            ),
-                            shape = RoundedCornerShape(12.dp)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = when (saveStatus) {
-                                    SaveStatus.SAVING -> LocalAppStrings.current.saving
-                                    SaveStatus.FAILED -> "Retry"
-                                    else -> LocalAppStrings.current.save
+                            if (saveStatus == SaveStatus.DIRTY || saveStatus == SaveStatus.FAILED) {
+                                Button(
+                                    onClick = {
+                                        playHaptic()
+                                        currentState = savedState
+                                        saveStatus = SaveStatus.IDLE
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFFFF4757),
+                                        contentColor = Color.White
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("Undo")
                                 }
-                            )
+                            }
+                            Button(
+                                onClick = {
+                                    playHaptic(doublePulse = true)
+                                    scope.launch {
+                                        saveStatus = SaveStatus.SAVING
+                                        val normalizedLevelType = normalizeWorldType(currentState.levelType)
+                                        val nextConfig = currentState.config.copy(
+                                            viewDistance = currentState.config.viewDistance.coerceIn(3, 32),
+                                            simulationDistance = currentState.config.simulationDistance.coerceIn(3, 32),
+                                            levelType = normalizedLevelType
+                                        )
+                                        val result = runCatching {
+                                            stateHolder.saveSettings(nextConfig)
+                                        }
+                                        if (result.isSuccess) {
+                                            withContext(Dispatchers.IO) {
+                                                stateHolder.writeServerProperty("force-gamemode", currentState.forceGamemode.toString())
+                                                stateHolder.writeServerProperty("broadcast-console-to-ops", currentState.broadcastConsoleToOps.toString())
+                                                stateHolder.writeServerProperty("hide-online-players", currentState.hideOnlinePlayers.toString())
+                                                stateHolder.applyOptimizationPreset(currentState.optimizationPreset)
+                                            }
+                                            preferences.autoRestart = currentState.autoRestartEnabled
+                                            preferences.isMaxPowerMode = currentState.maxPowerEnabled
+                                            preferences.forceExternalJvm = currentState.forceExternalJvm
+                                            
+                                            val savedStateSnapshot = currentState.copy(
+                                                config = nextConfig,
+                                                levelType = normalizedLevelType,
+                                                autoRestartEnabled = currentState.autoRestartEnabled,
+                                                maxPowerEnabled = currentState.maxPowerEnabled,
+                                                forceExternalJvm = currentState.forceExternalJvm
+                                            )
+                                            currentState = savedStateSnapshot
+                                            savedState = savedStateSnapshot
+                                            saveStatus = SaveStatus.SAVED
+                                            delay(1500)
+                                            if (saveStatus == SaveStatus.SAVED) {
+                                                saveStatus = SaveStatus.IDLE
+                                            }
+                                        } else {
+                                            saveStatus = SaveStatus.FAILED
+                                            onMessage(result.exceptionOrNull()?.message ?: "Failed to save settings")
+                                        }
+                                    }
+                                },
+                                enabled = saveStatus != SaveStatus.SAVING,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (saveStatus == SaveStatus.FAILED) Color(0xFFFF4757) else PocketColors.Primary
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = when (saveStatus) {
+                                        SaveStatus.SAVING -> LocalAppStrings.current.saving
+                                        SaveStatus.FAILED -> "Retry"
+                                        else -> LocalAppStrings.current.save
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -1709,6 +2085,251 @@ fun SettingsScreen(
                 }
             }
         }
+        // ── Email Verification Dialog (shown after account creation) ─────────
+        if (showEmailVerifyDialog) {
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { if (!emailVerifyBusy) showEmailVerifyDialog = false },
+                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.5f))
+                        .clickable { if (!emailVerifyBusy) showEmailVerifyDialog = false },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .width(310.dp)
+                            .clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null
+                            ) {}
+                            .border(1.dp, PocketColors.Primary.copy(alpha = 0.25f), RoundedCornerShape(20.dp)),
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 8.dp
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                    .background(PocketColors.Primary.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MarkEmailRead,
+                                    contentDescription = null,
+                                    tint = PocketColors.Primary,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+                            Text(
+                                "Verify your email",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 17.sp,
+                                fontFamily = Monocraft
+                            )
+                            Text(
+                                "We sent a verification link to ${firebaseUser?.email.orEmpty()}. Open the link in your email app, then tap \"I've Verified\" below. If you don't see it, check your spam folder too.",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                lineHeight = 18.sp
+                            )
+                            if (emailVerifyError.isNotBlank()) {
+                                Text(
+                                    emailVerifyError,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.error,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                            DuoButton(
+                                text = if (emailVerifyBusy) "CHECKING..." else "I'VE VERIFIED",
+                                enabled = !emailVerifyBusy,
+                                onClick = {
+                                    emailVerifyBusy = true
+                                    emailVerifyError = ""
+                                    AccountManager.reloadAndCheckVerified { result ->
+                                        result
+                                            .onSuccess { verified ->
+                                                if (verified) {
+                                                    showEmailVerifyDialog = false
+                                                    driveStatus = "Email verified! Account ready."
+                                                    scope.launch {
+                                                        try {
+                                                            firebaseUser?.let {
+                                                                DriveBackupManager.uploadAppSettingsToFirebase(context, it)
+                                                            }
+                                                        } catch (_: Exception) {}
+                                                    }
+                                                } else {
+                                                    emailVerifyError = "Email not verified yet. Please click the link in your inbox first."
+                                                }
+                                            }
+                                            .onFailure { emailVerifyError = it.message ?: "Could not check verification status." }
+                                        emailVerifyBusy = false
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                minHeight = 44.dp
+                            )
+                            DuoButton(
+                                text = "RESEND EMAIL",
+                                variant = DuoButtonVariant.Secondary,
+                                enabled = !emailVerifyBusy,
+                                onClick = {
+                                    emailVerifyBusy = true
+                                    AccountManager.sendEmailVerification { result ->
+                                        emailVerifyError = result.fold(
+                                            onSuccess = { "Verification email resent to ${firebaseUser?.email.orEmpty()}." },
+                                            onFailure = { it.message ?: "Could not resend email." }
+                                        )
+                                        emailVerifyBusy = false
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                minHeight = 40.dp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Delete Account: Password Re-Auth Dialog ────────────────────────────
+        if (showDeleteReAuthDialog) {
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { if (!authBusy) showDeleteReAuthDialog = false },
+                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.5f))
+                        .clickable { if (!authBusy) showDeleteReAuthDialog = false },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .width(310.dp)
+                            .clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null
+                            ) {}
+                            .border(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.22f), RoundedCornerShape(20.dp)),
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 8.dp
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                    .background(MaterialTheme.colorScheme.errorContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteForever,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+                            Text(
+                                "Confirm Deletion",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 17.sp,
+                                fontFamily = Monocraft,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                "This permanently deletes your account, synced settings, and cloud backups. Enter your password to confirm.",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                lineHeight = 18.sp
+                            )
+                            ThemedAccountField(
+                                value = deleteReAuthPassword,
+                                onValueChange = { deleteReAuthPassword = it },
+                                label = "Password",
+                                leadingIcon = Icons.Default.Lock,
+                                trailingIcon = if (deleteReAuthPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                onTrailingIconClick = { deleteReAuthPasswordVisible = !deleteReAuthPasswordVisible },
+                                visualTransformation = if (deleteReAuthPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            if (deleteReAuthError.isNotBlank()) {
+                                Text(
+                                    deleteReAuthError,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.error,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                DuoButton(
+                                    text = "CANCEL",
+                                    onClick = { showDeleteReAuthDialog = false },
+                                    variant = DuoButtonVariant.Primary,
+                                    modifier = Modifier.weight(1f),
+                                    minHeight = 40.dp
+                                )
+                                DuoButton(
+                                    text = if (authBusy) "DELETING..." else "DELETE",
+                                    enabled = !authBusy && deleteReAuthPassword.isNotBlank(),
+                                    onClick = {
+                                        authBusy = true
+                                        deleteReAuthError = ""
+                                        accountActionError = ""
+                                        scope.launch {
+                                            val result = AccountManager.reauthenticateAndDeleteAccount(context, deleteReAuthPassword)
+                                            result.fold(
+                                                onSuccess = { message ->
+                                                    showDeleteReAuthDialog = false
+                                                    firebaseUser = null
+                                                    signedInAccount = null
+                                                    passwordInput = ""
+                                                    emailInput = ""
+                                                    deleteReAuthPassword = ""
+                                                    accountActionError = ""
+                                                    driveStatus = message
+                                                    onMessage(message)
+                                                },
+                                                onFailure = { error ->
+                                                    deleteReAuthError = error.message ?: "Could not delete account. Please try again."
+                                                }
+                                            )
+                                            authBusy = false
+                                        }
+                                    },
+                                    variant = DuoButtonVariant.Warning,
+                                    modifier = Modifier.weight(1f),
+                                    minHeight = 40.dp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Old simple delete confirm (kept for Google-only accounts) ──────────
         if (showDeleteAccountConfirm) {
             androidx.compose.ui.window.Dialog(
                 onDismissRequest = { showDeleteAccountConfirm = false },
@@ -1770,7 +2391,7 @@ fun SettingsScreen(
                                     DuoButton(
                                         text = "CANCEL",
                                         onClick = { showDeleteAccountConfirm = false },
-                                        variant = DuoButtonVariant.Secondary,
+                                        variant = DuoButtonVariant.Primary,
                                         modifier = Modifier.weight(1f),
                                         minHeight = 36.dp
                                     )
@@ -1793,8 +2414,6 @@ fun SettingsScreen(
                                                         onMessage(message)
                                                     },
                                                     onFailure = { error ->
-                                                        // Show the error visibly in the signed-in
-                                                        // section AND as a snackbar so it's always seen.
                                                         val msg = when (error) {
                                                             is com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException ->
                                                                 "For security, sign out and sign back in before deleting your account."
@@ -1807,7 +2426,7 @@ fun SettingsScreen(
                                                 authBusy = false
                                             }
                                         },
-                                        variant = DuoButtonVariant.Danger,
+                                        variant = DuoButtonVariant.Warning,
                                         modifier = Modifier.weight(1f),
                                         minHeight = 36.dp
                                     )
@@ -2162,6 +2781,7 @@ private fun SettingsSliderRow(
     value: Int,
     step: Int = 1,
     enabled: Boolean = true,
+    warning: String? = null,
     onValueChange: (Int) -> Unit
 ) {
     var internalValue by remember(value) { mutableIntStateOf(value) }
@@ -2217,6 +2837,15 @@ private fun SettingsSliderRow(
                 valueRange = min.toFloat()..max.toFloat(),
                 enabled = enabled
             )
+            warning?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFFFF4757),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                )
+            }
             hint?.let {
                 Text(
                     text = it,

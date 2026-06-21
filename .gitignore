@@ -40,3 +40,6 @@ local.properties
 **.apk
 node_modules/
 .git_backup_*/
+.env
+*.env
+window_dump.xml

@@ -147,6 +147,27 @@ fun ServerScreen(
     val context = LocalContext.current
     val isFloatingChatEnabled by AppPreferencesStore.isFloatingChatEnabledFlow(context).collectAsState(initial = false)
     val isFloatingChatFirstTimeShown by AppPreferencesStore.isFloatingChatFirstTimeShownFlow(context).collectAsState(initial = false)
+    val billingManager = remember { com.pocketcraft.server.billing.BillingManager.getInstance(context) }
+    val isPremium by billingManager.isPremium.collectAsState()
+    val entitlement by billingManager.entitlement.collectAsState()
+    var showPremiumBottomSheet by remember { mutableStateOf(false) }
+    var showUpgradeCelebrationAnimation by remember { mutableStateOf(false) }
+    var showDiscordBadgePopup by remember { mutableStateOf(false) }
+    var hasInitiallyCheckedPremium by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isPremium) {
+        if (!hasInitiallyCheckedPremium) {
+            hasInitiallyCheckedPremium = true
+            return@LaunchedEffect
+        }
+        if (isPremium) {
+            showUpgradeCelebrationAnimation = true
+        } else {
+            if (currentMobTheme == MobTheme.CUSTOM) {
+                onMobThemeChange(MobTheme.CREEPER)
+            }
+        }
+    }
     val appFeedbackEnabled by AppPreferencesStore.isSoundEnabledFlow(context).collectAsState(initial = true)
     var currentTab by remember { mutableStateOf(PocketTab.HOME) }
     var selectedPlayer by remember { mutableStateOf<PlayerInfo?>(null) }
@@ -159,6 +180,8 @@ fun ServerScreen(
     var showSetupLoading by remember { mutableStateOf(false) }
     var setupLoadingProgress by remember { mutableStateOf(0f) }
     val navigationHistory = remember { mutableStateListOf<PocketTab>() }
+    var settingsInitialActiveTab by remember { mutableStateOf<Int?>(null) }
+    var settingsInitialAuthTab by remember { mutableStateOf<Int?>(null) }
 
     fun navigateToTab(tab: PocketTab) {
         if (currentTab != tab) {
@@ -168,6 +191,8 @@ fun ServerScreen(
         }
         currentTab = tab
         selectedPlayer = null
+        settingsInitialActiveTab = null
+        settingsInitialAuthTab = null
     }
 
     fun goBack(): Boolean {
@@ -268,6 +293,9 @@ fun ServerScreen(
                     scope.launch {
                         showMessage(stateHolder.updateRelayHost(host))
                     }
+                },
+                onPremiumUpgradeClick = {
+                    showPremiumBottomSheet = true
                 }
             )
         },
@@ -306,13 +334,25 @@ fun ServerScreen(
                             onVersionSelected = onVersionSelected,
                             onBack = { showWorldSetupPage = false },
                             onMessage = showMessage,
-                            onComplete = { showWorldSetupPage = false }
+                            onComplete = { showWorldSetupPage = false },
+                            onNavigateToSignUp = {
+                                showWorldSetupPage = false
+                                settingsInitialActiveTab = 2
+                                settingsInitialAuthTab = 1
+                                navigateToTab(PocketTab.SETTINGS)
+                            }
                         )
 
                         showServerDetailsPage -> ServerDetailsScreen(
                             stateHolder = stateHolder,
                             onBack = { showServerDetailsPage = false },
-                            onMessage = showMessage
+                            onMessage = showMessage,
+                            onNavigateToSignUp = {
+                                showServerDetailsPage = false
+                                settingsInitialActiveTab = 2
+                                settingsInitialAuthTab = 1
+                                navigateToTab(PocketTab.SETTINGS)
+                            }
                         )
 
                         selectedPlayer != null -> PlayerDetailScreen(
@@ -377,6 +417,11 @@ fun ServerScreen(
                                             openWorldSetup(createMode = true)
                                             currentTab = PocketTab.HOME
                                         },
+                                        onNavigateToSignUp = {
+                                            settingsInitialActiveTab = 2
+                                            settingsInitialAuthTab = 1
+                                            navigateToTab(PocketTab.SETTINGS)
+                                        },
                                         topContentBelowServerCard = homeTopContent
                                     )
 
@@ -417,7 +462,9 @@ fun ServerScreen(
                                         },
                                         onDarkThemeChange = onDarkThemeChange,
                                         currentMobTheme = currentMobTheme,
-                                        onMobThemeChange = onMobThemeChange
+                                        onMobThemeChange = onMobThemeChange,
+                                        initialActiveTab = settingsInitialActiveTab,
+                                        initialAuthTab = settingsInitialAuthTab
                                     )
                                 }
                             }
@@ -516,10 +563,13 @@ fun ServerScreen(
                     val currentSize = stateHolder.logs.size
                     if (currentSize > lastLogSize) {
                         if (!showFloatingChatSheet) {
-                            val chatRegex = Regex("""<(\w+)>\s+(.*)""")
-                            val broadcastRegex = Regex("""\[Server\]\s+(.*)""")
-                            val consoleWhisperRegex = Regex("""\[(?:Server|console):\s+Whispered\s+(.*)\s+to\s+(\w+)\]""")
-                            val playerWhisperRegex = Regex("""(\w+)\s+whispered\s+to\s+you:\s+(.*)""")
+                            val chatRegex = Regex("""^(?:\[Not Secure\]\s*)?<([^>]+)>\s+(.*)""")
+                            val broadcastRegex = Regex("""^(?:\[Not Secure\]\s*)?\[(?:Server|Rcon)\]\s+(.*)""")
+                            val consoleWhisperRegex = Regex("""^(?:\[Not Secure\]\s*)?\[(?:[Ss]erver|[Cc]onsole|[Rr][Cc][Oo][Nn]):\s+Whispered\s+(.*)\s+to\s+(\S+)\]""")
+                            val consoleWhisperNoBracketsRegex = Regex("""^(?:\[Not Secure\]\s*)?Whispered\s+(.*)\s+to\s+(\S+)""")
+                            val youWhisperRegex = Regex("""^(?:\[Not Secure\]\s*)?You\s+whisper(?:ed)?\s+to\s+(\S+):\s+(.*)""")
+                            val playerWhisperRegex = Regex("""^(?:\[Not Secure\]\s*)?(\S+)\s+whisper(?:s|ed)?\s+to\s+(?:you|[Ss]erver|[Cc]onsole):\s+(.*)""")
+                            val playerWhisperArrowRegex = Regex("""^(?:\[Not Secure\]\s*)?\[(\S+)\s+->\s+(?:[Yy]ou|[Ss]erver|[Cc]onsole)\]\s+(.*)""")
 
                             var newChatsCount = 0
                             for (i in lastLogSize until currentSize) {
@@ -528,7 +578,10 @@ fun ServerScreen(
                                 val isChat = chatRegex.containsMatchIn(cleanLine) ||
                                              broadcastRegex.containsMatchIn(cleanLine) ||
                                              consoleWhisperRegex.containsMatchIn(cleanLine) ||
-                                             playerWhisperRegex.containsMatchIn(cleanLine)
+                                             consoleWhisperNoBracketsRegex.containsMatchIn(cleanLine) ||
+                                             youWhisperRegex.containsMatchIn(cleanLine) ||
+                                             playerWhisperRegex.containsMatchIn(cleanLine) ||
+                                             playerWhisperArrowRegex.containsMatchIn(cleanLine)
                                 if (isChat) {
                                     newChatsCount++
                                 }
@@ -633,7 +686,7 @@ fun ServerScreen(
                                     if (appFeedbackEnabled) {
                                         scope.launch { playAppHaptic(context, hapticFeedback, false) }
                                     }
-                                    if (!isFloatingChatFirstTimeShown) {
+                                    if (!isFloatingChatFirstTimeShown && isPremium) {
                                         // First time: show the feature intro dialog, which will open chat on dismiss
                                         showFirstTimeChatIntro = true
                                     } else {
@@ -651,7 +704,7 @@ fun ServerScreen(
                         )
                     }
 
-                    // Red notification badge overlay
+                    // Notification badge or PRO badge overlay
                     if (chatNotificationCount > 0) {
                         Box(
                             modifier = Modifier
@@ -676,9 +729,47 @@ fun ServerScreen(
                 if (showFloatingChatSheet) {
                     FloatingChatBottomSheet(
                         stateHolder = stateHolder,
-                        onDismissRequest = { showFloatingChatSheet = false }
+                        onDismissRequest = { showFloatingChatSheet = false },
+                        onNavigateToSignUp = {
+                            showFloatingChatSheet = false
+                            settingsInitialActiveTab = 2
+                            settingsInitialAuthTab = 1
+                            navigateToTab(PocketTab.SETTINGS)
+                        }
                     )
                 }
+            }
+
+            if (showPremiumBottomSheet) {
+                com.pocketcraft.server.ui.components.PremiumUpgradeBottomSheet(
+                    onDismissRequest = { showPremiumBottomSheet = false },
+                    onNavigateToSignUp = {
+                        showPremiumBottomSheet = false
+                        settingsInitialActiveTab = 2
+                        settingsInitialAuthTab = 1
+                        navigateToTab(PocketTab.SETTINGS)
+                    }
+                )
+            }
+
+            if (showUpgradeCelebrationAnimation) {
+                com.pocketcraft.server.ui.components.UpgradeCelebrationDialog(
+                    entitlement = entitlement,
+                    onDismissRequest = {
+                        showUpgradeCelebrationAnimation = false
+                        if (entitlement.isPremium && !entitlement.isSupportive && entitlement.discordId.isBlank()) {
+                            showDiscordBadgePopup = true
+                        }
+                    }
+                )
+            }
+
+            if (showDiscordBadgePopup) {
+                com.pocketcraft.server.ui.components.DiscordBadgePopup(
+                    entitlement = entitlement,
+                    onDismissRequest = { showDiscordBadgePopup = false },
+                    onMessage = showMessage
+                )
             }
 
             // ── Floating nav — footer bg extends through system nav bar inset ──

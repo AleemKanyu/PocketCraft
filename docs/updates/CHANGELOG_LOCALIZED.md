@@ -3,31 +3,33 @@
 Shorter Play Store version:
 
 ```xml
+<en-US>
+- Added new custom IP address feature.
+- Fixed server startup failure issues.
+- Fixed cloud backup system not working.
+</en-US>
+
 <de-DE>
-- Neuer Server hinzugefügt: Europa
-- Sie können sich jetzt anmelden, Kontoeinstellungen speichern und Welten in der Cloud sichern
-- Weitere Optimierungen hinzugefügt
-- Systemstabilitäts- und Speicheroptimierungen unter der Haube.
+- Neue Funktion für benutzerdefinierte IP-Adressen hinzugefügt.
+- Fehler beim Serverstart behoben.
+- Fehler behoben, durch den Cloud-Backups nicht funktionierten.
 </de-DE>
 
 <es-ES>
-- Nuevo servidor añadido: Europa
-- Ahora puedes iniciar sesión, guardar la configuración de tu cuenta y guardar tus mundos en la nube
-- Añadidas más optimizaciones
-- Mejoras de estabilidad y optimizaciones de memoria internas.
+- Añadida nueva función de dirección IP personalizada.
+- Corregidos problemas de fallo en el inicio del servidor.
+- Corregido el problema por el cual las copias de seguridad en la nube no funcionaban.
 </es-ES>
 
 <ru-RU>
-- Добавлен новый сервер: Европа
-- Теперь вы можете войти в систему, сохранить настройки аккаунта и делать резервные копии миров в облаке
-- Добавлено больше оптимизаций
-- Внутренние улучшения стабильности и оптимизация памяти.
+- Добавлена новая функция пользовательских IP-адресов.
+- Исправлены проблемы со сбоем запуска сервера.
+- Исправлена ошибка, из-за которой не работало резервное копирование в облако.
 </ru-RU>
 
 <zh-CN>
-- 新增服务器：欧洲
-- 您现在可以登录、保存帐户设置并将世界保存到云端
-- 添加了更多优化
-- 底层稳定性改进和内存优化。
+- 新增自定义 IP 地址功能。
+- 修复了服务器启动失败的问题。
+- 修复了云端备份不可用的问题。
 </zh-CN>
 ```

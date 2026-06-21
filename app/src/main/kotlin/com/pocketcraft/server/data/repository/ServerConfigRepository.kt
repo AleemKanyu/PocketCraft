@@ -31,9 +31,16 @@ import javax.inject.Singleton
 class ServerConfigRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    @Volatile
+    private var worldNameOverride: String? = null
+
+    fun setWorldNameOverride(worldName: String) {
+        worldNameOverride = worldName
+    }
+
     private val serverDir: File 
         get() {
-            val worldName = runBlocking { AppPreferencesStore.getSelectedWorldFlow(context).first() }
+            val worldName = worldNameOverride ?: runBlocking { AppPreferencesStore.getSelectedWorldFlow(context).first() }
             return ServerFileManager.getServerDir(context, worldName)
         }
     private val serversDir: File get() = File(context.filesDir, "servers")
@@ -249,10 +256,13 @@ class ServerConfigRepository @Inject constructor(
         }
         val defaultName = if (fallbackName == "server") "world" else fallbackName
 
+        val isPremium = com.pocketcraft.server.data.preferences.AppPreferences(context).let { it.isPremiumUser || it.debugPremiumOverride }
+        val maxPlayersLimit = if (isPremium) 50 else 10
+
         return ServerConfig(
             worldName = props["level-name"] ?: defaultName,
             worldSeed = props["level-seed"] ?: "",
-            maxPlayers = (props["max-players"]?.toIntOrNull() ?: 10).coerceIn(1, 50),
+            maxPlayers = (props["max-players"]?.toIntOrNull() ?: 10).coerceIn(1, maxPlayersLimit),
             port = 25565,
             difficulty = props["difficulty"] ?: "normal",
             gameMode = props["gamemode"] ?: "survival",
@@ -294,7 +304,8 @@ class ServerConfigRepository @Inject constructor(
     }
 
     private fun writeConfigFile(file: File, config: ServerConfig) {
-        ServerPropertiesWriter.write(file, ServerPropertiesWriter.toSnapshot(config))
+        val isPremium = com.pocketcraft.server.data.preferences.AppPreferences(context).let { it.isPremiumUser || it.debugPremiumOverride }
+        ServerPropertiesWriter.write(file, ServerPropertiesWriter.toSnapshot(config), isPremium)
     }
 
     private fun serverFile(serverName: String): File =

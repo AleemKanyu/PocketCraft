@@ -9,6 +9,10 @@ import androidx.work.Configuration
 import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.ktx.crashlytics
 import com.google.firebase.ktx.Firebase
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreSettings
+import com.google.firebase.firestore.MemoryCacheSettings
+import android.util.Log
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.server.BundledPluginInstaller
@@ -38,6 +42,13 @@ open class PocketCraftApp : Application(), Configuration.Provider {
             Firebase.crashlytics.setCrashlyticsCollectionEnabled(false)
             Firebase.crashlytics.setCustomKey("app_process", currentProcessName())
             Firebase.crashlytics.setCustomKey("app_version", BuildConfig.VERSION_NAME)
+        }
+
+        val processName = currentProcessName()
+        if (processName != packageName) {
+            // Background process: return early to prevent main-process initializations 
+            // and do NOT touch Firestore to avoid database locking crashes.
+            return
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -89,13 +100,16 @@ open class PocketCraftApp : Application(), Configuration.Provider {
 
     private fun migrateRelayHostForRegion() {
         runCatching {
-            AppPreferences(applicationContext).migrateLegacyRelayHostForRegion()
+            val prefs = AppPreferences(applicationContext)
+            prefs.migrateLegacyRelayHostForRegion()
+            prefs.migrateSingaporeRelayRemoval()
         }.onFailure { error ->
             Firebase.crashlytics.recordException(error)
         }
         applicationScope.launch {
             runCatching {
                 AppPreferencesStore.migrateLegacyRelayHostForRegion(applicationContext)
+                AppPreferencesStore.migrateSingaporeRelayRemoval(applicationContext)
             }.onFailure { error ->
                 Firebase.crashlytics.recordException(error)
             }

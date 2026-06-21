@@ -1,0 +1,1068 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PocketCraft Local Admin</title>
+  <style>
+    :root {
+      --card: rgba(255, 252, 246, 0.92);
+      --line: rgba(85, 64, 34, 0.12);
+      --text: #2e2418;
+      --muted: #6d614f;
+      --accent: #25654a;
+      --accent-strong: #194b36;
+      --amber: #9f6117;
+      --danger: #9c2d30;
+      --shadow: 0 18px 44px rgba(68, 45, 18, 0.14);
+      --radius: 22px;
+      --radius-sm: 14px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(255,255,255,.75), transparent 30%),
+        linear-gradient(135deg, #f7f1e5 0%, #eadcbf 56%, #dcc69e 100%);
+    }
+    .shell { width: min(1500px, calc(100vw - 28px)); margin: 20px auto 36px; }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+    .hero, .grid, .wide-grid {
+      display: grid;
+      gap: 16px;
+      align-items: start;
+    }
+    .hero { grid-template-columns: 1.15fr 0.85fr; margin-bottom: 20px; }
+    .grid { grid-template-columns: minmax(340px, 430px) minmax(0, 1fr); }
+    .wide-grid { grid-template-columns: minmax(0, 1fr); }
+    .hero-copy, .hero-meta, .form-panel, .list-panel { padding: 22px; }
+    .hero-meta { display: grid; gap: 12px; }
+    .meta-card {
+      padding: 14px 16px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.6);
+    }
+    .meta-label {
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: .78rem;
+      color: var(--muted);
+    }
+    .meta-value { margin-top: 6px; font-weight: 700; word-break: break-word; }
+    h1, h2, h3 {
+      margin: 0;
+      font-family: "Outfit", "Segoe UI", sans-serif;
+      letter-spacing: -.03em;
+    }
+    h1 { font-size: clamp(2rem, 4vw, 3rem); line-height: 1; }
+    h2 { font-size: 1.35rem; }
+    h3 { font-size: 1rem; }
+    .section { margin-top: 18px; }
+    .lead, .hint, .card-body, small { color: var(--muted); line-height: 1.55; }
+    form { display: grid; gap: 12px; margin-top: 14px; }
+    .row, .row-3 {
+      display: grid;
+      gap: 12px;
+    }
+    .row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .row-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    label { display: grid; gap: 6px; font-size: .93rem; font-weight: 600; }
+    input, textarea, select, button { font: inherit; }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid rgba(68,49,25,.18);
+      background: rgba(255,255,255,.88);
+      border-radius: 12px;
+      padding: 12px 14px;
+      color: var(--text);
+    }
+    textarea { min-height: 104px; resize: vertical; }
+    .checkbox {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.62);
+    }
+    .checkbox input { width: 18px; height: 18px; margin: 0; }
+    .actions, .toolbar, .chips, .card-actions, .result-lines {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .toolbar {
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      cursor: pointer;
+      font-weight: 700;
+      transition: transform 120ms ease, opacity 120ms ease;
+    }
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: .65; transform: none; cursor: wait; }
+    .primary { background: var(--accent); color: #fff; }
+    .secondary { background: rgba(37,101,74,.12); color: var(--accent-strong); }
+    .warning { background: rgba(159,97,23,.12); color: var(--amber); }
+    .danger { background: rgba(156,45,48,.12); color: var(--danger); }
+    .status {
+      margin-top: 14px;
+      min-height: 46px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(37,101,74,.1);
+      color: var(--accent-strong);
+    }
+    .status.error {
+      background: rgba(156,45,48,.1);
+      color: var(--danger);
+    }
+    .cards { display: grid; gap: 12px; }
+    .card {
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.72);
+      padding: 16px;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .card-title { font-size: 1.08rem; font-weight: 800; }
+    .chip {
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(46,36,24,.08);
+      font-size: .82rem;
+      font-weight: 700;
+    }
+    .chip.live { background: rgba(37,101,74,.12); color: var(--accent-strong); }
+    .chip.off { background: rgba(156,45,48,.12); color: var(--danger); }
+    .empty {
+      border: 1px dashed rgba(68,49,25,.2);
+      border-radius: 18px;
+      padding: 18px;
+      color: var(--muted);
+      text-align: center;
+      background: rgba(255,255,255,.45);
+    }
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255,255,255,.65);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+    }
+    th, td {
+      text-align: left;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      font-size: .92rem;
+    }
+    th {
+      background: rgba(37,101,74,.08);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    code, pre {
+      font-family: "Cascadia Code", "SFMono-Regular", monospace;
+      font-size: .85rem;
+    }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 0;
+    }
+    @media (max-width: 1080px) {
+      .hero, .grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 720px) {
+      .shell { width: min(100vw - 16px, 100%); margin: 8px auto 20px; }
+      .hero-copy, .hero-meta, .form-panel, .list-panel { padding: 16px; }
+      .row, .row-3 { grid-template-columns: 1fr; }
+      .toolbar { align-items: stretch; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div class="panel hero-copy">
+        <h1>Local Firestore Admin</h1>
+        <p class="lead">
+          Manage PocketCraft Firebase-driven app surfaces from your own machine. This includes broadcasts, promo banners,
+          remote commands, update config, poll results, opt-ins, and a broader Firestore data explorer.
+        </p>
+      </div>
+      <div class="panel hero-meta">
+        <div class="meta-card">
+          <div class="meta-label">Project</div>
+          <div class="meta-value" id="projectId">Loading...</div>
+        </div>
+        <div class="meta-card">
+          <div class="meta-label">Binding</div>
+          <div class="meta-value" id="binding">Loading...</div>
+        </div>
+        <div class="meta-card">
+          <div class="meta-label">Managed Surfaces</div>
+          <div class="meta-value">broadcasts, promotions, remote_commands, app_config/update, results explorer, collection browser</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section grid">
+      <div class="panel form-panel">
+        <h2>Broadcasts</h2>
+        <p class="hint">Announcements, polls, and opt-in prompts shown in the app.</p>
+        <form id="broadcastForm">
+          <label>Document ID<input id="broadcastDocId" type="text" placeholder="Leave blank for a new document"></label>
+          <div class="row">
+            <label>Interaction
+              <select id="broadcastInteractionType">
+                <option value="none">Announcement</option>
+                <option value="question">Poll</option>
+                <option value="opt_in">Opt-in</option>
+              </select>
+            </label>
+            <label>Style
+              <select id="broadcastType">
+                <option value="info">Info</option>
+                <option value="warning">Warning</option>
+                <option value="critical">Critical</option>
+              </select>
+            </label>
+          </div>
+          <label>Title<input id="broadcastTitle" type="text" required></label>
+          <label>Body<textarea id="broadcastBody"></textarea></label>
+          <label id="broadcastPromptWrap">Prompt<input id="broadcastQuestionPrompt" type="text"></label>
+          <label id="broadcastOptionsWrap">Options Or Button Labels<textarea id="broadcastQuestionOptions" placeholder="Shaders&#10;Voice Chat&#10;Mods"></textarea></label>
+          <div class="row-3">
+            <label>Start Date<input id="broadcastStartDate" type="date"></label>
+            <label>Start Time<input id="broadcastStartTime" type="time" step="60" value="00:00"></label>
+            <label>Min Version<input id="broadcastTargetMinVersion" type="number" min="0" value="0"></label>
+          </div>
+          <div class="row-3">
+            <label>End Date<input id="broadcastExpiryDate" type="date"></label>
+            <label>End Time<input id="broadcastExpiryTime" type="time" step="60" value="00:00"></label>
+            <label>Max Version<input id="broadcastTargetMaxVersion" type="number" min="0" value="0"></label>
+          </div>
+          <label class="checkbox"><input id="broadcastActive" type="checkbox" checked>Broadcast is active</label>
+          <label class="checkbox"><input id="broadcastDismissible" type="checkbox" checked>Users can dismiss it</label>
+          <div class="actions">
+            <button class="primary" id="broadcastSaveButton" type="submit">Save Broadcast</button>
+            <button class="secondary" id="broadcastResetButton" type="button">New Blank Broadcast</button>
+          </div>
+        </form>
+        <div id="broadcastStatus" class="status">Ready.</div>
+      </div>
+      <div class="panel list-panel">
+        <div class="toolbar">
+          <div>
+            <h2>Broadcast List</h2>
+            <p class="hint">Poll counts and opt-in counts are included when results exist.</p>
+          </div>
+          <div class="actions"><button class="secondary" id="broadcastRefreshButton" type="button">Refresh</button></div>
+        </div>
+        <div id="broadcastList" class="cards"></div>
+      </div>
+    </section>
+
+    <section class="section grid">
+      <div class="panel form-panel">
+        <h2>Promo Banners</h2>
+        <p class="hint">Remote promo banners stored in `promotions` for Free or Pro users.</p>
+        <form id="promotionForm">
+          <label>Document ID<input id="promotionDocId" type="text" placeholder="Leave blank for a new document"></label>
+          <div class="row">
+            <label>Target Group
+              <select id="promotionTargetGroup">
+                <option value="free">Free</option>
+                <option value="pro">Pro</option>
+              </select>
+            </label>
+            <label>Icon Emoji<input id="promotionIconEmoji" type="text" placeholder="🚀"></label>
+          </div>
+          <label>Title<input id="promotionTitle" type="text" required></label>
+          <label>Body<textarea id="promotionBody"></textarea></label>
+          <label>CTA Text<input id="promotionCtaText" type="text" placeholder="Upgrade Now"></label>
+          <label class="checkbox"><input id="promotionActive" type="checkbox" checked>Promotion is active</label>
+          <div class="actions">
+            <button class="primary" id="promotionSaveButton" type="submit">Save Promotion</button>
+            <button class="secondary" id="promotionResetButton" type="button">New Blank Promotion</button>
+          </div>
+        </form>
+        <div id="promotionStatus" class="status">Ready.</div>
+      </div>
+      <div class="panel list-panel">
+        <div class="toolbar">
+          <div>
+            <h2>Promotion List</h2>
+            <p class="hint">These are the remote promo banners the app fetches.</p>
+          </div>
+          <div class="actions"><button class="secondary" id="promotionRefreshButton" type="button">Refresh</button></div>
+        </div>
+        <div id="promotionList" class="cards"></div>
+      </div>
+    </section>
+
+    <section class="section grid">
+      <div class="panel form-panel">
+        <h2>Remote Commands</h2>
+        <p class="hint">Force reconnect, clear cache, refetch relay config, or show an in-app message.</p>
+        <form id="remoteCommandForm">
+          <label>Document ID<input id="commandDocId" type="text" placeholder="Leave blank for a new document"></label>
+          <div class="row">
+            <label>Target<input id="commandTarget" type="text" placeholder="all, uid:USER_ID, or version:123"></label>
+            <label>Command Type
+              <select id="commandType">
+                <option value="show_message">Show Message</option>
+                <option value="force_reconnect">Force Reconnect</option>
+                <option value="force_relay_refetch">Force Relay Refetch</option>
+                <option value="clear_cache">Clear Cache</option>
+                <option value="trigger_rating_prompt">Trigger Play Store Rating Prompt</option>
+              </select>
+            </label>
+          </div>
+          <div id="commandMessageFields">
+            <label>Message Title<input id="commandTitle" type="text" placeholder="Notification"></label>
+            <label>Message Body<textarea id="commandMessage" placeholder="Server maintenance starts soon."></textarea></label>
+          </div>
+          <div class="row">
+            <label>Expires Date<input id="commandExpiresDate" type="date"></label>
+            <label>Expires Time<input id="commandExpiresTime" type="time" step="60" value="00:00"></label>
+          </div>
+          <div class="actions">
+            <button class="primary" id="commandSaveButton" type="submit">Save Command</button>
+            <button class="secondary" id="commandResetButton" type="button">New Blank Command</button>
+          </div>
+        </form>
+        <div id="commandStatus" class="status">Ready.</div>
+      </div>
+      <div class="panel list-panel">
+        <div class="toolbar">
+          <div>
+            <h2>Remote Command List</h2>
+            <p class="hint">The app listens for recent commands in `remote_commands`.</p>
+          </div>
+          <div class="actions"><button class="secondary" id="commandRefreshButton" type="button">Refresh</button></div>
+        </div>
+        <div id="commandList" class="cards"></div>
+      </div>
+    </section>
+
+    <section class="section grid">
+      <div class="panel form-panel">
+        <h2>Update Popup</h2>
+        <p class="hint">Controls the Firebase `app_config/update` popup and the Play Store rating prompt flag.</p>
+        <form id="updateForm">
+          <label>Play Store URL<input id="updatePlayStoreUrl" type="text" placeholder="https://play.google.com/store/apps/details?id=..."></label>
+          <div class="row">
+            <label>Target Version Code<input id="updateVersionCode" type="number" min="0" placeholder="Optional"></label>
+            <label>Latest Version<input id="updateLatestVersion" type="text" placeholder="Example: 1.2.0"></label>
+          </div>
+          <label>Exclude Version Code<input id="updateExcludeVersionCode" type="number" min="0" placeholder="Optional"></label>
+          <label class="checkbox"><input id="updateShowPopup" type="checkbox">Show update popup</label>
+          <label class="checkbox"><input id="updateForced" type="checkbox">Force the update popup</label>
+          <label class="checkbox"><input id="updateEnableRatingPrompt" type="checkbox" checked>Enable Play Store rating prompt</label>
+          <div class="actions">
+            <button class="primary" id="updateSaveButton" type="submit">Save Update Config</button>
+            <button class="secondary" id="updateRefreshButton" type="button">Reload Update Config</button>
+          </div>
+        </form>
+        <div id="updateStatus" class="status">Ready.</div>
+      </div>
+      <div class="panel list-panel">
+        <div class="toolbar">
+          <div>
+            <h2>Update Config Preview</h2>
+            <p class="hint">This is the exact document the app reads for update popups.</p>
+          </div>
+        </div>
+        <div id="updatePreview" class="cards"></div>
+      </div>
+    </section>
+
+    <section class="section wide-grid">
+      <div class="panel list-panel">
+        <div class="toolbar">
+          <div>
+            <h2>Poll And Opt-In Results</h2>
+            <p class="hint">Detailed result tables from `broadcast_results` and `broadcast_responses`.</p>
+          </div>
+          <div class="actions"><button class="secondary" id="resultsRefreshButton" type="button">Refresh Results</button></div>
+        </div>
+        <div id="resultsCards" class="cards"></div>
+      </div>
+    </section>
+
+    <section class="section wide-grid">
+      <div class="panel list-panel">
+        <div class="toolbar">
+          <div>
+            <h2>Firestore Data Explorer</h2>
+            <p class="hint">Browse other Firestore collections directly from this page. This is read-only.</p>
+          </div>
+          <div class="actions">
+            <select id="collectionSelect"></select>
+            <input id="collectionLimit" type="number" min="1" max="250" value="100" style="width:110px">
+            <button class="secondary" id="collectionLoadButton" type="button">Load Collection</button>
+          </div>
+        </div>
+        <div id="collectionStatus" class="status">Ready.</div>
+        <div id="collectionTable" class="table-wrap" style="margin-top:14px;"></div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const state = {
+      broadcasts: [],
+      promotions: [],
+      remoteCommands: [],
+      updateConfig: null,
+      results: [],
+      collections: []
+    };
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function toLocalDateTimeParts(isoString) {
+      if (!isoString) return { date: "", time: "00:00" };
+      const date = new Date(isoString);
+      if (Number.isNaN(date.getTime())) return { date: "", time: "00:00" };
+      const offset = date.getTimezoneOffset() * 60000;
+      const local = new Date(date.getTime() - offset).toISOString();
+      return { date: local.slice(0, 10), time: local.slice(11, 16) || "00:00" };
+    }
+
+    function fromDateAndTime(dateValue, timeValue) {
+      const date = (dateValue || "").trim();
+      if (!date) return "";
+      const time = (timeValue || "00:00").trim() || "00:00";
+      const composed = new Date(`${date}T${time}:00`);
+      return Number.isNaN(composed.getTime()) ? "" : composed.toISOString();
+    }
+
+    function setMidnightDefault(dateId, timeId) {
+      const timeInput = document.getElementById(timeId);
+      if (timeInput && !timeInput.value) timeInput.value = "00:00";
+      const dateInput = document.getElementById(dateId);
+      if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+    }
+
+    async function fetchJson(url, options = {}) {
+      const response = await fetch(url, {
+        headers: { "Content-Type": "application/json" },
+        ...options
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.ok === false) {
+        throw new Error(payload.error || `Request failed with ${response.status}`);
+      }
+      return payload;
+    }
+
+    function setStatus(id, message, isError = false) {
+      const el = document.getElementById(id);
+      el.textContent = message;
+      el.className = isError ? "status error" : "status";
+    }
+
+    function prettyJson(value) {
+      return JSON.stringify(value, null, 2);
+    }
+
+    function renderDataTable(containerId, rows) {
+      const container = document.getElementById(containerId);
+      if (!rows.length) {
+        container.innerHTML = '<div class="empty">No data found.</div>';
+        return;
+      }
+      const keys = Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
+      container.innerHTML = `
+        <table>
+          <thead>
+            <tr>${keys.map((key) => `<th>${escapeHtml(key)}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                ${keys.map((key) => {
+                  const value = row[key];
+                  const text = typeof value === "object" && value !== null ? prettyJson(value) : String(value ?? "");
+                  return `<td><pre>${escapeHtml(text)}</pre></td>`;
+                }).join("")}
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function updateBroadcastInteractionFields() {
+      const interactionType = document.getElementById("broadcastInteractionType").value;
+      const visible = interactionType !== "none";
+      document.getElementById("broadcastPromptWrap").style.display = visible ? "grid" : "none";
+      document.getElementById("broadcastOptionsWrap").style.display = visible ? "grid" : "none";
+    }
+
+    function updateCommandFields() {
+      const type = document.getElementById("commandType").value;
+      document.getElementById("commandMessageFields").style.display = type === "show_message" ? "grid" : "none";
+    }
+
+    function resetBroadcastForm() {
+      document.getElementById("broadcastForm").reset();
+      document.getElementById("broadcastType").value = "info";
+      document.getElementById("broadcastInteractionType").value = "none";
+      document.getElementById("broadcastTargetMinVersion").value = 0;
+      document.getElementById("broadcastTargetMaxVersion").value = 0;
+      document.getElementById("broadcastActive").checked = true;
+      document.getElementById("broadcastDismissible").checked = true;
+      setMidnightDefault("broadcastStartDate", "broadcastStartTime");
+      setMidnightDefault("broadcastExpiryDate", "broadcastExpiryTime");
+      updateBroadcastInteractionFields();
+      setStatus("broadcastStatus", "Ready.");
+    }
+
+    function resetPromotionForm() {
+      document.getElementById("promotionForm").reset();
+      document.getElementById("promotionTargetGroup").value = "free";
+      document.getElementById("promotionActive").checked = true;
+      setStatus("promotionStatus", "Ready.");
+    }
+
+    function resetCommandForm() {
+      document.getElementById("remoteCommandForm").reset();
+      document.getElementById("commandTarget").value = "all";
+      document.getElementById("commandType").value = "show_message";
+      setMidnightDefault("commandExpiresDate", "commandExpiresTime");
+      updateCommandFields();
+      setStatus("commandStatus", "Ready.");
+    }
+
+    function renderBroadcasts() {
+      const list = document.getElementById("broadcastList");
+      if (!state.broadcasts.length) {
+        list.innerHTML = '<div class="empty">No broadcasts yet.</div>';
+        return;
+      }
+      list.innerHTML = state.broadcasts.map((broadcast) => `
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">${escapeHtml(broadcast.title || "(Untitled)")}</div>
+              <small>${escapeHtml(broadcast.id)}</small>
+            </div>
+            <div class="chips">
+              <span class="chip ${broadcast.active ? "live" : "off"}">${broadcast.active ? "Active" : "Inactive"}</span>
+              <span class="chip">${escapeHtml(broadcast.interactionType)}</span>
+              <span class="chip">${escapeHtml(broadcast.type)}</span>
+            </div>
+          </div>
+          <div class="card-body">${escapeHtml(broadcast.body || "No body copy.")}</div>
+          ${broadcast.question?.prompt ? `<small>Prompt: ${escapeHtml(broadcast.question.prompt)}</small>` : ""}
+          ${(broadcast.question?.options || []).length ? `<div class="chips">${broadcast.question.options.map((option) => `<span class="chip">${escapeHtml(option)}</span>`).join("")}</div>` : ""}
+          <small>Start: ${escapeHtml(broadcast.startDate || "Immediate")} | End: ${escapeHtml(broadcast.expiryDate || "No expiry")}</small>
+          <div class="card-actions">
+            <button class="secondary" data-kind="broadcast" data-action="edit" data-id="${escapeHtml(broadcast.id)}">Edit</button>
+            <button class="warning" data-kind="broadcast" data-action="duplicate" data-id="${escapeHtml(broadcast.id)}">Duplicate</button>
+            <button class="danger" data-kind="broadcast" data-action="delete" data-id="${escapeHtml(broadcast.id)}">Delete</button>
+          </div>
+        </article>
+      `).join("");
+    }
+
+    function renderPromotions() {
+      const list = document.getElementById("promotionList");
+      if (!state.promotions.length) {
+        list.innerHTML = '<div class="empty">No promotions yet.</div>';
+        return;
+      }
+      list.innerHTML = state.promotions.map((promotion) => `
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">${escapeHtml(promotion.title || "(Untitled)")}</div>
+              <small>${escapeHtml(promotion.id)}</small>
+            </div>
+            <div class="chips">
+              <span class="chip ${promotion.active ? "live" : "off"}">${promotion.active ? "Active" : "Inactive"}</span>
+              <span class="chip">${escapeHtml(promotion.targetGroup)}</span>
+            </div>
+          </div>
+          <div class="card-body">${escapeHtml(promotion.body || "No body copy.")}</div>
+          <small>CTA: ${escapeHtml(promotion.ctaText || "Upgrade Now")} | Icon: ${escapeHtml(promotion.iconEmoji || "🚀")}</small>
+          <div class="card-actions">
+            <button class="secondary" data-kind="promotion" data-action="edit" data-id="${escapeHtml(promotion.id)}">Edit</button>
+            <button class="warning" data-kind="promotion" data-action="duplicate" data-id="${escapeHtml(promotion.id)}">Duplicate</button>
+            <button class="danger" data-kind="promotion" data-action="delete" data-id="${escapeHtml(promotion.id)}">Delete</button>
+          </div>
+        </article>
+      `).join("");
+    }
+
+    function renderRemoteCommands() {
+      const list = document.getElementById("commandList");
+      if (!state.remoteCommands.length) {
+        list.innerHTML = '<div class="empty">No remote commands yet.</div>';
+        return;
+      }
+      list.innerHTML = state.remoteCommands.map((command) => `
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">${escapeHtml(command.type)}</div>
+              <small>${escapeHtml(command.id)}</small>
+            </div>
+            <div class="chips"><span class="chip">${escapeHtml(command.target || "all")}</span></div>
+          </div>
+          <div class="card-body">${escapeHtml(command.payload?.message || "No message payload.")}</div>
+          <small>Title: ${escapeHtml(command.payload?.title || "Notification")} | Expires: ${escapeHtml(command.expiresAt || "No expiry")}</small>
+          <div class="card-actions">
+            <button class="secondary" data-kind="command" data-action="edit" data-id="${escapeHtml(command.id)}">Edit</button>
+            <button class="warning" data-kind="command" data-action="duplicate" data-id="${escapeHtml(command.id)}">Duplicate</button>
+            <button class="danger" data-kind="command" data-action="delete" data-id="${escapeHtml(command.id)}">Delete</button>
+          </div>
+        </article>
+      `).join("");
+    }
+
+    function renderUpdateConfig() {
+      const preview = document.getElementById("updatePreview");
+      const config = state.updateConfig;
+      if (!config) {
+        preview.innerHTML = '<div class="empty">No update config loaded yet.</div>';
+        return;
+      }
+      preview.innerHTML = `
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">app_config/update</div>
+              <small>Live Firebase document preview</small>
+            </div>
+            <div class="chips">
+              <span class="chip ${config.showUpdatePopup ? "live" : "off"}">${config.showUpdatePopup ? "Popup Enabled" : "Popup Disabled"}</span>
+              <span class="chip">${config.isForced ? "Forced" : "Optional"}</span>
+            </div>
+          </div>
+          <div class="card-body">${escapeHtml(config.playStoreUrl || "No Play Store URL set.")}</div>
+          <small>Target Version Code: ${escapeHtml(config.versionCode || "None")} | Latest Version: ${escapeHtml(config.latestVersion || config.latestVersionCode || "None")} | Exclude Version Code: ${escapeHtml(config.excludeVersionCode || "None")}</small>
+          <small>Play Store Rating Prompt: ${config.enablePlayStoreRatingPrompt ? "Enabled" : "Disabled"}</small>
+        </article>
+      `;
+    }
+
+    function renderResults() {
+      const container = document.getElementById("resultsCards");
+      if (!state.results.length) {
+        container.innerHTML = '<div class="empty">No poll or opt-in results found yet.</div>';
+        return;
+      }
+      container.innerHTML = state.results.map((result, index) => {
+        const optionRows = Object.entries(result.optionCounts || {}).map(([option, count]) => ({ option, count }));
+        const responseTableId = `responses-table-${index}`;
+        const optionsTableId = `options-table-${index}`;
+        const optInsTableId = `optins-table-${index}`;
+        setTimeout(() => {
+          if (optionRows.length) renderDataTable(optionsTableId, optionRows);
+          if (result.responses?.length) renderDataTable(responseTableId, result.responses);
+          if (result.optIns?.length) renderDataTable(optInsTableId, result.optIns);
+        }, 0);
+        return `
+          <article class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">${escapeHtml(result.id)}</div>
+                <small>Type: ${escapeHtml(result.type || "unknown")}</small>
+              </div>
+              <div class="chips">
+                <span class="chip">${escapeHtml(String(result.responses?.length || 0))} responses</span>
+                <span class="chip">${escapeHtml(String(result.optIns?.length || 0))} opt-ins</span>
+              </div>
+            </div>
+            ${optionRows.length ? `<h3 style="margin-top:14px;">Option Counts</h3><div id="${optionsTableId}" class="table-wrap" style="margin-top:8px;"></div>` : ""}
+            ${result.responses?.length ? `<h3 style="margin-top:14px;">Responses</h3><div id="${responseTableId}" class="table-wrap" style="margin-top:8px;"></div>` : ""}
+            ${result.optIns?.length ? `<h3 style="margin-top:14px;">Opt-In Entries</h3><div id="${optInsTableId}" class="table-wrap" style="margin-top:8px;"></div>` : ""}
+          </article>
+        `;
+      }).join("");
+    }
+
+    function fillBroadcastForm(broadcast) {
+      document.getElementById("broadcastDocId").value = broadcast.id;
+      document.getElementById("broadcastInteractionType").value = broadcast.interactionType || "none";
+      document.getElementById("broadcastType").value = broadcast.type || "info";
+      document.getElementById("broadcastTitle").value = broadcast.title || "";
+      document.getElementById("broadcastBody").value = broadcast.body || "";
+      document.getElementById("broadcastQuestionPrompt").value = broadcast.question?.prompt || "";
+      document.getElementById("broadcastQuestionOptions").value = (broadcast.question?.options || []).join("\n");
+      const start = toLocalDateTimeParts(broadcast.startDate);
+      const end = toLocalDateTimeParts(broadcast.expiryDate);
+      document.getElementById("broadcastStartDate").value = start.date;
+      document.getElementById("broadcastStartTime").value = start.time || "00:00";
+      document.getElementById("broadcastExpiryDate").value = end.date;
+      document.getElementById("broadcastExpiryTime").value = end.time || "00:00";
+      document.getElementById("broadcastTargetMinVersion").value = broadcast.targetMinVersion ?? 0;
+      document.getElementById("broadcastTargetMaxVersion").value = broadcast.targetMaxVersion ?? 0;
+      document.getElementById("broadcastActive").checked = !!broadcast.active;
+      document.getElementById("broadcastDismissible").checked = !!broadcast.dismissible;
+      updateBroadcastInteractionFields();
+      setStatus("broadcastStatus", `Editing ${broadcast.id}`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function fillPromotionForm(promotion) {
+      document.getElementById("promotionDocId").value = promotion.id;
+      document.getElementById("promotionTargetGroup").value = promotion.targetGroup || "free";
+      document.getElementById("promotionTitle").value = promotion.title || "";
+      document.getElementById("promotionBody").value = promotion.body || "";
+      document.getElementById("promotionCtaText").value = promotion.ctaText || "";
+      document.getElementById("promotionIconEmoji").value = promotion.iconEmoji || "";
+      document.getElementById("promotionActive").checked = !!promotion.active;
+      setStatus("promotionStatus", `Editing ${promotion.id}`);
+    }
+
+    function fillCommandForm(command) {
+      document.getElementById("commandDocId").value = command.id;
+      document.getElementById("commandTarget").value = command.target || "all";
+      document.getElementById("commandType").value = command.type || "show_message";
+      document.getElementById("commandTitle").value = command.payload?.title || "";
+      document.getElementById("commandMessage").value = command.payload?.message || "";
+      const expires = toLocalDateTimeParts(command.expiresAt);
+      document.getElementById("commandExpiresDate").value = expires.date;
+      document.getElementById("commandExpiresTime").value = expires.time || "00:00";
+      updateCommandFields();
+      setStatus("commandStatus", `Editing ${command.id}`);
+    }
+
+    function fillUpdateForm(config) {
+      document.getElementById("updatePlayStoreUrl").value = config.playStoreUrl || "";
+      document.getElementById("updateVersionCode").value = config.versionCode || "";
+      document.getElementById("updateLatestVersion").value = config.latestVersion || config.latestVersionCode || "";
+      document.getElementById("updateExcludeVersionCode").value = config.excludeVersionCode || "";
+      document.getElementById("updateShowPopup").checked = !!config.showUpdatePopup;
+      document.getElementById("updateForced").checked = !!config.isForced;
+      document.getElementById("updateEnableRatingPrompt").checked = config.enablePlayStoreRatingPrompt !== false;
+    }
+
+    async function loadMeta() {
+      const payload = await fetchJson("/api/meta");
+      document.getElementById("projectId").textContent = payload.projectId || "Unknown";
+      document.getElementById("binding").textContent = `${payload.host}:${payload.port}`;
+    }
+
+    async function loadBroadcasts() {
+      document.getElementById("broadcastRefreshButton").disabled = true;
+      try {
+        const payload = await fetchJson("/api/broadcasts");
+        state.broadcasts = payload.broadcasts || [];
+        renderBroadcasts();
+        setStatus("broadcastStatus", `Loaded ${state.broadcasts.length} broadcasts.`);
+      } catch (error) {
+        setStatus("broadcastStatus", error.message, true);
+      } finally {
+        document.getElementById("broadcastRefreshButton").disabled = false;
+      }
+    }
+
+    async function loadPromotions() {
+      document.getElementById("promotionRefreshButton").disabled = true;
+      try {
+        const payload = await fetchJson("/api/promotions");
+        state.promotions = payload.promotions || [];
+        renderPromotions();
+        setStatus("promotionStatus", `Loaded ${state.promotions.length} promotions.`);
+      } catch (error) {
+        setStatus("promotionStatus", error.message, true);
+      } finally {
+        document.getElementById("promotionRefreshButton").disabled = false;
+      }
+    }
+
+    async function loadRemoteCommands() {
+      document.getElementById("commandRefreshButton").disabled = true;
+      try {
+        const payload = await fetchJson("/api/remote-commands");
+        state.remoteCommands = payload.remoteCommands || [];
+        renderRemoteCommands();
+        setStatus("commandStatus", `Loaded ${state.remoteCommands.length} remote commands.`);
+      } catch (error) {
+        setStatus("commandStatus", error.message, true);
+      } finally {
+        document.getElementById("commandRefreshButton").disabled = false;
+      }
+    }
+
+    async function loadUpdateConfig() {
+      document.getElementById("updateRefreshButton").disabled = true;
+      try {
+        const payload = await fetchJson("/api/update-config");
+        state.updateConfig = payload.updateConfig;
+        fillUpdateForm(payload.updateConfig);
+        renderUpdateConfig();
+        setStatus("updateStatus", "Loaded update config.");
+      } catch (error) {
+        setStatus("updateStatus", error.message, true);
+      } finally {
+        document.getElementById("updateRefreshButton").disabled = false;
+      }
+    }
+
+    async function loadResults() {
+      document.getElementById("resultsRefreshButton").disabled = true;
+      try {
+        const payload = await fetchJson("/api/broadcast-results");
+        state.results = payload.results || [];
+        renderResults();
+      } finally {
+        document.getElementById("resultsRefreshButton").disabled = false;
+      }
+    }
+
+    async function loadCollections() {
+      try {
+        const payload = await fetchJson("/api/firestore/collections");
+        state.collections = payload.collections || [];
+        const select = document.getElementById("collectionSelect");
+        select.innerHTML = state.collections.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
+      } catch (error) {
+        setStatus("collectionStatus", error.message, true);
+      }
+    }
+
+    async function loadCollectionData() {
+      const collectionName = document.getElementById("collectionSelect").value;
+      const limit = document.getElementById("collectionLimit").value || "100";
+      document.getElementById("collectionLoadButton").disabled = true;
+      try {
+        const payload = await fetchJson(`/api/firestore/collection?name=${encodeURIComponent(collectionName)}&limit=${encodeURIComponent(limit)}`);
+        renderDataTable("collectionTable", payload.documents || []);
+        setStatus("collectionStatus", `Loaded ${payload.count} docs from ${payload.collection}.`);
+      } catch (error) {
+        setStatus("collectionStatus", error.message, true);
+      } finally {
+        document.getElementById("collectionLoadButton").disabled = false;
+      }
+    }
+
+    document.getElementById("broadcastForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = document.getElementById("broadcastSaveButton");
+      button.disabled = true;
+      try {
+        const payload = {
+          id: document.getElementById("broadcastDocId").value.trim(),
+          interactionType: document.getElementById("broadcastInteractionType").value,
+          type: document.getElementById("broadcastType").value,
+          title: document.getElementById("broadcastTitle").value.trim(),
+          body: document.getElementById("broadcastBody").value.trim(),
+          questionPrompt: document.getElementById("broadcastQuestionPrompt").value.trim(),
+          questionOptions: document.getElementById("broadcastQuestionOptions").value,
+          startDate: fromDateAndTime(document.getElementById("broadcastStartDate").value, document.getElementById("broadcastStartTime").value),
+          expiryDate: fromDateAndTime(document.getElementById("broadcastExpiryDate").value, document.getElementById("broadcastExpiryTime").value),
+          targetMinVersion: Number(document.getElementById("broadcastTargetMinVersion").value || 0),
+          targetMaxVersion: Number(document.getElementById("broadcastTargetMaxVersion").value || 0),
+          active: document.getElementById("broadcastActive").checked,
+          dismissible: document.getElementById("broadcastDismissible").checked
+        };
+        const response = await fetchJson("/api/broadcasts", { method: "POST", body: JSON.stringify(payload) });
+        resetBroadcastForm();
+        await loadBroadcasts();
+        setStatus("broadcastStatus", `Saved ${response.broadcast.id}.`);
+      } catch (error) {
+        setStatus("broadcastStatus", error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    document.getElementById("promotionForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = document.getElementById("promotionSaveButton");
+      button.disabled = true;
+      try {
+        const payload = {
+          id: document.getElementById("promotionDocId").value.trim(),
+          targetGroup: document.getElementById("promotionTargetGroup").value,
+          title: document.getElementById("promotionTitle").value.trim(),
+          body: document.getElementById("promotionBody").value.trim(),
+          ctaText: document.getElementById("promotionCtaText").value.trim(),
+          iconEmoji: document.getElementById("promotionIconEmoji").value.trim(),
+          active: document.getElementById("promotionActive").checked
+        };
+        const response = await fetchJson("/api/promotions", { method: "POST", body: JSON.stringify(payload) });
+        resetPromotionForm();
+        await loadPromotions();
+        setStatus("promotionStatus", `Saved ${response.promotion.id}.`);
+      } catch (error) {
+        setStatus("promotionStatus", error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    document.getElementById("remoteCommandForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = document.getElementById("commandSaveButton");
+      button.disabled = true;
+      try {
+        const payload = {
+          id: document.getElementById("commandDocId").value.trim(),
+          target: document.getElementById("commandTarget").value.trim(),
+          type: document.getElementById("commandType").value,
+          title: document.getElementById("commandTitle").value.trim(),
+          message: document.getElementById("commandMessage").value.trim(),
+          expiresAt: fromDateAndTime(document.getElementById("commandExpiresDate").value, document.getElementById("commandExpiresTime").value)
+        };
+        const response = await fetchJson("/api/remote-commands", { method: "POST", body: JSON.stringify(payload) });
+        resetCommandForm();
+        await loadRemoteCommands();
+        setStatus("commandStatus", `Saved ${response.remoteCommand.id}.`);
+      } catch (error) {
+        setStatus("commandStatus", error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    document.getElementById("updateForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = document.getElementById("updateSaveButton");
+      button.disabled = true;
+      try {
+        const payload = {
+          playStoreUrl: document.getElementById("updatePlayStoreUrl").value.trim(),
+          versionCode: document.getElementById("updateVersionCode").value.trim(),
+          latestVersion: document.getElementById("updateLatestVersion").value.trim(),
+          excludeVersionCode: document.getElementById("updateExcludeVersionCode").value.trim(),
+          showUpdatePopup: document.getElementById("updateShowPopup").checked,
+          isForced: document.getElementById("updateForced").checked,
+          enablePlayStoreRatingPrompt: document.getElementById("updateEnableRatingPrompt").checked
+        };
+        const response = await fetchJson("/api/update-config", { method: "POST", body: JSON.stringify(payload) });
+        state.updateConfig = response.updateConfig;
+        fillUpdateForm(response.updateConfig);
+        renderUpdateConfig();
+        setStatus("updateStatus", "Saved update config.");
+      } catch (error) {
+        setStatus("updateStatus", error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    async function duplicateItem(kind, id) {
+      const endpoint = kind === "broadcast" ? "broadcasts" : kind === "promotion" ? "promotions" : "remote-commands";
+      await fetchJson(`/api/${endpoint}/${encodeURIComponent(id)}/duplicate`, { method: "POST" });
+      if (kind === "broadcast") await loadBroadcasts();
+      if (kind === "promotion") await loadPromotions();
+      if (kind === "command") await loadRemoteCommands();
+    }
+
+    async function deleteItem(kind, id) {
+      const endpoint = kind === "broadcast" ? "broadcasts" : kind === "promotion" ? "promotions" : "remote-commands";
+      await fetchJson(`/api/${endpoint}/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (kind === "broadcast") await loadBroadcasts();
+      if (kind === "promotion") await loadPromotions();
+      if (kind === "command") await loadRemoteCommands();
+    }
+
+    document.body.addEventListener("click", async (event) => {
+      const button = event.target.closest("button[data-kind]");
+      if (!button) return;
+      const kind = button.dataset.kind;
+      const action = button.dataset.action;
+      const id = button.dataset.id;
+      if (!kind || !action || !id) return;
+      if (action === "edit") {
+        if (kind === "broadcast") {
+          const item = state.broadcasts.find((entry) => entry.id === id);
+          if (item) fillBroadcastForm(item);
+        } else if (kind === "promotion") {
+          const item = state.promotions.find((entry) => entry.id === id);
+          if (item) fillPromotionForm(item);
+        } else if (kind === "command") {
+          const item = state.remoteCommands.find((entry) => entry.id === id);
+          if (item) fillCommandForm(item);
+        }
+        return;
+      }
+      try {
+        if (action === "duplicate") {
+          await duplicateItem(kind, id);
+        } else if (action === "delete") {
+          if (!confirm(`Delete ${kind} "${id}"?`)) return;
+          await deleteItem(kind, id);
+        }
+      } catch (error) {
+        const statusId = kind === "broadcast" ? "broadcastStatus" : kind === "promotion" ? "promotionStatus" : "commandStatus";
+        setStatus(statusId, error.message, true);
+      }
+    });
+
+    document.getElementById("broadcastRefreshButton").addEventListener("click", loadBroadcasts);
+    document.getElementById("promotionRefreshButton").addEventListener("click", loadPromotions);
+    document.getElementById("commandRefreshButton").addEventListener("click", loadRemoteCommands);
+    document.getElementById("updateRefreshButton").addEventListener("click", loadUpdateConfig);
+    document.getElementById("resultsRefreshButton").addEventListener("click", loadResults);
+    document.getElementById("collectionLoadButton").addEventListener("click", loadCollectionData);
+    document.getElementById("broadcastResetButton").addEventListener("click", resetBroadcastForm);
+    document.getElementById("promotionResetButton").addEventListener("click", resetPromotionForm);
+    document.getElementById("commandResetButton").addEventListener("click", resetCommandForm);
+    document.getElementById("broadcastInteractionType").addEventListener("change", updateBroadcastInteractionFields);
+    document.getElementById("commandType").addEventListener("change", updateCommandFields);
+
+    resetBroadcastForm();
+    resetPromotionForm();
+    resetCommandForm();
+    Promise.all([
+      loadMeta(),
+      loadBroadcasts(),
+      loadPromotions(),
+      loadRemoteCommands(),
+      loadUpdateConfig(),
+      loadResults(),
+      loadCollections()
+    ]).then(() => loadCollectionData()).catch((error) => {
+      setStatus("broadcastStatus", error.message, true);
+      setStatus("promotionStatus", error.message, true);
+      setStatus("commandStatus", error.message, true);
+      setStatus("updateStatus", error.message, true);
+      setStatus("collectionStatus", error.message, true);
+    });
+  </script>
+</body>
+</html>

@@ -27,15 +27,7 @@ object RelayServers {
         fallbackIp = "13.201.57.41"
     )
 
-    val SINGAPORE = RelayServerConfig(
-        host = "play.pocketcraft.online",
-        displayName = "Asia (Singapore)",
-        region = "Asia (Singapore)",
-        icon = "🌐",
-        description = "Keep-live migration relay for global fallback coverage",
-        bestFor = "Global fallback during multi-region rollout",
-        fallbackIp = "13.212.218.219"
-    )
+
 
     val EUROPE = RelayServerConfig(
         host = "eu.pocketcraft.online",
@@ -56,7 +48,7 @@ object RelayServers {
         bestFor = "Players in the Americas"
     )
 
-    private val defaultRegionConfigs = listOf(MUMBAI, SINGAPORE, EUROPE, AMERICA)
+    private val defaultRegionConfigs = listOf(MUMBAI, EUROPE, AMERICA)
     private val metadataByHost = defaultRegionConfigs.associateBy { it.host }
 
     private var dynamicRegions: List<RelayRegion> = defaultRegions()
@@ -64,7 +56,6 @@ object RelayServers {
 
     fun defaultRegions(): List<RelayRegion> = listOf(
         RelayRegion("Asia (India)", MUMBAI.host),
-        RelayRegion("Asia (Singapore)", SINGAPORE.host),
         RelayRegion("Europe", EUROPE.host),
         RelayRegion("America", AMERICA.host)
     )
@@ -135,7 +126,7 @@ object RelayServers {
             offsetMillis in southAsiaOffsets -> MUMBAI
             offsetMillis in europeOffsets -> EUROPE
             offsetMillis in americaOffsets -> AMERICA
-            else -> SINGAPORE
+            else -> MUMBAI
         }
     }
 
@@ -153,7 +144,6 @@ object RelayServers {
 
     fun resolveBedrockRegion(host: String): String = when (host) {
         MUMBAI.host -> "MUMBAI"
-        SINGAPORE.host -> "SINGAPORE"
         EUROPE.host -> "EUROPE"
         AMERICA.host -> "AMERICA"
         else -> "MUMBAI"

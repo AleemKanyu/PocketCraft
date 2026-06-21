@@ -47,6 +47,7 @@ import com.pocketcraft.server.ui.theme.Monocraft
 import com.pocketcraft.server.ui.theme.PocketMotion
 import com.pocketcraft.server.ui.theme.PlayfairDisplay
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.theme.CustomThemePalette
 import com.pocketcraft.server.ui.util.MobTheme
 
 private data class SplashMascot(
@@ -149,24 +150,28 @@ fun SplashScreen(
         MobTheme.SKELETON -> Color(0xFFF0EBE0)
         MobTheme.CREEPER -> Color(0xFFEFF7EF)
         MobTheme.SIMPLE_WHITE, MobTheme.SIMPLE_DARK -> Color(0xFFEFF7EF)
+        MobTheme.CUSTOM -> CustomThemePalette.textPrimary
     }
 
     val statusColor = when (PocketColors.activeMobTheme) {
         MobTheme.SKELETON -> Color(0xFF8A94A8)
         MobTheme.CREEPER -> Color(0xFF8AAA8A)
         MobTheme.SIMPLE_WHITE, MobTheme.SIMPLE_DARK -> Color(0xFF8AAA8A)
+        MobTheme.CUSTOM -> CustomThemePalette.textSecondary
     }
 
     val progressColor = when (PocketColors.activeMobTheme) {
         MobTheme.SKELETON -> Color(0xFF7A8490)
         MobTheme.CREEPER -> Color(0xFF4ADE80)
         MobTheme.SIMPLE_WHITE, MobTheme.SIMPLE_DARK -> Color(0xFF4ADE80)
+        MobTheme.CUSTOM -> CustomThemePalette.primary
     }
 
     val trackColor = when (PocketColors.activeMobTheme) {
         MobTheme.SKELETON -> Color(0xFF2E3440)
         MobTheme.CREEPER -> Color(0xFF2C362C)
         MobTheme.SIMPLE_WHITE, MobTheme.SIMPLE_DARK -> Color(0xFF2C362C)
+        MobTheme.CUSTOM -> CustomThemePalette.inactiveBg
     }
 
     val pulseTransition = rememberInfiniteTransition(label = "logo_pulse")

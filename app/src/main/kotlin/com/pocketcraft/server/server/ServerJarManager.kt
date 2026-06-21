@@ -44,7 +44,7 @@ object ServerJarManager {
         }
 
         val versions = when (serverType) {
-            ServerType.PAPER -> VersionCatalog.fetchStableVersions(limit = 80)
+            ServerType.PAPER -> fetchPaperVersions().takeIf { it.isNotEmpty() } ?: VersionCatalog.fetchStableVersions(limit = 80)
             ServerType.PURPUR -> fetchPurpurVersions()
             ServerType.FABRIC -> fetchFabricVersions()
             ServerType.MODPACK -> emptyList()
@@ -56,43 +56,77 @@ object ServerJarManager {
         versions
     }
 
-    private fun fetchPurpurVersions(): List<String> {
-        val req = Request.Builder()
-            .url("https://api.purpurmc.org/v2/purpur")
-            .header("Accept", "application/json")
-            .header("User-Agent", USER_AGENT)
-            .build()
-        client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw Exception("Purpur API error ${resp.code}")
-            val body = resp.body?.string() ?: throw Exception("Empty response")
-            val json = JSONObject(body)
-            val versions = json.getJSONArray("versions")
-            val list = mutableListOf<String>()
-            for (i in (versions.length() - 1) downTo 0) {
-                list.add(versions.getString(i))
+    private fun fetchPaperVersions(): List<String> {
+        return runCatching {
+            val req = Request.Builder()
+                .url("https://api.papermc.io/v2/projects/paper")
+                .header("Accept", "application/json")
+                .header("User-Agent", USER_AGENT)
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) throw Exception("Paper API error ${resp.code}")
+                val body = resp.body?.string() ?: throw Exception("Empty response")
+                val json = JSONObject(body)
+                val versions = json.getJSONArray("versions")
+                val list = mutableListOf<String>()
+                for (i in (versions.length() - 1) downTo 0) {
+                    list.add(versions.getString(i))
+                }
+                list
             }
-            return list
+        }.getOrElse { e ->
+            Log.e(TAG, "Failed to fetch Paper versions: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    private fun fetchPurpurVersions(): List<String> {
+        return runCatching {
+            val req = Request.Builder()
+                .url("https://api.purpurmc.org/v2/purpur")
+                .header("Accept", "application/json")
+                .header("User-Agent", USER_AGENT)
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) throw Exception("Purpur API error ${resp.code}")
+                val body = resp.body?.string() ?: throw Exception("Empty response")
+                val json = JSONObject(body)
+                val versions = json.getJSONArray("versions")
+                val list = mutableListOf<String>()
+                for (i in (versions.length() - 1) downTo 0) {
+                    list.add(versions.getString(i))
+                }
+                list
+            }
+        }.getOrElse { e ->
+            Log.e(TAG, "Failed to fetch Purpur versions: ${e.message}", e)
+            emptyList()
         }
     }
 
     private fun fetchFabricVersions(): List<String> {
-        val req = Request.Builder()
-            .url("https://meta.fabricmc.net/v2/versions/game")
-            .header("Accept", "application/json")
-            .header("User-Agent", USER_AGENT)
-            .build()
-        client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw Exception("Fabric API error ${resp.code}")
-            val body = resp.body?.string() ?: throw Exception("Empty response")
-            val jsonArray = JSONArray(body)
-            val list = mutableListOf<String>()
-            for (i in 0 until jsonArray.length()) {
-                val obj = jsonArray.getJSONObject(i)
-                if (obj.getBoolean("stable")) {
-                    list.add(obj.getString("version"))
+        return runCatching {
+            val req = Request.Builder()
+                .url("https://meta.fabricmc.net/v2/versions/game")
+                .header("Accept", "application/json")
+                .header("User-Agent", USER_AGENT)
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) throw Exception("Fabric API error ${resp.code}")
+                val body = resp.body?.string() ?: throw Exception("Empty response")
+                val jsonArray = JSONArray(body)
+                val list = mutableListOf<String>()
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    if (obj.getBoolean("stable")) {
+                        list.add(obj.getString("version"))
+                    }
                 }
+                list
             }
-            return list
+        }.getOrElse { e ->
+            Log.e(TAG, "Failed to fetch Fabric versions: ${e.message}", e)
+            emptyList()
         }
     }
 

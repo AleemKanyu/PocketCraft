@@ -191,10 +191,10 @@ object PluginManager {
     }
 
     fun getModsDir(context: Context, worldName: String): File =
-        File(context.filesDir, "servers/$worldName/mods").also { it.mkdirs() }
+        File(context.filesDir, "servers/worlds/$worldName/mods").also { it.mkdirs() }
 
     fun getResourcePacksDir(context: Context, worldName: String): File =
-        File(context.filesDir, "servers/$worldName/resourcepacks").also { it.mkdirs() }
+        File(context.filesDir, "servers/worlds/$worldName/resourcepacks").also { it.mkdirs() }
 
     fun ensureContentDirs(context: Context, worldName: String) {
         getPluginsDir(context, worldName)
@@ -224,8 +224,16 @@ object PluginManager {
                 )
             }
             ?.filterNot(::isManagedBridgePlugin)
+            ?.filterNot(::isHiddenPocketCraftPlugin)
             ?.sortedByDescending { it.sizeMb }
             ?: emptyList()
+    }
+
+    private fun isHiddenPocketCraftPlugin(plugin: Plugin): Boolean {
+        val normalizedName = plugin.name.lowercase(Locale.US)
+        val normalizedFile = plugin.fileName.lowercase(Locale.US)
+        return normalizedName == "pocketcraftcompanion" ||
+            normalizedFile.startsWith("pocketcraftcompanion.jar")
     }
 
     suspend fun ensureBedrockBridgePlugins(
@@ -304,8 +312,8 @@ object PluginManager {
         updated = ensureTopLevelYamlValue(updated, "cache-chunks", "true")
         updated = ensureTopLevelYamlValue(updated, "max-auto-connect-attempts", "5")
         updated = ensureTopLevelYamlValue(updated, "forward-hostname", "false")
-        updated = ensureYamlValueByKey(updated, "validate-bedrock-login", "false")
-        updated = ensureYamlValueByKey(updated, "mtu", "1200")
+        updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "validate-bedrock-login", "false")
+        updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "mtu", "1200")
         updated = ensureYamlSectionValue(updated, "advanced", "floodgate-key-file", floodgateKeyPath)
         updated = ensureYamlSectionValue(updated, "java", "auth-type", "floodgate")
 
@@ -341,14 +349,15 @@ object PluginManager {
      * The backup is stored outside the server world folder so it survives world resets.
      */
     fun preserveFloodgateKey(context: Context, worldName: String) {
-        val serverDir = File(context.filesDir, "servers/$worldName")
+        val serverDir = ServerFileManager.getServerDir(context, worldName)
+        val backupDir = File(context.filesDir, "servers/$worldName").also { it.mkdirs() }
         val floodgateDirs = listOf(
             File(serverDir, "plugins/Floodgate"),
             File(serverDir, "plugins/floodgate")
         )
         val keyFile = floodgateDirs.map { File(it, "key.pem") }.firstOrNull { it.exists() }
         val defaultKeyFile = File(floodgateDirs.first(), "key.pem")
-        val backupFile = File(serverDir, "floodgate_key_backup.pem")
+        val backupFile = File(backupDir, "floodgate_key_backup.pem")
 
         if (keyFile != null && !backupFile.exists()) {
             // First time — back it up
@@ -465,7 +474,7 @@ object PluginManager {
             .split('\n')
             .toMutableList()
         val keyIndex = lines.indexOfFirst { line ->
-            line.trimStart() == "$key: $value" || (!line.startsWith(" ") && !line.startsWith("\t") && line.trimStart().startsWith("$key:"))
+            (!line.startsWith(" ") && !line.startsWith("\t")) && (line.trimStart() == "$key: $value" || line.trimStart().startsWith("$key:"))
         }
         if (keyIndex != -1) {
             lines[keyIndex] = "$key: ${formatYamlScalar(value)}"
@@ -512,12 +521,13 @@ object PluginManager {
             return lines.joinToString("\n").trimEnd() + "\n"
         }
 
+        val sectionIndent = lines[sectionStart].takeWhile { it == ' ' || it == '\t' }
         var sectionEnd = lines.size
         for (index in (sectionStart + 1) until lines.size) {
             val line = lines[index]
-            val trimmed = line.trim()
-            if (trimmed.isBlank() || trimmed.startsWith("#")) continue
-            if (!line.startsWith(" ") && !line.startsWith("\t")) {
+            if (line.trim().isBlank() || line.trim().startsWith("#")) continue
+            val indent = line.takeWhile { it == ' ' || it == '\t' }
+            if (indent.length <= sectionIndent.length) {
                 sectionEnd = index
                 break
             }
@@ -525,20 +535,24 @@ object PluginManager {
 
         val keyIndex = ((sectionStart + 1) until sectionEnd).firstOrNull { index ->
             val line = lines[index]
-            (line.startsWith(" ") || line.startsWith("\t")) && line.trimStart().startsWith("$key:")
+            val indent = line.takeWhile { it == ' ' || it == '\t' }
+            indent.length > sectionIndent.length && line.trimStart().startsWith("$key:")
         }
 
         if (keyIndex != null) {
-            lines[keyIndex] = "  $key: ${formatYamlScalar(value)}"
+            val existingIndent = lines[keyIndex].takeWhile { it == ' ' || it == '\t' }
+            lines[keyIndex] = "$existingIndent$key: ${formatYamlScalar(value)}"
         } else {
-            lines.add(sectionEnd, "  $key: ${formatYamlScalar(value)}")
+            val targetIndent = sectionIndent + "  "
+            lines.add(sectionEnd, "$targetIndent$key: ${formatYamlScalar(value)}")
         }
 
         return lines.joinToString("\n").trimEnd() + "\n"
     }
 
-    private fun ensureYamlValueByKey(
+    private fun ensureYamlPathValue(
         original: String,
+        path: List<String>,
         key: String,
         value: String
     ): String {
@@ -547,18 +561,67 @@ object PluginManager {
             .split('\n')
             .toMutableList()
 
-        val keyIndex = lines.indexOfFirst { it.trimStart().startsWith("$key:") }
-        if (keyIndex != -1) {
-            val indent = lines[keyIndex].takeWhile { it == ' ' || it == '\t' }
-            lines[keyIndex] = "$indent$key: ${formatYamlScalar(value)}"
-        } else {
-            if (lines.size == 1 && lines[0].isBlank()) lines.clear()
-            if (lines.isNotEmpty() && lines.last().isNotBlank()) lines += ""
-            lines += "advanced:"
-            lines += "  bedrock:"
-            lines += "    $key: ${formatYamlScalar(value)}"
+        if (lines.size == 1 && lines[0].isBlank()) {
+            lines.clear()
         }
+
+        var searchStart = 0
+        var searchEnd = lines.size
+
+        path.forEachIndexed { depth, section ->
+            val indent = "  ".repeat(depth)
+            val sectionIndex = (searchStart until searchEnd).firstOrNull { index ->
+                val line = lines[index]
+                line.trim() == "$section:" && leadingYamlIndent(line) == indent.length
+            }
+
+            val actualIndex = if (sectionIndex != null) {
+                sectionIndex
+            } else {
+                val insertionIndex = searchEnd
+                lines.add(insertionIndex, "$indent$section:")
+                searchEnd += 1
+                insertionIndex
+            }
+
+            searchStart = actualIndex + 1
+            searchEnd = findYamlSectionEnd(lines, actualIndex)
+        }
+
+        val keyIndent = "  ".repeat(path.size)
+        val keyIndex = (searchStart until searchEnd).firstOrNull { index ->
+            val line = lines[index]
+            leadingYamlIndent(line) == keyIndent.length && line.trimStart().startsWith("$key:")
+        }
+
+        val formatted = formatYamlScalar(value)
+        if (keyIndex != null) {
+            lines[keyIndex] = "$keyIndent$key: $formatted"
+        } else {
+            lines.add(searchEnd, "$keyIndent$key: $formatted")
+        }
+
         return lines.joinToString("\n").trimEnd() + "\n"
+    }
+
+    private fun findYamlSectionEnd(
+        lines: List<String>,
+        sectionStart: Int
+    ): Int {
+        val sectionIndent = leadingYamlIndent(lines[sectionStart])
+        for (index in (sectionStart + 1) until lines.size) {
+            val line = lines[index]
+            val trimmed = line.trim()
+            if (trimmed.isBlank() || trimmed.startsWith("#")) continue
+            if (leadingYamlIndent(line) <= sectionIndent) {
+                return index
+            }
+        }
+        return lines.size
+    }
+
+    private fun leadingYamlIndent(line: String): Int {
+        return line.takeWhile { it == ' ' || it == '\t' }.length
     }
 
     private fun String.stripYamlQuotes(): String {
@@ -571,14 +634,40 @@ object PluginManager {
         return hasGeyser && hasFloodgate
     }
 
-    fun supportsMods(worldName: String): Boolean {
-        // Fallback to worldName if game version not available, or check config repo
-        // For simplicity in list functions, we'll keep the signature but might need logic update
-        return true 
+    fun getRuntimeKeyForWorld(context: Context, worldName: String): String {
+        val serverDir = ServerFileManager.getServerDirNoCreate(context, worldName)
+        if (!serverDir.exists()) return "paper"
+        val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
+        val serverType = com.pocketcraft.server.data.model.ServerType.fromString(props.getProperty("pocketcraft-server-type"))
+        val version = props.getProperty("pocketcraft-game-version").orEmpty()
+        return when (serverType) {
+            com.pocketcraft.server.data.model.ServerType.FABRIC -> "fabric-$version"
+            com.pocketcraft.server.data.model.ServerType.PAPER -> "paper-$version"
+            com.pocketcraft.server.data.model.ServerType.PURPUR -> "purpur-$version"
+            com.pocketcraft.server.data.model.ServerType.MODPACK -> {
+                val loader = props.getProperty("pocketcraft-modpack-loader").orEmpty().lowercase()
+                when {
+                    loader.contains("quilt") -> "quilt-$version"
+                    loader.contains("fabric") -> "fabric-$version"
+                    loader.contains("neoforge") -> "neoforge-$version"
+                    loader.contains("forge") -> "forge-$version"
+                    else -> "modpack-$version"
+                }
+            }
+        }
     }
 
-    fun supportsFabricMods(worldName: String): Boolean {
+    fun supportsMods(worldNameOrRuntimeKey: String): Boolean {
+        val normalized = worldNameOrRuntimeKey.lowercase(Locale.US)
+        if (normalized.contains("paper") || normalized.contains("purpur")) {
+            return false
+        }
         return true
+    }
+
+    fun supportsFabricMods(worldNameOrRuntimeKey: String): Boolean {
+        val normalized = worldNameOrRuntimeKey.lowercase(Locale.US)
+        return normalized.contains("fabric") || normalized.contains("quilt")
     }
 
     fun listMods(context: Context, worldName: String): List<Plugin> {
@@ -799,33 +888,17 @@ object PluginManager {
     ): List<RemoteCatalogItem> = coroutineScope {
         val results = when (type) {
             ContentType.PLUGINS -> {
-                val perProviderLimit = (limit / 2).coerceAtLeast(6)
-                val modrinth = async {
-                    runCatching {
-                        searchModrinthCatalog(
-                            context = context,
-                            type = type,
-                            query = normalizedQuery,
-                            minecraftVersion = minecraftVersion,
-                            runtimeKey = runtimeKey,
-                            limit = perProviderLimit
-                        )
-                    }.getOrDefault(emptyList())
-                }
-                val hangar = async {
-                    runCatching {
-                        searchHangarPlugins(
-                            context = context,
-                            query = normalizedQuery,
-                            minecraftVersion = minecraftVersion,
-                            limit = perProviderLimit
-                        )
-                    }.getOrDefault(emptyList())
-                }
                 mergeCatalogResults(
-                    items = modrinth.await() + hangar.await(),
+                    items = searchModrinthCatalog(
+                        context = context,
+                        type = type,
+                        query = normalizedQuery,
+                        minecraftVersion = minecraftVersion,
+                        runtimeKey = runtimeKey,
+                        limit = limit
+                    ),
                     limit = limit,
-                    blankQuery = normalizedQuery.isBlank()
+                    blankQuery = true
                 )
             }
             ContentType.MODS,
@@ -895,7 +968,7 @@ object PluginManager {
         val facets = buildModrinthFacets(type)
         val encodedQuery = URLEncoder.encode(query, "UTF-8")
         val encodedFacets = URLEncoder.encode(facets, "UTF-8")
-        val index = if (query.isBlank()) "downloads" else "relevance"
+        val index = "downloads"
         val url = buildString {
             append("$MODRINTH_BASE_URL/search")
             append("?query=$encodedQuery")
@@ -1386,7 +1459,7 @@ object PluginManager {
         }
     }
 
-    private fun getFileNameFromUri(context: Context, uri: Uri): String? {
+    fun getFileNameFromUri(context: Context, uri: Uri): String? {
         var name: String? = null
         context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
             val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
@@ -1415,6 +1488,8 @@ object PluginManager {
         return when {
             normalizedVersion.contains("quilt") -> listOf("quilt", "fabric")
             normalizedVersion.contains("fabric") -> listOf("fabric")
+            normalizedVersion.contains("neoforge") -> listOf("neoforge")
+            normalizedVersion.contains("forge") -> listOf("forge")
             else -> emptyList()
         }
     }
@@ -1424,6 +1499,8 @@ object PluginManager {
         return when {
             normalizedVersion.contains("quilt") -> "Quilt"
             normalizedVersion.contains("fabric") -> "Fabric"
+            normalizedVersion.contains("neoforge") -> "NeoForge"
+            normalizedVersion.contains("forge") -> "Forge"
             else -> "Vanilla/Paper"
         }
     }
@@ -1573,6 +1650,38 @@ object PluginManager {
         }
     }
 
+    fun isDependencyInstalled(context: Context, worldName: String, slug: String, title: String, projectId: String): Boolean {
+        val slugLower = slug.lowercase()
+        val titleLower = title.lowercase()
+        val idLower = projectId.lowercase()
+
+        // Check mods directory first
+        val modsDir = getModsDir(context, worldName)
+        val modsFiles = modsDir.listFiles()
+        if (modsFiles != null) {
+            val found = modsFiles.any { file ->
+                val n = file.name.lowercase()
+                n.contains(slugLower) || n.contains(idLower) || 
+                    n.contains(titleLower.replace(" ", "")) || 
+                    n.contains(titleLower.replace("-", ""))
+            }
+            if (found) return true
+        }
+
+        // Also check plugins directory
+        val pluginsDir = getPluginsDir(context, worldName)
+        val pluginsFiles = pluginsDir.listFiles()
+        if (pluginsFiles != null) {
+            return pluginsFiles.any { file ->
+                val n = file.name.lowercase()
+                n.contains(slugLower) || n.contains(idLower) || 
+                    n.contains(titleLower.replace(" ", "")) || 
+                    n.contains(titleLower.replace("-", ""))
+            }
+        }
+        return false
+    }
+
     private fun isManagedPluginEnabled(context: Context, worldName: String, projectId: String): Boolean {
         val pluginsDir = getPluginsDir(context, worldName)
         return pluginsDir.listFiles()?.any {
@@ -1636,5 +1745,56 @@ object PluginManager {
     private fun userAgent(): String {
         val versionName = BuildConfig.VERSION_NAME.takeIf { it.isNotBlank() } ?: "dev"
         return "${BuildConfig.APPLICATION_ID}/$versionName (Android)"
+    }
+
+    data class ModDependency(
+        val projectId: String,
+        val title: String,
+        val slug: String,
+        val pageUrl: String,
+        val isRequired: Boolean
+    )
+
+    suspend fun fetchModDependencies(context: Context, projectId: String): List<ModDependency> = withContext(Dispatchers.IO) {
+        try {
+            val url = "$MODRINTH_BASE_URL/project/$projectId/dependencies"
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", userAgent())
+                .build()
+
+            val client = getHttpClient(context)
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext emptyList()
+                val payload = response.body?.string().orEmpty()
+                if (payload.isBlank()) return@withContext emptyList()
+
+                val obj = JSONObject(payload)
+                val projectsArr = obj.optJSONArray("projects") ?: return@withContext emptyList()
+                val result = mutableListOf<ModDependency>()
+                for (i in 0 until projectsArr.length()) {
+                    val p = projectsArr.getJSONObject(i)
+                    val id = p.optString("id")
+                    val title = p.optString("title")
+                    val slug = p.optString("slug")
+                    if (id.isNotBlank() && title.isNotBlank()) {
+                        val depSlug = slug.ifBlank { id }
+                        result.add(
+                            ModDependency(
+                                projectId = id,
+                                title = title,
+                                slug = depSlug,
+                                pageUrl = "https://modrinth.com/mod/$depSlug",
+                                isRequired = true
+                            )
+                        )
+                    }
+                }
+                return@withContext result
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("PluginManager", "Error fetching mod dependencies: ${e.message}", e)
+            emptyList()
+        }
     }
 }

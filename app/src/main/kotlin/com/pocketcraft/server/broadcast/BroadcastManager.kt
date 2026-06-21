@@ -3,6 +3,7 @@ package com.pocketcraft.server.broadcast
 import android.content.Context
 import android.util.Log
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
@@ -22,7 +23,15 @@ data class BroadcastMessage(
     val type: String = "info",
     val dismissible: Boolean = true,
     val createdAt: Timestamp? = null,
-    val targetMinVersion: Int = 0
+    val targetMinVersion: Int = 0,
+    val targetMaxVersion: Int = 0,
+    val interactionType: String = "none",
+    val questionPrompt: String = "",
+    val questionOptions: List<String> = emptyList(),
+    /** Optional window: popup only shows on/after this date. */
+    val startDate: Timestamp? = null,
+    /** Optional window: popup stops showing after this date (poll/opt-in expires). */
+    val expiryDate: Timestamp? = null
 )
 
 object BroadcastManager {
@@ -62,8 +71,17 @@ object BroadcastManager {
                         val type = (doc.firstString("type") ?: "info").normalizeType()
                         val dismissible = doc.firstBoolean("dismissible") ?: true
                         val targetMinVersion = doc.firstInt("targetMinVersion")
+                        val targetMaxVersion = doc.firstInt("targetMaxVersion")
                         val createdAtDate = doc.firstDate("createdAt")
                         val createdAt = createdAtDate?.let { Timestamp(it) }
+
+                        val interactionType = doc.getString("interactionType") ?: "none"
+                        val questionMap = doc.get("question") as? Map<*, *>
+                        val questionPrompt = questionMap?.get("prompt") as? String ?: ""
+                        val optionsList = questionMap?.get("options") as? List<*>
+                        val questionOptions = optionsList?.mapNotNull { it as? String } ?: emptyList()
+                        val startDate = (doc.get("startDate") as? com.google.firebase.Timestamp)
+                        val expiryDate = (doc.get("expiryDate") as? com.google.firebase.Timestamp)
 
                         val msg = BroadcastMessage(
                             id = doc.id,
@@ -73,26 +91,34 @@ object BroadcastManager {
                             type = type,
                             dismissible = dismissible,
                             createdAt = createdAt,
-                            targetMinVersion = targetMinVersion
+                            targetMinVersion = targetMinVersion,
+                            targetMaxVersion = targetMaxVersion,
+                            interactionType = interactionType,
+                            questionPrompt = questionPrompt,
+                            questionOptions = questionOptions,
+                            startDate = startDate,
+                            expiryDate = expiryDate
                         )
-                        Log.d("BroadcastManager", "Parsed broadcast document: id=${doc.id}, active=$active, title='$title', type='$type', dismissible=$dismissible, targetMinVersion=$targetMinVersion")
+                        Log.d("BroadcastManager", "Parsed broadcast document: id=${doc.id}, active=$active, title='$title', type='$type', dismissible=$dismissible, targetMinVersion=$targetMinVersion, targetMaxVersion=$targetMaxVersion")
                         msg
                     } catch (e: Exception) {
                         Log.e("BroadcastManager", "Failed parsing broadcast document ${doc.id}: ${e.message}", e)
                         null
                     }
                 }.filter { msg ->
-                    val matchesVersion = appVersionCode >= msg.targetMinVersion
-                    val isToShow = msg.active && matchesVersion
+                    val now = System.currentTimeMillis()
+                    val matchesMinVersion = appVersionCode >= msg.targetMinVersion
+                    val matchesMaxVersion = msg.targetMaxVersion == 0 || appVersionCode <= msg.targetMaxVersion
+                    val matchesVersion = matchesMinVersion && matchesMaxVersion
+                    val afterStart = msg.startDate == null || now >= msg.startDate.toDate().time
+                    val beforeExpiry = msg.expiryDate == null || now < msg.expiryDate.toDate().time
+                    val isToShow = msg.active && matchesVersion && afterStart && beforeExpiry
 
-                    Log.d("BroadcastManager", "Broadcast decision for ${msg.id}: active=${msg.active}, appVersionCode=$appVersionCode, targetMinVersion=${msg.targetMinVersion}, matchesVersion=$matchesVersion -> show=$isToShow")
-                    if (!msg.active) {
-                        Log.d("BroadcastManager", "Skipped broadcast ${msg.id}: active flag is false.")
-                    } else if (!matchesVersion) {
-                        Log.d("BroadcastManager", "Skipped broadcast ${msg.id}: appVersionCode $appVersionCode < targetMinVersion ${msg.targetMinVersion}.")
-                    } else {
-                        Log.d("BroadcastManager", "Showing broadcast ${msg.id} now...")
-                    }
+                    if (!msg.active) Log.d("BroadcastManager", "Skipped ${msg.id}: active=false")
+                    else if (!matchesVersion) Log.d("BroadcastManager", "Skipped ${msg.id}: version bounds mismatch")
+                    else if (!afterStart) Log.d("BroadcastManager", "Skipped ${msg.id}: before startDate")
+                    else if (!beforeExpiry) Log.d("BroadcastManager", "Skipped ${msg.id}: past expiryDate")
+                    else Log.d("BroadcastManager", "Showing broadcast ${msg.id}")
                     isToShow
                 }.sortedByDescending { it.createdAt?.seconds ?: 0 }
 
@@ -276,5 +302,107 @@ object BroadcastManager {
                 }
             }
             .firstOrNull()
+    }
+
+    fun submitResponse(broadcastId: String, selectedOption: String, interactionType: String, uid: String) {
+        if (uid.isBlank()) return
+        val responseDocId = "${broadcastId}_$uid"
+        if (interactionType == "opt_in") {
+            db.collection("users").document(uid)
+                .update("optedInFeatures", com.google.firebase.firestore.FieldValue.arrayUnion(broadcastId))
+                .addOnSuccessListener {
+                    Log.d("BroadcastManager", "Opt-in success for feature: $broadcastId")
+                }
+                .addOnFailureListener { e ->
+                    Log.e("BroadcastManager", "Opt-in failed for feature: $broadcastId", e)
+                }
+
+            // Save user details for the opt-in in broadcast_results/{broadcastId}
+            val manufacturer = android.os.Build.MANUFACTURER
+            val model = android.os.Build.MODEL
+            val deviceName = if (model.startsWith(manufacturer, ignoreCase = true)) {
+                model
+            } else {
+                "$manufacturer $model"
+            }
+            val email = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: ""
+            val optInEntry = mutableMapOf<String, Any>(
+                "deviceName" to deviceName,
+                "timestamp" to com.google.firebase.Timestamp.now(),
+                "uid" to uid
+            )
+            if (email.isNotBlank()) {
+                optInEntry["email"] = email
+            }
+
+            val resultRef = db.collection("broadcast_results").document(broadcastId)
+            val baseData = mapOf(
+                "broadcastId" to broadcastId,
+                "type" to "opt_in"
+            )
+            resultRef.set(baseData, com.google.firebase.firestore.SetOptions.merge())
+                .addOnSuccessListener {
+                    resultRef.update("optIns", com.google.firebase.firestore.FieldValue.arrayUnion(optInEntry))
+                        .addOnSuccessListener {
+                            Log.d("BroadcastManager", "Successfully added opt-in entry for user $uid")
+                        }
+                        .addOnFailureListener { e ->
+                            resultRef.set(
+                                mapOf("optIns" to listOf(optInEntry)),
+                                com.google.firebase.firestore.SetOptions.merge()
+                            )
+                        }
+                }
+
+            // Also write a sentinel to broadcast_responses so the answered state is tracked.
+            val sentinelData = mapOf(
+                "broadcastId" to broadcastId,
+                "uid" to uid,
+                "interactionType" to "opt_in",
+                "respondedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+            )
+            db.collection("broadcast_responses").document(responseDocId)
+                .set(sentinelData)
+                .addOnFailureListener { e ->
+                    Log.e("BroadcastManager", "Opt-in sentinel write failed for $broadcastId", e)
+                }
+
+        } else if (interactionType == "question") {
+            val response = mapOf(
+                "broadcastId" to broadcastId,
+                "uid" to uid,
+                "selectedOption" to selectedOption,
+                "respondedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+            )
+            db.collection("broadcast_responses").document(responseDocId)
+                .set(response)
+                .addOnSuccessListener {
+                    Log.d("BroadcastManager", "Poll response success for broadcast: $broadcastId")
+                }
+                .addOnFailureListener { e ->
+                    Log.e("BroadcastManager", "Poll response failed for broadcast: $broadcastId", e)
+                }
+
+            // Increment option count in broadcast_results/{broadcastId}
+            val safeOptionKey = selectedOption.replace(".", "_").replace("/", "_")
+            val resultRef = db.collection("broadcast_results").document(broadcastId)
+            val baseData = mapOf(
+                "broadcastId" to broadcastId,
+                "type" to "poll"
+            )
+            resultRef.set(baseData, com.google.firebase.firestore.SetOptions.merge())
+                .addOnSuccessListener {
+                    resultRef.update("optionCounts.$safeOptionKey", com.google.firebase.firestore.FieldValue.increment(1))
+                        .addOnSuccessListener {
+                            Log.d("BroadcastManager", "Successfully incremented poll count for option $selectedOption")
+                        }
+                        .addOnFailureListener { e ->
+                            resultRef.set(
+                                mapOf("optionCounts" to mapOf(safeOptionKey to 1)),
+                                com.google.firebase.firestore.SetOptions.merge()
+                            )
+                        }
+                }
+        }
     }
 }

@@ -38,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Group
@@ -69,6 +70,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -436,6 +438,11 @@ fun PlayerOnlineCard(
     )
 }
 
+private data class WhitelistSearchResult(
+    val player: PlayerInfo,
+    val isWhitelisted: Boolean
+)
+
 @Composable
 fun WhitelistTab(
     stateHolder: ServerStateHolder,
@@ -443,12 +450,19 @@ fun WhitelistTab(
     onPlayerSelected: (PlayerInfo) -> Unit
 ) {
     var query by remember { mutableStateOf("") }
-    val filteredPlayers = remember(players, query) {
+    val addedNames = remember { mutableStateListOf<String>() }
+    val searchResults = remember(players, stateHolder.knownPlayers, query) {
         val trimmedQuery = query.trim()
         if (trimmedQuery.isBlank()) {
-            players
+            players.map { WhitelistSearchResult(it, isWhitelisted = true) }
         } else {
-            players.filter { it.name.contains(trimmedQuery, ignoreCase = true) }
+            val whitelistedMatches = players.filter { it.name.contains(trimmedQuery, ignoreCase = true) }
+                .map { WhitelistSearchResult(it, isWhitelisted = true) }
+            val knownMatches = stateHolder.knownPlayers.filter { kp ->
+                kp.name.contains(trimmedQuery, ignoreCase = true) &&
+                players.none { wp -> wp.name.equals(kp.name, ignoreCase = true) }
+            }.map { WhitelistSearchResult(it, isWhitelisted = false) }
+            whitelistedMatches + knownMatches
         }
     }
 
@@ -496,7 +510,7 @@ fun WhitelistTab(
             }
         }
 
-        if (filteredPlayers.isEmpty()) {
+        if (searchResults.isEmpty()) {
             item {
                 Box(
                     modifier = Modifier
@@ -524,25 +538,68 @@ fun WhitelistTab(
                 }
             }
         } else {
-            itemsIndexed(filteredPlayers, key = { _, player -> player.name }) { idx, player ->
+            itemsIndexed(searchResults, key = { _, result -> result.player.name }) { idx, result ->
+                val player = result.player
                 AnimatedEntranceContainer(index = minOf(idx, 8)) {
-                    PlayerCard(
-                        username = player.name,
-                        subtitle = "Whitelisted player",
-                        badgeText = "WHITELISTED",
-                        badgeColor = PocketColors.Primary,
-                        onClick = { onPlayerSelected(player) },
-                        actions = listOf(
-                            PlayerCardAction(
-                                label = "Remove",
-                                onClick = {
-                                    stateHolder.removeWhitelistPlayer(player.name)
-                                    FirebaseAnalyticsManager.logPlayerWhitelistRemoved(player.name)
-                                },
-                                tint = PocketColors.Offline
+                    if (result.isWhitelisted) {
+                        PlayerCard(
+                            username = player.name,
+                            subtitle = "Whitelisted player",
+                            badgeText = "WHITELISTED",
+                            badgeColor = PocketColors.Primary,
+                            onClick = { onPlayerSelected(player) },
+                            actions = listOf(
+                                PlayerCardAction(
+                                    label = "Remove",
+                                    onClick = {
+                                        stateHolder.removeWhitelistPlayer(player.name)
+                                        FirebaseAnalyticsManager.logPlayerWhitelistRemoved(player.name)
+                                    },
+                                    tint = PocketColors.Offline
+                                )
                             )
                         )
-                    )
+                    } else {
+                        val isAdded = remember(addedNames, player.name) {
+                            addedNames.contains(player.name.lowercase())
+                        }
+                        PlayerCard(
+                            username = player.name,
+                            subtitle = "Already joined player",
+                            badgeText = "JOINED",
+                            badgeColor = Color.Gray,
+                            onClick = { onPlayerSelected(player) },
+                            trailingContent = {
+                                Button(
+                                    onClick = {
+                                        stateHolder.addWhitelistPlayer(player.name)
+                                        FirebaseAnalyticsManager.logPlayerWhitelistAdded(player.name)
+                                        addedNames.add(player.name.lowercase())
+                                    },
+                                    enabled = !isAdded,
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isAdded) Color.Gray.copy(alpha = 0.2f) else PocketColors.Primary,
+                                        contentColor = if (isAdded) Color.LightGray else Color.Black,
+                                        disabledContainerColor = Color.Gray.copy(alpha = 0.2f),
+                                        disabledContentColor = Color.LightGray
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = if (isAdded) Icons.Default.Check else Icons.Default.Add,
+                                        contentDescription = if (isAdded) "Added" else "Add",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isAdded) "Added" else "Add",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }

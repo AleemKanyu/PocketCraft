@@ -353,6 +353,7 @@ fun WorldsScreen(
                                         title = "Overworld (world)",
                                         isImporting = stateHolder.isImportingWorld && importDimension == "overworld",
                                         importProgress = stateHolder.importProgressPercent,
+                                        importMessage = stateHolder.importProgressMessage,
                                         enabled = stateHolder.status == ServerStatus.OFFLINE,
                                         onUpload = {
                                             importDimension = "overworld"
@@ -363,6 +364,7 @@ fun WorldsScreen(
                                         title = "Nether (world_nether)",
                                         isImporting = stateHolder.isImportingWorld && importDimension == "nether",
                                         importProgress = stateHolder.importProgressPercent,
+                                        importMessage = stateHolder.importProgressMessage,
                                         enabled = stateHolder.status == ServerStatus.OFFLINE,
                                         onUpload = {
                                             importDimension = "nether"
@@ -373,6 +375,7 @@ fun WorldsScreen(
                                         title = "End (world_the_end)",
                                         isImporting = stateHolder.isImportingWorld && importDimension == "end",
                                         importProgress = stateHolder.importProgressPercent,
+                                        importMessage = stateHolder.importProgressMessage,
                                         enabled = stateHolder.status == ServerStatus.OFFLINE,
                                         onUpload = {
                                             importDimension = "end"
@@ -697,45 +700,60 @@ private fun DimensionRow(
     title: String,
     isImporting: Boolean,
     importProgress: Float,
+    importMessage: String,
     enabled: Boolean,
     onUpload: () -> Unit
 ) {
     val isDark = com.pocketcraft.server.ui.theme.pocketIsDarkTheme()
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
             .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text(
-            text = title,
-            fontWeight = FontWeight.Medium,
-            fontSize = 14.sp,
-            color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
-        )
-        if (isImporting) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = title,
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp,
+                color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+            )
+            if (isImporting) {
                 Text(
-                    text = "${(importProgress * 100).toInt()}%",
+                    text = "${importProgress.toInt().coerceIn(0, 100)}%",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
                 )
+            } else {
+                DuoButton(
+                    text = "UPLOAD",
+                    onClick = onUpload,
+                    enabled = enabled,
+                    minHeight = 28.dp,
+                    fillMaxWidth = false
+                )
             }
-        } else {
-            DuoButton(
-                text = "UPLOAD",
-                onClick = onUpload,
-                enabled = enabled,
-                minHeight = 28.dp,
-                fillMaxWidth = false
+        }
+        if (isImporting) {
+            LinearProgressIndicator(
+                progress = { (importProgress / 100f).coerceIn(0f, 1f) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(999.dp)),
+                color = PocketColors.Primary
+            )
+            Text(
+                text = importMessage.ifBlank { "Importing world file..." },
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

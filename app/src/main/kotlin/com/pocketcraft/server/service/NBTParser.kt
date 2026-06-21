@@ -554,4 +554,78 @@ object NBTParser {
             dimension = dimensionMatch ?: parseDimension(output)
         )
     }
+
+    fun cleanPaperDatapack(levelFile: File, onOutput: (String) -> Unit): Boolean {
+        if (!levelFile.exists()) return false
+        return try {
+            val bytes = GZIPInputStream(FileInputStream(levelFile)).use { it.readBytes() }
+            val dpIdx = indexOfTag(bytes, "DataPacks", 10)
+            if (dpIdx == -1) {
+                onOutput("[PocketCraft] NBT check: DataPacks tag not found.")
+                return false
+            }
+            val enabledIdx = indexOfTagInRange(bytes, "Enabled", 9, dpIdx + 12, bytes.size)
+            if (enabledIdx == -1) {
+                onOutput("[PocketCraft] NBT check: Enabled datapacks tag not found.")
+                return false
+            }
+            
+            // Check list element type is TagString (8)
+            val elemType = bytes[enabledIdx + 10]
+            if (elemType.toInt() != 8) {
+                onOutput("[PocketCraft] NBT check: Enabled datapacks element type is not String ($elemType)")
+                return false
+            }
+            
+            val listSizeOffset = enabledIdx + 11
+            val listSize = ((bytes[listSizeOffset].toInt() and 0xFF) shl 24) or
+                           ((bytes[listSizeOffset + 1].toInt() and 0xFF) shl 16) or
+                           ((bytes[listSizeOffset + 2].toInt() and 0xFF) shl 8) or
+                           (bytes[listSizeOffset + 3].toInt() and 0xFF)
+            
+            var currentPos = enabledIdx + 15
+            var foundPaperIdx = -1
+            var paperStrLen = 0
+            
+            for (i in 0 until listSize) {
+                if (currentPos + 2 > bytes.size) break
+                val strLen = ((bytes[currentPos].toInt() and 0xFF) shl 8) or (bytes[currentPos + 1].toInt() and 0xFF)
+                if (currentPos + 2 + strLen > bytes.size) break
+                val strVal = String(bytes, currentPos + 2, strLen, Charsets.UTF_8)
+                if (strVal == "paper" || strVal == "pack:paper") {
+                    foundPaperIdx = currentPos
+                    paperStrLen = strLen
+                    break
+                }
+                currentPos += 2 + strLen
+            }
+            
+            if (foundPaperIdx != -1) {
+                onOutput("[PocketCraft] NBT check: Found 'paper' datapack in Enabled list. Removing it...")
+                val newListSize = listSize - 1
+                val sizeBytes = byteArrayOf(
+                    (newListSize shr 24).toByte(),
+                    (newListSize shr 16).toByte(),
+                    (newListSize shr 8).toByte(),
+                    newListSize.toByte()
+                )
+                
+                val prefix = bytes.copyOfRange(0, listSizeOffset)
+                val middle = bytes.copyOfRange(enabledIdx + 15, foundPaperIdx)
+                val suffix = bytes.copyOfRange(foundPaperIdx + 2 + paperStrLen, bytes.size)
+                
+                val newBytes = prefix + sizeBytes + middle + suffix
+                
+                GZIPOutputStream(FileOutputStream(levelFile)).use { it.write(newBytes) }
+                onOutput("[PocketCraft] NBT check: Successfully removed 'paper' datapack from level.dat.")
+                return true
+            } else {
+                onOutput("[PocketCraft] NBT check: 'paper' datapack not found in Enabled list.")
+                return false
+            }
+        } catch (e: Exception) {
+            onOutput("[PocketCraft] NBT clean failed: ${e.message}")
+            false
+        }
+    }
 }

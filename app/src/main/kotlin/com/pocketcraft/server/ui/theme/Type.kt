@@ -31,7 +31,7 @@ val DMSans = Outfit
 val DMMono = FontFamily.Monospace
 
 /** Convenience alias used by button components. */
-val ButtonFont = Monocraft
+val ButtonFont = Outfit
 
 val PocketCraftTypography = Typography(
     displayLarge = TextStyle(

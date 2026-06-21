@@ -92,7 +92,7 @@ object ServerPropertiesHelper {
 
         val currentView = props.getProperty("view-distance")?.toIntOrNull()?.coerceIn(3, 32)
         val desiredView = props.getProperty(DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull()?.coerceIn(3, 32)
-        val resolvedView = desiredView ?: currentView ?: DEFAULT_VIEW_DISTANCE
+        val resolvedView = currentView ?: desiredView ?: DEFAULT_VIEW_DISTANCE
         if (desiredView != resolvedView) {
             props[DESIRED_VIEW_DISTANCE_KEY] = resolvedView.toString()
             changed = true
@@ -104,7 +104,7 @@ object ServerPropertiesHelper {
 
         val currentSimulation = props.getProperty("simulation-distance")?.toIntOrNull()?.coerceIn(3, 32)
         val desiredSimulation = props.getProperty(DESIRED_SIMULATION_DISTANCE_KEY)?.toIntOrNull()?.coerceIn(3, 32)
-        val resolvedSimulation = desiredSimulation ?: currentSimulation ?: DEFAULT_SIMULATION_DISTANCE
+        val resolvedSimulation = currentSimulation ?: desiredSimulation ?: DEFAULT_SIMULATION_DISTANCE
         if (desiredSimulation != resolvedSimulation) {
             props[DESIRED_SIMULATION_DISTANCE_KEY] = resolvedSimulation.toString()
             changed = true

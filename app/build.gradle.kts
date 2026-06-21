@@ -41,6 +41,9 @@ val configuredPrivacyPolicyUrl = localProperties.getProperty("privacyPolicyUrl")
     ?: System.getenv("POCKETCRAFT_PRIVACY_POLICY_URL")
 val configuredTermsOfUseUrl = localProperties.getProperty("termsOfUseUrl")
     ?: System.getenv("POCKETCRAFT_TERMS_OF_USE_URL")
+val configuredRelaySecret = localProperties.getProperty("relaySecret")
+    ?: System.getenv("POCKETCRAFT_RELAY_SECRET")
+    ?: "e7f5fbdda85c265419e519454f8d54643930116b89a1b58dcb2b86f91889d3d3"
 
 val gitRemoteUrl = runCatching {
     val process = ProcessBuilder("git", "config", "--get", "remote.origin.url")
@@ -59,6 +62,9 @@ val legalTermsOfUseUrl = configuredTermsOfUseUrl?.trim().takeUnless { it.isNullO
     ?: "https://pocketcraft.online/terms"
 
 val autoVersionCode = (System.currentTimeMillis() / 60000).toInt()
+val fastReleaseBuild = providers.gradleProperty("pocketcraftFastRelease")
+    .map { it.equals("true", ignoreCase = true) }
+    .getOrElse(false)
 
 android {
     namespace = "com.pocketcraft.server"
@@ -70,8 +76,8 @@ android {
         applicationId = "com.pocketcraft.server"
         minSdk = 26
         targetSdk = 35
-        versionCode = 29687737
-        versionName = "1.5.2"
+        versionCode = autoVersionCode
+        versionName = "1.6.5"
 
         buildConfigField("String", "RELAY_PUBLIC_DOMAIN", "\"joinmc.link\"")
         buildConfigField("String", "GITHUB_REPO_OWNER", "\"$githubRepoOwner\"")
@@ -79,6 +85,7 @@ android {
         buildConfigField("String", "PRIVACY_POLICY_URL", "\"$legalPrivacyPolicyUrl\"")
         buildConfigField("String", "TERMS_OF_USE_URL", "\"$legalTermsOfUseUrl\"")
         buildConfigField("String", "LEGAL_POLICY_VERSION", "\"2026-04-06\"")
+        buildConfigField("String", "RELAY_SECRET", "\"$configuredRelaySecret\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -127,8 +134,8 @@ android {
         release {
             signingConfig = signingConfigs.getByName("release")
             
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = !fastReleaseBuild
+            isShrinkResources = !fastReleaseBuild
             isDebuggable = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -218,6 +225,8 @@ dependencies {
     ksp(libs.room.compiler)
 
     implementation(libs.datastore.preferences)
+    implementation(libs.play.billing)
+
 
     implementation(libs.retrofit)
     implementation(libs.retrofit.gson)
@@ -231,6 +240,7 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-messaging-ktx")
     implementation("com.google.firebase:firebase-config-ktx")
+    implementation("com.google.firebase:firebase-functions-ktx")
     implementation("com.google.firebase:firebase-inappmessaging-display-ktx")
     implementation("io.grpc:grpc-api:1.57.2")
     implementation("io.grpc:grpc-context:1.57.2")

@@ -46,7 +46,6 @@ class RelayManager(private val context: Context) {
     companion object {
         const val CONTROL_PORT = 8080
         const val PHONE_TUNNEL_PORT = 9000
-        private const val SOCKET_BUFFER_SIZE = 256 * 1024
         private const val PLAYER_BRIDGE_BUFFER_SIZE = 64 * 1024
         private const val LOW_LATENCY_WARMUP_BYTES = 128 * 1024L
         private const val LOW_LATENCY_WARMUP_NS = 4_000_000_000L
@@ -79,7 +78,7 @@ class RelayManager(private val context: Context) {
     private var bedrockUdpBridge: BedrockUdpBridge? = null
     @Volatile
     private var activeBedrockSocket: Socket? = null
-    private val bedrockTxChannel = Channel<ByteArray>(capacity = 256)
+    private val bedrockTxChannel = Channel<ByteArray>(capacity = Channel.UNLIMITED)
     private var bedrockTxJob: kotlinx.coroutines.Job? = null
     private val droppedFrameCount = AtomicInteger(0)
 
@@ -135,7 +134,7 @@ class RelayManager(private val context: Context) {
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
         val userId = currentRelaySessionId()
         val preferredRelayHost = prefs.relayHost
-        val fallbackRelayHost = RelayServers.SINGAPORE.host
+        val fallbackRelayHost = RelayServers.MUMBAI.host
         val hostCandidates = buildList {
             if (preferFallbackRelay && preferredRelayHost != fallbackRelayHost) {
                 add(fallbackRelayHost)
@@ -236,8 +235,6 @@ class RelayManager(private val context: Context) {
 
                 try {
                     outStream?.write(firstFrame)
-                    
-                    // Batch drain any other immediately available frames to reduce syscalls
                     while (true) {
                         val nextResult = bedrockTxChannel.tryReceive()
                         if (nextResult.isSuccess) {
@@ -247,8 +244,6 @@ class RelayManager(private val context: Context) {
                             break
                         }
                     }
-                    
-                    // Flush the batched frames to the network
                     outStream?.flush()
                 } catch (e: Exception) {
                     android.util.Log.e("RelayManager", "Failed to send Bedrock response: ${e.message}")
@@ -353,11 +348,11 @@ class RelayManager(private val context: Context) {
             )
         }
         if (!poolReady) {
-            if (!activeRelayIsFallback && (activeRelayHost ?: "") != RelayServers.SINGAPORE.host) {
+            if (!activeRelayIsFallback && (activeRelayHost ?: "") != RelayServers.MUMBAI.host) {
                 preferFallbackRelay = true
                 android.util.Log.w(
                     "RelayManager",
-                    "Selected relay tunnel pool did not become ready. Next registration attempt will use fallback relay ${RelayServers.SINGAPORE.host}."
+                    "Selected relay tunnel pool did not become ready. Next registration attempt will use fallback relay ${RelayServers.MUMBAI.host}."
                 )
             }
             android.util.Log.w(
@@ -991,8 +986,8 @@ class RelayManager(private val context: Context) {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = SOCKET_BUFFER_SIZE
-            socket.receiveBufferSize = SOCKET_BUFFER_SIZE
+            socket.sendBufferSize = 512 * 1024
+            socket.receiveBufferSize = 512 * 1024
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 1, 0)
         }
@@ -1048,13 +1043,14 @@ class RelayManager(private val context: Context) {
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
+                conn.connectTimeout = 3000
+                conn.readTimeout = 3000
                 conn.doOutput = true
                 conn.outputStream.write("""{"userId":"$sessionId"}""".toByteArray())
                 conn.outputStream.flush()
                 conn.disconnect()
             } catch (_: IOException) {}
         }
-
         disconnect()
     }
 

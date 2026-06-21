@@ -2,6 +2,7 @@ package com.pocketcraft.server
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import com.pocketcraft.server.service.PlayerDataManager
 import com.pocketcraft.server.service.ServerFileManager
 import kotlinx.coroutines.Dispatchers
@@ -17,17 +18,35 @@ object WorldImporter {
         serverType: com.pocketcraft.server.data.model.ServerType,
         serverVersionId: String,
         folderName: String = "world",
-        onProgress: (Float) -> Unit = {}
+        onProgress: (Float, String) -> Unit = { _, _ -> }
     ): Result<Unit> =
         withContext(Dispatchers.IO) {
             val tempFile = File(context.cacheDir, "import_temp_${System.currentTimeMillis()}.zip")
             try {
                 // Step 1: Copy to local temp file to avoid ContentResolver stream instabilities
+                onProgress(0f, "Importing selected world file...")
+                val sourceSize = queryContentLength(context, zipUri)
                 context.contentResolver.openInputStream(zipUri)?.use { input ->
                     tempFile.outputStream().use { output ->
-                        input.copyTo(output)
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        var copied = 0L
+                        var lastPercent = -1
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read <= 0) break
+                            output.write(buffer, 0, read)
+                            copied += read
+                            if (sourceSize > 0L) {
+                                val percent = ((copied * 35L) / sourceSize).toInt().coerceIn(0, 35)
+                                if (percent != lastPercent) {
+                                    lastPercent = percent
+                                    onProgress(percent / 100f, "Importing selected world file...")
+                                }
+                            }
+                        }
                     }
                 } ?: throw Exception("Could not open source file")
+                onProgress(0.35f, "Preparing to extract world files...")
 
                 val serverDir = ServerFileManager.getServerDir(context, folderName)
                 // Extract directly into serverDir, NOT a subfolder named after the world.
@@ -54,7 +73,8 @@ object WorldImporter {
                             val currentPercent = (processed * 100 / totalEntries.toInt()).coerceIn(0, 100)
                             if (currentPercent != lastPercent) {
                                 lastPercent = currentPercent
-                                onProgress(processed / totalEntries)
+                                val progress = 0.35f + ((processed / totalEntries) * 0.60f)
+                                onProgress(progress.coerceIn(0.35f, 0.95f), "Extracting world files...")
                             }
                             continue
                         }
@@ -63,7 +83,8 @@ object WorldImporter {
                             val currentPercent = (processed * 100 / totalEntries.toInt()).coerceIn(0, 100)
                             if (currentPercent != lastPercent) {
                                 lastPercent = currentPercent
-                                onProgress(processed / totalEntries)
+                                val progress = 0.35f + ((processed / totalEntries) * 0.60f)
+                                onProgress(progress.coerceIn(0.35f, 0.95f), "Extracting world files...")
                             }
                             continue
                         }
@@ -90,7 +111,8 @@ object WorldImporter {
                         val currentPercent = (processed * 100 / totalEntries.toInt()).coerceIn(0, 100)
                         if (currentPercent != lastPercent) {
                             lastPercent = currentPercent
-                            onProgress(processed / totalEntries)
+                            val progress = 0.35f + ((processed / totalEntries) * 0.60f)
+                            onProgress(progress.coerceIn(0.35f, 0.95f), "Extracting world files...")
                         }
                     }
                 }
@@ -110,9 +132,11 @@ object WorldImporter {
 
                 // Step 3: Fix nested structure and migrate server files
                 // Note: The ServerStateHolder.flattenWorldStructure will also run during next refresh.
+                onProgress(0.97f, "Normalizing imported world files...")
                 normalizeRestoredServerBackup(serverDir, serverType, folderName)
 
                 // Step 4: Fix player data UUIDs (Online -> Offline conversion)
+                onProgress(0.99f, "Finalizing imported world...")
                 android.util.Log.d("WorldImporter", "Starting fixOfflineUuids for $folderName. serverDir=${serverDir.absolutePath}")
                 try {
                     val rootPlayerdata = File(serverDir, "playerdata")
@@ -122,6 +146,7 @@ object WorldImporter {
                     android.util.Log.w("WorldImporter", "Error checking playerdata locations", e)
                 }
                 PlayerDataManager.fixOfflineUuids(serverDir, folderName)
+                onProgress(1f, "World import complete!")
 
                 Result.success(Unit)
             } catch (e: Exception) {
@@ -131,6 +156,19 @@ object WorldImporter {
                 if (tempFile.exists()) tempFile.delete()
             }
         }
+
+    private fun queryContentLength(context: Context, uri: Uri): Long {
+        context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
+            if (descriptor.length > 0L) return descriptor.length
+        }
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+            val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+            if (sizeIndex >= 0 && cursor.moveToFirst()) {
+                return cursor.getLong(sizeIndex).takeIf { it > 0L } ?: -1L
+            }
+        }
+        return -1L
+    }
 
     fun normalizeRestoredServerBackup(serverDir: File, serverType: com.pocketcraft.server.data.model.ServerType, targetWorld: String = "world") {
         val targetRoot = File(serverDir, targetWorld)
@@ -351,7 +389,7 @@ object WorldImporter {
         val worldFileNames = setOf(
             "advancements", "data", "datapacks", "dim-1", "dim1", "entities",
             "icon.png", "level.dat", "level.dat_old", "playerdata", "poi", "region",
-            "session.lock", "stats", "uid.dat", "world_nether", "world_the_end"
+            "session.lock", "stats", "uid.dat"
         )
         if (!targetRoot.exists()) {
             targetRoot.mkdirs()
@@ -359,8 +397,6 @@ object WorldImporter {
         serverDir.listFiles()?.forEach { file ->
             val fileNameLower = file.name.lowercase()
             val shouldMove = fileNameLower in worldFileNames || 
-                           fileNameLower.endsWith("_nether") || 
-                           fileNameLower.endsWith("_the_end") ||
                            (file.isDirectory && File(file, "level.dat").exists())
 
             if (shouldMove && file.absolutePath != targetRoot.absolutePath && !file.absolutePath.startsWith(targetRoot.absolutePath)) {

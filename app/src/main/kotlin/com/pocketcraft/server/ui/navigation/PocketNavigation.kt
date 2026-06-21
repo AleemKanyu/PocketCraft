@@ -6,6 +6,12 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Spacer
@@ -18,10 +24,12 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.geometry.Offset
+import com.pocketcraft.server.billing.BillingManager
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.config.RelayServers
 import com.pocketcraft.server.config.RemoteConfigManager
 import android.net.Uri
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -92,8 +100,10 @@ import com.pocketcraft.server.R
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.PocketMotion
 import com.pocketcraft.server.ui.theme.pocketGlassControlBrush
+import com.pocketcraft.server.ui.theme.pocketIsDarkTheme
 import com.pocketcraft.server.ui.theme.raisedBorder
 import com.pocketcraft.server.ui.util.MobTheme
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -161,10 +171,14 @@ fun PocketTopBar(
     onRelayHostChange: (String) -> Unit,
     currentMobTheme: MobTheme,
     onMobThemeChange: (MobTheme) -> Unit,
-    relayLocked: Boolean = false
+    relayLocked: Boolean = false,
+    onPremiumUpgradeClick: () -> Unit = {}
 ) {
     var relayMenuExpanded by remember { mutableStateOf(false) }
     var themeMenuExpanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val billingManager = remember { BillingManager.getInstance(context) }
+    val isPremium by billingManager.isPremium.collectAsState()
     val relayRegions by RemoteConfigManager.relayRegions.collectAsState(initial = RelayServers.defaultRegions())
     val relayOptions = relayRegions
     val glassButtonBorder = PocketColors.IconBtnBorder
@@ -209,8 +223,13 @@ fun PocketTopBar(
                     text = "PocketCraft",
                     fontFamily = com.pocketcraft.server.ui.theme.Monocraft,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 20.sp,
-                    color = MaterialTheme.colorScheme.onSurface
+                    fontSize = when {
+                        LocalConfiguration.current.screenWidthDp < 360 -> 14.sp
+                        LocalConfiguration.current.screenWidthDp < 400 -> 17.sp
+                        else -> 20.sp
+                    },
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1
                 )
             }
         },
@@ -220,6 +239,56 @@ fun PocketTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Pro star button
+                if (!isPremium) {
+                    val infiniteTransition = rememberInfiniteTransition(label = "star_pulse")
+                    val pulseScale by infiniteTransition.animateFloat(
+                        initialValue = 1.0f,
+                        targetValue = 1.15f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(1200, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "star_scale"
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .graphicsLayer {
+                                scaleX = pulseScale
+                                scaleY = pulseScale
+                            }
+                            .size(28.dp)
+                            .raisedBorder(
+                                color = Color(0xFFFFD700), // Gold
+                                depthColor = Color(0xFFB8860B),
+                                cornerRadius = 14.dp,
+                                borderWidth = 1.dp,
+                                depthWidth = 2.dp
+                            )
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color(0xFFFFF8DC),
+                                        Color(0xFFFFD700)
+                                    )
+                                )
+                            )
+                            .clickable {
+                                onPremiumUpgradeClick()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = "Upgrade to Pro",
+                            modifier = Modifier.size(14.dp),
+                            tint = Color(0xFFD4AF37)
+                        )
+                    }
+                }
+
                 // Discord button
                 Box(
                     modifier = Modifier
@@ -243,7 +312,7 @@ fun PocketTopBar(
                         painter = painterResource(id = R.drawable.discord_colored),
                         contentDescription = "Join Discord",
                         modifier = Modifier.size(18.dp),
-                        tint = Color.Unspecified
+                        tint = if (pocketIsDarkTheme()) Color.White else Color.Unspecified
                     )
                 }
 
@@ -274,19 +343,27 @@ fun PocketTopBar(
                         expanded = themeMenuExpanded,
                         onDismissRequest = { themeMenuExpanded = false }
                     ) {
-                        MenuHeader(
-                            title = "Theme Studio",
-                            subtitle = "Tune PocketCraft's vibe"
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                         MobTheme.entries.forEach { theme ->
+                            val isLocked = theme == MobTheme.CUSTOM && !isPremium
                             PremiumDropdownItem(
                                 title = theme.themeName,
-                                subtitle = if (theme == currentMobTheme) "Currently active" else "Apply this theme",
+                                subtitle = if (isLocked) {
+                                    "Custom theme is a Pro feature"
+                                } else if (theme == currentMobTheme) {
+                                    "Currently active"
+                                } else {
+                                    "Apply this theme"
+                                },
                                 selected = theme == currentMobTheme,
+                                locked = isLocked,
+                                lockedLabel = if (theme == MobTheme.CUSTOM) "Pro" else "Soon",
                                 onClick = {
                                     themeMenuExpanded = false
-                                    onMobThemeChange(theme)
+                                    if (isLocked) {
+                                        onPremiumUpgradeClick()
+                                    } else {
+                                        onMobThemeChange(theme)
+                                    }
                                 }
                             )
                         }
@@ -389,6 +466,7 @@ private fun PremiumDropdownItem(
     subtitle: String,
     selected: Boolean,
     locked: Boolean = false,
+    lockedLabel: String = "Soon",
     onClick: () -> Unit
 ) {
     Box(
@@ -396,7 +474,7 @@ private fun PremiumDropdownItem(
             .fillMaxWidth()
             .padding(horizontal = 10.dp, vertical = 4.dp)
             .clip(RoundedCornerShape(20.dp))
-            .clickable(enabled = !locked, onClick = onClick)
+            .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier
@@ -460,7 +538,7 @@ private fun PremiumDropdownItem(
                         tint = PocketColors.PrimaryDark
                     )
                     Text(
-                        text = "Soon",
+                        text = lockedLabel,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = PocketColors.PrimaryDark

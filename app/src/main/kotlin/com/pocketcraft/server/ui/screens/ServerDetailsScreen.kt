@@ -56,16 +56,25 @@ import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.collectAsState
+import com.pocketcraft.server.billing.BillingManager
+import com.pocketcraft.server.billing.PremiumEntitlement
+import com.pocketcraft.server.ui.components.IpManagerCard
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ServerDetailsScreen(
     stateHolder: ServerStateHolder,
     onBack: () -> Unit,
-    onMessage: (String) -> Unit
+    onMessage: (String) -> Unit,
+    onNavigateToSignUp: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val billingManager = remember { BillingManager.getInstance(context) }
+    val entitlement by billingManager.entitlement.collectAsState()
+    val isPremium by billingManager.isPremium.collectAsState()
+    val customSubdomainEnabled by com.pocketcraft.server.config.RemoteConfigManager.customSubdomainEnabled.collectAsState(initial = false)
     val activeWorld = stateHolder.activeWorld
     var serverName by remember(stateHolder.serverName, stateHolder.activeWorld) {
         mutableStateOf(stateHolder.serverName.ifBlank { stateHolder.activeWorld.ifBlank { "world" } })
@@ -228,6 +237,16 @@ fun ServerDetailsScreen(
             )
         }
 
+        IpManagerCard(
+            entitlement = entitlement,
+            isPremiumUnlocked = isPremium,
+            rolloutEnabled = customSubdomainEnabled,
+            onMessage = onMessage,
+            onNavigateToSignUp = onNavigateToSignUp
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -372,6 +391,7 @@ fun ServerDetailsScreen(
                 )
             }
         }
+
         Spacer(modifier = Modifier.height(96.dp))
     }
 

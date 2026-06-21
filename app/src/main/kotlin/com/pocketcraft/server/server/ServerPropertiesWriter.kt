@@ -45,10 +45,10 @@ data class ServerPrefsSnapshot(
 object ServerPropertiesWriter {
     private const val TAG = "ServerPropertiesWriter"
 
-    fun apply(serverDir: File, prefs: ServerPrefsSnapshot) {
+    fun apply(serverDir: File, prefs: ServerPrefsSnapshot, isPremium: Boolean = false) {
         val file = File(serverDir, "server.properties")
         val props = loadExisting(file)
-        overlayManagedValues(props, prefs)
+        overlayManagedValues(props, prefs, isPremium)
         save(file, props)
         Log.d(
             TAG,
@@ -56,16 +56,18 @@ object ServerPropertiesWriter {
         )
     }
 
-    fun write(file: File, prefs: ServerPrefsSnapshot) {
+    fun write(file: File, prefs: ServerPrefsSnapshot, isPremium: Boolean = false) {
         val props = loadExisting(file)
-        overlayManagedValues(props, prefs)
+        overlayManagedValues(props, prefs, isPremium)
         save(file, props)
     }
 
-    fun overlayManagedValues(props: Properties, prefs: ServerPrefsSnapshot) {
+    fun overlayManagedValues(props: Properties, prefs: ServerPrefsSnapshot, isPremium: Boolean = false) {
         props["level-name"] = prefs.worldName
         props["level-seed"] = prefs.worldSeed
-        props["max-players"] = prefs.maxPlayers.coerceIn(1, 50).toString()
+        val maxLimit = if (isPremium) 50 else 5
+        props["max-players"] = prefs.maxPlayers.coerceIn(1, maxLimit).toString()
+
         props["server-port"] = "25565"
         props["difficulty"] = prefs.difficulty.lowercase()
         props["gamemode"] = prefs.gameMode.lowercase()

@@ -70,6 +70,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -741,6 +743,70 @@ private fun onboardingSteps(): List<OnboardingStep> {
 }
 
 @Composable
+private fun GoogleLogoIcon(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier = modifier.size(18.dp)) {
+        val sizePx = size.width
+        val stroke = sizePx * 0.22f
+        
+        // Draw yellow arc (left)
+        drawArc(
+            color = Color(0xFFFBBC05),
+            startAngle = 135f,
+            sweepAngle = 92f,
+            useCenter = false,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = stroke,
+                cap = androidx.compose.ui.graphics.StrokeCap.Butt
+            )
+        )
+        
+        // Draw red arc (top)
+        drawArc(
+            color = Color(0xFFEA4335),
+            startAngle = 225f,
+            sweepAngle = 92f,
+            useCenter = false,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = stroke,
+                cap = androidx.compose.ui.graphics.StrokeCap.Butt
+            )
+        )
+        
+        // Draw green arc (bottom)
+        drawArc(
+            color = Color(0xFF34A853),
+            startAngle = 45f,
+            sweepAngle = 92f,
+            useCenter = false,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = stroke,
+                cap = androidx.compose.ui.graphics.StrokeCap.Butt
+            )
+        )
+        
+        // Draw blue arc (right side and bar)
+        drawArc(
+            color = Color(0xFF4285F4),
+            startAngle = -45f,
+            sweepAngle = 92f,
+            useCenter = false,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = stroke,
+                cap = androidx.compose.ui.graphics.StrokeCap.Butt
+            )
+        )
+        
+        // Draw blue bar
+        drawLine(
+            color = Color(0xFF4285F4),
+            start = androidx.compose.ui.geometry.Offset(sizePx / 2f, sizePx / 2f),
+            end = androidx.compose.ui.geometry.Offset(sizePx - stroke / 2f, sizePx / 2f),
+            strokeWidth = stroke
+        )
+    }
+}
+
+@Composable
 private fun OnboardingGoogleSignInScreen(
     signedInAccountEmail: String,
     onSignInClick: () -> Unit
@@ -773,21 +839,88 @@ private fun OnboardingGoogleSignInScreen(
             textAlign = TextAlign.Center
         )
 
-        ScreenCard(
-            accent = onboardingAccentGold(),
-            title = if (signedInAccountEmail.isBlank()) "Not signed in" else "Signed in",
-            subtitle = if (signedInAccountEmail.isBlank()) {
-                "PocketCraft will only use your private Drive app data folder."
-            } else {
-                signedInAccountEmail
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = onboardingSurfaceColor(),
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (signedInAccountEmail.isBlank()) onboardingBorderColor() else onboardingAccentGreen().copy(alpha = 0.4f)
+            ),
+            shadowElevation = 2.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (signedInAccountEmail.isBlank()) {
+                                    onboardingAccentPurple().copy(alpha = 0.1f)
+                                } else {
+                                    onboardingAccentGreen().copy(alpha = 0.1f)
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (signedInAccountEmail.isBlank()) Icons.Filled.AccountCircle else Icons.Filled.CheckCircle,
+                            contentDescription = null,
+                            tint = if (signedInAccountEmail.isBlank()) onboardingAccentPurple() else onboardingAccentGreen(),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = if (signedInAccountEmail.isBlank()) "Cloud Sync Status" else "Backup Account Connected",
+                            fontSize = 13.sp.scaledSp(scale),
+                            fontWeight = FontWeight.Bold,
+                            color = onboardingTextPrimary()
+                        )
+                        Text(
+                            text = if (signedInAccountEmail.isBlank()) "Inactive (Local Only)" else "Active & Secured",
+                            fontSize = 11.sp.scaledSp(scale),
+                            color = if (signedInAccountEmail.isBlank()) onboardingTextSecondary() else onboardingAccentGreen(),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+                Text(
+                    text = if (signedInAccountEmail.isBlank()) {
+                        "Backups are stored inside your private Google Drive app folder. PocketCraft cannot see or access your other Drive files."
+                    } else {
+                        "Your server worlds, plugins, and settings will automatically backup to: $signedInAccountEmail"
+                    },
+                    fontSize = 11.sp.scaledSp(scale),
+                    lineHeight = 16.sp.scaledSp(scale),
+                    color = onboardingTextSecondary()
+                )
             }
-        )
+        }
 
         DuoButton(
-            text = if (signedInAccountEmail.isBlank()) "SIGN IN WITH GOOGLE" else "SIGNED IN",
+            text = if (signedInAccountEmail.isBlank()) "Sign in with Google" else "Signed in",
             onClick = onSignInClick,
             enabled = signedInAccountEmail.isBlank(),
-            modifier = Modifier.fillMaxWidth()
+            iconContent = if (signedInAccountEmail.isBlank()) {
+                { GoogleLogoIcon() }
+            } else {
+                null
+            },
+            variant = DuoButtonVariant.Primary,
+            modifier = Modifier.fillMaxWidth(),
+            minHeight = 60.dp
         )
 
         Text(
@@ -908,19 +1041,6 @@ private fun TopHeader(progress: Float, step: Int, total: Int) {
                     color = onboardingTextMuted()
                 )
             }
-
-            Surface(
-                color = onboardingAccentPurpleMuted(),
-                shape = RoundedCornerShape(999.dp)
-            ) {
-                Text(
-                    text = "Beta",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    color = onboardingAccentPurpleDark(),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
         }
 
         Surface(
@@ -1036,41 +1156,74 @@ private fun WelcomeScreen(
     onOpenTerms: () -> Unit
 ) {
     val scale = onboardingCompactScale()
+    val accentGreen  = onboardingAccentGreen()
+    val accentGold   = onboardingAccentGold()
+    val accentPurple = onboardingAccentPurple()
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
+        verticalArrangement = Arrangement.spacedBy(14.dp.scaled(scale))
     ) {
-        HaloIconBox(
-            accent = onboardingAccentGreen(),
-            drawableRes = R.drawable.ic_launcher_foreground_square
-        )
 
-        Surface(
-            color = onboardingAccentPurple().copy(alpha = 0.12f),
-            shape = RoundedCornerShape(999.dp)
-        ) {
-            Text(
-                text = "Beta",
-                modifier = Modifier.padding(horizontal = 12.dp.scaled(scale), vertical = 6.dp.scaled(scale)),
-                color = onboardingAccentPurple(),
-                fontSize = 10.sp.scaledSp(scale),
-                fontWeight = FontWeight.Bold
+        // ── Hero icon: concentric glow rings ──────────────────────────────────
+        Box(contentAlignment = Alignment.Center) {
+            // Outer soft halo
+            Box(
+                modifier = Modifier
+                    .size(108.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(accentGreen.copy(alpha = 0.15f), Color.Transparent)
+                        )
+                    )
             )
+            // Mid ring
+            Box(
+                modifier = Modifier
+                    .size(84.dp)
+                    .clip(CircleShape)
+                    .background(accentGreen.copy(alpha = 0.10f))
+            )
+            // Icon square
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(accentGreen.copy(alpha = 0.20f))
+                    .border(
+                        1.5.dp,
+                        Brush.linearGradient(
+                            listOf(accentGreen.copy(alpha = 0.70f), accentGreen.copy(alpha = 0.25f))
+                        ),
+                        RoundedCornerShape(20.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_launcher_foreground_square),
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp),
+                    contentScale = ContentScale.Fit
+                )
+            }
         }
 
+        // ── Headline ──────────────────────────────────────────────────────────
         Text(
-            text = "Your phone is now a Minecraft server",
-            fontSize = 21.sp.scaledSp(scale),
-            lineHeight = 24.sp.scaledSp(scale),
+            text = "Your phone is now\na Minecraft server",
+            fontSize = 25.sp.scaledSp(scale),
+            lineHeight = 30.sp.scaledSp(scale),
             color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
             fontFamily = Monocraft,
             textAlign = TextAlign.Center
         )
 
+        // ── Subtitle ──────────────────────────────────────────────────────────
         Text(
-            text = "Host Java Edition servers for free. No PC required. Share with friends anywhere in the world.",
+            text = "Host Java Edition servers for free.\nNo PC required. Play with anyone.",
             fontSize = 13.sp.scaledSp(scale),
             lineHeight = 19.sp.scaledSp(scale),
             color = onboardingTextSecondary(),
@@ -1078,121 +1231,111 @@ private fun WelcomeScreen(
             maxLines = 3
         )
 
-        FeaturePillRow(
-            items = listOf("Free to host", "No PC", "Invite friends")
-        )
+        // ── Feature cards: icon + label ───────────────────────────────────────
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            listOf(
+                Triple(Icons.Filled.Star,        "Free to host", accentGold),
+                Triple(Icons.Filled.PhoneAndroid, "No PC needed", accentGreen),
+                Triple(Icons.Filled.Group,        "Invite anyone", accentPurple)
+            ).forEach { (icon, label, accent) ->
+                Surface(
+                    color = onboardingSurfaceSoftColor(),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, accent.copy(alpha = 0.28f)),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(vertical = 12.dp, horizontal = 6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(accent.copy(alpha = 0.14f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = accent,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Text(
+                            text = label,
+                            fontSize = 10.sp.scaledSp(scale),
+                            fontWeight = FontWeight.Bold,
+                            color = onboardingTextPrimary(),
+                            textAlign = TextAlign.Center,
+                            lineHeight = 13.sp.scaledSp(scale)
+                        )
+                    }
+                }
+            }
+        }
 
+        // ── Terms & policy ────────────────────────────────────────────────────
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 6.dp),
-            shape = RoundedCornerShape(18.dp),
-            color = if (privacyAccepted) {
-                onboardingAccentGreen().copy(alpha = 0.14f)
-            } else {
-                onboardingAccentGold().copy(alpha = 0.12f)
-            },
+                .clickable { onPrivacyChange(!privacyAccepted) },
+            shape = RoundedCornerShape(14.dp.scaled(scale)),
+            color = if (privacyAccepted) accentGreen.copy(alpha = 0.08f)
+                    else onboardingSurfaceSoftColor().copy(alpha = 0.5f),
             border = BorderStroke(
-                1.5.dp,
-                if (privacyAccepted) onboardingAccentGreen().copy(alpha = 0.5f) else onboardingAccentGold().copy(alpha = 0.55f)
+                1.dp,
+                if (privacyAccepted) accentGreen.copy(alpha = 0.4f)
+                else onboardingBorderColor().copy(alpha = 0.5f)
             )
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onPrivacyChange(!privacyAccepted) }
-                    .padding(horizontal = 14.dp.scaled(scale), vertical = 14.dp.scaled(scale)),
-                verticalArrangement = Arrangement.spacedBy(10.dp.scaled(scale))
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp.scaled(scale), vertical = 10.dp.scaled(scale)),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    color = if (privacyAccepted) onboardingAccentGreen().copy(alpha = 0.2f) else onboardingAccentGold().copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(999.dp)
-                ) {
-                    Text(
-                        text = if (privacyAccepted) "Required step completed" else "Required before continuing",
-                        modifier = Modifier.padding(horizontal = 10.dp.scaled(scale), vertical = 5.dp.scaled(scale)),
-                        color = if (privacyAccepted) onboardingAccentGreen() else onboardingAccentPurpleDark(),
-                        fontSize = 10.sp.scaledSp(scale),
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = Monocraft
+                Checkbox(
+                    checked = privacyAccepted,
+                    onCheckedChange = onPrivacyChange,
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = accentGreen,
+                        uncheckedColor = onboardingBorderColor()
                     )
-                }
-
-                Row(
-                    verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp.scaled(scale))
-                ) {
-                    Checkbox(
-                        checked = privacyAccepted,
-                        onCheckedChange = onPrivacyChange,
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = PocketColors.Primary,
-                            uncheckedColor = onboardingBorderColor()
-                        )
-                    )
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(6.dp.scaled(scale))
-                    ) {
-                        Text(
-                            text = "Agree to PocketCraft's Privacy Policy and Terms of Use",
-                            fontSize = 12.sp.scaledSp(scale),
-                            color = onboardingTextPrimary(),
-                            fontWeight = FontWeight.ExtraBold,
-                            lineHeight = 17.sp.scaledSp(scale)
-                        )
-                        Text(
-                            text = "Tap the checkbox after reviewing the links below. The Next button stays locked until this is checked.",
-                            fontSize = 11.sp.scaledSp(scale),
-                            color = onboardingTextSecondary(),
-                            lineHeight = 16.sp.scaledSp(scale)
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    TextButton(
-                        onClick = onOpenPrivacy,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Privacy Policy", fontWeight = FontWeight.Bold)
-                    }
-                    TextButton(
-                        onClick = onOpenTerms,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Terms of Use", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        if (!privacyAccepted) {
-            Surface(
-                color = onboardingAccentGold().copy(alpha = 0.1f),
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, onboardingAccentGold().copy(alpha = 0.45f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = "Check the agreement box to unlock the Next button.",
-                    modifier = Modifier.padding(horizontal = 14.dp.scaled(scale), vertical = 10.dp.scaled(scale)),
-                    color = onboardingTextPrimary(),
-                    fontSize = 11.sp.scaledSp(scale),
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
                 )
+                Spacer(modifier = Modifier.width(10.dp.scaled(scale)))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "I agree to the terms & policy",
+                        fontSize = 12.sp.scaledSp(scale),
+                        color = onboardingTextPrimary(),
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Privacy Policy",
+                            color = accentPurple,
+                            fontSize = 11.sp.scaledSp(scale),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clickable { onOpenPrivacy() }
+                        )
+                        Text(text = "•", color = onboardingTextMuted(), fontSize = 10.sp.scaledSp(scale))
+                        Text(
+                            text = "Terms of Use",
+                            color = accentPurple,
+                            fontSize = 11.sp.scaledSp(scale),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clickable { onOpenTerms() }
+                        )
+                    }
+                }
             }
         }
-
-        ScreenCard(
-            accent = onboardingAccentGreen(),
-            title = "Fast start",
-            subtitle = "PocketCraft keeps setup short, then guides you to the real server tools."
-        )
     }
 }
 
@@ -1384,7 +1527,7 @@ private fun CrossPlayScreen() {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                text = "⚠️ Beta Feature - Play at Your Own Discretion\n\nCross-play is still in beta development. Bugs and stability issues may occur as this feature is not yet officially supported. Use at your own risk.",
+                text = "⚠️ Experimental Feature - Play at Your Own Discretion\n\nCross-play is still in active development. Bugs and stability issues may occur as this feature is not yet officially supported. Use at your own risk.",
                 modifier = Modifier.padding(horizontal = 14.dp.scaled(scale), vertical = 12.dp.scaled(scale)),
                 color = onboardingTextPrimary(),
                 fontSize = 11.sp.scaledSp(scale),

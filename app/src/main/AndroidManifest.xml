@@ -82,7 +82,7 @@
             android:name=".server.ServerHostService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync|specialUse"
+            android:foregroundServiceType="specialUse"
             android:process=":server"
             android:stopWithTask="true">
             <property

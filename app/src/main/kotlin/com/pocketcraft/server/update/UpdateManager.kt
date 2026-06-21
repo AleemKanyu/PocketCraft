@@ -13,6 +13,8 @@ data class UpdateConfig(
     val showUpdatePopup: Boolean = false,
     val playStoreUrl: String = "",
     val versionCode: Int? = null,
+    val latestVersion: String? = null,
+    val dismissKey: String? = null,
     val isForced: Boolean = false,
     val enablePlayStoreRatingPrompt: Boolean = true
 )
@@ -61,14 +63,20 @@ object UpdateManager {
         val playStoreUrlRaw = document.get("playStoreUrl")
         val versionCodeRaw = document.get("versionCode")
         val enablePlayStoreRatingPromptRaw = document.get("enablePlayStoreRatingPrompt")
+        val excludeVersionCodeRaw = document.get("excludeVersionCode")
+        val latestVersionRaw = document.get("latestVersion")
+        val latestVersionCodeRaw = document.get("latestVersionCode")
 
         val showUpdatePopup = showUpdatePopupRaw.toBooleanOrNull() ?: false
         val isForced = isForcedRaw.toBooleanOrNull() ?: false
         val playStoreUrl = playStoreUrlRaw?.toString()?.trim() ?: ""
-        val versionCode = versionCodeRaw.toIntOrNull()
+        val versionCode = versionCodeRaw.toFirestoreIntOrNull()
         val enablePlayStoreRatingPrompt = enablePlayStoreRatingPromptRaw.toBooleanOrNull() ?: true
+        val excludeVersionCode = excludeVersionCodeRaw.toFirestoreIntOrNull()
+        val latestVersion = latestVersionRaw?.toString()?.trim()?.takeIf { it.isNotBlank() }
+        val latestVersionCode = latestVersionCodeRaw.toFirestoreIntOrNull()
 
-        Log.d(TAG, "Fetched app_config/update values: showUpdatePopupRaw=$showUpdatePopupRaw, isForcedRaw=$isForcedRaw, playStoreUrlRaw=$playStoreUrlRaw, versionCodeRaw=$versionCodeRaw, enablePlayStoreRatingPromptRaw=$enablePlayStoreRatingPromptRaw")
+        Log.d(TAG, "Fetched app_config/update values: showUpdatePopupRaw=$showUpdatePopupRaw, isForcedRaw=$isForcedRaw, playStoreUrlRaw=$playStoreUrlRaw, versionCodeRaw=$versionCodeRaw, enablePlayStoreRatingPromptRaw=$enablePlayStoreRatingPromptRaw, excludeVersionCodeRaw=$excludeVersionCodeRaw, latestVersionRaw=$latestVersionRaw, latestVersionCodeRaw=$latestVersionCodeRaw")
 
         if (!showUpdatePopup) {
             Log.d(TAG, "Update config parsed: showUpdatePopup is false/null. Skipping update popup.")
@@ -80,8 +88,26 @@ object UpdateManager {
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             packageInfo.longVersionCode.toInt()
         }.getOrDefault(0)
+        val currentVersionName = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
+        }.getOrDefault("")
 
-        if (versionCode != null && currentVersionCode >= versionCode) {
+        if (excludeVersionCode != null && currentVersionCode == excludeVersionCode) {
+            Log.d(TAG, "Update config parsed: currentVersionCode ($currentVersionCode) == excludeVersionCode ($excludeVersionCode). Skipping update popup.")
+            return UpdateConfig(enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt)
+        }
+
+        if (latestVersion != null && compareVersionNames(currentVersionName, latestVersion) >= 0) {
+            Log.d(TAG, "Update config parsed: currentVersionName ($currentVersionName) >= latestVersion ($latestVersion). Skipping update popup.")
+            return UpdateConfig(enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt)
+        }
+
+        if (latestVersion == null && latestVersionCode != null && currentVersionCode >= latestVersionCode) {
+            Log.d(TAG, "Update config parsed: currentVersionCode ($currentVersionCode) >= latestVersionCode ($latestVersionCode). Skipping update popup.")
+            return UpdateConfig(enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt)
+        }
+
+        if (latestVersion == null && latestVersionCode == null && versionCode != null && currentVersionCode >= versionCode) {
             Log.d(TAG, "Update config parsed: currentVersionCode ($currentVersionCode) >= target versionCode ($versionCode). Skipping update popup.")
             return UpdateConfig(enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt)
         }
@@ -97,6 +123,8 @@ object UpdateManager {
             showUpdatePopup = showUpdatePopup,
             playStoreUrl = playStoreUrl,
             versionCode = versionCode,
+            latestVersion = latestVersion,
+            dismissKey = latestVersion ?: latestVersionCode?.toString() ?: versionCode?.toString(),
             isForced = isForced,
             enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt
         )
@@ -116,7 +144,36 @@ object UpdateManager {
         return null
     }
 
-    private fun Any?.toIntOrNull(): Int? {
+    private fun compareVersionNames(current: String, target: String): Int {
+        val currentParts = normalizeVersionName(current).split('.', '-', '_').filter { it.isNotBlank() }
+        val targetParts = normalizeVersionName(target).split('.', '-', '_').filter { it.isNotBlank() }
+        val maxParts = maxOf(currentParts.size, targetParts.size)
+
+        for (index in 0 until maxParts) {
+            val currentPart = currentParts.getOrNull(index).orEmpty()
+            val targetPart = targetParts.getOrNull(index).orEmpty()
+            val numericCompare = compareVersionPart(currentPart, targetPart)
+            if (numericCompare != 0) return numericCompare
+        }
+        return 0
+    }
+
+    private fun compareVersionPart(currentPart: String, targetPart: String): Int {
+        val currentNumber = currentPart.parseVersionNumberOrNull()
+        val targetNumber = targetPart.parseVersionNumberOrNull()
+        return when {
+            currentNumber != null && targetNumber != null -> currentNumber.compareTo(targetNumber)
+            else -> currentPart.compareTo(targetPart)
+        }
+    }
+
+    private fun String.parseVersionNumberOrNull(): Int? = trim().toIntOrNull()
+
+    private fun normalizeVersionName(versionName: String): String {
+        return versionName.trim().removePrefix("v").removePrefix("V")
+    }
+
+    private fun Any?.toFirestoreIntOrNull(): Int? {
         if (this == null) return null
         if (this is Number) return this.toInt()
         if (this is String) return this.trim().toIntOrNull()

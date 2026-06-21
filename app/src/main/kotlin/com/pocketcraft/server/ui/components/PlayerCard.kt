@@ -48,7 +48,8 @@ fun PlayerCard(
     badgeText: String? = null,
     badgeColor: Color = PocketColors.Primary,
     onClick: (() -> Unit)? = null,
-    actions: List<PlayerCardAction> = emptyList()
+    actions: List<PlayerCardAction> = emptyList(),
+    trailingContent: (@Composable () -> Unit)? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -110,7 +111,9 @@ fun PlayerCard(
                 )
             }
 
-            if (actions.isNotEmpty()) {
+            if (trailingContent != null) {
+                trailingContent()
+            } else if (actions.isNotEmpty()) {
                 Box {
                     IconButton(onClick = { expanded = true }) {
                         Icon(

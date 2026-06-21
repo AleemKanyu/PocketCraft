@@ -23,7 +23,7 @@
     <string name="uptime_label">Uptime: %1$s</string>
     <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
     <string name="announcement_title">A note from PocketCraft</string>
-    <string name="announcement_body">Hey! Just wanted to be upfront &#8212; PocketCraft will always be completely free. No subscriptions, ever.\n\nWe use a small number of ads to keep the servers running and the app improving. That\'s it.\n\nIf you\'d like to help us go fully ad-free, or just want to chat with the team, join our Discord &#8212; we\'d love to have you.</string>
+    <string name="announcement_body">PocketCraft will be free forever for everyone, but some features are in Pro just so that you can support our server costs and app running costs. They are cheap, and that\'s why they are in there, including that for more value.\n\nIf you\'d like to help us, or just want to chat with the team, join our Discord &#8212; we\'d love to have you.</string>
     <string name="announcement_join_discord">Join Discord</string>
     <string name="announcement_got_it">Got it</string>
 </resources>

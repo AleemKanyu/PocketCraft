@@ -7,11 +7,14 @@
   "main": "lib/index.js",
   "scripts": {
     "build": "tsc",
+    "admin-dashboard": "node ../scripts/local_admin_dashboard.cjs",
     "serve": "npm run build && firebase emulators:start --only functions,firestore",
     "deploy": "npm run build && firebase deploy --only functions",
     "lint": "echo 'No lint configured'"
   },
   "dependencies": {
+    "google-auth-library": "^9.15.0",
+    "googleapis": "^144.0.0",
     "firebase-admin": "^12.7.0",
     "firebase-functions": "^5.1.1"
   },

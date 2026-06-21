@@ -53,26 +53,36 @@ object ConsoleParser {
     // e.g. "[17:31:00 INFO]: TPS from last 1m, 5m, 15m: 19.98, 19.99, 20.0"
     private val TPS_REGEX = Regex("""TPS from last 1m, 5m, 15m: ([\d.]+)""")
 
-    // e.g. "[17:30:01 WARN]: ..."   "[11:05:32] [Server thread/INFO]:"
-    private val LEVEL_REGEX = Regex("""\[\d{2}:\d{2}:\d{2}\] \[(?:.*?/)?(INFO|WARN|ERROR|FATAL)\]""")
+    // Match format: [12:34:56] [Server thread/INFO]: or [2026-06-20 12:34:56.789] [INFO]:
+    private val PREFIX_REGEX_1 = Regex(
+        """^\[?(?:\d{4}-\d{2}-\d{2}[T\s])?\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s+[AP]M)?\]?\s+\[(?:.*?/)?(?:INFO|WARN|ERROR|FATAL|ALERT|DEBUG|TRACE)\]:?\s*""",
+        RegexOption.IGNORE_CASE
+    )
+
+    // Match format: [12:34:56 INFO]: or [2026-06-20 12:34:56.789 WARN]: or [12:34:56] or 12:34:56 INFO:
+    private val PREFIX_REGEX_2 = Regex(
+        """^\[?(?:\d{4}-\d{2}-\d{2}[T\s])?\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s+[AP]M)?(?:\s+(?:INFO|WARN|ERROR|FATAL|ALERT|DEBUG|TRACE))?\]?:?\s*""",
+        RegexOption.IGNORE_CASE
+    )
 
     // Chat: "[17:30:15 INFO]: <Steve> hello"
-    private val CHAT_REGEX = Regex("""<(\w+)> """)
+    private val CHAT_REGEX = Regex("""<([^>]+)>\s+""")
 
     fun parse(raw: String): ConsoleMessage {
+        val cleanRaw = stripAnsi(raw).trim()
         val level = when {
-            raw.contains("[WARN]") || raw.contains("WARN]") -> LogLevel.WARN
-            raw.contains("[ERROR]") || raw.contains("ERROR]") ||
-                    raw.contains("[FATAL]") || raw.contains("FATAL]") -> LogLevel.ERROR
-            CHAT_REGEX.containsMatchIn(raw) -> LogLevel.CHAT
+            cleanRaw.contains("[WARN]") || cleanRaw.contains("WARN]") -> LogLevel.WARN
+            cleanRaw.contains("[ERROR]") || cleanRaw.contains("ERROR]") ||
+                    cleanRaw.contains("[FATAL]") || cleanRaw.contains("FATAL]") -> LogLevel.ERROR
+            CHAT_REGEX.containsMatchIn(cleanRaw) -> LogLevel.CHAT
             else -> LogLevel.INFO
         }
         // Strip the timestamp prefix for cleaner display
-        val text = raw
-            .replace(LEVEL_REGEX, "")
-            .replace(Regex("""^\[[\d:]+\] """), "")
+        val text = cleanRaw
+            .replace(PREFIX_REGEX_1, "")
+            .replace(PREFIX_REGEX_2, "")
             .trim()
-            .ifEmpty { raw.trim() }
+            .ifEmpty { cleanRaw.trim() }
         return ConsoleMessage(
             timestamp = System.currentTimeMillis(),
             level = level,
@@ -128,20 +138,34 @@ object ConsoleParser {
 
     // e.g. "[17:30:06 INFO]: [PocketCraftPing] Steve:10@127.0.0.1 Alex:42"
     private val PING_REGEX = Regex("""\[PocketCraftPing\](.*)""")
+    private val PURPUR_PING_REGEX = Regex("""(\S+)'s ping is (\d+)ms""", RegexOption.IGNORE_CASE)
 
     fun parsePing(line: String): Map<String, ParsedPlayerPing> {
-        val match = PING_REGEX.find(line) ?: return emptyMap()
-        val data = match.groupValues[1].trim()
-        val pings = mutableMapOf<String, ParsedPlayerPing>()
-        for (pair in data.split(" ")) {
-            val name = pair.substringBefore(':').trim()
-            if (name.isBlank() || !pair.contains(':')) continue
-            val value = pair.substringAfter(':')
-            val ping = value.substringBefore('@').toIntOrNull() ?: -1
-            val ip = value.substringAfter('@', "").trim()
-            pings[name] = ParsedPlayerPing(pingMs = ping, ip = ip)
+        val match = PING_REGEX.find(line)
+        if (match != null) {
+            val data = match.groupValues[1].trim()
+            val pings = mutableMapOf<String, ParsedPlayerPing>()
+            for (pair in data.split(" ")) {
+                val name = pair.substringBefore(':').trim()
+                if (name.isBlank() || !pair.contains(':')) continue
+                val value = pair.substringAfter(':')
+                val ping = value.substringBefore('@').toIntOrNull() ?: -1
+                val ip = value.substringAfter('@', "").trim()
+                pings[name] = ParsedPlayerPing(pingMs = ping, ip = ip)
+            }
+            return pings
         }
-        return pings
+
+        val purpurMatch = PURPUR_PING_REGEX.find(line)
+        if (purpurMatch != null) {
+            val name = purpurMatch.groupValues[1].replace(Regex("§[0-9a-fk-or]"), "").trim()
+            val ping = purpurMatch.groupValues[2].toIntOrNull() ?: -1
+            if (name.isNotBlank() && ping >= 0) {
+                return mapOf(name to ParsedPlayerPing(pingMs = ping))
+            }
+        }
+
+        return emptyMap()
     }
 
     /** Returns the cleaned console text, stripping ANSI color codes. */

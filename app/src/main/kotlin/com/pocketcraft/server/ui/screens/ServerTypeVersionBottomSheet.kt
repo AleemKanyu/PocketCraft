@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -217,6 +218,35 @@ fun ServerTypeVersionBottomSheet(
                                     color = cardText
                                 )
                             }
+                        }
+                    }
+                }
+
+                if (selectedType != ServerType.PAPER) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = PocketColors.Warning.copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, PocketColors.Warning),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = "Warning",
+                                tint = PocketColors.Warning,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "Paper runs the best and starts the fastest. Other versions might take much longer to start, but they also run.",
+                                fontSize = 12.sp,
+                                color = if (isDarkTheme) Color.White else PocketColors.TextPrimary,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                     }
                 }

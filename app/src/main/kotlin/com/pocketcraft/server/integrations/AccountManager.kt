@@ -8,6 +8,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
@@ -82,6 +83,65 @@ object AccountManager {
             .sendPasswordResetEmail(email.trim())
             .addOnSuccessListener { onResult(Result.success(Unit)) }
             .addOnFailureListener { error -> onResult(Result.failure(error)) }
+    }
+
+    /** Sends an email-verification link to the currently signed-in user's address. */
+    fun sendEmailVerification(onResult: (Result<Unit>) -> Unit) {
+        val user = FirebaseAuth.getInstance().currentUser
+        if (user == null) {
+            onResult(Result.failure(IllegalStateException("No signed-in user.")))
+            return
+        }
+        user.sendEmailVerification()
+            .addOnSuccessListener { onResult(Result.success(Unit)) }
+            .addOnFailureListener { onResult(Result.failure(it)) }
+    }
+
+    /** Reloads the Firebase user from the server and returns whether their email is now verified. */
+    fun reloadAndCheckVerified(onResult: (Result<Boolean>) -> Unit) {
+        val user = FirebaseAuth.getInstance().currentUser
+        if (user == null) {
+            onResult(Result.failure(IllegalStateException("No signed-in user.")))
+            return
+        }
+        user.reload()
+            .addOnSuccessListener { onResult(Result.success(user.isEmailVerified)) }
+            .addOnFailureListener { onResult(Result.failure(it)) }
+    }
+
+    /**
+     * Re-authenticates the current email/password user with [password], then permanently deletes
+     * their account, Firestore data, and Drive backups.
+     * Required when Firebase throws [FirebaseAuthRecentLoginRequiredException] on plain delete.
+     */
+    suspend fun reauthenticateAndDeleteAccount(context: Context, password: String): Result<String> {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser
+            ?: return Result.failure(IllegalStateException("No signed-in account to delete."))
+        val email = firebaseUser.email
+            ?: return Result.failure(IllegalStateException("Cannot re-authenticate: no email on account."))
+        return runCatching {
+            val credential = EmailAuthProvider.getCredential(email, password)
+            firebaseUser.reauthenticate(credential).awaitVoidTask()
+            runCatching {
+                FirebaseFirestore.getInstance()
+                    .collection("user_settings")
+                    .document(firebaseUser.uid)
+                    .delete()
+                    .awaitVoidTask()
+            }
+            runCatching {
+                val account = currentDriveAccount(context)
+                if (account != null) DriveBackupManager.deleteAllCloudBackups(context, account)
+            }
+            runCatching {
+                GoogleSignIn.getClient(context, googleOptions(context))
+                    .revokeAccess()
+                    .awaitVoidTask()
+            }
+            firebaseUser.delete().awaitVoidTask()
+            FirebaseAuth.getInstance().signOut()
+            "Account deleted permanently."
+        }
     }
 
     fun completeGoogleSignIn(

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
+import com.google.android.play.core.review.ReviewManagerFactory
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -82,6 +83,7 @@ import com.pocketcraft.server.config.RemoteConfigManager
 import com.pocketcraft.server.R
 import com.pocketcraft.server.ui.components.BroadcastBanner
 import com.pocketcraft.server.ui.components.AnnouncementDialog
+import com.pocketcraft.server.ui.components.BroadcastPopup
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.PocketMotion
@@ -93,6 +95,12 @@ import com.pocketcraft.server.ui.components.ServerModpackPickerBottomSheet
 import com.pocketcraft.server.viewmodel.BroadcastViewModel
 import com.google.firebase.crashlytics.ktx.crashlytics
 import com.google.firebase.ktx.Firebase
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
+import com.pocketcraft.server.billing.BillingManager
+import com.pocketcraft.server.billing.PremiumTier
+import com.pocketcraft.server.ui.components.PromotionBottomSheet
+import com.pocketcraft.server.ui.components.PremiumUpgradeBottomSheet
 import com.pocketcraft.server.data.model.ServerType
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.service.ServerPropertiesHelper
@@ -112,6 +120,25 @@ private data class PendingVersionChange(
     val version: String,
     val customJar: String?
 )
+
+private data class PromotionData(
+    val id: String,
+    val title: String,
+    val body: String,
+    val ctaText: String,
+    val iconEmoji: String,
+    val targetGroup: String
+)
+
+private const val RECURRING_UPSELL_REQUIRED_OPENS = 5
+private const val FREE_TO_PRO_UPSELL_TITLE = "Ready for more?"
+private const val FREE_TO_PRO_UPSELL_BODY =
+    "Upgrade to PocketCraft Pro to unlock more power for your server, including higher player limits, extra customization, and premium tools."
+private const val FREE_TO_PRO_UPSELL_CTA = "Upgrade to Pro"
+private const val PRO_TO_MEMBER_UPSELL_TITLE = "Enjoying Pro?"
+private const val PRO_TO_MEMBER_UPSELL_BODY =
+    "If PocketCraft Pro has been valuable for you, becoming a Member is a simple way to support the project and help us keep improving it."
+private const val PRO_TO_MEMBER_UPSELL_CTA = "Upgrade to Member"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -158,6 +185,17 @@ fun PocketCraftApp(
     var modpackImportStatus by remember { mutableStateOf("Preparing modpack import...") }
     var modpackImportProgress by remember { mutableStateOf(0) }
     var modpackImportError by remember { mutableStateOf<String?>(null) }
+    var showForceReconnectPrompt by remember { mutableStateOf(false) }
+
+    var activePromotion by remember { mutableStateOf<PromotionData?>(null) }
+    var showPromotionDialog by remember { mutableStateOf(false) }
+    var showPremiumUpgradeDialog by remember { mutableStateOf(false) }
+    var pendingFreeUpsellDialog by remember { mutableStateOf(false) }
+    var showFreeUpsellDialog by remember { mutableStateOf(false) }
+    var pendingMemberUpsellDialog by remember { mutableStateOf(false) }
+    var showMemberUpsellDialog by remember { mutableStateOf(false) }
+    // Only one non-consent popup shows per app launch to avoid overwhelming the user.
+    var popupShownThisLaunch by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -174,6 +212,8 @@ fun PocketCraftApp(
     val notificationsEnabled by AppPreferencesStore.isNotificationsEnabledFlow(context).collectAsState(initial = true)
     val analyticsConsentGranted by AppPreferencesStore.isAnalyticsConsentFlow(context).collectAsState(initial = false)
     val legalVersionAccepted by AppPreferencesStore.getLegalVersionAcceptedFlow(context).collectAsState(initial = null)
+    val billingManager = remember { BillingManager.getInstance(context) }
+    val entitlement by billingManager.entitlement.collectAsState()
     val isFirstLaunchAfterInstallOrUpdate = remember(BuildConfig.VERSION_NAME) {
         preferences.lastLaunchedAppVersion != BuildConfig.VERSION_NAME
     }
@@ -189,7 +229,11 @@ fun PocketCraftApp(
         showInstagramDialog ||
         showFeedbackPromptDialog ||
         showRatingPromptDialog ||
-        showExitDialog
+        showExitDialog ||
+        showPromotionDialog ||
+        showFreeUpsellDialog ||
+        showMemberUpsellDialog ||
+        showPremiumUpgradeDialog
 
     DisposableEffect(stateHolder) {
         onDispose { stateHolder.dispose() }
@@ -201,9 +245,54 @@ fun PocketCraftApp(
         }
     }
 
+    LaunchedEffect(entitlement.tier) {
+        val currentTier = entitlement.tier.wireValue
+        val previousTier = preferences.lastSeenMembershipTier.ifBlank { PremiumTier.NONE.wireValue }
+
+        when (entitlement.tier) {
+            PremiumTier.NONE -> {
+                if (previousTier != PremiumTier.NONE.wireValue || !preferences.freeToProUpsellTrackingStarted) {
+                    preferences.freeToProUpsellTrackingStarted = true
+                    preferences.freeToProUpsellStartLaunchCount = preferences.appLaunchCount
+                    preferences.freeToProUpsellLastShownLaunchCount = 0
+                }
+                preferences.resetProToMemberUpsellTracking(currentTier)
+            }
+            PremiumTier.PREMIUM -> {
+                preferences.resetFreeToProUpsellTracking()
+                if (previousTier != PremiumTier.PREMIUM.wireValue || !preferences.proToMemberUpsellTrackingStarted) {
+                    preferences.proToMemberUpsellTrackingStarted = true
+                    preferences.proToMemberUpsellStartLaunchCount = preferences.appLaunchCount
+                    preferences.proToMemberUpsellLastShownLaunchCount = 0
+                    preferences.proToMemberUpsellShown = false
+                }
+            }
+            PremiumTier.SUPPORTIVE -> {
+                preferences.resetFreeToProUpsellTracking()
+                preferences.resetProToMemberUpsellTracking(currentTier)
+            }
+        }
+
+        preferences.lastSeenMembershipTier = currentTier
+    }
+
     LaunchedEffect(notificationsEnabled) {
         if (notificationsEnabled) {
             PocketCraftMessagingService.subscribeToAllUsers()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        launch {
+            com.pocketcraft.server.broadcast.RemoteCommandListener.forceReconnectTrigger.collect {
+                showForceReconnectPrompt = true
+            }
+        }
+        launch {
+            com.pocketcraft.server.broadcast.RemoteCommandListener.triggerRatingPromptFlow.collect {
+                showRatingPromptDialog = true
+                popupShownThisLaunch = true
+            }
         }
     }
 
@@ -468,10 +557,12 @@ fun PocketCraftApp(
         if (!pendingAnnouncementDialog) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
         if (pendingConsentDialog) return@LaunchedEffect
+        if (popupShownThisLaunch) return@LaunchedEffect
         val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showExitDialog || showAnnouncementDialog || showInstagramDialog || hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
         showAnnouncementDialog = true
         pendingAnnouncementDialog = false
+        popupShownThisLaunch = true
     }
 
     LaunchedEffect(
@@ -491,10 +582,12 @@ fun PocketCraftApp(
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
         if (!showInstagramButtonFromRemoteConfig) return@LaunchedEffect
         if (pendingConsentDialog || pendingAnnouncementDialog) return@LaunchedEffect
+        if (popupShownThisLaunch) return@LaunchedEffect
         val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showAnnouncementDialog || showExitDialog || showInstagramDialog || showFeedbackPromptDialog || hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
         showInstagramDialog = true
         pendingInstagramDialog = false
+        popupShownThisLaunch = true
     }
 
     LaunchedEffect(
@@ -513,9 +606,11 @@ fun PocketCraftApp(
         if (pendingFeedbackPrompt == null) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
         if (pendingConsentDialog || pendingAnnouncementDialog) return@LaunchedEffect
+        if (popupShownThisLaunch) return@LaunchedEffect
         val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showAnnouncementDialog || showInstagramDialog || showExitDialog || hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
         showFeedbackPromptDialog = true
+        popupShownThisLaunch = true
     }
 
     LaunchedEffect(
@@ -536,10 +631,13 @@ fun PocketCraftApp(
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
         if (pendingConsentDialog || pendingAnnouncementDialog) return@LaunchedEffect
         if (preferences.ratingPopupDismissedForever) return@LaunchedEffect
-        if (preferences.appLaunchCount < 3) return@LaunchedEffect
+        // Show if a real player joined in a previous session OR if the user has successfully started the server 3+ times
+        val hasMetStartsThreshold = preferences.successfulServerStarts >= 3
+        if (!preferences.pendingRatingPopup && !hasMetStartsThreshold) return@LaunchedEffect
         if (preferences.ratingPopupShowCount >= 3) return@LaunchedEffect
         val cooldownMs = 14L * 24L * 60L * 60L * 1000L
         if (System.currentTimeMillis() - preferences.ratingPopupLastShownAt < cooldownMs) return@LaunchedEffect
+        if (popupShownThisLaunch) return@LaunchedEffect
         val hasBlockingPopup = showVersionPickerDialog ||
             showConsentDialog ||
             showAnnouncementDialog ||
@@ -549,9 +647,210 @@ fun PocketCraftApp(
             hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
         delay(1_000)
+        preferences.pendingRatingPopup = false
         preferences.ratingPopupLastShownAt = System.currentTimeMillis()
         preferences.ratingPopupShowCount = preferences.ratingPopupShowCount + 1
         showRatingPromptDialog = true
+        popupShownThisLaunch = true
+    }
+
+    LaunchedEffect(
+        screen,
+        homeScreenReady,
+        entitlement.tier,
+        pendingFreeUpsellDialog,
+        showVersionPickerDialog,
+        showConsentDialog,
+        showAnnouncementDialog,
+        showInstagramDialog,
+        showFeedbackPromptDialog,
+        showRatingPromptDialog,
+        showExitDialog,
+        hasPendingBroadcast
+    ) {
+        if (entitlement.tier != PremiumTier.NONE) {
+            pendingFreeUpsellDialog = false
+            showFreeUpsellDialog = false
+            return@LaunchedEffect
+        }
+        if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
+        if (pendingFreeUpsellDialog) return@LaunchedEffect
+        if (!preferences.freeToProUpsellTrackingStarted) return@LaunchedEffect
+        val freeUpsellReferenceLaunch = preferences.freeToProUpsellLastShownLaunchCount
+            .takeIf { it > 0 }
+            ?: preferences.freeToProUpsellStartLaunchCount
+        val launchesSinceFreeUpsellReference = preferences.appLaunchCount - freeUpsellReferenceLaunch
+        if (launchesSinceFreeUpsellReference < RECURRING_UPSELL_REQUIRED_OPENS) return@LaunchedEffect
+        if (preferences.freeToProUpsellLastShownLaunchCount == preferences.appLaunchCount) return@LaunchedEffect
+        pendingFreeUpsellDialog = true
+    }
+
+    LaunchedEffect(
+        pendingFreeUpsellDialog,
+        pendingConsentDialog,
+        pendingAnnouncementDialog,
+        showVersionPickerDialog,
+        showConsentDialog,
+        showAnnouncementDialog,
+        showInstagramDialog,
+        showFeedbackPromptDialog,
+        showRatingPromptDialog,
+        showExitDialog,
+        showPromotionDialog,
+        showPremiumUpgradeDialog,
+        screen,
+        homeScreenReady,
+        hasPendingBroadcast
+    ) {
+        if (!pendingFreeUpsellDialog) return@LaunchedEffect
+        if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
+        if (pendingConsentDialog || pendingAnnouncementDialog) return@LaunchedEffect
+        val hasBlockingPopup = showVersionPickerDialog ||
+            showConsentDialog ||
+            showAnnouncementDialog ||
+            showInstagramDialog ||
+            showFeedbackPromptDialog ||
+            showRatingPromptDialog ||
+            showExitDialog ||
+            showPromotionDialog ||
+            showPremiumUpgradeDialog ||
+            hasPendingBroadcast
+        if (hasBlockingPopup) return@LaunchedEffect
+        if (popupShownThisLaunch) return@LaunchedEffect
+        preferences.freeToProUpsellLastShownLaunchCount = preferences.appLaunchCount
+        showFreeUpsellDialog = true
+        pendingFreeUpsellDialog = false
+        popupShownThisLaunch = true
+    }
+
+    LaunchedEffect(
+        screen,
+        homeScreenReady,
+        entitlement.tier,
+        pendingMemberUpsellDialog,
+        showVersionPickerDialog,
+        showConsentDialog,
+        showAnnouncementDialog,
+        showInstagramDialog,
+        showFeedbackPromptDialog,
+        showRatingPromptDialog,
+        showExitDialog,
+        hasPendingBroadcast
+    ) {
+        if (entitlement.tier != PremiumTier.PREMIUM) {
+            pendingMemberUpsellDialog = false
+            showMemberUpsellDialog = false
+            return@LaunchedEffect
+        }
+        if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
+        if (pendingMemberUpsellDialog) return@LaunchedEffect
+        if (!preferences.proToMemberUpsellTrackingStarted) return@LaunchedEffect
+        val memberUpsellReferenceLaunch = preferences.proToMemberUpsellLastShownLaunchCount
+            .takeIf { it > 0 }
+            ?: preferences.proToMemberUpsellStartLaunchCount
+        val launchesSinceMemberUpsellReference = preferences.appLaunchCount - memberUpsellReferenceLaunch
+        if (launchesSinceMemberUpsellReference < RECURRING_UPSELL_REQUIRED_OPENS) return@LaunchedEffect
+        if (preferences.proToMemberUpsellLastShownLaunchCount == preferences.appLaunchCount) return@LaunchedEffect
+        pendingMemberUpsellDialog = true
+    }
+
+    LaunchedEffect(
+        pendingMemberUpsellDialog,
+        pendingConsentDialog,
+        pendingAnnouncementDialog,
+        showVersionPickerDialog,
+        showConsentDialog,
+        showAnnouncementDialog,
+        showInstagramDialog,
+        showFeedbackPromptDialog,
+        showRatingPromptDialog,
+        showExitDialog,
+        showPromotionDialog,
+        showPremiumUpgradeDialog,
+        screen,
+        homeScreenReady,
+        hasPendingBroadcast
+    ) {
+        if (!pendingMemberUpsellDialog) return@LaunchedEffect
+        if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
+        if (pendingConsentDialog || pendingAnnouncementDialog) return@LaunchedEffect
+        val hasBlockingPopup = showVersionPickerDialog ||
+            showConsentDialog ||
+            showAnnouncementDialog ||
+            showInstagramDialog ||
+            showFeedbackPromptDialog ||
+            showRatingPromptDialog ||
+            showExitDialog ||
+            showPromotionDialog ||
+            showPremiumUpgradeDialog ||
+            hasPendingBroadcast
+        if (hasBlockingPopup) return@LaunchedEffect
+        if (popupShownThisLaunch) return@LaunchedEffect
+        preferences.proToMemberUpsellLastShownLaunchCount = preferences.appLaunchCount
+        showMemberUpsellDialog = true
+        pendingMemberUpsellDialog = false
+        popupShownThisLaunch = true
+    }
+
+    LaunchedEffect(
+        screen,
+        homeScreenReady,
+        entitlement.tier,
+        showVersionPickerDialog,
+        showConsentDialog,
+        showAnnouncementDialog,
+        showInstagramDialog,
+        showFeedbackPromptDialog,
+        showRatingPromptDialog,
+        showExitDialog,
+        hasPendingBroadcast,
+        pendingFreeUpsellDialog,
+        showFreeUpsellDialog,
+        pendingMemberUpsellDialog,
+        showMemberUpsellDialog
+    ) {
+        if (pendingFreeUpsellDialog || showFreeUpsellDialog || pendingMemberUpsellDialog || showMemberUpsellDialog) return@LaunchedEffect
+        if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
+        val targetGroup = when (entitlement.tier) {
+            PremiumTier.NONE -> "free"
+            PremiumTier.PREMIUM -> "pro"
+            else -> null
+        }
+        if (targetGroup != null) {
+            val shownPromotions = preferences.getShownPromotions()
+            val db = FirebaseFirestore.getInstance()
+            runCatching {
+                db.collection("promotions")
+                    .whereEqualTo("active", true)
+                    .whereEqualTo("targetGroup", targetGroup)
+                    .get()
+                    .await()
+            }.onSuccess { querySnapshot ->
+                val promoDoc = querySnapshot.documents.firstOrNull { doc ->
+                    val id = doc.id
+                    !shownPromotions.contains(id)
+                }
+                if (promoDoc != null) {
+                    val id = promoDoc.id
+                    val title = promoDoc.getString("title").orEmpty()
+                    val body = promoDoc.getString("body").orEmpty()
+                    val ctaText = promoDoc.getString("ctaText").orEmpty().ifBlank { "Upgrade Now" }
+                    val iconEmoji = promoDoc.getString("iconEmoji").orEmpty().ifBlank { "🚀" }
+                    activePromotion = PromotionData(
+                        id = id,
+                        title = title,
+                        body = body,
+                        ctaText = ctaText,
+                        iconEmoji = iconEmoji,
+                        targetGroup = targetGroup
+                    )
+                    showPromotionDialog = true
+                    popupShownThisLaunch = true
+                }
+            }.onFailure { e ->
+                Log.e(TAG_POCKETCRAFT_APP, "Failed to fetch active promotions: ${e.message}", e)
+            }
+        }
     }
 
     SideEffect {
@@ -851,8 +1150,50 @@ fun PocketCraftApp(
                 Screen.VERSION_PICKER -> Unit
             }
         }
+    }
 
-        // Broadcasts are rendered inline within the home screen under the server card.
+    if (showForceReconnectPrompt) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showForceReconnectPrompt = false },
+            title = { 
+                Text(
+                    text = "Restart Required", 
+                    fontFamily = com.pocketcraft.server.ui.theme.Monocraft, 
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                ) 
+            },
+            text = { 
+                Text(
+                    text = "A remote command has requested a server restart to apply updates. Restart your server now?",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                ) 
+            },
+            confirmButton = {
+                DuoButton(
+                    text = "RESTART NOW",
+                    onClick = {
+                        showForceReconnectPrompt = false
+                        stateHolder.restartServer()
+                    }
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { showForceReconnectPrompt = false }) {
+                    Text("LATER", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        )
+    }
+
+    val interactiveBroadcast = broadcasts.firstOrNull { it.interactionType != "none" }
+    interactiveBroadcast?.let { msg ->
+        BroadcastPopup(
+            broadcast = msg,
+            onDismiss = {
+                broadcastViewModel.dismiss(msg.id)
+            }
+        )
     }
 
     if (showAnnouncementDialog) {
@@ -1469,7 +1810,7 @@ fun PocketCraftApp(
                         onClick = {
                             showRatingPromptDialog = false
                             preferences.ratingPopupDismissedForever = true
-                            openPlayStoreListing(context)
+                            requestPlayStoreRating(context)
                         },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1508,6 +1849,67 @@ fun PocketCraftApp(
             },
             containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(26.dp)
+        )
+    }
+
+    if (showPromotionDialog && activePromotion != null) {
+        val promo = activePromotion!!
+        PromotionBottomSheet(
+            title = promo.title,
+            body = promo.body,
+            ctaText = promo.ctaText,
+            iconEmoji = promo.iconEmoji,
+            onDismissRequest = {
+                preferences.markPromotionShown(promo.id)
+                showPromotionDialog = false
+                activePromotion = null
+            },
+            onCtaClick = {
+                preferences.markPromotionShown(promo.id)
+                showPromotionDialog = false
+                activePromotion = null
+                showPremiumUpgradeDialog = true
+            }
+        )
+    }
+
+    if (showFreeUpsellDialog) {
+        PromotionBottomSheet(
+            title = FREE_TO_PRO_UPSELL_TITLE,
+            body = FREE_TO_PRO_UPSELL_BODY,
+            ctaText = FREE_TO_PRO_UPSELL_CTA,
+            iconEmoji = "🚀",
+            onDismissRequest = {
+                showFreeUpsellDialog = false
+            },
+            onCtaClick = {
+                showFreeUpsellDialog = false
+                showPremiumUpgradeDialog = true
+            }
+        )
+    }
+
+    if (showMemberUpsellDialog) {
+        PromotionBottomSheet(
+            title = PRO_TO_MEMBER_UPSELL_TITLE,
+            body = PRO_TO_MEMBER_UPSELL_BODY,
+            ctaText = PRO_TO_MEMBER_UPSELL_CTA,
+            iconEmoji = "⭐",
+            onDismissRequest = {
+                showMemberUpsellDialog = false
+            },
+            onCtaClick = {
+                showMemberUpsellDialog = false
+                showPremiumUpgradeDialog = true
+            }
+        )
+    }
+
+    if (showPremiumUpgradeDialog) {
+        PremiumUpgradeBottomSheet(
+            onDismissRequest = {
+                showPremiumUpgradeDialog = false
+            }
         )
     }
 }
@@ -1732,6 +2134,27 @@ private fun openPlayStoreListing(context: Context): Boolean {
     }.getOrDefault(false)
     if (openedMarket) return true
     return openExternalUrl(context, "https://play.google.com/store/apps/details?id=$packageName")
+}
+
+private fun requestPlayStoreRating(context: Context) {
+    val activity = context.findActivity()
+    if (activity == null || activity.isFinishing || activity.isDestroyed) {
+        openPlayStoreListing(context)
+        return
+    }
+
+    val reviewManager = ReviewManagerFactory.create(activity)
+    reviewManager.requestReviewFlow().addOnCompleteListener { requestTask ->
+        if (!requestTask.isSuccessful || activity.isFinishing || activity.isDestroyed) {
+            openPlayStoreListing(context)
+            return@addOnCompleteListener
+        }
+
+        reviewManager.launchReviewFlow(activity, requestTask.result).addOnCompleteListener {
+            if (activity.isFinishing || activity.isDestroyed) return@addOnCompleteListener
+            openPlayStoreListing(context)
+        }
+    }
 }
 
 private fun parseCreatedWorldName(message: String): String? {

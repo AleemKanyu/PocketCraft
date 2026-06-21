@@ -17,10 +17,14 @@ object RemoteConfigManager {
     private val _showDiscordButton = MutableStateFlow(true)
     private val _showInstagramButton = MutableStateFlow(false)
     private val _relayRegions = MutableStateFlow(RelayServers.defaultRegions())
+    private val _customSubdomainEnabled = MutableStateFlow(false)
+    private val _premiumPurchaseEnabled = MutableStateFlow(false)
 
     val showDiscordButton: Flow<Boolean> = _showDiscordButton.asStateFlow()
     val showInstagramButton: Flow<Boolean> = _showInstagramButton.asStateFlow()
     val relayRegions: Flow<List<RelayRegion>> = _relayRegions.asStateFlow()
+    val customSubdomainEnabled: Flow<Boolean> = _customSubdomainEnabled.asStateFlow()
+    val premiumPurchaseEnabled: Flow<Boolean> = _premiumPurchaseEnabled.asStateFlow()
 
     private var isInitialized = false
 
@@ -41,13 +45,8 @@ object RemoteConfigManager {
             val defaultRelayRegionsJson = serializeRelayRegions(RelayServers.defaultRegions())
 
             // Set in-app defaults
-            remoteConfig.setDefaultsAsync(
-                mapOf(
-                    "show_discord_button" to true,
-                    "show_instagram_button" to false,
-                    "relay_servers" to defaultRelayRegionsJson
-                )
-            ).await()
+            remoteConfig.setDefaultsAsync(com.pocketcraft.server.R.xml.remote_config_defaults).await()
+            remoteConfig.setDefaultsAsync(mapOf("relay_servers" to defaultRelayRegionsJson)).await()
 
             // Fetch and activate remote config
             remoteConfig.fetchAndActivate().await()
@@ -55,6 +54,8 @@ object RemoteConfigManager {
             // Update state
             _showDiscordButton.value = remoteConfig.getBoolean("show_discord_button")
             _showInstagramButton.value = remoteConfig.getBoolean("show_instagram_button")
+            _customSubdomainEnabled.value = remoteConfig.getBoolean("feature_custom_subdomain_enabled")
+            _premiumPurchaseEnabled.value = remoteConfig.getBoolean("feature_premium_purchase_enabled")
             updateRelayRegions(remoteConfig.getString("relay_servers"), context)
 
             isInitialized = true
@@ -71,6 +72,8 @@ object RemoteConfigManager {
 
             _showDiscordButton.value = remoteConfig.getBoolean("show_discord_button")
             _showInstagramButton.value = remoteConfig.getBoolean("show_instagram_button")
+            _customSubdomainEnabled.value = remoteConfig.getBoolean("feature_custom_subdomain_enabled")
+            _premiumPurchaseEnabled.value = remoteConfig.getBoolean("feature_premium_purchase_enabled")
             updateRelayRegions(remoteConfig.getString("relay_servers"), context)
         } catch (e: Exception) {
             // Keep existing values on error
@@ -87,6 +90,14 @@ object RemoteConfigManager {
 
     fun currentRelayRegions(): List<RelayRegion> = _relayRegions.value
 
+    fun isCustomSubdomainEnabledSync(): Boolean {
+        return FirebaseRemoteConfig.getInstance().getBoolean("feature_custom_subdomain_enabled")
+    }
+
+    fun isPremiumPurchaseEnabledSync(): Boolean {
+        return FirebaseRemoteConfig.getInstance().getBoolean("feature_premium_purchase_enabled")
+    }
+
     private fun hydrateRelayRegionsFromCache(context: Context) {
         val cachedRaw = AppPreferences(context).cachedRelayServersJson
         updateRelayRegions(cachedRaw ?: serializeRelayRegions(RelayServers.defaultRegions()), context)
@@ -94,7 +105,25 @@ object RemoteConfigManager {
 
     private fun updateRelayRegions(raw: String, context: Context) {
         val parsed = parseRelayRegions(raw).ifEmpty { RelayServers.defaultRegions() }
-        RelayServers.updateRegions(parsed)
+        val disabledSet = FeatureGate.getDisabledRegions()
+        val filtered = if (disabledSet.isEmpty()) {
+            parsed
+        } else {
+            parsed.filter { region ->
+                val host = region.host.lowercase()
+                val label = region.label.lowercase()
+                val hostPrefix = host.substringBefore('.')
+                disabledSet.none { code ->
+                    val c = code.trim()
+                    c.isNotBlank() && (
+                        hostPrefix == c ||
+                        host.contains(c) ||
+                        label.contains(c)
+                    )
+                }
+            }
+        }
+        RelayServers.updateRegions(filtered)
         _relayRegions.value = RelayServers.currentRegions()
         AppPreferences(context).cachedRelayServersJson = serializeRelayRegions(_relayRegions.value)
     }

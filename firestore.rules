@@ -2,8 +2,39 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
     match /user_settings/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isOwner(userId);
+    }
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+    match /subdomains/{subdomain} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.serverId is string
+        && request.resource.data.createdAt != null
+        && (
+          !("region" in request.resource.data)
+          || request.resource.data.region == null
+          || request.resource.data.region in ["as", "eu"]
+        );
+      allow update, delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+    match /featureRequests/{requestId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.message is string;
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
     }
     match /beta_feedback/{document} {
       allow create: if true;
@@ -11,6 +42,21 @@ service cloud.firestore {
     }
     match /social_prompts/{userId} {
       allow read, write: if true;
+    }
+    match /broadcasts/{broadcastId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /broadcast_responses/{responseId} {
+      allow read, write: if signedIn();
+    }
+    match /broadcast_results/{resultId} {
+      allow read: if true;
+      allow write: if signedIn();
+    }
+    match /remote_commands/{commandId} {
+      allow read: if signedIn();
+      allow write: if false;
     }
     match /{document=**} {
       allow read: if true;

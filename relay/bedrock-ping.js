@@ -9,7 +9,7 @@ const RAKNET_MAGIC = Buffer.from([
 
 const SERVER_GUID = 0xDEADBEEFCAFE1234n;
 const DEFAULT_PROTOCOL = '800';
-const DEFAULT_VERSION = '1.21.0';
+const DEFAULT_VERSION = '1.22.0';
 const statusMap = new Map();
 let pingLogCount = 0;
 
@@ -28,13 +28,13 @@ function getProtocolForVersion(version) {
   if (!version) return DEFAULT_PROTOCOL;
   const v = version.trim();
   if (v.startsWith('1.20.8')) return '671';
-  if (v.startsWith('1.21.0') || v === '1.21' || v === '1.21.1' || v === '1.21.2') return '685';
-  if (v.startsWith('1.21.1')) return '712';
-  if (v.startsWith('1.21.2')) return '723';
+  if (v.startsWith('1.21.1') || v.startsWith('1.21.2')) return '723';
   if (v.startsWith('1.21.3')) return '729';
   if (v.startsWith('1.21.4')) return '748';
   if (v.startsWith('1.21.5')) return '766';
-  return '748';
+  if (v.startsWith('1.21.0') || v === '1.21') return '685';
+  if (v.startsWith('1.22.0')) return '800';
+  return DEFAULT_PROTOCOL;
 }
 
 function buildMotd(entry) {

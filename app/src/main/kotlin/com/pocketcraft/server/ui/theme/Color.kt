@@ -1,5 +1,8 @@
 package com.pocketcraft.server.ui.theme
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import com.pocketcraft.server.ui.util.MobTheme
 
@@ -283,6 +286,72 @@ object SimpleDarkTheme : BaseThemePalette() {
 }
 
 
+object CustomThemePalette : BaseThemePalette() {
+    var customPrimary by mutableStateOf(Color(0xFF4ADE80))
+    var customBgApp by mutableStateOf(Color(0xFF0B0E0B))
+    var customSurfaceCard by mutableStateOf(Color(0xFF131713))
+    var customPrimaryText by mutableStateOf(Color(0xFF0B0E0B))
+    var customTextPrimary by mutableStateOf(Color(0xFFEFF7EF))
+
+    private fun Color.blend(other: Color, fraction: Float): Color {
+        return Color(
+            red = (this.red + (other.red - this.red) * fraction).coerceIn(0f, 1f),
+            green = (this.green + (other.green - this.green) * fraction).coerceIn(0f, 1f),
+            blue = (this.blue + (other.blue - this.blue) * fraction).coerceIn(0f, 1f),
+            alpha = (this.alpha + (other.alpha - this.alpha) * fraction).coerceIn(0f, 1f)
+        )
+    }
+    private fun Color.lighten(fraction: Float): Color = this.blend(Color.White, fraction)
+    private fun Color.darken(fraction: Float): Color = this.blend(Color.Black, fraction)
+
+    override val bgApp: Color get() = customBgApp
+    override val surfaceCard: Color get() = customSurfaceCard
+    override val surfaceHover: Color get() = if (customSurfaceCard.lighten(0.15f) == customSurfaceCard) customSurfaceCard.blend(Color.White, 0.1f) else customSurfaceCard.blend(if (customBgApp.red + customBgApp.green + customBgApp.blue > 1.5f) Color.Black else Color.White, 0.08f)
+    override val cardBorder: Color get() = customSurfaceCard.blend(if (customBgApp.red + customBgApp.green + customBgApp.blue > 1.5f) Color.Black else Color.White, 0.15f)
+    override val cardBorderBottom: Color get() = customSurfaceCard.blend(if (customBgApp.red + customBgApp.green + customBgApp.blue > 1.5f) Color.Black else Color.White, 0.25f)
+    
+    override val primary: Color get() = customPrimary
+    override val primaryBorder: Color get() = customPrimary.darken(0.15f)
+    override val primaryBorderBottom: Color get() = customPrimary.darken(0.3f)
+    override val primaryText: Color get() = customPrimaryText
+
+    override val inactiveBg: Color get() = customSurfaceCard.blend(customBgApp, 0.5f)
+    override val inactiveBorder: Color get() = cardBorder.blend(customBgApp, 0.5f)
+    override val inactiveBorderBottom: Color get() = cardBorderBottom.blend(customBgApp, 0.5f)
+    override val inactiveText: Color get() = customTextPrimary.blend(customBgApp, 0.5f)
+
+    override val tagBg: Color get() = surfaceHover
+    override val tagBorder: Color get() = cardBorder
+    override val tagBorderBottom: Color get() = cardBorderBottom
+    override val tagText: Color get() = customPrimary
+
+    override val textPrimary: Color get() = customTextPrimary
+    override val textSecondary: Color get() = customTextPrimary.blend(customBgApp, 0.25f)
+    override val textMuted: Color get() = customTextPrimary.blend(customBgApp, 0.5f)
+    override val textSection: Color get() = customPrimary
+
+    override val iconBtnBg: Color get() = customSurfaceCard
+    override val iconBtnBorder: Color get() = cardBorder
+    override val iconBtnBorderBottom: Color get() = cardBorderBottom
+    override val iconBtnIcon: Color get() = customPrimary
+
+    override val navActivePillBg: Color get() = customPrimary.blend(customBgApp, 0.85f)
+    override val navActivePillBorder: Color get() = customPrimary.blend(customBgApp, 0.7f)
+    override val navActivePillBorderBottom: Color get() = customPrimary.blend(customBgApp, 0.6f)
+
+    override val footerBg: Color get() = customBgApp
+    override val footerLogoBg: Color get() = customSurfaceCard
+    override val footerText: Color get() = textSecondary
+    override val footerMuted: Color get() = textMuted
+
+    override val consoleBg: Color get() = customBgApp.darken(0.2f)
+    override val consoleBorder: Color get() = cardBorder
+    override val consoleBorderBottom: Color get() = cardBorderBottom
+    override val consoleDim: Color get() = textMuted
+    override val consoleBright: Color get() = customPrimary
+    override val consoleCursor: Color get() = customPrimary
+}
+
 object PocketColors {
     var activeMobTheme = MobTheme.CREEPER
     var isDark = false
@@ -293,6 +362,7 @@ object PocketColors {
             MobTheme.CREEPER -> if (isDark) CreeperDarkTheme else CreeperLightTheme
             MobTheme.SIMPLE_WHITE -> SimpleWhiteTheme
             MobTheme.SIMPLE_DARK -> SimpleDarkTheme
+            MobTheme.CUSTOM -> CustomThemePalette
         }
 
     val BgApp: Color get() = currentPalette.bgApp

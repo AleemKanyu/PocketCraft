@@ -36,6 +36,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Brush
 import com.pocketcraft.server.ui.theme.ButtonFont
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,7 +47,7 @@ import com.pocketcraft.server.ui.theme.PocketMotion
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.button3d
 
-enum class DuoButtonVariant { StartServer, Primary, Secondary, Danger, Info }
+enum class DuoButtonVariant { StartServer, Primary, Secondary, Danger, Warning, Info, Discord, Pro, SecondaryGray }
 
 @Composable
 fun DuoButton(
@@ -59,7 +60,9 @@ fun DuoButton(
     variant: DuoButtonVariant = DuoButtonVariant.Primary,
     isLoading: Boolean = false,
     fillMaxWidth: Boolean = true,
-    minHeight: Dp = 56.dp
+    minHeight: Dp = 56.dp,
+    backgroundBrush: Brush? = null,
+    fontWeight: FontWeight = FontWeight.ExtraBold
 ) {
     // ── Colors ──────────────────────────────────────────────────────────────
     val bgColor: Color
@@ -87,10 +90,10 @@ fun DuoButton(
                 contentColor = PocketColors.PrimaryText
             }
             DuoButtonVariant.Secondary -> {
-                bgColor = PocketColors.InactiveBg
-                borderColor = PocketColors.InactiveBorder
-                bottomBorderColor = PocketColors.InactiveBorderBottom
-                contentColor = PocketColors.InactiveText
+                bgColor = Color(0xFF58CC02)
+                borderColor = Color(0xFF4BAC02)
+                bottomBorderColor = Color(0xFF3B8801)
+                contentColor = Color.White
             }
             DuoButtonVariant.Danger -> {
                 bgColor = PocketColors.DangerBg
@@ -98,11 +101,35 @@ fun DuoButton(
                 bottomBorderColor = PocketColors.DangerBorderBottom
                 contentColor = PocketColors.DangerText
             }
+            DuoButtonVariant.Warning -> {
+                bgColor = Color(0xFFF59E0B)
+                borderColor = Color(0xFFD97706)
+                bottomBorderColor = Color(0xFF92400E)
+                contentColor = Color.White
+            }
             DuoButtonVariant.Info -> {
                 bgColor = Color(0xFF2F80ED)
                 borderColor = Color(0xFF1B5EAA)
                 bottomBorderColor = Color(0xFF113867)
                 contentColor = Color.White
+            }
+            DuoButtonVariant.Discord -> {
+                bgColor = Color(0xFF5865F2)
+                borderColor = Color(0xFF404EED)
+                bottomBorderColor = Color(0xFF303BBA)
+                contentColor = Color.White
+            }
+            DuoButtonVariant.Pro -> {
+                bgColor = Color(0xFF8C4DFF)
+                borderColor = Color(0xFF753CE0)
+                bottomBorderColor = Color(0xFF5A25B8)
+                contentColor = Color.White
+            }
+            DuoButtonVariant.SecondaryGray -> {
+                bgColor = Color(0xFFE0E0E0)
+                borderColor = Color(0xFFBDBDBD)
+                bottomBorderColor = Color(0xFF9E9E9E)
+                contentColor = Color(0xFF616161)
             }
         }
     }
@@ -158,7 +185,13 @@ fun DuoButton(
                     depthWidth = bottomBorderDp
                 )
                 .clip(shape)
-                .background(bgColor)
+                .then(
+                    if (backgroundBrush != null && enabled) {
+                        Modifier.background(backgroundBrush)
+                    } else {
+                        Modifier.background(bgColor)
+                    }
+                )
                 .clickable(
                     enabled           = enabled && !isLoading,
                     interactionSource = interactionSource,
@@ -169,48 +202,45 @@ fun DuoButton(
             val verticalPadding = if (minHeight < 48.dp) 10.dp else 16.dp
             val iconSize = if (minHeight < 48.dp) 16.dp else 20.dp
             val iconGap = if (minHeight < 48.dp) 6.dp else 10.dp
-            BoxWithConstraints(
+            Row(
                 modifier = (if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier)
-                    .padding(horizontal = 22.dp, vertical = verticalPadding)
+                    .align(Alignment.Center)
+                    .padding(horizontal = 22.dp, vertical = verticalPadding),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (iconContent != null || icon != null || isLoading) {
-                        if (iconContent != null) {
-                            iconContent()
-                        } else {
-                            val iconToShow = icon ?: Icons.Default.Refresh
-                            Icon(
-                                imageVector = iconToShow,
-                                contentDescription = null,
-                                tint = contentColor,
-                                modifier = Modifier
-                                    .size(iconSize)
-                                    .then(if (isLoading) Modifier.rotate(rotation) else Modifier)
-                            )
-                        }
-                        androidx.compose.foundation.layout.Spacer(Modifier.size(iconGap))
+                if (iconContent != null || icon != null || isLoading) {
+                    if (iconContent != null) {
+                        iconContent()
+                    } else {
+                        val iconToShow = icon ?: Icons.Default.Refresh
+                        Icon(
+                            imageVector = iconToShow,
+                            contentDescription = null,
+                            tint = contentColor,
+                            modifier = Modifier
+                                .size(iconSize)
+                                .then(if (isLoading) Modifier.rotate(rotation) else Modifier)
+                        )
                     }
-                    Text(
-                        text = text,
-                        color = contentColor,
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontFamily = ButtonFont,
-                            fontWeight = FontWeight.Normal,
-                            fontSize = if (minHeight < 48.dp) 12.sp else 14.sp,
-                            letterSpacing = 0.sp
-                        ),
-                        maxLines = 2,
-                        softWrap = true,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                    if (iconContent != null || icon != null || isLoading) {
-                        androidx.compose.foundation.layout.Spacer(Modifier.size(iconGap))
-                        Box(modifier = Modifier.size(iconSize))
-                    }
+                    androidx.compose.foundation.layout.Spacer(Modifier.size(iconGap))
+                }
+                Text(
+                    text = text,
+                    color = contentColor,
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontFamily = ButtonFont,
+                        fontWeight = fontWeight,
+                        fontSize = if (minHeight < 48.dp) 12.sp else 14.sp,
+                        letterSpacing = 0.sp
+                    ),
+                    maxLines = 2,
+                    softWrap = true,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                if (iconContent != null || icon != null || isLoading) {
+                    androidx.compose.foundation.layout.Spacer(Modifier.size(iconGap))
+                    Box(modifier = Modifier.size(iconSize))
                 }
             }
         }

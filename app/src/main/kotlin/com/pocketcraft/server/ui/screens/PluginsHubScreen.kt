@@ -42,6 +42,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -142,22 +144,58 @@ fun PluginsHubScreen(
     var downloadedSectionExpanded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var catalogRetryToken by remember { mutableIntStateOf(0) }
+    var discoverPage by remember { mutableIntStateOf(0) }
     var detailCard by remember { mutableStateOf<ContentDetailCard?>(null) }
     var pendingRemoteInstall by remember { mutableStateOf<PluginManager.RemoteCatalogItem?>(null) }
+    var dependenciesList by remember { mutableStateOf<List<PluginManager.ModDependency>>(emptyList()) }
+    var isLoadingDependencies by remember { mutableStateOf(false) }
+
+    val availableTabs = remember(stateHolder.config.serverType) {
+        when (stateHolder.config.serverType) {
+            com.pocketcraft.server.data.model.ServerType.FABRIC,
+            com.pocketcraft.server.data.model.ServerType.MODPACK -> listOf(ContentTab.MODS, ContentTab.PACKS)
+            com.pocketcraft.server.data.model.ServerType.PAPER,
+            com.pocketcraft.server.data.model.ServerType.PURPUR -> listOf(ContentTab.PLUGINS, ContentTab.PACKS)
+        }
+    }
+
+    fun currentTab(): ContentTab = availableTabs[selectedTab.coerceIn(0, availableTabs.lastIndex)]
+
+    LaunchedEffect(pendingRemoteInstall) {
+        val item = pendingRemoteInstall
+        if (item != null && currentTab().type == PluginManager.ContentType.MODS) {
+            isLoadingDependencies = true
+            dependenciesList = emptyList()
+            try {
+                dependenciesList = PluginManager.fetchModDependencies(context, item.projectId)
+            } catch (e: Exception) {
+                android.util.Log.e("PluginsHub", "Failed to load dependencies: ${e.message}")
+            } finally {
+                isLoadingDependencies = false
+            }
+        } else {
+            dependenciesList = emptyList()
+            isLoadingDependencies = false
+        }
+    }
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val selectedTabColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary
     val unselectedTabColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f) else MaterialTheme.colorScheme.onSurfaceVariant
 
     val resourcePackIcons = remember { mutableStateMapOf<String, File?>() }
 
-    fun currentTab(): ContentTab = ContentTab.entries[selectedTab]
-
     val isModsTab = currentTab().type == PluginManager.ContentType.MODS
-    val runtimeKey = remember(stateHolder.config.serverType, stateHolder.config.gameVersion) {
-        "${stateHolder.config.serverType.name.lowercase(Locale.US)}-${stateHolder.config.gameVersion}"
+    val runtimeKey = remember(stateHolder.activeWorld) {
+        PluginManager.getRuntimeKeyForWorld(context, stateHolder.activeWorld)
     }
     val supportsMods = remember(runtimeKey) { PluginManager.supportsMods(runtimeKey) }
     val showModsWarning = isModsTab && !supportsMods
+
+    LaunchedEffect(availableTabs) {
+        if (selectedTab > availableTabs.lastIndex) {
+            selectedTab = 0
+        }
+    }
 
     suspend fun loadDownloadedItems(): List<Plugin> = withContext(Dispatchers.IO) {
         PluginManager.ensureContentDirs(context, stateHolder.activeWorld)
@@ -174,25 +212,41 @@ fun PluginsHubScreen(
         }
     }
 
-    val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (uris.isNullOrEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
             isUploading = true
-            uploadProgress = 0
-            val result = PluginManager.installFromUri(
-                context = context,
-                uri = uri,
-                worldName = stateHolder.activeWorld,
-                type = currentTab().type,
-                runtimeKey = runtimeKey,
-                onProgress = { uploadProgress = it.coerceIn(0, 100) }
-            )
+            var successCount = 0
+            var failCount = 0
+            var lastErrorMessage: String? = null
+            uris.forEachIndexed { index, uri ->
+                uploadProgress = (index * 100) / uris.size
+                val result = PluginManager.installFromUri(
+                    context = context,
+                    uri = uri,
+                    worldName = stateHolder.activeWorld,
+                    type = currentTab().type,
+                    runtimeKey = runtimeKey,
+                    onProgress = { currentFileProgress ->
+                        uploadProgress = ((index * 100) + currentFileProgress) / uris.size
+                    }
+                )
+                result.onSuccess {
+                    successCount++
+                }.onFailure {
+                    failCount++
+                    lastErrorMessage = it.message
+                }
+            }
             isUploading = false
-            result.onSuccess {
-                refreshDownloadedItems()
-                Toast.makeText(context, s.hubInstalled + ": " + currentTab().label(s), Toast.LENGTH_SHORT).show()
-            }.onFailure {
-                onMessage(it.message ?: "Could not add file.")
+            refreshDownloadedItems()
+            val label = currentTab().label(s).lowercase()
+            if (successCount > 0 && failCount == 0) {
+                Toast.makeText(context, "Successfully added $successCount $label.", Toast.LENGTH_SHORT).show()
+            } else if (successCount > 0 && failCount > 0) {
+                onMessage("Added $successCount $label, but $failCount failed (last error: ${lastErrorMessage ?: "unknown"}).")
+            } else {
+                onMessage("Failed to add files: ${lastErrorMessage ?: "unknown"}")
             }
         }
     }
@@ -200,6 +254,7 @@ fun PluginsHubScreen(
     LaunchedEffect(selectedTab, stateHolder.activeWorld) {
         resourcePackIcons.clear()
         downloadedItems = loadDownloadedItems()
+        discoverPage = 0
     }
 
     LaunchedEffect(selectedTab, downloadedItems, stateHolder.activeWorld) {
@@ -227,7 +282,7 @@ fun PluginsHubScreen(
             query = query,
             minecraftVersion = stateHolder.config.gameVersion,
             runtimeKey = runtimeKey,
-            limit = 50
+            limit = 100
         )
 
         result.onSuccess { remoteItems ->
@@ -256,6 +311,23 @@ fun PluginsHubScreen(
     val sortedDiscoveredItems = remember(discoveredItems, selectedTab) {
         discoveredItems
     }
+    val discoverPageSize = 10
+    val discoverPageCount = ((sortedDiscoveredItems.size + discoverPageSize - 1) / discoverPageSize).coerceAtLeast(1)
+    val pagedDiscoveredItems = remember(sortedDiscoveredItems, discoverPage) {
+        val pageIndex = discoverPage.coerceAtLeast(0)
+        sortedDiscoveredItems.drop(pageIndex * discoverPageSize).take(discoverPageSize)
+    }
+
+    LaunchedEffect(query, selectedTab, catalogRetryToken) {
+        discoverPage = 0
+    }
+
+    LaunchedEffect(sortedDiscoveredItems.size) {
+        val maxPageIndex = (discoverPageCount - 1).coerceAtLeast(0)
+        if (discoverPage > maxPageIndex) {
+            discoverPage = maxPageIndex
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -267,7 +339,7 @@ fun PluginsHubScreen(
             containerColor = MaterialTheme.colorScheme.background,
             contentColor = selectedTabColor
         ) {
-            ContentTab.entries.forEachIndexed { index, tab ->
+            availableTabs.forEachIndexed { index, tab ->
                 Tab(
                     selected = selectedTab == index,
                     onClick = {
@@ -409,8 +481,12 @@ fun PluginsHubScreen(
 
             item {
                 SectionHeader(
-                    title = s.hubSectionDiscover,
-                    subtitle = s.hubSectionDiscoverDesc,
+                    title = if (query.isBlank()) "Trending ${currentTab().label(s)}" else s.hubSectionDiscover,
+                    subtitle = if (query.isBlank()) {
+                        "Top picks for ${currentTab().label(s).lowercase(Locale.US)} right now."
+                    } else {
+                        s.hubSectionDiscoverDesc
+                    },
                     actionLabel = if (errorMessage != null && !isDiscoverLoading) s.hubRetry else null,
                     onAction = { catalogRetryToken++ }
                 )
@@ -473,7 +549,7 @@ fun PluginsHubScreen(
                     }
                 }
                 else -> {
-                    items(sortedDiscoveredItems, key = { it.catalogKey }) { remote ->
+                    items(pagedDiscoveredItems, key = { it.catalogKey }) { remote ->
                         val installed = isRemoteInstalled(remote, installedKeys)
                         RemoteContentRow(
                             item = remote,
@@ -492,6 +568,16 @@ fun PluginsHubScreen(
                                 }
                             }
                         )
+                    }
+                    if (sortedDiscoveredItems.size > discoverPageSize) {
+                        item {
+                            DiscoverPagerRow(
+                                currentPage = discoverPage,
+                                pageCount = discoverPageCount,
+                                onPrevious = { discoverPage = (discoverPage - 1).coerceAtLeast(0) },
+                                onNext = { discoverPage = (discoverPage + 1).coerceAtMost(discoverPageCount - 1) }
+                            )
+                        }
                     }
                 }
             }
@@ -651,6 +737,7 @@ fun PluginsHubScreen(
                 scope.launch {
                     isUploading = true
                     uploadProgress = 0
+                    val fileName = PluginManager.getFileNameFromUri(context, uri) ?: item.title
                     val result = PluginManager.installFromUri(
                         context = context,
                         uri = uri,
@@ -663,7 +750,38 @@ fun PluginsHubScreen(
                     result.onSuccess {
                         pendingRemoteInstall = null
                         refreshDownloadedItems()
-                        Toast.makeText(context, "${s.hubInstalled}: ${item.title}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "${s.hubInstalled}: $fileName", Toast.LENGTH_SHORT).show()
+                    }.onFailure {
+                        onMessage(it.message ?: "Could not add file.")
+                    }
+                }
+            },
+            dependencies = dependenciesList,
+            isLoadingDependencies = isLoadingDependencies,
+            contentTypeLabel = when (currentTab().type) {
+                PluginManager.ContentType.PLUGINS -> "PLUGIN"
+                PluginManager.ContentType.MODS -> "MOD"
+                PluginManager.ContentType.RESOURCE_PACKS -> "PACK"
+            },
+            worldName = stateHolder.activeWorld,
+            onDependencyFileSelected = { dep, uri, onComplete ->
+                scope.launch {
+                    isUploading = true
+                    uploadProgress = 0
+                    val fileName = PluginManager.getFileNameFromUri(context, uri) ?: dep.title
+                    val result = PluginManager.installFromUri(
+                        context = context,
+                        uri = uri,
+                        worldName = stateHolder.activeWorld,
+                        type = currentTab().type,
+                        runtimeKey = runtimeKey,
+                        onProgress = { uploadProgress = it.coerceIn(0, 100) }
+                    )
+                    isUploading = false
+                    result.onSuccess {
+                        refreshDownloadedItems()
+                        onComplete()
+                        Toast.makeText(context, "${s.hubInstalled}: $fileName", Toast.LENGTH_SHORT).show()
                     }.onFailure {
                         onMessage(it.message ?: "Could not add file.")
                     }
@@ -1061,6 +1179,57 @@ private fun RemoteContentRow(
                     text = item.supportMessage,
                     fontSize = 11.sp,
                     color = if (item.canInstall) pluginsHubMutedTextColor() else pluginsHubUnsupportedChipContentColor()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiscoverPagerRow(
+    currentPage: Int,
+    pageCount: Int,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit
+) {
+    PocketCraftCard(
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, pluginsHubBorderColor()),
+        colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                onClick = onPrevious,
+                enabled = currentPage > 0,
+                border = BorderStroke(1.dp, pluginsHubBorderColor())
+            ) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowLeft,
+                    contentDescription = "Previous page",
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Text(
+                text = "Page ${currentPage + 1} of $pageCount",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = pluginsHubMutedTextColor()
+            )
+            OutlinedButton(
+                onClick = onNext,
+                enabled = currentPage < pageCount - 1,
+                border = BorderStroke(1.dp, pluginsHubBorderColor())
+            ) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowRight,
+                    contentDescription = "Next page",
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }

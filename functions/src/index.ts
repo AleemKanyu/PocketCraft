@@ -1,13 +1,18 @@
 import { initializeApp } from "firebase-admin/app";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { defineSecret } from "firebase-functions/params";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { onMessagePublished } from "firebase-functions/v2/pubsub";
+import { google } from "googleapis";
 
 initializeApp();
 
 const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 const EMAIL_FROM = defineSecret("EMAIL_FROM");
+const GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = defineSecret("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON");
+const GOOGLE_PLAY_PACKAGE_NAME = defineSecret("GOOGLE_PLAY_PACKAGE_NAME");
 const SUPPORT_EMAIL = "support@pocketcraft.online";
 
 type FeedbackDoc = {
@@ -20,6 +25,13 @@ type FeedbackDoc = {
   deviceModel?: string;
   androidSdk?: number;
 };
+
+type VerifyPurchaseRequest = {
+  purchaseToken?: string;
+  productId?: string;
+};
+
+type PremiumTier = "none" | "premium" | "supportive";
 
 export const forwardFeedbackEmail = onDocumentCreated(
   {
@@ -140,6 +152,179 @@ export const forwardFeedbackEmail = onDocumentCreated(
     }
   }
 );
+
+export const verifyPurchase = onCall(
+  {
+    region: "us-central1",
+    timeoutSeconds: 60,
+    memory: "256MiB",
+    secrets: [GOOGLE_PLAY_SERVICE_ACCOUNT_JSON, GOOGLE_PLAY_PACKAGE_NAME]
+  },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "You must be signed in to verify a purchase.");
+    }
+
+    const payload = (request.data || {}) as VerifyPurchaseRequest;
+    const purchaseToken = payload.purchaseToken?.trim();
+    const productId = payload.productId?.trim();
+    if (!purchaseToken || !productId) {
+      throw new HttpsError("invalid-argument", "purchaseToken and productId are required.");
+    }
+
+    const verification = await fetchSubscriptionState(productId, purchaseToken);
+    if (!verification.active) {
+      await applyEntitlementForUid(uid, "none", purchaseToken, false, verification);
+      throw new HttpsError("failed-precondition", verification.reason || "Subscription is not active.");
+    }
+
+    const tier = productIdToTier(productId);
+    await applyEntitlementForUid(uid, tier, purchaseToken, tier === "supportive", verification);
+
+    return {
+      premiumTier: tier,
+      prioritySupport: tier === "supportive",
+      expiryTimeMillis: verification.expiryTimeMillis ?? null
+    };
+  }
+);
+
+export const syncPlaySubscriptionRtdn = onMessagePublished(
+  {
+    topic: "play-rtdn",
+    region: "us-central1",
+    timeoutSeconds: 60,
+    memory: "256MiB",
+    secrets: [GOOGLE_PLAY_SERVICE_ACCOUNT_JSON, GOOGLE_PLAY_PACKAGE_NAME]
+  },
+  async (event) => {
+    const rawMessage = event.data.message.json ?? safeParseJson(Buffer.from(event.data.message.data || "", "base64").toString("utf8"));
+    if (!rawMessage || typeof rawMessage !== "object") {
+      logger.warn("RTDN payload missing or invalid.");
+      return;
+    }
+
+    const subscriptionNotification = (rawMessage as Record<string, unknown>).subscriptionNotification as Record<string, unknown> | undefined;
+    const purchaseToken = typeof subscriptionNotification?.purchaseToken === "string" ? subscriptionNotification.purchaseToken : "";
+    const productId = typeof subscriptionNotification?.subscriptionId === "string" ? subscriptionNotification.subscriptionId : "";
+
+    if (!purchaseToken || !productId) {
+      logger.warn("RTDN did not include purchaseToken/subscriptionId.", { rawMessage });
+      return;
+    }
+
+    const users = await getFirestore()
+      .collection("users")
+      .where("playPurchaseToken", "==", purchaseToken)
+      .limit(1)
+      .get();
+
+    const userDoc = users.docs[0];
+    if (!userDoc) {
+      logger.warn("RTDN token not linked to a user.", { productId });
+      return;
+    }
+
+    const verification = await fetchSubscriptionState(productId, purchaseToken);
+    const tier = verification.active ? productIdToTier(productId) : "none";
+    await applyEntitlementForUid(userDoc.id, tier, purchaseToken, tier === "supportive", verification);
+  }
+);
+
+async function fetchSubscriptionState(productId: string, purchaseToken: string) {
+  const credentials = JSON.parse(GOOGLE_PLAY_SERVICE_ACCOUNT_JSON.value()) as {
+    client_email: string;
+    private_key: string;
+  };
+
+  const authClient = new google.auth.JWT(
+    credentials.client_email,
+    undefined,
+    credentials.private_key,
+    ["https://www.googleapis.com/auth/androidpublisher"]
+  );
+  await authClient.authorize();
+  const androidpublisher = google.androidpublisher({
+    version: "v3",
+    auth: authClient
+  });
+
+  const response = await androidpublisher.purchases.subscriptions.get({
+    packageName: GOOGLE_PLAY_PACKAGE_NAME.value(),
+    subscriptionId: productId,
+    token: purchaseToken
+  });
+
+  const expiryTimeMillis = Number(response.data.expiryTimeMillis || 0);
+  const now = Date.now();
+  const active = expiryTimeMillis > now;
+  const reason = active ? "" : "Subscription expired or was revoked.";
+
+  if (response.data.acknowledgementState === 0) {
+    logger.info("Acknowledging subscription purchase on server-side...", { productId });
+    try {
+      await androidpublisher.purchases.subscriptions.acknowledge({
+        packageName: GOOGLE_PLAY_PACKAGE_NAME.value(),
+        subscriptionId: productId,
+        token: purchaseToken
+      });
+    } catch (err) {
+      logger.error("Failed to acknowledge subscription server-side:", err);
+    }
+  }
+
+  return {
+    active,
+    expiryTimeMillis,
+    raw: response.data,
+    reason
+  };
+}
+
+async function applyEntitlementForUid(
+  uid: string,
+  tier: PremiumTier,
+  purchaseToken: string,
+  prioritySupport: boolean,
+  verification: {
+    expiryTimeMillis?: number;
+    raw?: unknown;
+    reason?: string;
+  }
+) {
+  const db = getFirestore();
+  const ref = db.collection("users").doc(uid);
+  const update: Record<string, unknown> = {
+    premiumTier: tier,
+    playPurchaseToken: purchaseToken,
+    prioritySupport,
+    updatedAt: FieldValue.serverTimestamp(),
+    lastPlayVerification: verification.raw ?? {},
+    playEntitlementStatus: tier === "none" ? "inactive" : "active",
+    playEntitlementReason: verification.reason || null
+  };
+
+  if (tier === "none") {
+    update.premiumSince = FieldValue.delete();
+  } else if (verification.expiryTimeMillis) {
+    update.premiumSince = FieldValue.serverTimestamp();
+    update.premiumExpiry = Timestamp.fromMillis(verification.expiryTimeMillis);
+  }
+
+  await ref.set(update, { merge: true });
+}
+
+function productIdToTier(productId: string): PremiumTier {
+  switch (productId) {
+    case "pocketcraft_premium_monthly":
+      return "premium";
+    case "pocketcraft_supportive_monthly":
+      return "supportive";
+    default:
+      throw new HttpsError("invalid-argument", `Unknown subscription product: ${productId}`);
+  }
+}
 
 function safeParseJson(value: string): Record<string, unknown> | null {
   try {

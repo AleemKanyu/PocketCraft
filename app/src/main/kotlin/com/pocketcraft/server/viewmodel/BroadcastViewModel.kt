@@ -41,15 +41,31 @@ class BroadcastViewModel @Inject constructor(
     private val _configBanner = MutableStateFlow<BroadcastMessage?>(null)
     val configBanner: StateFlow<BroadcastMessage?> = _configBanner
 
+    private val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+    private val answeredMap = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+
     val visibleBroadcasts: StateFlow<List<BroadcastMessage>> =
-        combine(broadcasts, dismissed) { messages, dismissedIds ->
-            messages.filter { it.id !in dismissedIds }
+        combine(
+            broadcasts,
+            dismissed,
+            answeredMap,
+            com.pocketcraft.server.broadcast.RemoteCommandListener.commandBroadcasts
+        ) { liveBroadcasts, dismissedIds, answeredStates, commandBroadcasts ->
+            val allMessages = liveBroadcasts + commandBroadcasts
+            allMessages
+                .filter { it.id !in dismissedIds }
+                .map { msg ->
+                    val isAlreadyAnswered = answeredStates[msg.id] == true
+                    if (isAlreadyAnswered) {
+                        msg.copy(interactionType = "none")
+                    } else {
+                        msg
+                    }
+                }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         BroadcastManager.initRemoteConfig { message ->
-            // Only show remote config banner if it hasn't been dismissed this session
-            // Config banners are session-only (they change content regularly)
             _configBanner.value = message
         }
 
@@ -61,12 +77,34 @@ class BroadcastViewModel @Inject constructor(
                 }
             }
         }
+
+        viewModelScope.launch {
+            broadcasts.collect { messages ->
+                val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+                if (uid.isNullOrBlank()) return@collect
+
+                messages.forEach { msg ->
+                    if ((msg.interactionType == "question" || msg.interactionType == "opt_in")
+                        && !answeredMap.value.containsKey(msg.id)
+                    ) {
+                        // Check broadcast_responses/{broadcastId}_{uid} for both polls and opt-ins
+                        db.collection("broadcast_responses")
+                            .document("${msg.id}_$uid")
+                            .get()
+                            .addOnSuccessListener { doc ->
+                                answeredMap.value = answeredMap.value + (msg.id to doc.exists())
+                            }
+                    }
+                }
+            }
+        }
     }
 
     fun dismiss(id: String) {
         val updated = dismissed.value + id
         dismissed.value = updated
         saveDismissedIds(updated)
+        com.pocketcraft.server.broadcast.RemoteCommandListener.dismissCommandBroadcast(id)
     }
 
     fun dismissConfigBanner() {

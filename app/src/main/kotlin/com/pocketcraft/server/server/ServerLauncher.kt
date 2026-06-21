@@ -23,8 +23,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import java.util.Properties
+import java.util.concurrent.TimeUnit
 
 class ServerLauncher(private val context: Context) {
+
+    private fun normalizeAndroidPath(path: String): String {
+        return if (path.startsWith("/data/user/0/")) {
+            path.replaceFirst("/data/user/0/", "/data/data/")
+        } else {
+            path
+        }
+    }
 
     companion object {
         @Volatile
@@ -65,7 +74,8 @@ class ServerLauncher(private val context: Context) {
         onError  : (String) -> Unit,
         onStopped: (Int) -> Unit
     ) {
-        val launchTarget = File(jarPath)
+        val normalizedJarPath = normalizeAndroidPath(jarPath)
+        val launchTarget = File(normalizedJarPath)
         
         // Pre-launch guard: abort immediately if the persisted launch target is missing.
         if (!launchTarget.exists() || launchTarget.isDirectory) {
@@ -75,6 +85,20 @@ class ServerLauncher(private val context: Context) {
 
         ServerFileManager.prepareEula(context, worldName)
         ServerFileManager.prepareServerProperties(context, worldName)
+
+        // Sync configuration from ServerConfigRepository to server.properties of the world before launch
+        runCatching {
+            val configRepo = ServerConfigRepository(context).apply {
+                setWorldNameOverride(worldName)
+            }
+            val config = runBlocking { configRepo.loadConfig() }
+            val serverDir = ServerFileManager.getServerDir(context, worldName)
+            val isPremium = AppPreferences(context).let { it.isPremiumUser || it.debugPremiumOverride }
+            ServerPropertiesWriter.apply(serverDir, ServerPropertiesWriter.toSnapshot(config), isPremium)
+        }.onFailure { e ->
+            onOutput("[PocketCraft] Warning: Failed to sync configuration properties: ${e.message}")
+        }
+
         ServerFileManager.prepareRuntimeArtifacts(context, worldName)
         PluginManager.removeIncompatiblePlugins(context, worldName)
         
@@ -90,17 +114,45 @@ class ServerLauncher(private val context: Context) {
 
         val serverTypeStr = props.getProperty("pocketcraft-server-type", "PAPER")
         val serverType = com.pocketcraft.server.data.model.ServerType.fromString(serverTypeStr)
+
+        val levelName = props.getProperty("level-name", "world")
+        val worldDir = File(serverDirFileLocal, levelName)
+        val levelDat = File(worldDir, "level.dat")
+        if (serverType != com.pocketcraft.server.data.model.ServerType.PAPER && levelDat.exists()) {
+            try {
+                com.pocketcraft.server.service.NBTParser.cleanPaperDatapack(levelDat, onOutput)
+            } catch (e: Exception) {
+                onOutput("[PocketCraft] Failed to clean paper datapack from level.dat: ${e.message}")
+            }
+        }
         
         com.pocketcraft.server.service.DimensionMigrator.syncDimensionsForServerType(context, worldName, serverType)
         PluginManager.enforceBedrockBridgeLocalConfig(context, worldName)
         PlayerDataManager.warnIfFloodgateUsernamePrefixChanged(serverDirFileLocal)
 
-        val jrePath   = JreExtractor.getJreDir(context, runtime).absolutePath
-        chmodJreRuntime(context, runtime)
-
-        val serverDirFile = ServerFileManager.getServerDir(context, worldName)
+        val serverDirFile = File(normalizeAndroidPath(ServerFileManager.getServerDir(context, worldName).absolutePath))
         val serverDir = serverDirFile.absolutePath
-        val tmpDir    = File(context.filesDir, "runtime-tmp").also { it.mkdirs() }.absolutePath
+        val tmpDir    = normalizeAndroidPath(File(context.filesDir, "runtime-tmp").also { it.mkdirs() }.absolutePath)
+        val shimDir = File(normalizeAndroidPath(File(context.filesDir, "lib-shims").also { it.mkdirs() }.absolutePath))
+        ensureSystemShims(shimDir, File(tmpDir), onOutput)
+        val forceExternal = AppPreferences(context).forceExternalJvm
+        val preferInProcessJvm = launchMode == ServerFileManager.LaunchMode.JAR && !forceExternal && NativeLauncher.loadLibrary()
+
+        val resolvedRuntime = ensureLaunchableRuntime(
+            versionId = versionId,
+            preferredRuntime = runtime,
+            tmpDir = tmpDir,
+            shimDir = shimDir,
+            preferInProcessJvm = preferInProcessJvm,
+            onOutput = onOutput
+        ) ?: run {
+            onError("[PocketCraft] Could not prepare a launchable Java runtime for this device.")
+            onStopped(127)
+            return
+        }
+
+        val jrePath   = normalizeAndroidPath(JreExtractor.getJreDir(context, resolvedRuntime).absolutePath)
+        chmodJreRuntime(context, resolvedRuntime)
         val totalRam = getTotalRamMb(context)
         applyRelayReadyRuntimeProfile(serverDirFile, onOutput)
         applyRelayReadyPaperGlobalConfig(serverDirFile, onOutput)
@@ -130,7 +182,7 @@ class ServerLauncher(private val context: Context) {
 
         onOutput("[PocketCraft] JVM memory: mode=$ramModeFromProps, heap=${minRamMb}MB..${maxRamMb}MB, available=${availRam}MB, total=${totalRam}MB")
 
-        val javaBin = JreExtractor.getJavaBinary(context, runtime)
+        val javaBin = File(normalizeAndroidPath(JreExtractor.getJavaBinary(context, resolvedRuntime).absolutePath))
         val libjli = File(jrePath, "lib/libjli.so")
         val libjvm = File(jrePath, "lib/server/libjvm.so")
         if (!javaBin.exists()) {
@@ -143,11 +195,8 @@ class ServerLauncher(private val context: Context) {
             onError("libjvm.so not found — JRE may not be extracted correctly"); return
         }
 
-        val shimDir = File(context.filesDir, "lib-shims").also { it.mkdirs() }
-        val libs = if (Build.SUPPORTED_64_BIT_ABIS.isNotEmpty()) "/system/lib64" else "/system/lib"
-
         runCatching {
-            if (extractAndPatchJnaLibrary(jarPath, serverDirFile, shimDir)) {
+            if (extractAndPatchJnaLibrary(normalizedJarPath, serverDirFile, shimDir)) {
                 onOutput("[PocketCraft] Patched JNA native dispatch library for Android")
             }
         }.onFailure { e ->
@@ -156,56 +205,17 @@ class ServerLauncher(private val context: Context) {
 
         onOutput("[PocketCraft] Starting world '$worldName' (version $versionId)...")
         onOutput("[PocketCraft] JRE: $jrePath")
-        onOutput("[PocketCraft] Launch target: $jarPath")
+        onOutput("[PocketCraft] Launch target: $normalizedJarPath")
         
-        val tmpShimDir = File(tmpDir)
-        runCatching {
-            listOf(
-                "libc.so.6" to "$libs/libc.so",
-                "libdl.so.2" to "$libs/libdl.so",
-                "libm.so.6" to "$libs/libm.so",
-                "librt.so.1" to "$libs/libc.so",
-                "libpthread.so.0" to "$libs/libc.so",
-                "libutil.so.1" to "$libs/libc.so"
-            ).forEach { (shim, target) ->
-                val shimFile = File(shimDir, shim)
-                if (!shimFile.exists()) {
-                    try {
-                        android.system.Os.symlink(target, shimFile.absolutePath)
-                        onOutput("[PocketCraft] Created shim: $shim -> $target")
-                    } catch (e: Exception) {
-                        onOutput("[PocketCraft] Warning: Failed to create shim $shim: ${e.message}")
-                    }
-                }
-                val tmpShimFile = File(tmpShimDir, shim)
-                if (!tmpShimFile.exists()) {
-                    try {
-                        android.system.Os.symlink(target, tmpShimFile.absolutePath)
-                    } catch (_: Exception) {}
-                }
-            }
-        }.onFailure { e ->
-            onOutput("[PocketCraft] Warning: Shim creation pool failed: ${e.message}")
-        }
-
         Thread {
             var result = -1
             try {
-                val forceExternal = AppPreferences(context).forceExternalJvm
-                val isRedmiXiaomiAndroid16 = run {
-                    val brand = Build.BRAND.orEmpty().lowercase()
-                    val manufacturer = Build.MANUFACTURER.orEmpty().lowercase()
-                    val isRedmi = brand.contains("redmi") || brand.contains("xiaomi") || brand.contains("poco") ||
-                                  manufacturer.contains("redmi") || manufacturer.contains("xiaomi") || manufacturer.contains("poco")
-                    isRedmi && Build.VERSION.SDK_INT >= 36
-                }
-
-                if (launchMode != ServerFileManager.LaunchMode.JAR || forceExternal || isRedmiXiaomiAndroid16) {
-                    onOutput("[PocketCraft] Routing to out-of-process JVM execution (ForceExternal=$forceExternal, RedmiAndroid16=$isRedmiXiaomiAndroid16)")
+                if (launchMode != ServerFileManager.LaunchMode.JAR || forceExternal) {
+                    onOutput("[PocketCraft] Routing to out-of-process JVM execution (ForceExternal=$forceExternal)")
                     result = launchExternalJvm(
                         javaBin = javaBin,
                         jrePath = jrePath,
-                        launchTargetPath = jarPath,
+                        launchTargetPath = normalizedJarPath,
                         launchMode = launchMode,
                         serverDir = serverDir,
                         tmpDir = tmpDir,
@@ -221,10 +231,10 @@ class ServerLauncher(private val context: Context) {
                         onOutput("[PocketCraft] Launching in-process JVM on Android ${Build.VERSION.RELEASE}.")
                         NativeLauncher.launchJVM(
                             jrePath = jrePath,
-                            jarPath = jarPath,
+                            jarPath = normalizedJarPath,
                             serverDir = serverDir,
                             tmpDir = tmpDir,
-                            nativeLibDir = context.applicationInfo.nativeLibraryDir,
+                            nativeLibDir = normalizeAndroidPath(context.applicationInfo.nativeLibraryDir),
                             shimDir = shimDir.absolutePath,
                             minRamMb = minRamMb,
                             maxRamMb = maxRamMb,
@@ -242,7 +252,7 @@ class ServerLauncher(private val context: Context) {
                         result = launchExternalJvm(
                             javaBin = javaBin,
                             jrePath = jrePath,
-                            launchTargetPath = jarPath,
+                            launchTargetPath = normalizedJarPath,
                             launchMode = launchMode,
                             serverDir = serverDir,
                             tmpDir = tmpDir,
@@ -268,6 +278,210 @@ class ServerLauncher(private val context: Context) {
         }.apply { name = "mc-server-thread"; isDaemon = false }.start()
     }
 
+    private fun ensureLaunchableRuntime(
+        versionId: String,
+        preferredRuntime: JreExtractor.RuntimeSpec,
+        tmpDir: String,
+        shimDir: File,
+        preferInProcessJvm: Boolean,
+        onOutput: (String) -> Unit
+    ): JreExtractor.RuntimeSpec? {
+        val candidates = buildList {
+            add(preferredRuntime)
+            addAll(JreExtractor.launchCandidatesForVersion(versionId))
+        }.distinctBy { it.id }
+
+        for (candidate in candidates) {
+            if (verifyRuntime(candidate, tmpDir, shimDir, preferInProcessJvm, onOutput)) {
+                return candidate
+            }
+
+            onOutput("[PocketCraft] ${candidate.displayName} preflight failed. Reinstalling runtime...")
+            val rebuilt = runCatching {
+                JreExtractor.forceReextract(context, candidate) { percent, status ->
+                    if (percent == 0 || percent >= 25 || status.contains("Ready")) {
+                        onOutput("[PocketCraft] ${candidate.displayName}: $status ($percent%)")
+                    }
+                }
+                verifyRuntime(candidate, tmpDir, shimDir, preferInProcessJvm, onOutput)
+            }.getOrElse { error ->
+                onOutput("[PocketCraft] ${candidate.displayName} reinstall failed: ${error.message}")
+                false
+            }
+            if (rebuilt) {
+                return candidate
+            }
+        }
+
+        return null
+    }
+
+    private fun verifyRuntime(
+        runtime: JreExtractor.RuntimeSpec,
+        tmpDir: String,
+        shimDir: File,
+        preferInProcessJvm: Boolean,
+        onOutput: (String) -> Unit
+    ): Boolean {
+        chmodJreRuntime(context, runtime)
+        val javaBin = JreExtractor.getJavaBinary(context, runtime)
+        val jreDir = JreExtractor.getJreDir(context, runtime)
+        val libjli = File(jreDir, "lib/libjli.so")
+        val libjvm = File(jreDir, "lib/server/libjvm.so")
+
+        if (!javaBin.exists() || !libjli.exists() || !libjvm.exists()) {
+            onOutput("[PocketCraft] ${runtime.displayName} files are incomplete.")
+            return false
+        }
+
+        if (preferInProcessJvm) {
+            onOutput("[PocketCraft] ${runtime.displayName} verified for in-process JVM launch.")
+            return true
+        }
+
+        val result = runJavaPreflight(
+            runtime = runtime,
+            tmpDir = tmpDir,
+            shimDir = shimDir
+        )
+        if (!result.success) {
+            onOutput("[PocketCraft] ${runtime.displayName} preflight failed (exit=${result.exitCode}): ${result.detail}")
+        }
+        return result.success
+    }
+
+    private data class RuntimePreflightResult(
+        val success: Boolean,
+        val exitCode: Int,
+        val detail: String
+    )
+
+    private data class JavaCommandProbeResult(
+        val success: Boolean,
+        val exitCode: Int,
+        val detail: String,
+        val usedWrapper: Boolean
+    )
+
+    private fun runJavaPreflight(
+        runtime: JreExtractor.RuntimeSpec,
+        tmpDir: String,
+        shimDir: File
+    ): RuntimePreflightResult {
+        val jrePath = normalizeAndroidPath(JreExtractor.getJreDir(context, runtime).absolutePath)
+        val javaBin = File(normalizeAndroidPath(JreExtractor.getJavaBinary(context, runtime).absolutePath))
+        val nativeLibDir = normalizeAndroidPath(context.applicationInfo.nativeLibraryDir)
+        val wrapperBin = File(normalizeAndroidPath(File(nativeLibDir, "libserverwrap.so").absolutePath))
+        if (wrapperBin.exists() && !wrapperBin.canExecute()) {
+            runCatching { android.system.Os.chmod(wrapperBin.absolutePath, 0x1ED) }
+        }
+
+        val archLibDir = detectRuntimeLibDir(jrePath)
+        val jvmDir = File(archLibDir, "server").takeIf { it.isDirectory } ?: File(jrePath, "lib/server")
+        val ldLibraryPath = buildLdLibraryPath(archLibDir, jvmDir, shimDir, nativeLibDir)
+        val wrapperProbe = if (wrapperBin.exists()) {
+            probeJavaCommand(
+                commandPrefix = listOf(wrapperBin.absolutePath, javaBin.absolutePath),
+                jrePath = jrePath,
+                tmpDir = tmpDir,
+                homeDir = normalizeAndroidPath(context.filesDir.absolutePath),
+                ldLibraryPath = ldLibraryPath,
+                javaBinDir = normalizeAndroidPath(javaBin.parent.orEmpty()),
+                usedWrapper = true
+            )
+        } else {
+            null
+        }
+        if (wrapperProbe?.success == true) {
+            return RuntimePreflightResult(true, wrapperProbe.exitCode, wrapperProbe.detail)
+        }
+
+        val directProbe = probeJavaCommand(
+            commandPrefix = listOf(javaBin.absolutePath),
+            jrePath = jrePath,
+            tmpDir = tmpDir,
+            homeDir = normalizeAndroidPath(context.filesDir.absolutePath),
+            ldLibraryPath = ldLibraryPath,
+            javaBinDir = normalizeAndroidPath(javaBin.parent.orEmpty()),
+            usedWrapper = false
+        )
+        if (directProbe.success) {
+            return RuntimePreflightResult(true, directProbe.exitCode, directProbe.detail)
+        }
+
+        val details = buildString {
+            if (wrapperProbe != null) {
+                append("wrapper: ")
+                append(wrapperProbe.detail)
+            }
+            if (isNotEmpty()) append(" | ")
+            append("direct: ")
+            append(directProbe.detail)
+        }
+        val failingExit = wrapperProbe?.exitCode ?: directProbe.exitCode
+        return RuntimePreflightResult(false, failingExit, details)
+    }
+
+    private fun probeJavaCommand(
+        commandPrefix: List<String>,
+        jrePath: String,
+        tmpDir: String,
+        homeDir: String,
+        ldLibraryPath: String,
+        javaBinDir: String,
+        usedWrapper: Boolean
+    ): JavaCommandProbeResult {
+        val rawCommand = buildList {
+            addAll(commandPrefix)
+            add("-Xshare:off")
+            add("-version")
+        }
+        val shellCmd = "exec " + rawCommand.joinToString(" ") { arg ->
+            "'" + arg.replace("'", "'\\''") + "'"
+        }
+        val process = ProcessBuilder("/system/bin/sh", "-c", shellCmd)
+            .redirectErrorStream(true)
+            .apply {
+                environment()["JAVA_HOME"] = jrePath
+                environment()["TMPDIR"] = tmpDir
+                environment()["HOME"] = homeDir
+                environment()["LD_LIBRARY_PATH"] = "$jrePath/lib/server:$jrePath/lib:$jrePath/lib/jli:$ldLibraryPath"
+                environment()["PATH"] = "$jrePath/bin:/system/bin:/system/xbin:$javaBinDir:${System.getenv("PATH").orEmpty()}"
+                environment()["BIONIC_DISABLE_PTR_TAGGING"] = "1"
+            }
+            .start()
+
+        val output = StringBuilder()
+        val readerThread = Thread {
+            runCatching {
+                process.inputStream.bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        if (output.length < 4000) {
+                            if (output.isNotEmpty()) output.append('\n')
+                            output.append(line)
+                        }
+                    }
+                }
+            }
+        }.apply {
+            name = "runtime-preflight-reader"
+            isDaemon = true
+            start()
+        }
+
+        if (!process.waitFor(20, TimeUnit.SECONDS)) {
+            process.destroyForcibly()
+            readerThread.join(1000)
+            return JavaCommandProbeResult(false, 124, "Timed out while executing java -version", usedWrapper)
+        }
+
+        readerThread.join(1000)
+        val exitCode = process.exitValue()
+        val detail = output.toString().trim().ifBlank { "No output" }
+        val success = exitCode == 0 && detail.contains("version", ignoreCase = true)
+        return JavaCommandProbeResult(success, exitCode, detail, usedWrapper)
+    }
+
     private fun launchExternalJvm(
         javaBin: File,
         jrePath: String,
@@ -283,33 +497,22 @@ class ServerLauncher(private val context: Context) {
         onError: (String) -> Unit
     ): Int {
         val errorFilePattern = File(serverDir, "hs_err_pid%p.log").absolutePath
-        val nativeLibDir = context.applicationInfo.nativeLibraryDir
-        val wrapperBin = File(nativeLibDir, "libserverwrap.so")
+        val nativeLibDir = normalizeAndroidPath(context.applicationInfo.nativeLibraryDir)
+        val wrapperBin = File(normalizeAndroidPath(File(nativeLibDir, "libserverwrap.so").absolutePath))
         if (wrapperBin.exists() && !wrapperBin.canExecute()) {
             runCatching { android.system.Os.chmod(wrapperBin.absolutePath, 0x1ED) }
                 .onFailure { android.util.Log.w("ServerLauncher", "chmod serverwrap failed: ${it.message}") }
         }
         val archLibDir = detectRuntimeLibDir(jrePath)
         val jvmDir = File(archLibDir, "server").takeIf { it.isDirectory } ?: File(jrePath, "lib/server")
-
-        val ldLibraryPath = buildString {
-            append("${shimDir.absolutePath}:")
-            append("${File(archLibDir, "jli").absolutePath}:")
-            append("${archLibDir.absolutePath}:")
-            append("${jvmDir.absolutePath}:")
-            append("/system/lib64:")
-            append("/vendor/lib64")
-            append(":")
-            append("/vendor/lib64/hw:")
-            append(nativeLibDir)
-        }
+        val ldLibraryPath = buildLdLibraryPath(archLibDir, jvmDir, shimDir, nativeLibDir)
         val javaLibraryPath = buildString {
             append(ldLibraryPath)
             append(":")
             append(nativeLibDir)
         }
 
-        val jnaBootPath = "${shimDir.absolutePath}:$nativeLibDir"
+        val jnaBootPath = shimDir.absolutePath
         val jnaLibraryPath = jnaBootPath
  
         val vmArgs = mutableListOf(
@@ -342,7 +545,7 @@ class ServerLauncher(private val context: Context) {
             "-DPaper.IgnoreJavaVersion=true",
             "-Dsun.zip.disableMemoryMapping=true",
             "-Djdk.attach.allowAttachSelf=true",
-            "-Djna.nosys=false",
+            "-Djna.nosys=true",
             "-Xshare:off",
             "-XX:+UnlockExperimentalVMOptions",
             "-XX:+UnlockDiagnosticVMOptions",
@@ -398,19 +601,28 @@ class ServerLauncher(private val context: Context) {
             runCatching { android.system.Os.chmod(f.absolutePath, 0x1ED) }
         }
 
-        val launcherName = if (wrapperBin.exists()) "serverwrap" else "java"
+        val launcherPrefix = selectLaunchCommandPrefix(
+            wrapperBin = wrapperBin,
+            javaBin = javaBin,
+            jrePath = jrePath,
+            tmpDir = tmpDir,
+            homeDir = serverDir,
+            ldLibraryPath = ldLibraryPath
+        )
+        val launcherName = if (launcherPrefix.firstOrNull() == wrapperBin.absolutePath) "serverwrap" else "java"
         onOutput("[PocketCraft] Launching dedicated Java process on Android ${Build.VERSION.RELEASE} via $launcherName.")
 
         // On Android 10+ some vendors block direct execve from code_cache via SELinux.
         // Routing through /system/bin/sh bypasses this: the shell runs in a trusted domain
         // that IS permitted to exec app-owned binaries.
         val rawCommand = buildList<String> {
-            if (wrapperBin.exists()) add(wrapperBin.absolutePath)
-            add(javaBin.absolutePath)
+            addAll(launcherPrefix)
             addAll(vmArgs)
         }
         // Build a shell-quoted command string so we can pass it to sh -c.
-        val shellCmd = rawCommand.joinToString(" ") { arg ->
+        // Prepend "exec " so the shell process replaces itself with the JVM wrapper,
+        // making the JVM wrapper/process the direct child of ProcessBuilder.
+        val shellCmd = "exec " + rawCommand.joinToString(" ") { arg ->
             "'" + arg.replace("'", "'\\''" ) + "'"
         }
         val command = listOf("/system/bin/sh", "-c", shellCmd)
@@ -430,6 +642,20 @@ class ServerLauncher(private val context: Context) {
             .start()
 
         activeExternalProcess = process
+        val pid = runCatching {
+            val method = process.javaClass.getMethod("pid")
+            method.invoke(process) as Long
+        }.getOrElse {
+            runCatching {
+                val field = process.javaClass.getDeclaredField("pid")
+                field.isAccessible = true
+                (field.get(process) as Number).toLong()
+            }.getOrDefault(-1L)
+        }
+        if (pid > 0) {
+            ServerHostService.persistExternalJvmPid(context, pid)
+        }
+
         val shutdownHook = Thread {
             runCatching {
                 if (process.isAlive) {
@@ -451,10 +677,93 @@ class ServerLauncher(private val context: Context) {
         if (activeExternalProcess == process) {
             activeExternalProcess = null
         }
+        ServerHostService.persistExternalJvmPid(context, -1L)
         if (exitCode != 0) {
             reportHotspotCrash(serverDir, onError)
         }
         return exitCode
+    }
+
+    private fun selectLaunchCommandPrefix(
+        wrapperBin: File,
+        javaBin: File,
+        jrePath: String,
+        tmpDir: String,
+        homeDir: String,
+        ldLibraryPath: String
+    ): List<String> {
+        if (wrapperBin.exists()) {
+            val wrapperProbe = probeJavaCommand(
+                commandPrefix = listOf(wrapperBin.absolutePath, javaBin.absolutePath),
+                jrePath = jrePath,
+                tmpDir = tmpDir,
+                homeDir = homeDir,
+                ldLibraryPath = ldLibraryPath,
+                javaBinDir = javaBin.parent.orEmpty(),
+                usedWrapper = true
+            )
+            if (wrapperProbe.success) {
+                return listOf(wrapperBin.absolutePath, javaBin.absolutePath)
+            }
+            android.util.Log.w(
+                "ServerLauncher",
+                "serverwrap preflight failed (exit=${wrapperProbe.exitCode}): ${wrapperProbe.detail}. Falling back to direct java."
+            )
+        }
+        return listOf(javaBin.absolutePath)
+    }
+
+    private fun ensureSystemShims(
+        shimDir: File,
+        tmpShimDir: File,
+        onOutput: (String) -> Unit
+    ) {
+        val libs = if (Build.SUPPORTED_64_BIT_ABIS.isNotEmpty()) "/system/lib64" else "/system/lib"
+        runCatching {
+            listOf(
+                "libc.so.6" to "$libs/libc.so",
+                "libdl.so.2" to "$libs/libdl.so",
+                "libm.so.6" to "$libs/libm.so",
+                "librt.so.1" to "$libs/libc.so",
+                "libpthread.so.0" to "$libs/libc.so",
+                "libutil.so.1" to "$libs/libc.so"
+            ).forEach { (shim, target) ->
+                val shimFile = File(shimDir, shim)
+                if (!shimFile.exists()) {
+                    try {
+                        android.system.Os.symlink(target, shimFile.absolutePath)
+                        onOutput("[PocketCraft] Created shim: $shim -> $target")
+                    } catch (e: Exception) {
+                        onOutput("[PocketCraft] Warning: Failed to create shim $shim: ${e.message}")
+                    }
+                }
+                val tmpShimFile = File(tmpShimDir, shim)
+                if (!tmpShimFile.exists()) {
+                    try {
+                        android.system.Os.symlink(target, tmpShimFile.absolutePath)
+                    } catch (_: Exception) {}
+                }
+            }
+        }.onFailure { e ->
+            onOutput("[PocketCraft] Warning: Shim creation pool failed: ${e.message}")
+        }
+    }
+
+    private fun buildLdLibraryPath(
+        archLibDir: File,
+        jvmDir: File,
+        shimDir: File,
+        nativeLibDir: String
+    ): String = buildString {
+        append("${shimDir.absolutePath}:")
+        append("${File(archLibDir, "jli").absolutePath}:")
+        append("${archLibDir.absolutePath}:")
+        append("${jvmDir.absolutePath}:")
+        append("/system/lib64:")
+        append("/vendor/lib64")
+        append(":")
+        append("/vendor/lib64/hw:")
+        append(nativeLibDir)
     }
 
     private fun detectRuntimeLibDir(jrePath: String): File {
@@ -560,7 +869,7 @@ class ServerLauncher(private val context: Context) {
         val paperGlobal = File(configDir, "paper-global.yml")
         val original = runCatching { paperGlobal.readText() }.getOrDefault("")
         val cellularRelay = NetworkUtils.isCellular(context)
-        val chunkSendRate = if (cellularRelay) 80 else 120
+        val chunkSendRate = if (cellularRelay) 200 else 400
 
         var updated = original
 
@@ -574,19 +883,22 @@ class ServerLauncher(private val context: Context) {
         updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-loading-priority-override")
         updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-loads")
 
-        // Bound chunk bursts so movement/flight cannot bloat Geyser's internal RakNet queue
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate", "40")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate", "80")
+        // Raised limits for faster chunk loading on modern mobile processors & networks
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate", "120")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate", "300")
         updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate", chunkSendRate.toString())
 
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "auto-config-send-distance", "true")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-generates", "4")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", "8")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-generates", "8")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", "16")
+
+        val cores = Runtime.getRuntime().availableProcessors()
+        val threads = (cores / 2).coerceIn(2, 4)
 
         updated = removeYamlPathKey(updated, listOf("chunk-system"), "io-threads")
         updated = removeYamlPathKey(updated, listOf("chunk-system"), "worker-threads")
-        updated = ensureYamlSectionValue(updated, "misc", "io-threads", "2")
-        updated = ensureYamlSectionValue(updated, "misc", "worker-threads", "2")
+        updated = ensureYamlSectionValue(updated, "misc", "io-threads", threads.toString())
+        updated = ensureYamlSectionValue(updated, "misc", "worker-threads", threads.toString())
         updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "2")
 
         // Disable bundled Spark profiler (fails to load native libraries on Android)
@@ -1062,6 +1374,12 @@ class ServerLauncher(private val context: Context) {
                 's'.code.toByte(), 't'.code.toByte(), 'r'.code.toByte(),
                 'd'.code.toByte(), 'u'.code.toByte(), 'p'.code.toByte(),
                 0, 0
+            ),
+            // __errno_location -> __errno + 9 zero pads
+            "__errno_location".toByteArray() to byteArrayOf(
+                '_'.code.toByte(), '_'.code.toByte(), 'e'.code.toByte(),
+                'r'.code.toByte(), 'r'.code.toByte(), 'n'.code.toByte(),
+                'o'.code.toByte(), 0, 0, 0, 0, 0, 0, 0, 0, 0
             )
         )
 

@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.luminance
 import androidx.core.content.ContextCompat
@@ -42,8 +43,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import android.net.Uri
-import android.content.Intent
 import android.util.Log
+import android.content.Intent
 import com.pocketcraft.server.update.UpdateConfig
 import com.pocketcraft.server.update.UpdateManager
 import com.pocketcraft.server.ui.components.UpdatePopup
@@ -71,7 +72,7 @@ class MainActivity : ComponentActivity() {
         var isAppInForeground = false
         private const val KEY_RATE_LAST_REQUEST_AT = "play_store_rating_last_request_at"
         private const val KEY_RATE_REQUEST_COUNT = "play_store_rating_request_count"
-        private const val RATE_MIN_LAUNCHES = 3
+        private const val RATE_MIN_LAUNCHES = 4
         private const val RATE_MAX_REQUESTS = 3
         private const val RATE_PROMPT_DELAY_MS = 1_200L
         private val RATE_REQUEST_COOLDOWN_MS = TimeUnit.DAYS.toMillis(30)
@@ -80,11 +81,13 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         isAppInForeground = true
+        com.pocketcraft.server.broadcast.RemoteCommandListener.startListening(this)
     }
 
     override fun onStop() {
         super.onStop()
         isAppInForeground = false
+        com.pocketcraft.server.broadcast.RemoteCommandListener.stopListening()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -109,6 +112,7 @@ class MainActivity : ComponentActivity() {
         val preferences = AppPreferences(this)
         val onboardingCompleted = preferences.onboardingCompleted
         preferences.recordAppLaunch()
+        ThemePreferenceStore.loadCustomColors(this)
         val initialThemePreference = ThemePreferenceStore.load(this)
         val initialMobTheme = ThemePreferenceStore.loadMobTheme(this)
         val initialDarkTheme = initialThemePreference.resolve(systemDark = ThemePreferenceStore.isSystemDark(this))
@@ -155,15 +159,64 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
+            val billingManager = remember { com.pocketcraft.server.billing.BillingManager.getInstance(this@MainActivity) }
+            val isPremium by billingManager.isPremium.collectAsState()
             var themePreference by remember { mutableStateOf(initialThemePreference) }
             var mobTheme by remember { mutableStateOf(initialMobTheme) }
+
+            LaunchedEffect(isPremium) {
+                if (!isPremium && mobTheme == MobTheme.CUSTOM) {
+                    mobTheme = MobTheme.CREEPER
+                    PocketColors.activeMobTheme = MobTheme.CREEPER
+                    ThemePreferenceStore.saveMobTheme(this@MainActivity, MobTheme.CREEPER)
+                }
+            }
             val systemDarkTheme = isSystemInDarkTheme()
             val darkTheme = themePreference.resolve(systemDark = systemDarkTheme)
 
             var updateConfig by remember { mutableStateOf<UpdateConfig?>(null) }
             var playStoreRatingPromptEnabled by remember { mutableStateOf(true) }
-            var dismissedUpdateVersion by remember { mutableStateOf<Int?>(null) }
+            var dismissedUpdateKey by remember { mutableStateOf<String?>(null) }
             var dismissedUpdateShowFlag by remember { mutableStateOf(false) }
+
+            // Remote Config update nudges
+            var remoteConfigInitialized by remember { mutableStateOf(false) }
+            var rcUpdateConfig by remember { mutableStateOf<UpdateConfig?>(null) }
+            var dismissedRcUpdateKey by remember { mutableStateOf<String?>(null) }
+
+            LaunchedEffect(Unit) {
+                com.pocketcraft.server.config.RemoteConfigManager.initialize(applicationContext)
+                remoteConfigInitialized = true
+            }
+
+            val currentVersionCode = com.pocketcraft.server.BuildConfig.VERSION_CODE
+
+            LaunchedEffect(remoteConfigInitialized) {
+                if (remoteConfigInitialized) {
+                    val minSupported = com.pocketcraft.server.config.FeatureGate.getMinSupportedVersionCode()
+                    val recommended = com.pocketcraft.server.config.FeatureGate.getRecommendedVersionCode()
+                    Log.d("MainActivity", "RemoteConfig versions parsed: minSupported=$minSupported, recommended=$recommended, currentVersionCode=$currentVersionCode")
+                    if (currentVersionCode < minSupported) {
+                        rcUpdateConfig = UpdateConfig(
+                            showUpdatePopup = true,
+                            playStoreUrl = "market://details?id=com.pocketcraft.server",
+                            versionCode = minSupported,
+                            dismissKey = "rc:$minSupported",
+                            isForced = true
+                        )
+                    } else if (currentVersionCode < recommended && dismissedRcUpdateKey != "rc:$recommended") {
+                        rcUpdateConfig = UpdateConfig(
+                            showUpdatePopup = true,
+                            playStoreUrl = "market://details?id=com.pocketcraft.server",
+                            versionCode = recommended,
+                            dismissKey = "rc:$recommended",
+                            isForced = false
+                        )
+                    } else {
+                        rcUpdateConfig = null
+                    }
+                }
+            }
 
             val updateConfigFlow = remember { UpdateManager.getUpdateConfigFlow(this@MainActivity) }
             LaunchedEffect(updateConfigFlow) {
@@ -173,7 +226,7 @@ class MainActivity : ComponentActivity() {
                     if (config != null && config.showUpdatePopup) {
                         val alreadyDismissed = !config.isForced && 
                             dismissedUpdateShowFlag && 
-                            dismissedUpdateVersion == config.versionCode
+                            dismissedUpdateKey == config.dismissKey
                         
                         if (alreadyDismissed) {
                             Log.d("MainActivity", "Update popup skipped: already dismissed this version/flag in this session.")
@@ -185,6 +238,16 @@ class MainActivity : ComponentActivity() {
                         Log.d("MainActivity", "Hiding update popup: config is null or showUpdatePopup is false.")
                         updateConfig = null
                     }
+                }
+            }
+
+            val finalUpdateConfig = remember(updateConfig, rcUpdateConfig) {
+                if (rcUpdateConfig?.isForced == true) {
+                    rcUpdateConfig
+                } else if (updateConfig?.isForced == true) {
+                    updateConfig
+                } else {
+                    rcUpdateConfig ?: updateConfig
                 }
             }
 
@@ -295,7 +358,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                updateConfig?.let { config ->
+                finalUpdateConfig?.let { config ->
                     UpdatePopup(
                         config = config,
                         onUpdateNow = {
@@ -306,34 +369,47 @@ class MainActivity : ComponentActivity() {
                         },
                         onDismiss = {
                             Log.d("MainActivity", "Update popup dismissed by user.")
-                            dismissedUpdateShowFlag = true
-                            dismissedUpdateVersion = config.versionCode
-                            updateConfig = null
+                            if (config == rcUpdateConfig) {
+                                dismissedRcUpdateKey = config.dismissKey
+                                rcUpdateConfig = null
+                            } else {
+                                dismissedUpdateShowFlag = true
+                                dismissedUpdateKey = config.dismissKey
+                                updateConfig = null
+                            }
                         }
                     )
-                }
-            }
             }
         }
     }
+}
+    }
 
     private fun maybeRequestPlayStoreRating(preferences: AppPreferences) {
-        val prefs = getSharedPreferences("app_relay_prefs", Context.MODE_PRIVATE)
-        val now = System.currentTimeMillis()
-        val lastRequestAt = prefs.getLong(KEY_RATE_LAST_REQUEST_AT, 0L)
-        val requestCount = prefs.getInt(KEY_RATE_REQUEST_COUNT, 0)
+        val currentVersion = com.pocketcraft.server.BuildConfig.VERSION_CODE.toString()
 
-        if (preferences.appLaunchCount < RATE_MIN_LAUNCHES) return
-        if (requestCount >= RATE_MAX_REQUESTS) return
-        if (now - lastRequestAt < RATE_REQUEST_COOLDOWN_MS) return
+        if (!com.pocketcraft.server.config.FeatureGate.isReviewPromptEnabled()) {
+            Log.d("MainActivity", "In-app review prompt is disabled by Remote Config.")
+            return
+        }
+
+        val starts = preferences.successfulServerStarts
+        val minStarts = com.pocketcraft.server.config.FeatureGate.getReviewPromptMinStarts()
+        if (starts < minStarts) {
+            Log.d("MainActivity", "In-app review prompt skipped: starts ($starts) < minStarts ($minStarts).")
+            return
+        }
+
+        if (preferences.reviewRequestedForVersion == currentVersion) {
+            Log.d("MainActivity", "In-app review prompt skipped: already requested for this version ($currentVersion).")
+            return
+        }
 
         window.decorView.postDelayed({
             if (isFinishing || isDestroyed) return@postDelayed
 
-            prefs.edit()
-                .putLong(KEY_RATE_LAST_REQUEST_AT, System.currentTimeMillis())
-                .putInt(KEY_RATE_REQUEST_COUNT, requestCount + 1)
-                .apply()
+            // Mark review requested for this version
+            preferences.reviewRequestedForVersion = currentVersion
 
             val reviewManager = ReviewManagerFactory.create(this)
             reviewManager.requestReviewFlow().addOnCompleteListener { requestTask ->

@@ -47,6 +47,9 @@ object FeedbackService {
                 "deviceManufacturer" to Build.MANUFACTURER,
                 "deviceModel" to Build.MODEL,
                 "androidSdk" to Build.VERSION.SDK_INT,
+                "androidRelease" to Build.VERSION.RELEASE,
+                "deviceBrand" to Build.BRAND,
+                "deviceFingerprint" to Build.FINGERPRINT,
                 "logFilePath" to logDump.file.absolutePath,
                 "logFileName" to logDump.file.name,
                 "appLogExcerpt" to logDump.excerpt,
@@ -170,7 +173,10 @@ private fun createFeedbackLogDump(context: Context, serverVersion: String): Feed
         appendLine("serverVersion=$serverVersion")
         appendLine("appVersion=${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
         appendLine("device=${Build.MANUFACTURER} ${Build.MODEL}")
+        appendLine("brand=${Build.BRAND}")
+        appendLine("androidRelease=${Build.VERSION.RELEASE}")
         appendLine("androidSdk=${Build.VERSION.SDK_INT}")
+        appendLine("fingerprint=${Build.FINGERPRINT}")
         appendLine()
         appendLine("---- latest.log ----")
         appendLine(serverLogText.takeLast(220_000))

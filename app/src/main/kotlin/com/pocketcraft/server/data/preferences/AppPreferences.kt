@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 private val Context.appPreferencesDataStore: DataStore<Preferences> by preferencesDataStore(name = "app_prefs")
-const val RELAY_SECRET = "e7f5fbdda85c265419e519454f8d54643930116b89a1b58dcb2b86f91889d3d3"
+val RELAY_SECRET = com.pocketcraft.server.BuildConfig.RELAY_SECRET
 const val KEY_MAX_POWER_MODE = "max_power_mode"
 
 object AppPreferencesKeys {
@@ -176,7 +176,7 @@ class AppPreferences(context: Context) {
         }
 
     var bedrockRelayRegion: String
-        get() = prefs.getString("bedrock_relay_region", "SINGAPORE").orEmpty()
+        get() = prefs.getString("bedrock_relay_region", "MUMBAI").orEmpty()
         set(value) = prefs.edit().putString("bedrock_relay_region", value).apply()
 
     var relayHost: String
@@ -197,6 +197,18 @@ class AppPreferences(context: Context) {
                 putString("cached_relay_servers_json", value)
             }
         }.apply()
+
+    var successfulServerStarts: Int
+        get() = prefs.getInt("successful_server_starts", 0)
+        set(value) = prefs.edit().putInt("successful_server_starts", value).apply()
+
+    var reviewRequestedForVersion: String
+        get() = prefs.getString("review_requested_for_version", "").orEmpty()
+        set(value) = prefs.edit().putString("review_requested_for_version", value).apply()
+
+    var lastProcessedCommandId: String
+        get() = prefs.getString("last_processed_command_id", "").orEmpty()
+        set(value) = prefs.edit().putString("last_processed_command_id", value).apply()
 
     var relayHostUserOverridden: Boolean
         get() = prefs.getBoolean("relay_host_user_overridden", false)
@@ -231,8 +243,8 @@ class AppPreferences(context: Context) {
         val currentHost = prefs.getString("selected_relay_host", null)
             ?: prefs.getString("relay_host", null)
         prefs.edit().apply {
-            if (bestHost != RelayServers.SINGAPORE.host &&
-                (currentHost == null || currentHost == RelayServers.SINGAPORE.host)
+            if (bestHost != "play.pocketcraft.online" &&
+                (currentHost == null || currentHost == "play.pocketcraft.online")
             ) {
                 putString("selected_relay_host", bestHost)
                 putString("relay_host", bestHost)
@@ -241,6 +253,30 @@ class AppPreferences(context: Context) {
             }
             putBoolean("relay_host_region_migrated", true)
         }.apply()
+    }
+
+    fun migrateSingaporeRelayRemoval() {
+        if (prefs.getBoolean("singapore_removal_migrated", false)) {
+            val currentHost = prefs.getString("selected_relay_host", null)
+                ?: prefs.getString("relay_host", null)
+            if (currentHost != "play.pocketcraft.online") {
+                return
+            }
+        }
+
+        val bestHost = RelayServers.getBestForTimeZone(java.util.TimeZone.getDefault().id).host
+        val currentHost = prefs.getString("selected_relay_host", null)
+            ?: prefs.getString("relay_host", null)
+        if (currentHost == "play.pocketcraft.online") {
+            prefs.edit().apply {
+                putString("selected_relay_host", bestHost)
+                putString("relay_host", bestHost)
+                if (prefs.getString("bedrock_relay_region", "") == "SINGAPORE") {
+                    putString("bedrock_relay_region", RelayServers.resolveBedrockRegion(bestHost))
+                }
+            }.apply()
+        }
+        prefs.edit().putBoolean("singapore_removal_migrated", true).apply()
     }
 
     var onboardingCompleted: Boolean
@@ -375,7 +411,108 @@ class AppPreferences(context: Context) {
     var isFloatingChatFirstTimeShown: Boolean
         get() = prefs.getBoolean("floating_chat_first_time_shown", false)
         set(value) = prefs.edit().putBoolean("floating_chat_first_time_shown", value).apply()
+
+    var consecutiveCrashCount: Int
+        get() = prefs.getInt("consecutive_crash_count", 0)
+        set(value) = prefs.edit().putInt("consecutive_crash_count", value).apply()
+
+    var lastStartTimestamp: Long
+        get() = prefs.getLong("last_start_timestamp", 0L)
+        set(value) = prefs.edit().putLong("last_start_timestamp", value).apply()
+
+    var isPremiumUser: Boolean
+        get() = prefs.getBoolean("is_premium_user", false)
+        set(value) = prefs.edit().putBoolean("is_premium_user", value).apply()
+
+    var lastSeenMembershipTier: String
+        get() = prefs.getString("last_seen_membership_tier", "none").orEmpty()
+        set(value) = prefs.edit().putString("last_seen_membership_tier", value).apply()
+
+    var freeToProUpsellTrackingStarted: Boolean
+        get() = prefs.getBoolean("free_to_pro_upsell_tracking_started", false)
+        set(value) = prefs.edit().putBoolean("free_to_pro_upsell_tracking_started", value).apply()
+
+    var freeToProUpsellStartLaunchCount: Int
+        get() = prefs.getInt("free_to_pro_upsell_start_launch_count", 0)
+        set(value) = prefs.edit().putInt("free_to_pro_upsell_start_launch_count", value).apply()
+
+    var freeToProUpsellLastShownLaunchCount: Int
+        get() = prefs.getInt("free_to_pro_upsell_last_shown_launch_count", 0)
+        set(value) = prefs.edit().putInt("free_to_pro_upsell_last_shown_launch_count", value).apply()
+
+    fun resetFreeToProUpsellTracking() {
+        prefs.edit()
+            .putBoolean("free_to_pro_upsell_tracking_started", false)
+            .putInt("free_to_pro_upsell_start_launch_count", 0)
+            .putInt("free_to_pro_upsell_last_shown_launch_count", 0)
+            .apply()
+    }
+
+    var proToMemberUpsellTrackingStarted: Boolean
+        get() = prefs.getBoolean("pro_to_member_upsell_tracking_started", false)
+        set(value) = prefs.edit().putBoolean("pro_to_member_upsell_tracking_started", value).apply()
+
+    var proToMemberUpsellStartLaunchCount: Int
+        get() = prefs.getInt("pro_to_member_upsell_start_launch_count", 0)
+        set(value) = prefs.edit().putInt("pro_to_member_upsell_start_launch_count", value).apply()
+
+    var proToMemberUpsellLastShownLaunchCount: Int
+        get() = prefs.getInt("pro_to_member_upsell_last_shown_launch_count", 0)
+        set(value) = prefs.edit().putInt("pro_to_member_upsell_last_shown_launch_count", value).apply()
+
+    var proToMemberUpsellShown: Boolean
+        get() = prefs.getBoolean("pro_to_member_upsell_shown", false)
+        set(value) = prefs.edit().putBoolean("pro_to_member_upsell_shown", value).apply()
+
+    fun resetProToMemberUpsellTracking(lastSeenTier: String = "none") {
+        prefs.edit()
+            .putString("last_seen_membership_tier", lastSeenTier)
+            .putBoolean("pro_to_member_upsell_tracking_started", false)
+            .putInt("pro_to_member_upsell_start_launch_count", 0)
+            .putInt("pro_to_member_upsell_last_shown_launch_count", 0)
+            .putBoolean("pro_to_member_upsell_shown", false)
+            .apply()
+    }
+
+    var debugPremiumOverride: Boolean
+        get() = prefs.getBoolean("debug_premium_override", false)
+        set(value) = prefs.edit().putBoolean("debug_premium_override", value).apply()
+
+    var customSubdomain: String?
+        get() = prefs.getString("custom_subdomain", null)
+        set(value) = prefs.edit().putString("custom_subdomain", value).apply()
+
+    var customSubdomainRegion: String?
+        get() = prefs.getString("custom_subdomain_region", null)
+        set(value) = prefs.edit().putString("custom_subdomain_region", value).apply()
+
+    var hasStartedServer: Boolean
+        get() = prefs.getBoolean("has_started_server", false)
+        set(value) = prefs.edit().putBoolean("has_started_server", value).apply()
+
+    var hasCompletedStartStopCycle: Boolean
+        get() = prefs.getBoolean("has_completed_start_stop_cycle", false)
+        set(value) = prefs.edit().putBoolean("has_completed_start_stop_cycle", value).apply()
+
+    /**
+     * Set to true when the server stops after a real player has joined that session.
+     * Cleared once the rating popup has been shown on the next app launch.
+     */
+    var pendingRatingPopup: Boolean
+        get() = prefs.getBoolean("pending_rating_popup", false)
+        set(value) = prefs.edit().putBoolean("pending_rating_popup", value).apply()
+
+    fun getShownPromotions(): Set<String> {
+        return prefs.getStringSet("shown_promotions", emptySet()) ?: emptySet()
+    }
+
+    fun markPromotionShown(promoId: String) {
+        val current = getShownPromotions().toMutableSet()
+        current.add(promoId)
+        prefs.edit().putStringSet("shown_promotions", current).apply()
+    }
 }
+
 
 // Keep object-based API for backward compatibility with existing code
 object AppPreferencesStore {
@@ -538,8 +675,8 @@ object AppPreferencesStore {
 
             val currentHost = prefs[AppPreferencesKeys.RELAY_HOST]
                 ?: prefs[AppPreferencesKeys.LEGACY_RELAY_HOST]
-            if (bestHost != RelayServers.SINGAPORE.host &&
-                (currentHost == null || currentHost == RelayServers.SINGAPORE.host)
+            if (bestHost != "play.pocketcraft.online" &&
+                (currentHost == null || currentHost == "play.pocketcraft.online")
             ) {
                 prefs[AppPreferencesKeys.RELAY_HOST] = bestHost
                 prefs[AppPreferencesKeys.LEGACY_RELAY_HOST] = bestHost
@@ -547,6 +684,18 @@ object AppPreferencesStore {
                 prefs[AppPreferencesKeys.RELAY_HOST] = currentHost
             }
             prefs[AppPreferencesKeys.RELAY_HOST_REGION_MIGRATED] = true
+        }
+    }
+
+    suspend fun migrateSingaporeRelayRemoval(context: Context) {
+        val bestHost = RelayServers.getBestForTimeZone(java.util.TimeZone.getDefault().id).host
+        context.appPreferencesDataStore.edit { prefs ->
+            val currentHost = prefs[AppPreferencesKeys.RELAY_HOST]
+                ?: prefs[AppPreferencesKeys.LEGACY_RELAY_HOST]
+            if (currentHost == "play.pocketcraft.online") {
+                prefs[AppPreferencesKeys.RELAY_HOST] = bestHost
+                prefs[AppPreferencesKeys.LEGACY_RELAY_HOST] = bestHost
+            }
         }
     }
 
