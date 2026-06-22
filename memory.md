@@ -1,98 +1,128 @@
-# PocketCraft Codebase Memory & Architecture Guide
+# PocketCraft Project Memory & Architectural Guide
 
-This file serves as a persistent memory and token-saving reference. Every AI assistant or developer working on this project must read this file first and update it immediately whenever any structural, architectural, or networking changes are made.
-
----
-
-## 1. Project Overview
-PocketCraft is an Android application that hosts a local Minecraft Paper (Java) server on-device and bridges it to the internet using a custom TCP/UDP relay tunnel. It bundles **Geyser** and **ViaVersion** to allow both Minecraft Java and Bedrock clients to connect.
+This file serves as a persistent context guide and token-saving reference for the entire PocketCraft codebase. It describes how all components (Android client, Node.js relay nodes, companion Spigot/Paper plugin, and Cloud Functions backend) fit together.
 
 ---
 
-## 2. Infrastructure & Environments
+## 1. Project Directory Structure
 
-### A. Active Relay Servers
+```
+PocketCraft/
+├── app/               # Android Client (Kotlin / Jetpack Compose UI)
+├── companion-plugin/  # Bukkit/Spigot Java plugin bundled in Minecraft server
+├── relay/             # Node.js TCP/UDP Relay Server & Custom IP Subdomain listener
+├── functions/         # Firebase Cloud Functions (TypeScript)
+├── docs/              # Developer guides, technical specs, agents instructions
+└── assets/            # Bundled JRE binaries (Java 25) & licensing
+```
+
+---
+
+## 2. Component Architectures
+
+### A. Android Client App (`/app`)
+The client app acts as the user-facing controller and JVM supervisor that runs the Minecraft server on the phone.
+
+1. **User Interface (`com.pocketcraft.server.ui`)**:
+   - Built using **Jetpack Compose** and vanilla Material Design.
+   - Screen layouts (`ConsoleScreen.kt`, `ServerDetailsScreen.kt`, `SettingsScreen.kt`, `WorldsScreen.kt`) organize server options, modpacks, and plugins.
+   - `SubdomainManager.kt` provides premium users the UI to reserve/configure Custom IPs.
+
+2. **JVM Launching & Execution (`com.pocketcraft.server.server`)**:
+   - Extracts a bundled **JRE 25** (`assets/java/jre25`) to local app storage on first startup (`JreExtractor.kt`).
+   - Uses a custom native C launcher (`launcher.c` / `libjnidispatch.so` loaded via JNI) to invoke the Java VM in-process/out-of-process.
+   - **`ServerLauncher.kt`** sets memory configurations, garbage collection rules, and loads the Paper server jar.
+   - **`ConsoleParser.kt`** captures output streams from the server process, parsing logs, events, and player joins to update the app state.
+
+3. **Backup & World Importer (`com.pocketcraft.server.integrations`)**:
+   - `DriveBackupManager.kt` integrates with Google Drive APIs to upload/download compressed backups of world files.
+   - `WorldImporter.kt` handles extracting, validating, and mounting external Minecraft world folders into local server storage.
+
+4. **Billing & Entitlement (`com.pocketcraft.server.billing`)**:
+   - `BillingManager.kt` integrates with Google Play Billing Library to check and track Pro/Member subscription statuses.
+
+---
+
+### B. Companion Spigot/Paper Plugin (`/companion-plugin`)
+A custom Bukkit plugin (`PocketCraftCompanion.jar`) is bundled and automatically loaded by the local server.
+
+1. **Security Manager Bypassing**:
+   - Installs an anti-exit `SecurityManager`. This intercepts and blocks `System.exit()` requests from third-party plugins, preventing them from taking down the host Android app's JVM process.
+2. **Graceful Shutdown**:
+   - Periodically polls for a `graceful_stop.signal` file. When found, it reflects into `MinecraftServer.stopServer()` to flush world files and shutdown cleanly instead of force-killing the process.
+3. **Debug Subscription Decoders**:
+   - Injects a netty channel inbound adapter (`DebugSubscriptionShield.java`) that suppresses decoding errors related to `debug_subscription_request` packets, preventing client connections from getting reset on modern Paper builds.
+4. **Ping Reporting**:
+   - Outputs console status lines like `[PocketCraftPing] player:ping@address` which the client app's `ConsoleParser` reads to dynamically display player ping/telemetry in the UI.
+
+---
+
+### C. Cloud Functions Backend (`/functions`)
+Written in TypeScript and deployed as Firebase v2 Cloud Functions to handle authentication-sensitive operations.
+
+1. **Feedback Forwarder (`forwardFeedbackEmail`)**:
+   - Firestore trigger on the `beta_feedback` collection. Automatically builds feedback emails and sends them to `support@pocketcraft.online` via the **Resend API**.
+2. **Google Play Purchase Verification (`verifyPurchase`)**:
+   - HTTPS Callable function. Receives Google Play Purchase Tokens, verifies them with the Google Play Developer API, and updates user entitlement records in the Firestore `users` collection.
+3. **Real-Time Developer Notifications (`syncPlaySubscriptionRtdn`)**:
+   - Pub/Sub subscription mapping Google Play RTDN events. Listens for subscription upgrades, cancellations, or expirations, keeping Firestore entitlement states synchronized with Google Play.
+
+---
+
+### D. Relay Infrastructure (`/relay`)
+Hosted on AWS EC2 instances to expose local mobile servers to the public internet.
+
+1. **Relay Server (`index.js`)**:
+   - Listens on port 8080 (Control API) and port 9000 (Phone tunnel).
+   - Maps player TCP sockets to persistent client socket pools registered from phones.
+   - Runs a Bedrock MTU proxy and routes UDP RakNet frames to local Geyser bindings.
+2. **Subdomain Listener (`subdomain-listener.js` & `hostname-router.js`)**:
+   - Listens on standard port 25565.
+   - Extracts hostname details from Java Handshake packets.
+   - Maps `<subdomain>.as.pocketcraft.online` / `<subdomain>.eu.pocketcraft.online` to target user IDs in Firestore, fetches their active tunnel port from the relay status API, and proxies the Minecraft connection.
+
+---
+
+## 3. Server Node Configurations & Operations
+
+### A. Environments
 - **Asia (Mumbai)**:
-  - **Host / Public IP**: `mine.pocketcraft.online` (`13.201.57.41`)
+  - **Public Host**: `mine.pocketcraft.online` (`13.201.57.41`)
   - **Key File**: `/home/aleemkanyu/Downloads/pocketcraft-key1.pem`
   - **Relay Path**: `/home/ubuntu/pocketcraft-relay/`
 - **Europe (Frankfurt)**:
-  - **Host / Public IP**: `eu.pocketcraft.online` (`54.93.247.2`)
+  - **Public Host**: `eu.pocketcraft.online` (`54.93.247.2`)
   - **Key File**: `/home/aleemkanyu/Downloads/europekey.pem`
   - **Relay Path**: `/home/ubuntu/relay/`
-- **America**:
-  - **Host**: `us.pocketcraft.online`
 
 *Note: The Singapore relay server (`play.pocketcraft.online`) has been permanently deleted.*
 
-### B. Daemon Processes (PM2) on Relays
-Both active servers run two separate PM2 services:
-1. `pocketcraft-relay`: Manages the primary TCP/UDP tunnels on port 9000 (phone tunnel) and control API on port 8080.
-2. `pocketcraft-subdomain-listener`: Manages the Java Custom IP subdomain routing on port 25565.
+### B. Deployment & Process Commands
+Both Mumbai and Europe servers run two PM2 processes: `pocketcraft-relay` and `pocketcraft-subdomain-listener`.
+
+```bash
+# Redeploy relay code to Europe
+scp -i ~/Downloads/europekey.pem relay/index.js ubuntu@54.93.247.2:~/relay/index.js
+ssh -i ~/Downloads/europekey.pem ubuntu@54.93.247.2 "pm2 restart pocketcraft-relay"
+
+# Check PM2 status on Mumbai
+ssh -i ~/Downloads/pocketcraft-key1.pem ubuntu@13.201.57.41 "pm2 status"
+```
 
 ---
 
-## 3. Core Architecture & Tunnelling Flow
-
-### A. Standard Connection Flow
-1. **Registration**: App requests a port assignment from `http://<relay-host>:8080/register`.
-2. **Socket Pooling**: `RelayManager.kt` maintains a pool of persistent outbound TCP connections to `http://<relay-host>:9000` (assigned to the user's UUID).
-3. **Traffic Bridging**:
-   - Java players connect to the relay server on their assigned port.
-   - The relay pairs the player's TCP socket with an idle phone socket from the pool.
-   - The phone routes it locally to the Paper port (`25565`).
-
-### B. Custom IP / Subdomain Routing (Port 25565)
-1. **Subdomain Creation**: Premium users register a subdomain (e.g., `myname`) mapped to their UUID in the Firestore `subdomains` collection.
-2. **DNS Routing**: Wildcards `*.as.pocketcraft.online` and `*.eu.pocketcraft.online` resolve to the Mumbai and Europe relay IPs, respectively.
-3. **Parsing & Routing**:
-   - `subdomain-listener.js` runs on port 25565 of the relay.
-   - When a Java client connects, it parses the Minecraft Handshake packet to extract the host (e.g., `myname.as.pocketcraft.online`).
-   - It queries Firestore to find the owner's UUID, calls the relay's local `/status` endpoint on port 8080 to get their assigned tunnel port, and pipes the connection directly to `127.0.0.1:<assigned-port>`.
-
----
-
-## 4. Key Constraints & Warning Directives
+## 4. Key Constraints & Rules for AI Agents
 
 > [!WARNING]
-> To prevent massive latency spikes (thousands of ms) and connection drops, the following configurations are locked to the stable v1.6.0 release values:
+> To prevent massive latency spikes, compile errors, or connection issues, the following configurations are locked to the stable v1.6.0 release values:
 
-1. **Buffer Sizes**:
+1. **Relay Manager Socket Buffers**:
    - `SOCKET_BUFFER_SIZE` in `RelayManager.kt` MUST remain at `256 * 1024` (256KB).
    - `PLAYER_BRIDGE_BUFFER_SIZE` in `RelayManager.kt` MUST remain at `64 * 1024` (64KB).
 2. **Bedrock Bridge Channel**:
-   - `bedrockTxChannel` capacity MUST remain at `256` (do not use unlimited capacity channels).
+   - `bedrockTxChannel` capacity in `RelayManager.kt` MUST remain at `256` (do not use unlimited capacity channels).
 3. **No Experimental Bindings**:
    - Do not introduce custom Wi-Fi socket bindings or modify Netty thread loops unless explicitly asked.
 4. **Dynamic Fallback Region**:
-   - Singapore is deleted. In `RelayManager.kt`, fallback selection is calculated dynamically: if the preferred server is Mumbai, the fallback is Europe; otherwise, the fallback is Mumbai.
-
----
-
-## 5. Operations Cheatsheet
-
-### Deploying Relay Code changes
-```bash
-# Deploy to Mumbai
-scp -i ~/Downloads/pocketcraft-key1.pem relay/index.js ubuntu@13.201.57.41:~/pocketcraft-relay/index.js
-ssh -i ~/Downloads/pocketcraft-key1.pem ubuntu@13.201.57.41 "pm2 restart pocketcraft-relay"
-
-# Deploy to Europe
-scp -i ~/Downloads/europekey.pem relay/index.js ubuntu@54.93.247.2:~/relay/index.js
-ssh -i ~/Downloads/europekey.pem ubuntu@54.93.247.2 "pm2 restart pocketcraft-relay"
-```
-
-### Checking Relay PM2 Status
-```bash
-ssh -i ~/Downloads/pocketcraft-key1.pem ubuntu@13.201.57.41 "pm2 status"
-ssh -i ~/Downloads/europekey.pem ubuntu@54.93.247.2 "pm2 status"
-```
-
-### Client Packaging & Installation
-```bash
-# Compile and build Release APK
-./gradlew assembleRelease
-
-# Stream Install to connected device
-android run --apks=app/build/outputs/apk/release/app-release.apk
-```
+   - Singapore is deleted. Do not reference it or add it back to config.
+   - In `RelayManager.kt`, fallback selection is resolved dynamically: if the preferred server is Mumbai, the fallback is Europe; otherwise, the fallback is Mumbai.
