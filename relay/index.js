@@ -37,7 +37,7 @@ const STALE_TUNNEL_TIMEOUT_MS = 2 * 60_000;
 const MAX_USER_ID_LENGTH = 128;
 const VALID_USER_ID_RE = /^[a-zA-Z0-9_-]+$/;
 const RELAY_SECRET = process.env.RELAY_SECRET || '';
-const APP_RELAY_SECRET = process.env.APP_RELAY_SECRET || 'e7f5fbdda85c265419e519454f8d54643930116b89a1b58dcb2b86f91889d3d3';
+const APP_RELAY_SECRET = 'e7f5fbdda85c265419e519454f8d54643930116b89a1b58dcb2b86f91889d3d3';
 const PUBLIC_IP_ENV = process.env.PUBLIC_IP || '';
 
 let RESOLVED_PUBLIC_IPV4 = null;
@@ -1172,27 +1172,6 @@ const phoneServer = net.createServer({ allowHalfOpen: false }, (phoneSocket) => 
       return;
     }
 
-    const poolEntry = { socket: phoneSocket };
-    tunnel.activePhoneConnections = (tunnel.activePhoneConnections || 0) + 1;
-    console.log(`[relay] Phone socket connected for ${userId}, active connections: ${tunnel.activePhoneConnections}`);
-
-    let decremented = false;
-    const cleanupPhoneSocket = (src) => {
-      if (!decremented) {
-        decremented = true;
-        tunnel.activePhoneConnections = Math.max(0, (tunnel.activePhoneConnections || 0) - 1);
-        console.log(`[relay] Phone socket removed for ${userId} (${src}), active connections: ${tunnel.activePhoneConnections}`);
-      }
-      const idx = tunnel.phoneSocketPool.indexOf(poolEntry);
-      if (idx !== -1) tunnel.phoneSocketPool.splice(idx, 1);
-      if (tunnel.bedrockPhoneSocket === phoneSocket) {
-        clearBedrockPhoneSocket(tunnel);
-      }
-    };
-
-    phoneSocket.on('close', () => cleanupPhoneSocket('close'));
-    phoneSocket.on('error', (e) => cleanupPhoneSocket(`error: ${e.message}`));
-
     const pendingPlayer = takeNextPendingPlayer(tunnel);
     if (pendingPlayer) {
       pairSockets(pendingPlayer, phoneSocket, userId);
@@ -1210,8 +1189,21 @@ const phoneServer = net.createServer({ allowHalfOpen: false }, (phoneSocket) => 
       console.warn(`[relay] Unexpected post-handshake data from ${userId}, len=${remainder.length}; ignoring until socket is assigned`);
     }
 
+    const poolEntry = { socket: phoneSocket };
     tunnel.phoneSocketPool.push(poolEntry);
     console.log(`[relay] Phone socket registered for ${userId}, pool=${tunnel.phoneSocketPool.length}`);
+
+    const removeFromPool = (src) => {
+      console.log(`[relay] Phone socket removed from pool for ${userId} (${src})`);
+      const idx = tunnel.phoneSocketPool.indexOf(poolEntry);
+      if (idx !== -1) tunnel.phoneSocketPool.splice(idx, 1);
+      if (tunnel.bedrockPhoneSocket === phoneSocket) {
+        clearBedrockPhoneSocket(tunnel);
+      }
+    };
+
+    phoneSocket.on('close', () => removeFromPool('close'));
+    phoneSocket.on('error', (e) => removeFromPool(`error: ${e.message}`));
 
   };
 
@@ -1254,32 +1246,22 @@ setInterval(() => {
     const hasUdp = userUdpSockets.has(userId);
     const hasRecentReady = t.lastReadyAt && (Date.now() - t.lastReadyAt) < STALE_TUNNEL_TIMEOUT_MS;
 
-    const activeConnections = t.activePhoneConnections || 0;
-    const isNew = (Date.now() - t.createdAt) < 30_000;
-
-    if (activeConnections === 0 && !isNew) {
-      console.warn(`[cleanup] Closing stale tunnel for ${userId} (0 active connections)`);
-      closeTunnel(userId, 'stale_no_phone_connections');
+    if (
+      poolSize === 0 &&
+      !hasBedrockSocket &&
+      t.pendingPlayers.length === 0 &&
+      false // disabled: phone pool can be temporarily empty during active Java bridges
+    ) {
+      console.warn(`[cleanup] Closing stale tunnel for ${userId}: no phone sockets or recent heartbeat.`);
+      closeTunnel(userId, 'stale_no_phone_sockets');
       continue;
     }
 
-    if (!hasRecentReady && !isNew && (Date.now() - t.createdAt) > STALE_TUNNEL_TIMEOUT_MS) {
-      console.warn(`[cleanup] Closing stale tunnel for ${userId} (no recent heartbeat)`);
-      closeTunnel(userId, 'stale_no_heartbeat');
-      continue;
-    }
-
-    // Clear server status immediately if activeConnections is 0 to show server as offline
-    if (activeConnections === 0 && !isNew) {
-      const { clearServerStatus } = require('./bedrock-ping');
-      clearServerStatus(t.port);
-    }
-
-    if (hasUdp && activeConnections === 0) {
+    if (hasUdp && poolSize === 0 && !hasBedrockSocket) {
       t.staleCycles = (t.staleCycles || 0) + 1;
       console.warn(
         `[cleanup] ${userId} - STALE bedrock tunnel (cycle ${t.staleCycles}/3): ` +
-        `activeConnections=0. Bedrock frames are being silently dropped.`
+        `pool=0, no bedrockSocket. Bedrock frames are being silently dropped.`
       );
       if (t.staleCycles >= 3) {
         console.warn(`[cleanup] ${userId} - Evicting stale UDP socket after ${t.staleCycles} cycles to force client reconnect.`);
@@ -1293,14 +1275,14 @@ setInterval(() => {
       }
     } else {
       t.staleCycles = 0;
-      if (!hasUdp && activeConnections > 0) {
+      if (!hasUdp && (poolSize > 0 || hasBedrockSocket)) {
         console.log(`[cleanup] Restoring missing UDP socket for active tunnel ${userId}`);
         startUserUdpSocket(userId, t.port, getBedrockPhoneSocket);
       }
     }
 
     console.log(
-      `[cleanup] ${userId} - activeConnections: ${activeConnections}, pool: ${poolSize}, ` +
+      `[cleanup] ${userId} - pool: ${poolSize}, ` +
       `pending: ${t.pendingPlayers.length}, udp: ${hasUdp || userUdpSockets.has(userId)}, ` +
       `bedrockSocket: ${hasBedrockSocket}, staleCycles: ${t.staleCycles}`
     );
