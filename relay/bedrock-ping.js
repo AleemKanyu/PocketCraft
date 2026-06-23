@@ -37,9 +37,10 @@ function getProtocolForVersion(version) {
   return DEFAULT_PROTOCOL;
 }
 
-function buildMotd(entry) {
+function buildMotd(entry, port = 19132) {
+  const finalPort = String(port || 19132);
   if (!entry) {
-    return `MCPE;PocketCraft;${DEFAULT_PROTOCOL};${DEFAULT_VERSION};0;20;12345;Survival;1;`;
+    return `MCPE;PocketCraft;${DEFAULT_PROTOCOL};${DEFAULT_VERSION};0;20;12345;PocketCraft Server;Survival;1;${finalPort};${finalPort};`;
   }
 
   const motd = normalizeMotdPart(entry.motd, 'PocketCraft');
@@ -48,7 +49,7 @@ function buildMotd(entry) {
   const players = Number.isFinite(Number(entry.players)) ? Math.max(0, Number(entry.players) | 0) : 0;
   const maxPlayers = Number.isFinite(Number(entry.maxPlayers)) ? Math.max(1, Number(entry.maxPlayers) | 0) : 20;
 
-  return `MCPE;${motd};${protocol};${version};${players};${maxPlayers};12345;Survival;1;`;
+  return `MCPE;${motd};${protocol};${version};${players};${maxPlayers};12345;PocketCraft Server;Survival;1;${finalPort};${finalPort};`;
 }
 
 function buildPong(pingTime, motd) {
@@ -69,13 +70,14 @@ function buildPong(pingTime, motd) {
 
 function getMotd(port) {
   const entry = port ? statusMap.get(port) : statusMap.values().next().value;
-  return buildMotd(entry);
+  return buildMotd(entry, port);
 }
 
 function isRakNetPing(msg) {
   if (!Buffer.isBuffer(msg)) return false;
   if (msg.length < 1 + 8 + RAKNET_MAGIC.length) return false;
-  if (msg[0] !== 0x01) return false; // 0x01 = Unconnected Ping only; 0x02 = OpenConnectionRequest1 must be forwarded to Geyser
+  // Support both 0x01 (ID_UNCONNECTED_PING) and 0x02 (ID_UNCONNECTED_PING_OPEN_CONNECTIONS)
+  if (msg[0] !== 0x01 && msg[0] !== 0x02) return false;
 
   const magicOffset = 1 + 8;
   return msg.subarray(magicOffset, magicOffset + RAKNET_MAGIC.length).equals(RAKNET_MAGIC);

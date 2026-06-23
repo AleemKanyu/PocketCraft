@@ -55,6 +55,54 @@ async function resolveSubdomainRoute({
     };
   }
 
+  const ownerId = typeof data.ownerId === 'string' ? data.ownerId : '';
+  if (!ownerId) {
+    return {
+      ok: false,
+      code: 'invalid-owner',
+      message: 'Subdomain has no registered owner.',
+      parsed,
+      data
+    };
+  }
+
+  const userDoc = await firestore.collection('users').doc(ownerId).get();
+  if (!userDoc.exists) {
+    return {
+      ok: false,
+      code: 'inactive-subscription',
+      message: 'Subdomain owner does not exist.',
+      parsed,
+      data
+    };
+  }
+
+  const userData = userDoc.data() || {};
+  const premiumTier = typeof userData.premiumTier === 'string' ? userData.premiumTier.toLowerCase() : 'none';
+  if (premiumTier !== 'premium' && premiumTier !== 'supportive') {
+    return {
+      ok: false,
+      code: 'inactive-subscription',
+      message: 'Subdomain owner does not have an active premium subscription.',
+      parsed,
+      data
+    };
+  }
+
+  const expiryTimestamp = userData.premiumUntil || userData.premiumExpiry || userData.expiresAt;
+  if (expiryTimestamp && typeof expiryTimestamp.toDate === 'function') {
+    const expiresAt = expiryTimestamp.toDate().getTime();
+    if (Date.now() > expiresAt) {
+      return {
+        ok: false,
+        code: 'inactive-subscription',
+        message: 'Premium subscription has expired.',
+        parsed,
+        data
+      };
+    }
+  }
+
   return {
     ok: true,
     parsed,
@@ -62,7 +110,7 @@ async function resolveSubdomainRoute({
       subdomain: parsed.subdomain,
       region: parsed.region,
       serverId: typeof data.serverId === 'string' ? data.serverId : '',
-      ownerId: typeof data.ownerId === 'string' ? data.ownerId : '',
+      ownerId: ownerId,
       storedRegion
     }
   };

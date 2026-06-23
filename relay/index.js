@@ -20,6 +20,13 @@ const { handleJavaPing } = require('./java-ping');
 const CONTROL_PORT = 8080;
 const PHONE_RELAY_PORT = 9000;
 const PUBLIC_HOST = 'mine.pocketcraft.online';
+function getPublicHost(req) {
+  if (req && req.headers && req.headers.host) {
+    return req.headers.host.split(':')[0];
+  }
+  return PUBLIC_HOST;
+}
+
 const PORT_POOL_START = 25500;
 const PORT_POOL_END = 35500;
 const PLAYER_WAIT_TIMEOUT_MS = 30_000;
@@ -216,7 +223,6 @@ function encapsulatedHeaderLength(flags, buf, offset) {
 function rewriteOpenConnectionReply1Packet(packet) {
   if (!Buffer.isBuffer(packet) || packet.length < 20) return packet;
   if (packet.readUInt8(0) !== 0x06) return packet;
-
   console.log(`[bedrock] OpenConnectionReply1 hex: ${packet.toString('hex')} len=${packet.length}`);
   const out = Buffer.from(packet);
 
@@ -910,7 +916,7 @@ app.post('/register', (req, res) => {
 
   if (activeTunnels.has(userId)) {
     const existing = activeTunnels.get(userId);
-    return res.json({ port: existing.port, ip: PUBLIC_HOST });
+    return res.json({ port: existing.port, ip: getPublicHost(req) });
   }
 
   const port = getOrAssignPort(userId);
@@ -959,7 +965,7 @@ app.post('/register', (req, res) => {
 
   startUserUdpSocket(userId, port, getBedrockPhoneSocket);
 
-  return res.json({ port, ip: PUBLIC_HOST });
+  return res.json({ port, ip: getPublicHost(req) });
 });
 
 app.post(['/phone-ready', '/phone_ready', '/ready', '/phoneReady'], (req, res) => {
@@ -1021,7 +1027,7 @@ app.post(['/phone-ready', '/phone_ready', '/ready', '/phoneReady'], (req, res) =
   }
 
   tunnel.lastReadyAt = Date.now();
-  return res.json({ ok: true, tunnelExists: true, ip: PUBLIC_HOST, port: tunnel.port });
+  return res.json({ ok: true, tunnelExists: true, ip: getPublicHost(req), port: tunnel.port });
 });
 
 app.post('/unregister', (req, res) => {

@@ -72,6 +72,8 @@ class RelayManager(private val context: Context) {
     @Volatile
     private var activeRelayHost: String? = null
     @Volatile
+    private var lastRegisteredHost: String? = null
+    @Volatile
     private var activeRelayIsFallback = false
     @Volatile
     private var preferFallbackRelay = false
@@ -161,8 +163,8 @@ class RelayManager(private val context: Context) {
             try {
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
-                conn.connectTimeout = 3_000
-                conn.readTimeout = 5_000
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 10_000
                 conn.doOutput = true
 
                 val body = """{"userId":"$userId"}"""
@@ -184,6 +186,7 @@ class RelayManager(private val context: Context) {
                 assignedPort = json.getInt("port")
                 com.pocketcraft.server.data.preferences.AppPreferences(context).relayPort = assignedPort
                 activeRelayHost = relayHost
+                lastRegisteredHost = relayHost
                 activeRelayIsFallback = isFallback
                 preferFallbackRelay = isFallback
                 resolvedRelayIp = null
@@ -451,8 +454,8 @@ class RelayManager(private val context: Context) {
                 try {
                     conn.requestMethod = "POST"
                     conn.setRequestProperty("Content-Type", "application/json")
-                    conn.connectTimeout = 3_000
-                    conn.readTimeout = 5_000
+                    conn.connectTimeout = 10_000
+                    conn.readTimeout = 10_000
                     conn.doOutput = true
 
                     conn.outputStream.write(body.toByteArray(Charsets.UTF_8))
@@ -1026,6 +1029,7 @@ class RelayManager(private val context: Context) {
         resolvedRelayIp = null
         activeRelayHost = null
         activeRelayIsFallback = false
+        preferFallbackRelay = false
         _isPoolReady.value = false
 
         synchronized(socketPool) {
@@ -1048,8 +1052,8 @@ class RelayManager(private val context: Context) {
      */
     suspend fun unregister() = withContext(Dispatchers.IO) {
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
-        val relayHost = activeRelayHost ?: prefs.relayHost
-        val sessionId = activeRelaySessionId
+        val relayHost = lastRegisteredHost ?: activeRelayHost ?: prefs.relayHost
+        val sessionId = activeRelaySessionId.takeIf { !it.isNullOrBlank() } ?: prefs.userId
 
         if (!sessionId.isNullOrBlank()) {
             try {
@@ -1064,6 +1068,7 @@ class RelayManager(private val context: Context) {
             } catch (_: IOException) {}
         }
 
+        lastRegisteredHost = null
         disconnect()
     }
 
