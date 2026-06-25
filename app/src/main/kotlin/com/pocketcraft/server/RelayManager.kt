@@ -75,8 +75,6 @@ class RelayManager(private val context: Context) {
     private var lastRegisteredHost: String? = null
     @Volatile
     private var activeRelayIsFallback = false
-    @Volatile
-    private var preferFallbackRelay = false
 
     private var bedrockUdpBridge: BedrockUdpBridge? = null
     @Volatile
@@ -137,20 +135,7 @@ class RelayManager(private val context: Context) {
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
         val userId = currentRelaySessionId()
         val preferredRelayHost = prefs.relayHost
-        val fallbackRelayHost = if (preferredRelayHost == RelayServers.MUMBAI.host) {
-            RelayServers.EUROPE.host
-        } else {
-            RelayServers.MUMBAI.host
-        }
-        val hostCandidates = buildList {
-            if (preferFallbackRelay && preferredRelayHost != fallbackRelayHost) {
-                add(fallbackRelayHost)
-                add(preferredRelayHost)
-            } else {
-                add(preferredRelayHost)
-                if (preferredRelayHost != fallbackRelayHost) add(fallbackRelayHost)
-            }
-        }.distinct()
+        val hostCandidates = listOf(preferredRelayHost)
 
         var lastError: Exception? = null
         for (relayHost in hostCandidates) {
@@ -188,7 +173,6 @@ class RelayManager(private val context: Context) {
                 activeRelayHost = relayHost
                 lastRegisteredHost = relayHost
                 activeRelayIsFallback = isFallback
-                preferFallbackRelay = isFallback
                 resolvedRelayIp = null
                 val address = RelayAddress(relayHost, assignedPort!!, isFallback = isFallback)
                 android.util.Log.d("RelayManager", "Register success: $address")
@@ -360,18 +344,6 @@ class RelayManager(private val context: Context) {
             )
         }
         if (!poolReady) {
-            val currentFallback = if ((activeRelayHost ?: "") == RelayServers.MUMBAI.host) {
-                RelayServers.EUROPE.host
-            } else {
-                RelayServers.MUMBAI.host
-            }
-            if (!activeRelayIsFallback && (activeRelayHost ?: "") != currentFallback) {
-                preferFallbackRelay = true
-                android.util.Log.w(
-                    "RelayManager",
-                    "Selected relay tunnel pool did not become ready. Next registration attempt will use fallback relay $currentFallback."
-                )
-            }
             android.util.Log.w(
                 "RelayManager",
                 "Relay tunnel pool did not become ready within ${INITIAL_POOL_READY_TIMEOUT_MS}ms."
@@ -1029,7 +1001,6 @@ class RelayManager(private val context: Context) {
         resolvedRelayIp = null
         activeRelayHost = null
         activeRelayIsFallback = false
-        preferFallbackRelay = false
         _isPoolReady.value = false
 
         synchronized(socketPool) {
