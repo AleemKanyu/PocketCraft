@@ -70,6 +70,7 @@ function buildPong(pingTime, motd) {
 
 function getMotd(port) {
   const entry = port ? statusMap.get(port) : statusMap.values().next().value;
+  if (!entry) return null;
   return buildMotd(entry, port);
 }
 
@@ -100,7 +101,9 @@ function startBedrockPing(udpPort = 19132) {
 
     try {
       const pingTime = msg.readBigUInt64BE(1);
-      const pong = buildPong(pingTime, getMotd());
+      const motd = getMotd();
+      if (!motd) return;
+      const pong = buildPong(pingTime, motd);
       server.send(pong, 0, pong.length, rinfo.port, rinfo.address, (err) => {
         if (err) {
           console.error(`[BedrockPing] Pong send error to ${rinfo.address}:${rinfo.port}:`, err.message);

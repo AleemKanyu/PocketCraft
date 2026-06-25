@@ -777,10 +777,13 @@ function startUserUdpSocket(userId, assignedPort, getPhoneSocket) {
     if (isRakNetPing(msg)) {
       try {
         const pingTime = msg.readBigUInt64BE(1);
-        const pong = buildPong(pingTime, getMotd(assignedPort));
-        udpSock.send(pong, rinfo.port, rinfo.address, (err) => {
-          if (err) console.error('[udp] pong send error:', err.message);
-        });
+        const motd = getMotd(assignedPort);
+        if (motd) {
+          const pong = buildPong(pingTime, motd);
+          udpSock.send(pong, rinfo.port, rinfo.address, (err) => {
+            if (err) console.error('[udp] pong send error:', err.message);
+          });
+        }
       } catch (e) {
         console.error('[udp] ping handler error:', e.message);
       }
@@ -1294,14 +1297,12 @@ setInterval(() => {
     const hasUdp = userUdpSockets.has(userId);
     const hasRecentReady = t.lastReadyAt && (Date.now() - t.lastReadyAt) < STALE_TUNNEL_TIMEOUT_MS;
 
-    if (
-      poolSize === 0 &&
-      !hasBedrockSocket &&
-      t.pendingPlayers.length === 0 &&
-      false // disabled: phone pool can be temporarily empty during active Java bridges
-    ) {
-      console.warn(`[cleanup] Closing stale tunnel for ${userId}: no phone sockets or recent heartbeat.`);
-      closeTunnel(userId, 'stale_no_phone_sockets');
+    const isStale = (!t.lastReadyAt && (Date.now() - t.createdAt) > STALE_TUNNEL_TIMEOUT_MS) ||
+                    (t.lastReadyAt && (Date.now() - t.lastReadyAt) > STALE_TUNNEL_TIMEOUT_MS);
+
+    if (isStale) {
+      console.warn(`[cleanup] Closing stale tunnel for ${userId}: no recent heartbeat.`);
+      closeTunnel(userId, 'stale_no_heartbeat');
       continue;
     }
 
