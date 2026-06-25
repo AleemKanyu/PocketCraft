@@ -1793,7 +1793,7 @@ private fun ServerIdentityCard(
         topContentBetweenServerAndAddress?.invoke()
 
         val publicAddress = stateHolder.publicAddress?.takeIf { it.isNotBlank() }
-        val internetRelayAddress = publicAddress ?: "No relay address"
+        val internetRelayAddress = publicAddress ?: "Not connected"
 
         val localWifiAddress = stateHolder.localIp
             .takeIf(::isShareableLanIp)
@@ -1864,7 +1864,10 @@ private fun ServerIdentityCard(
                         emphasized = true,
                         onEditClick = {
                             showIpBottomSheet = true
-                        }
+                        },
+                        onRetryClick = if (!relayReady) {
+                            { stateHolder.reconnectRelay() }
+                        } else null
                     )
 
                     AddressValueRow(
@@ -2154,7 +2157,8 @@ private fun AddressValueRow(
     label: String,
     address: String,
     emphasized: Boolean,
-    onEditClick: (() -> Unit)? = null
+    onEditClick: (() -> Unit)? = null,
+    onRetryClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     Column(
@@ -2184,13 +2188,24 @@ private fun AddressValueRow(
                 letterSpacing = (-0.2).sp,
                 modifier = Modifier.weight(1f)
             )
-            val canCopy = address.isNotBlank() &&
-                address != "Wi-Fi address unavailable" &&
-                address != "No relay address" &&
-                address != "Start the server to generate internet join addresses."
-            if (canCopy) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (onRetryClick != null) {
+                    IconButton(
+                        onClick = onRetryClick,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Retry Connection",
+                            tint = PocketColors.Starting,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
                 if (onEditClick != null) {
-                    Spacer(modifier = Modifier.width(8.dp))
                     IconButton(
                         onClick = onEditClick,
                         modifier = Modifier.size(24.dp)
@@ -2203,22 +2218,28 @@ private fun AddressValueRow(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(4.dp))
-                IconButton(
-                    onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("Address", address)
-                        clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "Address copied to clipboard!", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ContentCopy,
-                        contentDescription = "Copy Address",
-                        tint = PocketColors.Primary,
-                        modifier = Modifier.size(16.dp)
-                    )
+                val canCopy = address.isNotBlank() &&
+                    address != "Wi-Fi address unavailable" &&
+                    address != "No relay address" &&
+                    address != "Not connected" &&
+                    address != "Start the server to generate internet join addresses."
+                if (canCopy) {
+                    IconButton(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clip = ClipData.newPlainText("Address", address)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "Address copied to clipboard!", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy Address",
+                            tint = PocketColors.Primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         }

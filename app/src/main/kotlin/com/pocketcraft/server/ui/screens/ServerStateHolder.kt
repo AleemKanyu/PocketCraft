@@ -126,6 +126,7 @@ class ServerStateHolder(
     private var receiverRegistered = false
     private var startedAtRealtime: Long? = null
     private var startupStartedAtRealtime: Long? = null
+    private var jvmStartedTracking = false
     private var startupProgressJob: Job? = null
     private var startupLaunchJob: Job? = null
     private var stopWatchdogJob: Job? = null
@@ -785,6 +786,7 @@ class ServerStateHolder(
         tps = 4f
         startedAtRealtime = SystemClock.elapsedRealtime()
         startupStartedAtRealtime = SystemClock.elapsedRealtime()
+        jvmStartedTracking = false
         publicAddress = null
         tunnelConnecting = false
         tunnelError = null
@@ -1456,8 +1458,26 @@ class ServerStateHolder(
             stopPeriodicLocationPolling()
             resetJoinable()
         }
+        val extPid = ServerHostService.getExternalJvmPid(appContext)
+        if (isStarting && extPid > 0 && !jvmStartedTracking) {
+            val processAlive = try {
+                android.system.Os.kill(extPid.toInt(), 0)
+                true
+            } catch (e: android.system.ErrnoException) {
+                e.errno != android.system.OsConstants.ESRCH
+            } catch (e: Exception) {
+                false
+            }
+            if (processAlive) {
+                jvmStartedTracking = true
+                startupStartedAtRealtime = SystemClock.elapsedRealtime()
+                appendLog("[PocketCraft] JVM process launched (PID $extPid). Server boot timeout timer initialized.")
+            }
+        }
+
         if (isStarting && startupStartedAtRealtime == null) {
             startupStartedAtRealtime = SystemClock.elapsedRealtime()
+            jvmStartedTracking = false
             startStartupProgressTracking()
         } else if (!isStarting) {
             stopStartupProgressTracking(reset = false)
@@ -2813,19 +2833,14 @@ class ServerStateHolder(
         val serverPid = ServerHostService.getServerPid(appContext)
         if (serverPid <= 0) return false
 
-        val am = appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val isServiceRunning = runCatching {
-            @Suppress("DEPRECATION")
-            am.getRunningServices(Integer.MAX_VALUE).any {
-                ServerHostService::class.java.name == it.service.className
-            }
-        }.getOrDefault(false)
-
-        if (!isServiceRunning) {
-            return false
+        return try {
+            android.system.Os.kill(serverPid, 0)
+            true
+        } catch (e: android.system.ErrnoException) {
+            e.errno != android.system.OsConstants.ESRCH
+        } catch (e: Exception) {
+            false
         }
-
-        return am.runningAppProcesses?.any { it.pid == serverPid } == true
     }
 
     private fun startStopWatchdog() {

@@ -1205,6 +1205,10 @@ private fun serverFailureSummary(
         rawReason.contains("-Djava.home", ignoreCase = true)
 
     return when {
+        "startup timed out" in combined || "startup timeout" in combined -> ServerFailureSummary(
+            reason = "The server took too long to start up (exceeded 5 minutes).",
+            fix = "Please verify your JRE/Java settings, check the console log for any plugin/mod errors, or try starting again."
+        )
         "modpack not installed" in combined || "install modpack" in combined -> ServerFailureSummary(
             reason = "The selected world is configured for a modpack, but the modpack has not been installed yet.",
             fix = "Tap Install Modpack on the Home screen, wait for it to finish, then start the server again."
