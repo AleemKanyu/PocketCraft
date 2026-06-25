@@ -915,15 +915,19 @@ class ServerLauncher(private val context: Context) {
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-send-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "target-player-chunk-send-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-concurrent-sends")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "target-player-chunk-send-rate")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "auto-config-send-distance")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-loading-priority-override")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-loads")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-generates")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-loads")
+
+        val cellularRelay = NetworkUtils.isCellular(context)
+        val chunkSendRate = if (cellularRelay) "20.0" else "40.0"
+
+        // Write optimized chunk loading settings globally where they are actually read by PaperMC
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate", "16.0")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate", "48.0")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate", chunkSendRate)
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "target-player-chunk-send-rate", "-1.0")
+
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "auto-config-send-distance", "true")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-generates", "4")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-loads", "8")
 
         val cores = Runtime.getRuntime().availableProcessors()
         val threads = (cores / 2).coerceIn(2, 4)
@@ -941,7 +945,7 @@ class ServerLauncher(private val context: Context) {
 
         if (updated != original) {
             paperGlobal.writeText(updated)
-            onOutput("[PocketCraft] Paper global tuning applied: chunk-system threads configured.")
+            onOutput("[PocketCraft] Paper global tuning applied: chunk-system threads and chunk-loading rates configured.")
         }
     }
 
@@ -976,24 +980,20 @@ class ServerLauncher(private val context: Context) {
 
         var updated = original
 
-        val cellularRelay = NetworkUtils.isCellular(context)
-        val chunkSendRate = if (cellularRelay) "20.0" else "40.0"
-
         // Clean up any broken chunk limits left over from previous experiments
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-load-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-send-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "target-player-chunk-send-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-concurrent-sends")
 
-        // Write optimized chunk loading settings
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate", "16.0")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate", "48.0")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate", chunkSendRate)
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "target-player-chunk-send-rate", "-1.0")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "target-player-chunk-send-rate")
 
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "auto-config-send-distance", "true")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-generates", "4")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-loads", "8")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "auto-config-send-distance")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-generates")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-loads")
 
         // Maintain a small buffer so brief movement doesn't instantly cause chunk shedding.
         updated = ensureYamlPathValue(updated, listOf("chunks"), "delay-chunk-unloads-by", "10s")

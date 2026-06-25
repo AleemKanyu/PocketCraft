@@ -15,7 +15,7 @@ data class PlayerInfo(
     val isBedrockBridge: Boolean get() = isBedrock && isLoopbackIp(ip)
 
     fun pingText(unavailable: String = "Ping unavailable"): String {
-        val ping = pingMs.takeIf { it > 0 } ?: return unavailable
+        val ping = pingMs.takeIf { it >= 0 } ?: return unavailable
         val label = when {
             isRelayBridge -> "Relay ping"
             isBedrockBridge -> "Bedrock bridge ping"

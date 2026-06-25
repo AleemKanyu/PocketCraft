@@ -81,7 +81,7 @@ class RelayManager(private val context: Context) {
     private var bedrockUdpBridge: BedrockUdpBridge? = null
     @Volatile
     private var activeBedrockSocket: Socket? = null
-    private val bedrockTxChannel = Channel<ByteArray>(capacity = 256)
+    private val bedrockTxChannel = Channel<ByteArray>(capacity = 10000)
     private var bedrockTxJob: kotlinx.coroutines.Job? = null
     private val droppedFrameCount = AtomicInteger(0)
 
