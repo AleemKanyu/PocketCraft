@@ -12,6 +12,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -123,8 +124,8 @@ class ServerStateHolder(
     private val backupsDir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "PocketCraft Server Backups").also { it.mkdirs() }
     private val logsQueue = ArrayDeque<String>(2000)
     private var receiverRegistered = false
-    private var startedAtMillis: Long? = null
-    private var startupStartedAtMillis: Long? = null
+    private var startedAtRealtime: Long? = null
+    private var startupStartedAtRealtime: Long? = null
     private var startupProgressJob: Job? = null
     private var startupLaunchJob: Job? = null
     private var stopWatchdogJob: Job? = null
@@ -204,7 +205,7 @@ class ServerStateHolder(
             _isRestartingCycle.value = value
             notifyStateChanged()
         }
-    private var lastStartRequestedMillis: Long = 0L
+    private var lastStartRequestedRealtime: Long = 0L
     var config by mutableStateOf(ServerConfig())
         private set
     var localIp by mutableStateOf("127.0.0.1")
@@ -383,7 +384,7 @@ class ServerStateHolder(
                         publicAddress = null
                         tunnelConnecting = false
                         tunnelError = null
-                        startedAtMillis = null
+                        startedAtRealtime = null
                         resetJoinable()
                     }
                     onlinePlayers.clear()
@@ -498,7 +499,7 @@ class ServerStateHolder(
                             publicAddress = null
                             tunnelConnecting = false
                             tunnelError = null
-                            startedAtMillis = null
+                            startedAtRealtime = null
                             resetJoinable()
                         }
                         onlinePlayers.clear()
@@ -769,7 +770,7 @@ class ServerStateHolder(
             }
         }
 
-        lastStartRequestedMillis = System.currentTimeMillis()
+        lastStartRequestedRealtime = SystemClock.elapsedRealtime()
         stopWatchdogJob?.cancel()
         stopWatchdogJob = null
         pendingRestart = false
@@ -782,8 +783,8 @@ class ServerStateHolder(
         isRelayDone = false
         resetJoinable()
         tps = 4f
-        startedAtMillis = System.currentTimeMillis()
-        startupStartedAtMillis = System.currentTimeMillis()
+        startedAtRealtime = SystemClock.elapsedRealtime()
+        startupStartedAtRealtime = SystemClock.elapsedRealtime()
         publicAddress = null
         tunnelConnecting = false
         tunnelError = null
@@ -904,8 +905,8 @@ class ServerStateHolder(
         restartFallbackJob = null
         isStopping = true
         appendLog("[PocketCraft] Stopping server...")
-        val durationSeconds = startedAtMillis
-            ?.let { ((System.currentTimeMillis() - it) / 1000L).coerceAtLeast(0L) }
+        val durationSeconds = startedAtRealtime
+            ?.let { ((SystemClock.elapsedRealtime() - it) / 1000L).coerceAtLeast(0L) }
             ?: 0L
         FirebaseAnalyticsManager.logServerStopped(versionId, durationSeconds)
         requestWorldSave(reason = "before stop")
@@ -1146,7 +1147,7 @@ class ServerStateHolder(
         startupProgressPercent = 100
         startupStatusMessage = "Server ready!"
         if (tps <= 0f) tps = 20f
-        if (startedAtMillis == null) startedAtMillis = System.currentTimeMillis()
+        if (startedAtRealtime == null) startedAtRealtime = SystemClock.elapsedRealtime()
         if (!hasAnnouncedServerOnline) {
             hasAnnouncedServerOnline = true
         }
@@ -1414,7 +1415,7 @@ class ServerStateHolder(
                 isStarting = false
                 isRunning = false
                 stopPeriodicWorldSave()
-                startedAtMillis = null
+                startedAtRealtime = null
                 publicAddress = null
                 tunnelConnecting = false
                 tunnelError = null
@@ -1428,7 +1429,7 @@ class ServerStateHolder(
             return
         }
 
-        if (!state.isStarting && isStarting && (System.currentTimeMillis() - lastStartRequestedMillis < 120000)) {
+        if (!state.isStarting && isStarting && (SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 120000)) {
             // Keep isStarting = true during the 120s grace period to allow service to spawn and Paper to boot
         } else {
             isStarting = state.isStarting
@@ -1455,8 +1456,8 @@ class ServerStateHolder(
             stopPeriodicLocationPolling()
             resetJoinable()
         }
-        if (isStarting && startupStartedAtMillis == null) {
-            startupStartedAtMillis = System.currentTimeMillis()
+        if (isStarting && startupStartedAtRealtime == null) {
+            startupStartedAtRealtime = SystemClock.elapsedRealtime()
             startStartupProgressTracking()
         } else if (!isStarting) {
             stopStartupProgressTracking(reset = false)
@@ -1472,12 +1473,12 @@ class ServerStateHolder(
         }
 
         if (!state.isRunning && !state.isStarting) {
-            startedAtMillis = null
+            startedAtRealtime = null
             publicAddress = null
             tps = 0f
             resetJoinable()
-        } else if (startedAtMillis == null) {
-            startedAtMillis = System.currentTimeMillis()
+        } else if (startedAtRealtime == null) {
+            startedAtRealtime = SystemClock.elapsedRealtime()
         }
     }
 
@@ -2850,7 +2851,7 @@ class ServerStateHolder(
                     publicAddress = null
                     tunnelConnecting = false
                     tunnelError = null
-                    startedAtMillis = null
+                    startedAtRealtime = null
                     onlinePlayers.clear()
                     appendLog("[INFO] Server stopped.")
                     if (shouldRestart) {
@@ -2874,7 +2875,7 @@ class ServerStateHolder(
                 publicAddress = null
                 tunnelConnecting = false
                 tunnelError = null
-                startedAtMillis = null
+                startedAtRealtime = null
                 onlinePlayers.clear()
                 ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
                 appendLog("[ERROR] Server stop timed out. Process may be hung.")
@@ -2945,7 +2946,7 @@ class ServerStateHolder(
         startupProgressJob = scope.launch {
             while (isStarting) {
                 if (!isStopping) {
-                    val elapsedMs = (System.currentTimeMillis() - (startupStartedAtMillis ?: System.currentTimeMillis())).coerceAtLeast(0L)
+                    val elapsedMs = (SystemClock.elapsedRealtime() - (startupStartedAtRealtime ?: SystemClock.elapsedRealtime())).coerceAtLeast(0L)
                     if (elapsedMs > 300_000L) {
                         appendLog("[ERROR] Server startup timed out (exceeded 5 minutes).")
                         stopServer()
@@ -2973,7 +2974,7 @@ class ServerStateHolder(
     private fun stopStartupProgressTracking(reset: Boolean) {
         startupProgressJob?.cancel()
         startupProgressJob = null
-        startupStartedAtMillis = null
+        startupStartedAtRealtime = null
         if (reset) {
             startupProgressPercent = 0
             startupStatusMessage = ""

@@ -1217,7 +1217,7 @@ private fun serverFailureSummary(
             reason = "The server ran out of available memory while starting or loading the world.",
             fix = "Lower the RAM allocation, close other apps, then start the server again."
         )
-        "address already in use" in combined || "failed to bind" in combined || ("port" in combined && "use" in combined) -> ServerFailureSummary(
+        "address already in use" in combined || "failed to bind" in combined || "port already in use" in combined || "port in use" in combined -> ServerFailureSummary(
             reason = "Another process is already using the server port.",
             fix = "Stop other server apps or restart the device, then try starting PocketCraft again."
         )
