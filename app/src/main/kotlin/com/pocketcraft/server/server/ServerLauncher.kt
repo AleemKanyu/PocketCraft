@@ -917,17 +917,17 @@ class ServerLauncher(private val context: Context) {
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-concurrent-sends")
 
         val cellularRelay = NetworkUtils.isCellular(context)
-        val chunkSendRate = if (cellularRelay) "20.0" else "40.0"
+        val chunkSendRate = if (cellularRelay) "60.0" else "90.0"
 
         // Write optimized chunk loading settings globally where they are actually read by PaperMC
         updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate", "16.0")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate", "48.0")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate", "72.0")
         updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate", chunkSendRate)
         updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "target-player-chunk-send-rate", "-1.0")
 
         updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "auto-config-send-distance", "true")
         updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-generates", "4")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-loads", "8")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-loads", "16")
 
         val cores = Runtime.getRuntime().availableProcessors()
         val threads = (cores / 2).coerceIn(2, 4)

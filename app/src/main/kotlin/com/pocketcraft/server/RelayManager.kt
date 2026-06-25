@@ -46,8 +46,8 @@ class RelayManager(private val context: Context) {
     companion object {
         const val CONTROL_PORT = 8080
         const val PHONE_TUNNEL_PORT = 9000
-        private const val SOCKET_BUFFER_SIZE = 256 * 1024
-        private const val PLAYER_BRIDGE_BUFFER_SIZE = 64 * 1024
+        private const val SOCKET_BUFFER_SIZE = 64 * 1024
+        private const val PLAYER_BRIDGE_BUFFER_SIZE = 8 * 1024
         private const val LOW_LATENCY_WARMUP_BYTES = 128 * 1024L
         private const val LOW_LATENCY_WARMUP_NS = 4_000_000_000L
         private const val INITIAL_POOL_SIZE = 5
@@ -81,7 +81,7 @@ class RelayManager(private val context: Context) {
     private var bedrockUdpBridge: BedrockUdpBridge? = null
     @Volatile
     private var activeBedrockSocket: Socket? = null
-    private val bedrockTxChannel = Channel<ByteArray>(capacity = 10000)
+    private val bedrockTxChannel = Channel<ByteArray>(capacity = 256)
     private var bedrockTxJob: kotlinx.coroutines.Job? = null
     private val droppedFrameCount = AtomicInteger(0)
 
