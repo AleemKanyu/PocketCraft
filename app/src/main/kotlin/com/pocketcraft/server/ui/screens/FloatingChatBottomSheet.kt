@@ -46,6 +46,7 @@ import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.theme.raisedBorder
 import com.pocketcraft.server.ui.components.DuoButtonVariant
+import com.pocketcraft.server.ui.components.resolvePlayerAvatarUrl
 import com.pocketcraft.server.ui.util.playAppHaptic
 import kotlinx.coroutines.launch
 
@@ -637,7 +638,7 @@ fun FloatingChatBottomSheet(
                                                 .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                                         ) {
                                             AsyncImage(
-                                                model = "https://mc-heads.net/avatar/${player.name}/16",
+                                                model = resolvePlayerAvatarUrl(player.name, player.uuid, 16),
                                                 contentDescription = null,
                                                 modifier = Modifier.fillMaxSize(),
                                                 contentScale = ContentScale.Crop

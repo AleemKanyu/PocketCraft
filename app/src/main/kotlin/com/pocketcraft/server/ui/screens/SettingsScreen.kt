@@ -75,6 +75,9 @@ import java.io.File
 import com.pocketcraft.server.util.LocalAppStrings
 import androidx.compose.ui.text.input.KeyboardType
 import com.pocketcraft.server.feedback.FeedbackService
+import com.pocketcraft.server.update.UpdateConfig
+import com.pocketcraft.server.update.UpdateManager
+import com.pocketcraft.server.ui.components.UpdatePopup
 
 data class LevelTypeOption(val displayName: String, val propertyValue: String)
 
@@ -225,6 +228,8 @@ fun SettingsScreen(
     var isDeletingVersions by remember { mutableStateOf(false) }
     var showThemeMaker by remember { mutableStateOf(false) }
     var showPremiumBottomSheet by remember { mutableStateOf(false) }
+    var checkingForUpdate by remember { mutableStateOf(false) }
+    var manualUpdateConfig by remember { mutableStateOf<UpdateConfig?>(null) }
 
     val hasUnsavedChanges by remember(currentState, savedState) {
         derivedStateOf {
@@ -602,7 +607,14 @@ fun SettingsScreen(
                             label = "Whitelist",
                             description = "Only allowed players can join",
                             checked = currentState.config.whiteList,
-                            onToggle = { currentState = currentState.copy(config = currentState.config.copy(whiteList = it)) }
+                            onToggle = {
+                                currentState = currentState.copy(
+                                    config = currentState.config.copy(
+                                        whiteList = it,
+                                        enforceWhitelist = currentState.config.enforceWhitelist && it
+                                    )
+                                )
+                            }
                         )
                     }
                 }
@@ -611,9 +623,19 @@ fun SettingsScreen(
                         SettingsToggleRow(
                             icon = "🚫",
                             label = "Enforce Whitelist",
-                            description = "Kick players not on whitelist upon reload",
-                            checked = currentState.config.enforceWhitelist,
-                            onToggle = { currentState = currentState.copy(config = currentState.config.copy(enforceWhitelist = it)) }
+                            description = if (!currentState.config.whiteList)
+                                "Enable Whitelist first to use this option"
+                            else
+                                "Kick players not on whitelist upon reload",
+                            checked = currentState.config.enforceWhitelist && currentState.config.whiteList,
+                            enabled = currentState.config.whiteList,
+                            onToggle = {
+                                currentState = currentState.copy(
+                                    config = currentState.config.copy(
+                                        enforceWhitelist = it && currentState.config.whiteList
+                                    )
+                                )
+                            }
                         )
                     }
                 }
@@ -1693,6 +1715,7 @@ fun SettingsScreen(
                                     Column {
                                         Text("PocketCraft", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, fontFamily = Monocraft)
                                         Text("Version ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("Build ${BuildConfig.VERSION_CODE}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f))
                                         firebaseUser?.let {
                                             androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(2.dp))
                                             Text("UID: ${it.uid}", fontSize = 9.sp, fontFamily = Monocraft, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
@@ -1701,6 +1724,24 @@ fun SettingsScreen(
                                 }
                                 Text("Run full Minecraft Java Edition servers directly on your Android device.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                                DuoButton(
+                                    text = if (checkingForUpdate) "CHECKING..." else "CHECK FOR UPDATE",
+                                    enabled = !checkingForUpdate,
+                                    onClick = {
+                                        playHaptic()
+                                        scope.launch {
+                                            checkingForUpdate = true
+                                            val config = UpdateManager.fetchUpdateConfig(context)
+                                            checkingForUpdate = false
+                                            if (config?.showUpdatePopup == true) {
+                                                manualUpdateConfig = config
+                                            } else {
+                                                onMessage("Your app is up to date!")
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                                 Text("Made with ❤️ by the PocketCraft Team", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PocketColors.PrimaryDark)
                             }
                         }
@@ -1710,6 +1751,22 @@ fun SettingsScreen(
 
             item { Spacer(modifier = Modifier.height(32.dp)) }
             }
+        }
+
+        manualUpdateConfig?.let { config ->
+            UpdatePopup(
+                config = config,
+                onUpdateNow = {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(config.playStoreUrl)))
+                    }.onFailure {
+                        onMessage("Could not open Play Store link.")
+                    }
+                },
+                onDismiss = {
+                    manualUpdateConfig = null
+                }
+            )
         }
 
         AnimatedVisibility(
@@ -2613,9 +2670,14 @@ private fun SettingsToggleRow(
     label: String,
     description: String? = null,
     checked: Boolean,
+    enabled: Boolean = true,
     onToggle: (Boolean) -> Unit
 ) {
-    GameCard(modifier = Modifier.fillMaxWidth()) {
+    val rowAlpha = if (enabled) 1f else 0.4f
+    GameCard(modifier = Modifier
+        .fillMaxWidth()
+        .graphicsLayer(alpha = rowAlpha)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -2640,7 +2702,10 @@ private fun SettingsToggleRow(
                     }
                 }
             }
-            DuoToggle(checked = checked, onCheckedChange = onToggle)
+            DuoToggle(
+                checked = checked && enabled,
+                onCheckedChange = { if (enabled) onToggle(it) }
+            )
         }
     }
 }

@@ -185,6 +185,15 @@ fun BroadcastBanner(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+                    // Countdown timer — only shown when configured in Firestore
+                    val timerMs = message.timerExpiresAt?.toDate()?.time
+                    if (message.showTimer && timerMs != null && timerMs > System.currentTimeMillis()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        BroadcastCountdownTimer(
+                            expiresAtMs = timerMs,
+                            accentColor = accent
+                        )
+                    }
                 }
 
                 if (message.dismissible) {
@@ -245,6 +254,16 @@ fun BroadcastBanner(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 22.sp,
                         fontSize = 15.sp
+                    )
+                }
+
+                // Countdown timer in the details sheet
+                val timerMs = message.timerExpiresAt?.toDate()?.time
+                if (message.showTimer && timerMs != null && timerMs > System.currentTimeMillis()) {
+                    BroadcastCountdownTimer(
+                        expiresAtMs = timerMs,
+                        accentColor = accent,
+                        label = "Time remaining"
                     )
                 }
 

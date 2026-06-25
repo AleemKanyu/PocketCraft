@@ -404,8 +404,12 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
   snprintf(jna_tmp_opt, sizeof(jna_tmp_opt), "-Djna.tmpdir=%s", tmp_dir);
   snprintf(jansi_tmp_opt, sizeof(jansi_tmp_opt), "-Djansi.tmpdir=%s", tmp_dir);
   snprintf(netty_tmp_opt, sizeof(netty_tmp_opt), "-Dio.netty.native.workdir=%s", tmp_dir);
-  snprintf(jna_boot_opt, sizeof(jna_boot_opt), "-Djna.boot.library.path=%s", shim_dir);
-  snprintf(jna_library_opt, sizeof(jna_library_opt), "-Djna.library.path=%s", shim_dir);
+  char jna_path[1024];
+  snprintf(jna_path, sizeof(jna_path), "%s/libjnidispatch.so", native_lib_dir);
+  const char *jna_dir = path_exists(jna_path) ? native_lib_dir : shim_dir;
+
+  snprintf(jna_boot_opt, sizeof(jna_boot_opt), "-Djna.boot.library.path=%s", jna_dir);
+  snprintf(jna_library_opt, sizeof(jna_library_opt), "-Djna.library.path=%s", jna_dir);
   snprintf(user_home_opt, sizeof(user_home_opt), "-Duser.home=%s", server_dir);
   snprintf(language_opt, sizeof(language_opt), "-Duser.language=en");
   snprintf(timezone_opt, sizeof(timezone_opt), "-Duser.timezone=UTC");

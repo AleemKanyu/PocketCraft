@@ -260,6 +260,8 @@ function serializeBroadcast(doc, resultsById) {
     updatedAt: toIso(data.updatedAt),
     startDate: toIso(data.startDate),
     expiryDate: toIso(data.expiryDate),
+    showTimer: ensureBoolean(data.showTimer, false),
+    timerExpiresAt: toIso(data.timerExpiresAt),
     resultSummary: {
       type: ensureString(result?.type),
       optionCounts,
@@ -330,9 +332,13 @@ async function saveBroadcast(input) {
 
   const startDate = parseOptionalTimestamp(input.startDate, "startDate");
   const expiryDate = parseOptionalTimestamp(input.expiryDate, "expiryDate");
+  const timerExpiresAt = parseOptionalTimestamp(input.timerExpiresAt, "timerExpiresAt");
+  const showTimer = ensureBoolean(input.showTimer, false);
 
   payload.startDate = startDate;
   payload.expiryDate = expiryDate;
+  payload.showTimer = showTimer;
+  payload.timerExpiresAt = timerExpiresAt;
   payload.createdAt = existing.exists && existing.get("createdAt")
     ? existing.get("createdAt")
     : FieldValue.serverTimestamp();

@@ -65,13 +65,15 @@ object ServerPropertiesWriter {
     fun overlayManagedValues(props: Properties, prefs: ServerPrefsSnapshot, isPremium: Boolean = false) {
         props["level-name"] = prefs.worldName
         props["level-seed"] = prefs.worldSeed
-        val maxLimit = if (isPremium) 50 else 5
+        val maxLimit = if (isPremium) 50 else 10
         props["max-players"] = prefs.maxPlayers.coerceIn(1, maxLimit).toString()
 
         props["server-port"] = "25565"
         props["difficulty"] = prefs.difficulty.lowercase()
         props["gamemode"] = prefs.gameMode.lowercase()
-        props["online-mode"] = "false"
+        props["online-mode"] = prefs.onlineMode.toString()
+        // enforce-secure-profile causes chat signing requirement which breaks on some
+        // client builds; keep it false regardless of online-mode setting.
         props["enforce-secure-profile"] = "false"
         props["motd"] = prefs.motd
         props["pvp"] = prefs.pvp.toString()
@@ -131,6 +133,8 @@ object ServerPropertiesWriter {
             onlineMode = config.onlineMode,
             motd = if (config.motd.isBlank()) {
                 "Hosted on Pocketcraft"
+            } else if (config.motd.endsWith(" - Hosted on Pocketcraft", ignoreCase = true)) {
+                config.motd
             } else {
                 "${config.motd} - Hosted on Pocketcraft"
             },

@@ -204,7 +204,7 @@ fun PremiumUpgradeBottomSheet(
                             isProOnly && offer.tier == PremiumTier.SUPPORTIVE -> "UPGRADE MEMBERSHIP"
                             offer.tier == PremiumTier.SUPPORTIVE -> "BECOME MEMBER"
                             offer.tier == PremiumTier.PREMIUM -> {
-                                if (entitlement.eligibleForFreeTrial) {
+                                if (offer.hasFreeTrial) {
                                     "START FREE, CANCEL ANYTIME"
                                 } else {
                                     "GET PRO"
@@ -217,10 +217,10 @@ fun PremiumUpgradeBottomSheet(
 
                         SubscriptionOfferCard(
                             title = displayTitleForTier(offer.tier),
-                            price = displayPriceForTier(offer.tier),
+                            price = offer.recurringPrice,
                             tier = offer.tier,
                             buttonLabel = buttonLabel,
-                            eligibleForFreeTrial = entitlement.eligibleForFreeTrial,
+                            freeTrialDays = offer.freeTrialDays,
                             showMostPopular = offer.tier == PremiumTier.PREMIUM,
                             enabled = enabled,
                             onClick = {
@@ -266,9 +266,11 @@ fun PremiumUpgradeBottomSheet(
                     minHeight = 38.dp
                 )
 
-                if (entitlement.eligibleForFreeTrial) {
+                val premiumOffer = offers.firstOrNull { it.tier == PremiumTier.PREMIUM }
+                val showFreeTrialWarning = premiumOffer?.hasFreeTrial == true && entitlement.tier != PremiumTier.PREMIUM
+                if (showFreeTrialWarning) {
                     Text(
-                        text = "After your 7-day free trial, you will be automatically charged ₹89/month unless canceled.",
+                        text = "After your ${premiumOffer!!.freeTrialDays}-day free trial, you will be automatically charged ${premiumOffer.recurringPrice}/month unless canceled.",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                         textAlign = TextAlign.Center,
@@ -276,7 +278,7 @@ fun PremiumUpgradeBottomSheet(
                     )
                 } else {
                     Text(
-                        text = "You will be automatically charged ₹89/month unless canceled.",
+                        text = "You will be automatically charged ${premiumOffer?.recurringPrice ?: "the monthly rate"}/month unless canceled.",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                         textAlign = TextAlign.Center,
@@ -302,14 +304,6 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
-private fun displayPriceForTier(tier: PremiumTier): String {
-    return when (tier) {
-        PremiumTier.PREMIUM -> "₹89"
-        PremiumTier.SUPPORTIVE -> "₹299"
-        PremiumTier.NONE -> ""
-    }
-}
-
 private fun displayTitleForTier(tier: PremiumTier): String {
     return when (tier) {
         PremiumTier.PREMIUM -> "Pro"
@@ -318,13 +312,18 @@ private fun displayTitleForTier(tier: PremiumTier): String {
     }
 }
 
-private fun buildOfferSubtitle(tier: PremiumTier, eligibleForFreeTrial: Boolean): String {
+private fun buildOfferSubtitle(
+    tier: PremiumTier,
+    eligibleForFreeTrial: Boolean,
+    price: String,
+    freeTrialDays: Int
+): String {
     return when (tier) {
         PremiumTier.PREMIUM -> {
             if (eligibleForFreeTrial) {
-                "Try 7 days free, then ₹89/month. Cancel anytime in Google Play."
+                "Try $freeTrialDays days free, then $price/month. Cancel anytime in Google Play."
             } else {
-                "PocketCraft Pro at ₹89/month. Cancel anytime in Google Play."
+                "PocketCraft Pro at $price/month. Cancel anytime in Google Play."
             }
         }
         PremiumTier.SUPPORTIVE -> "Everything in Pro, plus a simple way to support PocketCraft directly."
@@ -357,19 +356,25 @@ private fun SubscriptionOfferCard(
     price: String,
     tier: PremiumTier,
     buttonLabel: String,
-    eligibleForFreeTrial: Boolean = false,
+    freeTrialDays: Int = 0,
     showMostPopular: Boolean = false,
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     GameCard(modifier = Modifier.fillMaxWidth()) {
         val isMember = tier == PremiumTier.SUPPORTIVE
-        val effectiveSubtitle = buildOfferSubtitle(tier, eligibleForFreeTrial)
+        val hasFreeTrial = freeTrialDays > 0
+        val effectiveSubtitle = buildOfferSubtitle(
+            tier = tier,
+            eligibleForFreeTrial = hasFreeTrial && enabled,
+            price = price,
+            freeTrialDays = freeTrialDays
+        )
         val benefitItems = benefitsForTier(tier)
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (showMostPopular) {
-                val badgeText = if (tier == PremiumTier.PREMIUM && eligibleForFreeTrial) {
-                    "MOST POPULAR · 7 DAYS FREE"
+                val badgeText = if (tier == PremiumTier.PREMIUM && hasFreeTrial && enabled) {
+                    "MOST POPULAR · $freeTrialDays DAYS FREE"
                 } else {
                     "MOST POPULAR"
                 }
@@ -415,7 +420,7 @@ private fun SubscriptionOfferCard(
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    if (tier == PremiumTier.PREMIUM && eligibleForFreeTrial) {
+                    if (tier == PremiumTier.PREMIUM && hasFreeTrial && enabled) {
                         Text(
                             text = price,
                             fontWeight = FontWeight.Bold,
@@ -432,7 +437,7 @@ private fun SubscriptionOfferCard(
                             fontSize = 15.sp
                         )
                         Text(
-                            text = "then ₹89/month",
+                            text = "then $price/month",
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             fontSize = 9.sp
@@ -492,7 +497,7 @@ private fun SubscriptionOfferCard(
                     null
                 }
             )
-            if (tier == PremiumTier.PREMIUM && eligibleForFreeTrial && enabled) {
+            if (tier == PremiumTier.PREMIUM && hasFreeTrial && enabled) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "No charge today · cancel anytime in Google Play.",

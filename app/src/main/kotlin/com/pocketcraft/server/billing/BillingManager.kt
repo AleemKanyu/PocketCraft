@@ -76,10 +76,13 @@ class BillingManager private constructor(private val context: Context) {
     private var billingClient: BillingClient? = null
     private var isConnecting = false
     private var userListener: ListenerRegistration? = null
+    private var activePurchases: List<Purchase> = emptyList()
 
     private val purchasesUpdatedListener = PurchasesUpdatedListener { billingResult, purchases ->
         when {
             billingResult.responseCode == BillingResponseCode.OK && purchases != null -> {
+                activePurchases = (activePurchases + purchases.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED })
+                    .distinctBy { it.purchaseToken }
                 purchases.forEach { purchase ->
                     scope.launch { verifyPurchaseServerSide(purchase) }
                 }
@@ -165,7 +168,7 @@ class BillingManager private constructor(private val context: Context) {
 
         client.queryProductDetailsAsync(params) { billingResult, productDetailsList ->
             if (billingResult.responseCode == BillingResponseCode.OK) {
-                _availableOffers.value = productDetailsList.mapNotNull { toSubscriptionOffer(it, entitlement.value.eligibleForFreeTrial) }
+                _availableOffers.value = productDetailsList.mapNotNull { toSubscriptionOffer(it) }
                     .sortedBy { if (it.tier == PremiumTier.PREMIUM) 0 else 1 }
                 onComplete?.invoke()
             } else {
@@ -187,6 +190,7 @@ class BillingManager private constructor(private val context: Context) {
 
         client.queryPurchasesAsync(params) { billingResult, purchases ->
             if (billingResult.responseCode == BillingResponseCode.OK) {
+                activePurchases = purchases.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
                 var hasActiveSubscription = false
                 purchases.forEach { purchase ->
                     if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED) {
@@ -233,9 +237,23 @@ class BillingManager private constructor(private val context: Context) {
             .setOfferToken(offer.offerToken)
             .build()
 
-        val billingFlowParams = BillingFlowParams.newBuilder()
+        val activeProPurchase = activePurchases.firstOrNull { it.products.contains(PRODUCT_PREMIUM) }
+        val isUpgradeToSupportive = productId == PRODUCT_SUPPORTIVE && activeProPurchase != null
+
+        val billingFlowParamsBuilder = BillingFlowParams.newBuilder()
             .setProductDetailsParamsList(listOf(productParams))
-            .build()
+
+        if (isUpgradeToSupportive) {
+            val updateParams = BillingFlowParams.SubscriptionUpdateParams.newBuilder()
+                .setOldPurchaseToken(activeProPurchase!!.purchaseToken)
+                .setSubscriptionReplacementMode(
+                    BillingFlowParams.SubscriptionUpdateParams.ReplacementMode.CHARGE_PRORATED_PRICE
+                )
+                .build()
+            billingFlowParamsBuilder.setSubscriptionUpdateParams(updateParams)
+        }
+
+        val billingFlowParams = billingFlowParamsBuilder.build()
 
         val result = billingClient?.launchBillingFlow(activity, billingFlowParams)
         if (result == null || result.responseCode != BillingResponseCode.OK) {
@@ -414,31 +432,32 @@ class BillingManager private constructor(private val context: Context) {
         }
     }
 
-    private fun toSubscriptionOffer(productDetails: ProductDetails, eligibleForFreeTrial: Boolean): SubscriptionOffer? {
+    private fun toSubscriptionOffer(productDetails: ProductDetails): SubscriptionOffer? {
         val tier = when (productDetails.productId) {
             PRODUCT_PREMIUM -> PremiumTier.PREMIUM
             PRODUCT_SUPPORTIVE -> PremiumTier.SUPPORTIVE
             else -> return null
         }
-        val offer = if (eligibleForFreeTrial) {
-            productDetails.subscriptionOfferDetails
-                ?.filter { offerDetails ->
-                    offerDetails.pricingPhases.pricingPhaseList.any { phase ->
-                        phase.priceAmountMicros == 0L
-                    }
-                }
-                ?.maxByOrNull { offerDetails ->
-                    freePhaseDurationDays(offerDetails)
-                }
-                ?: productDetails.subscriptionOfferDetails?.firstOrNull()
-        } else {
-            productDetails.subscriptionOfferDetails?.firstOrNull { offerDetails ->
-                offerDetails.pricingPhases.pricingPhaseList.none { phase ->
-                    phase.priceAmountMicros == 0L
-                }
-            } ?: productDetails.subscriptionOfferDetails?.firstOrNull()
-        } ?: return null
-        val pricePhase = offer.pricingPhases.pricingPhaseList.firstOrNull() ?: return null
+        val offers = productDetails.subscriptionOfferDetails.orEmpty()
+        if (offers.isEmpty()) return null
+
+        val offer = when (tier) {
+            PremiumTier.PREMIUM -> {
+                offers
+                    .maxWithOrNull(
+                        compareBy<SubscriptionOfferDetails> { freePhaseDurationDays(it) }
+                            .thenByDescending { recurringPricePhase(it)?.billingCycleCount ?: 0 }
+                    )
+                    ?: offers.first()
+            }
+            PremiumTier.SUPPORTIVE -> {
+                offers.firstOrNull { freePhaseDurationDays(it) == 0 } ?: offers.first()
+            }
+            PremiumTier.NONE -> return null
+        }
+        val recurringPhase = recurringPricePhase(offer) ?: offer.pricingPhases.pricingPhaseList.lastOrNull() ?: return null
+        val rawFreeTrialDays = freePhaseDurationDays(offer)
+        val freeTrialDays = if (tier == PremiumTier.PREMIUM && rawFreeTrialDays > 0) 7 else rawFreeTrialDays
         val title = if (tier == PremiumTier.PREMIUM) "Pro" else "Member"
         val description = if (tier == PremiumTier.PREMIUM) {
             "All premium features at a budget-friendly rate."
@@ -448,12 +467,20 @@ class BillingManager private constructor(private val context: Context) {
         return SubscriptionOffer(
             productId = productDetails.productId,
             title = title,
-            price = pricePhase.formattedPrice,
+            price = recurringPhase.formattedPrice,
+            recurringPrice = recurringPhase.formattedPrice,
             tier = tier,
             description = description,
+            freeTrialDays = freeTrialDays,
             offerToken = offer.offerToken,
             productDetails = productDetails
         )
+    }
+
+    private fun recurringPricePhase(offerDetails: SubscriptionOfferDetails): ProductDetails.PricingPhase? {
+        return offerDetails.pricingPhases.pricingPhaseList.firstOrNull { phase ->
+            phase.priceAmountMicros > 0L
+        }
     }
 
     private fun freePhaseDurationDays(offerDetails: SubscriptionOfferDetails): Int {

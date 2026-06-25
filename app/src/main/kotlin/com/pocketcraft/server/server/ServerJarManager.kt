@@ -19,6 +19,20 @@ import java.util.concurrent.TimeUnit
 object ServerJarManager {
     private const val TAG = "ServerJarManager"
     private const val USER_AGENT = "PocketCraft/1.0"
+    private val stableVersionRegex = Regex("^\\d+\\.\\d+(\\.\\d+)?$")
+    private val versionComparator = Comparator<String> { left, right ->
+        val leftParts = left.split('.').map { it.toIntOrNull() ?: -1 }
+        val rightParts = right.split('.').map { it.toIntOrNull() ?: -1 }
+        val maxSize = maxOf(leftParts.size, rightParts.size)
+        for (index in 0 until maxSize) {
+            val leftPart = leftParts.getOrElse(index) { -1 }
+            val rightPart = rightParts.getOrElse(index) { -1 }
+            if (leftPart != rightPart) {
+                return@Comparator rightPart.compareTo(leftPart)
+            }
+        }
+        0
+    }
 
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -44,7 +58,10 @@ object ServerJarManager {
         }
 
         val versions = when (serverType) {
-            ServerType.PAPER -> fetchPaperVersions().takeIf { it.isNotEmpty() } ?: VersionCatalog.fetchStableVersions(limit = 80)
+            ServerType.PAPER -> mergePaperAndStableVersions(
+                fetchPaperVersions(),
+                VersionCatalog.fetchStableVersions(limit = 80)
+            )
             ServerType.PURPUR -> fetchPurpurVersions()
             ServerType.FABRIC -> fetchFabricVersions()
             ServerType.MODPACK -> emptyList()
@@ -59,7 +76,7 @@ object ServerJarManager {
     private fun fetchPaperVersions(): List<String> {
         return runCatching {
             val req = Request.Builder()
-                .url("https://api.papermc.io/v2/projects/paper")
+                .url("https://fill.papermc.io/v3/projects/paper")
                 .header("Accept", "application/json")
                 .header("User-Agent", USER_AGENT)
                 .build()
@@ -67,10 +84,15 @@ object ServerJarManager {
                 if (!resp.isSuccessful) throw Exception("Paper API error ${resp.code}")
                 val body = resp.body?.string() ?: throw Exception("Empty response")
                 val json = JSONObject(body)
-                val versions = json.getJSONArray("versions")
+                val versionsObj = json.getJSONObject("versions")
                 val list = mutableListOf<String>()
-                for (i in (versions.length() - 1) downTo 0) {
-                    list.add(versions.getString(i))
+                val keys = versionsObj.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val arr = versionsObj.getJSONArray(key)
+                    for (j in 0 until arr.length()) {
+                        list.add(arr.getString(j))
+                    }
                 }
                 list
             }
@@ -78,6 +100,16 @@ object ServerJarManager {
             Log.e(TAG, "Failed to fetch Paper versions: ${e.message}", e)
             emptyList()
         }
+    }
+
+    private fun mergePaperAndStableVersions(
+        paperVersions: List<String>,
+        stableVersions: List<String>
+    ): List<String> {
+        return (paperVersions + stableVersions)
+            .filter { stableVersionRegex.matches(it) }
+            .distinct()
+            .sortedWith(versionComparator)
     }
 
     private fun fetchPurpurVersions(): List<String> {

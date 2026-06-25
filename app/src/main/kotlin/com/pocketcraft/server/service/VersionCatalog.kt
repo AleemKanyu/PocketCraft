@@ -8,10 +8,9 @@ import org.json.JSONObject
 
 object VersionCatalog {
 
-    private val versionRegex = Regex("^\\d+\\.\\d+(\\.\\d+)?$")
-    // Only include valid Minecraft versions (1.x.x). Purpur recently introduced their own
-    // versioning scheme (e.g. "26.1.2") which passes versionRegex but is unknown to PaperMC.
-    private val minecraftVersionRegex = Regex("^1\\.\\d+(\\.\\d+)?$")
+    // Accept stable semantic Minecraft version identifiers from providers that expose either
+    // classic 1.x releases or the newer 26.x-style release train.
+    private val minecraftVersionRegex = Regex("^\\d+\\.\\d+(\\.\\d+)?$")
     private val userAgent = "PocketCraft/1.0"
 
     suspend fun fetchStableVersions(limit: Int = 60): List<String> = withContext(Dispatchers.IO) {

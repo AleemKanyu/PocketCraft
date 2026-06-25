@@ -53,6 +53,13 @@ object JreExtractor {
     fun runtimeForVersion(versionId: String): RuntimeSpec {
         val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
         val isArm64 = abi.contains("arm64") || abi.contains("aarch64")
+
+        // Java 25 only ships arm64 binaries. 32-bit ARM devices (e.g. Redmi 10A,
+        // Samsung Galaxy A17) must always use Java 21, regardless of MC version.
+        if (!isArm64) {
+            return RUNTIME_JAVA_21
+        }
+
         val is16KBPageSize = try {
             android.system.Os.sysconf(android.system.OsConstants._SC_PAGESIZE) == 16384L
         } catch (_: Exception) {
@@ -60,10 +67,12 @@ object JreExtractor {
         }
         val requires16KBAlign = Build.VERSION.SDK_INT >= 35 || is16KBPageSize
 
-        if (isArm64 && requires16KBAlign) {
+        if (requires16KBAlign) {
             return RUNTIME_JAVA_25
         }
 
+        // For arm64 devices without 16KB page-size requirements, pick runtime
+        // based on the Minecraft version's Java requirement.
         val minecraftJavaMajor = parseMinecraftJavaMajor(versionId)
         return when {
             minecraftJavaMajor == null -> RUNTIME_JAVA_21
@@ -203,6 +212,12 @@ object JreExtractor {
         val primary = runtimeForVersion(versionId)
         val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
         val isArm64 = abi.contains("arm64") || abi.contains("aarch64")
+
+        // 32-bit ARM devices can only run Java 21 — Java 25 has no 32-bit binaries.
+        if (!isArm64) {
+            return listOf(RUNTIME_JAVA_21)
+        }
+
         val is16KBPageSize = try {
             android.system.Os.sysconf(android.system.OsConstants._SC_PAGESIZE) == 16384L
         } catch (_: Exception) {
@@ -210,15 +225,13 @@ object JreExtractor {
         }
         val requires16KBAlign = Build.VERSION.SDK_INT >= 35 || is16KBPageSize
 
-        if (isArm64 && requires16KBAlign) {
+        if (requires16KBAlign) {
+            // Devices with 16KB page alignment can only run the 16KB-aligned Java 25 build.
             return listOf(RUNTIME_JAVA_25)
         }
 
-        val defaults = if (isArm64) {
-            listOf(primary, RUNTIME_JAVA_25, RUNTIME_JAVA_21)
-        } else {
-            listOf(primary, RUNTIME_JAVA_21)
-        }
+        // arm64 without 16KB constraint: try primary, then offer both as fallbacks.
+        val defaults = listOf(primary, RUNTIME_JAVA_25, RUNTIME_JAVA_21)
         return defaults.distinctBy { it.id }
     }
 
@@ -277,18 +290,19 @@ object JreExtractor {
     private fun parseMinecraftJavaMajor(versionId: String): Int? {
         val trimmed = versionId.trim()
 
-        // Only parse standard Minecraft release strings: "1.x", "1.x.y", "1.x.y-snapshot", etc.
-        // Forge build numbers like "26.1.2", "47.3.0" start with a number > 1 and are NOT
-        // Minecraft versions — treat them as unknown so we fall back to the safe Java 21 default.
-        if (!trimmed.startsWith("1.")) return null
-
-        val version = Regex("""\d+(?:\.\d+){1,2}""").find(trimmed)?.value ?: return null
-        val parts = version.split('.').mapNotNull { it.toIntOrNull() }
-        if (parts.size < 2) return null
-
-        // parts[0] == 1 guaranteed by the startsWith check above.
-        // parts[1] is the Minecraft generation: 1.21.x → 21, 1.12.x → 12, 1.26.x → 26 (future).
-        return parts[1]
+        if (trimmed.startsWith("1.")) {
+            val version = Regex("""\d+(?:\.\d+){1,2}""").find(trimmed)?.value ?: return null
+            val parts = version.split('.').mapNotNull { it.toIntOrNull() }
+            if (parts.size < 2) return null
+            return parts[1]
+        } else {
+            // Support 26.x-style release train (Minecraft 1.21+) and other non-standard version trains
+            val firstPart = trimmed.substringBefore('.').toIntOrNull()
+            if (firstPart != null && firstPart >= 26) {
+                return firstPart
+            }
+        }
+        return null
     }
 
     private fun abiArchiveName(): String {

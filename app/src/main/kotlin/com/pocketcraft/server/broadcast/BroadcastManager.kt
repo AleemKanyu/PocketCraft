@@ -31,7 +31,11 @@ data class BroadcastMessage(
     /** Optional window: popup only shows on/after this date. */
     val startDate: Timestamp? = null,
     /** Optional window: popup stops showing after this date (poll/opt-in expires). */
-    val expiryDate: Timestamp? = null
+    val expiryDate: Timestamp? = null,
+    /** If true, show a countdown timer on the banner card. Controlled by Firestore `showTimer` field. */
+    val showTimer: Boolean = false,
+    /** The Unix epoch millis at which the timer expires. Controlled by Firestore `timerExpiresAt` Timestamp field. */
+    val timerExpiresAt: Timestamp? = null
 )
 
 object BroadcastManager {
@@ -82,6 +86,8 @@ object BroadcastManager {
                         val questionOptions = optionsList?.mapNotNull { it as? String } ?: emptyList()
                         val startDate = (doc.get("startDate") as? com.google.firebase.Timestamp)
                         val expiryDate = (doc.get("expiryDate") as? com.google.firebase.Timestamp)
+                        val showTimer = doc.firstBoolean("showTimer") ?: false
+                        val timerExpiresAt = (doc.get("timerExpiresAt") as? com.google.firebase.Timestamp)
 
                         val msg = BroadcastMessage(
                             id = doc.id,
@@ -97,7 +103,9 @@ object BroadcastManager {
                             questionPrompt = questionPrompt,
                             questionOptions = questionOptions,
                             startDate = startDate,
-                            expiryDate = expiryDate
+                            expiryDate = expiryDate,
+                            showTimer = showTimer,
+                            timerExpiresAt = timerExpiresAt
                         )
                         Log.d("BroadcastManager", "Parsed broadcast document: id=${doc.id}, active=$active, title='$title', type='$type', dismissible=$dismissible, targetMinVersion=$targetMinVersion, targetMaxVersion=$targetMaxVersion")
                         msg

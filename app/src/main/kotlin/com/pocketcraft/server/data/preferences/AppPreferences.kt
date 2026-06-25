@@ -110,10 +110,17 @@ class AppPreferences(context: Context) {
 
     val userId: String
         get() {
+            val androidId = android.provider.Settings.Secure.getString(
+                appContext.contentResolver,
+                android.provider.Settings.Secure.ANDROID_ID
+            )
+            if (!androidId.isNullOrBlank() && androidId != "9774d56d682e549c") {
+                return androidId
+            }
             var id = prefs.getString("user_id", null)
             if (id == null) {
-                id = java.util.UUID.randomUUID().toString()
-                prefs.edit().putString("user_id", id).apply()
+                id = java.util.UUID.randomUUID().toString().replace("-", "")
+                prefs.edit().putString("user_id", id).commit()
             }
             return id
         }

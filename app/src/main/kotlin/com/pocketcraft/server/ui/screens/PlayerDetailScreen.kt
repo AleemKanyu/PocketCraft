@@ -77,6 +77,7 @@ import com.pocketcraft.server.ui.components.DuoToggle
 import com.pocketcraft.server.ui.components.HealthBar
 import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import com.pocketcraft.server.ui.components.InventoryPreview
+import com.pocketcraft.server.ui.components.resolvePlayerAvatarUrl
 import com.pocketcraft.server.ui.theme.PocketColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -340,7 +341,7 @@ fun PlayerDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     AsyncImage(
-                        model = "https://mc-heads.net/head/${player.name}/64",
+                        model = resolvePlayerAvatarUrl(player.name, player.uuid, 64),
                         contentDescription = null,
                         modifier = Modifier.size(64.dp),
                         contentScale = ContentScale.Crop

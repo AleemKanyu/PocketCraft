@@ -31,7 +31,8 @@ If you are an AI assistant (such as Gemini, Claude, Copilot, etc.) asked to modi
 To prevent regressions (high latency spikes in thousands of milliseconds, connection drops):
 
 1. **Buffer Size Constraints**:
-   - `RelayManager.kt` socket buffer sizes MUST remain at the v1.6.0 values: `256 * 1024` (256KB) for socket send/receive sizes and `64 * 1024` (64KB) for player bridge buffer size.
+   - `RelayManager.kt` socket buffer sizes MUST remain at the optimized values: `64 * 1024` (64KB) for socket send/receive sizes and `8 * 1024` (8KB) for player bridge buffer size.
+     *(Note: Keeping these queues deliberately small prevents chunk traffic from queueing ahead of keep-alive packets, stabilizing ping.)*
    - `bedrockTxChannel` capacity MUST remain at `256` (do not use `Channel.UNLIMITED` or inject high-volume write loops without batch-draining).
    - Do NOT introduce experimental Wi-Fi socket bindings or other network routing logic.
 

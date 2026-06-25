@@ -1473,6 +1473,9 @@ class ServerStateHolder(
 
         if (!state.isRunning && !state.isStarting) {
             startedAtMillis = null
+            publicAddress = null
+            tps = 0f
+            resetJoinable()
         } else if (startedAtMillis == null) {
             startedAtMillis = System.currentTimeMillis()
         }
@@ -1831,15 +1834,7 @@ class ServerStateHolder(
                 config = next
             }
 
-            val rconResult = runCatching {
-                sendRconCommand("whitelist on")
-                sendRconCommand("whitelist reload")
-                null
-            }.getOrElse { error ->
-                com.pocketcraft.server.server.ServerLauncher.sendCommand("whitelist on")
-                com.pocketcraft.server.server.ServerLauncher.sendCommand("whitelist reload")
-                error.message ?: "RCON unavailable"
-            }
+            val rconResult = applyWhitelistRuntimeState(next)
 
             withContext(Dispatchers.Main) {
                 if (rconResult == null) {
@@ -1856,7 +1851,8 @@ class ServerStateHolder(
             port = singleServerPort,
             maxPlayers = next.maxPlayers.coerceIn(1, 50),
             viewDistance = next.viewDistance.coerceIn(3, 32),
-            simulationDistance = next.simulationDistance.coerceIn(3, 32)
+            simulationDistance = next.simulationDistance.coerceIn(3, 32),
+            whiteList = next.whiteList || next.enforceWhitelist
         )
         val targetDir = if (targetWorldName != null) {
             ServerFileManager.getServerDir(appContext, targetWorldName)
@@ -1871,16 +1867,7 @@ class ServerStateHolder(
         }
 
         if (isRunning) {
-            val whitelistCmd = if (enforced.whiteList) "whitelist on" else "whitelist off"
-            val rconResult = runCatching {
-                sendRconCommand(whitelistCmd)
-                sendRconCommand("whitelist reload")
-                null
-            }.getOrElse { error ->
-                com.pocketcraft.server.server.ServerLauncher.sendCommand(whitelistCmd)
-                com.pocketcraft.server.server.ServerLauncher.sendCommand("whitelist reload")
-                error.message ?: "RCON unavailable"
-            }
+            val rconResult = applyWhitelistRuntimeState(enforced)
             if (rconResult != null) {
                 android.util.Log.w("ServerStateHolder", "Settings dynamic update RCON failed, fell back to stdin: $rconResult")
             }
@@ -1890,6 +1877,41 @@ class ServerStateHolder(
             config = enforced
         }
         "Settings saved."
+    }
+
+    private fun applyWhitelistRuntimeState(config: ServerConfig): String? {
+        val whitelistCmd = if (config.whiteList) "whitelist on" else "whitelist off"
+        return runCatching {
+            sendRconCommand(whitelistCmd)
+            sendRconCommand("whitelist reload")
+            if (config.whiteList && config.enforceWhitelist) {
+                kickPlayersNotOnWhitelist(::sendRconCommand)
+            }
+            null
+        }.getOrElse { error ->
+            com.pocketcraft.server.server.ServerLauncher.sendCommand(whitelistCmd)
+            com.pocketcraft.server.server.ServerLauncher.sendCommand("whitelist reload")
+            if (config.whiteList && config.enforceWhitelist) {
+                kickPlayersNotOnWhitelist(com.pocketcraft.server.server.ServerLauncher::sendCommand)
+            }
+            error.message ?: "RCON unavailable"
+        }
+    }
+
+    private fun kickPlayersNotOnWhitelist(sendCommandAction: (String) -> Unit) {
+        val allowedPlayers = readNamedList("whitelist.json")
+            .map { canonicalPlayerName(it.name) }
+            .toSet()
+        val activePlayers = (onlinePlayers.toList() + sessionPlayers.toList())
+            .distinctBy { canonicalPlayerName(it.name) }
+        val playersToKick = activePlayers.filter { player ->
+            canonicalPlayerName(player.name) !in allowedPlayers
+        }
+
+        playersToKick.forEach { player ->
+            val escapedName = escapeSelectorName(player.name)
+            sendCommandAction("""kick @a[name="$escapedName",limit=1] Whitelist is enabled on this server""")
+        }
     }
 
     suspend fun updateRelayHost(host: String): String = withContext(Dispatchers.IO) {
@@ -3021,7 +3043,7 @@ class ServerStateHolder(
             difficulty = props.getProperty("difficulty", "normal"),
             gameMode = props.getProperty("gamemode", "survival"),
             onlineMode = props.getProperty("online-mode", "false").toBoolean(),
-            motd = props.getProperty("motd", "A PocketCraft Server"),
+            motd = props.getProperty("motd", "A PocketCraft Server").removeSuffix(" - Hosted on Pocketcraft").trim(),
             pvp = props.getProperty("pvp", "true").toBoolean(),
             viewDistance = props.getProperty(ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY)
                 ?.toIntOrNull()

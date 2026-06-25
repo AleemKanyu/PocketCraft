@@ -506,12 +506,28 @@ function handlePhoneFrameData(userId, data) {
       continue;
     }
 
-    const rewrittenPayload = rewriteAdvertisedRelayAddress(
-      parsed.payload,
-      relayPort || parsed.port,
-      parsed.ip,
-      parsed.port
-    );
+    const clientMap = bedrockClientMap.get(userId);
+    const key = `${parsed.ip}:${parsed.port}`;
+    const clientEntry = clientMap ? clientMap.get(key) : null;
+
+    let rewrittenPayload;
+    if (clientEntry && clientEntry.serverHandshakeComplete) {
+      rewrittenPayload = parsed.payload;
+    } else {
+      rewrittenPayload = rewriteAdvertisedRelayAddress(
+        parsed.payload,
+        relayPort || parsed.port,
+        parsed.ip,
+        parsed.port
+      );
+      if (clientEntry && rewrittenPayload !== parsed.payload) {
+        const packetId = parsed.payload.readUInt8(0);
+        if (isRakNetFrameSet(packetId)) {
+          clientEntry.serverHandshakeComplete = true;
+          console.log(`[bedrock] Server handshake complete (0x10 rewritten) for ${userId} to ${key}`);
+        }
+      }
+    }
 
     // Only log the first few packets to avoid console.log blocking the event loop and causing high ping
     if (!global.udpSendCount) global.udpSendCount = 0;
@@ -795,10 +811,23 @@ function startUserUdpSocket(userId, assignedPort, getPhoneSocket) {
       }
     }
 
-    payload = rewriteClientNewIncomingConnection(payload);
-
     const key = `${rinfo.address}:${rinfo.port}`;
-    clientMap.set(key, { address: rinfo.address, port: rinfo.port, lastSeen: Date.now() });
+    let clientEntry = clientMap.get(key);
+    if (!clientEntry) {
+      clientEntry = { address: rinfo.address, port: rinfo.port, lastSeen: Date.now(), handshakeComplete: false };
+      clientMap.set(key, clientEntry);
+    } else {
+      clientEntry.lastSeen = Date.now();
+    }
+
+    if (!clientEntry.handshakeComplete) {
+      const rew = rewriteClientNewIncomingConnection(payload);
+      if (rew !== payload) {
+        clientEntry.handshakeComplete = true;
+        console.log(`[bedrock] Client handshake complete (0x13 rewritten) for ${userId} from ${key}`);
+      }
+      payload = rew;
+    }
 
     const phoneSocket = getBedrockPhoneSocket(userId);
     if (!phoneSocket) return;
@@ -1091,21 +1120,34 @@ app.get('/download/paper', async (req, res) => {
   }
 
   try {
-    const apiRes = await fetch(`https://api.papermc.io/v2/projects/paper/versions/${version}`);
+    const apiRes = await fetch(`https://fill.papermc.io/v3/projects/paper/versions/${version}/builds`, {
+      headers: {
+        'User-Agent': 'PocketCraft/1.0.0 (contact@pocketcraft.online)'
+      }
+    });
     if (!apiRes.ok) {
       return res.status(apiRes.status).send(`Failed to fetch version metadata from PaperMC: ${apiRes.statusText}`);
     }
-    const data = await apiRes.json();
-    if (!data.builds || !Array.isArray(data.builds) || data.builds.length === 0) {
+    const builds = await apiRes.json();
+    if (!builds || !Array.isArray(builds) || builds.length === 0) {
       return res.status(404).send('No builds found for this version.');
     }
 
-    const latestBuild = data.builds[data.builds.length - 1];
-    const downloadUrl = `https://api.papermc.io/v2/projects/paper/versions/${version}/builds/${latestBuild}/downloads/paper-${version}-${latestBuild}.jar`;
+    const latestBuild = builds[0];
+    const downloads = latestBuild.downloads;
+    if (!downloads) {
+      return res.status(404).send('No downloads found for the latest build.');
+    }
+    const downloadInfo = downloads['server:default'] || downloads[Object.keys(downloads)[0]];
+    if (!downloadInfo || !downloadInfo.url) {
+      return res.status(404).send('Download URL not found in build metadata.');
+    }
+    const downloadUrl = downloadInfo.url;
+    const jarName = downloadInfo.name || `paper-${version}-${latestBuild.id}.jar`;
 
     const jarRes = await fetch(downloadUrl, {
       headers: {
-        'User-Agent': 'PocketCraft/1.0.0'
+        'User-Agent': 'PocketCraft/1.0.0 (contact@pocketcraft.online)'
       }
     });
 
@@ -1114,7 +1156,7 @@ app.get('/download/paper', async (req, res) => {
     }
 
     res.setHeader('Content-Type', 'application/java-archive');
-    res.setHeader('Content-Disposition', `attachment; filename="paper-${version}-${latestBuild}.jar"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${jarName}"`);
 
     const readableStream = jarRes.body;
     if (readableStream && typeof readableStream.pipeTo === 'function') {

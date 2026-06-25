@@ -86,6 +86,7 @@ import com.pocketcraft.server.data.model.PlayerInfo
 import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.components.PlayerCard
 import com.pocketcraft.server.ui.components.PlayerCardAction
+import com.pocketcraft.server.ui.components.resolvePlayerAvatarUrl
 import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.theme.PocketColors
@@ -134,7 +135,7 @@ fun PlayersScreen(
             }
         }
 
-        if (!stateHolder.config.whiteList && stateHolder.openServerRiskAcknowledged) {
+        if (stateHolder.isRunning && !stateHolder.config.whiteList && stateHolder.openServerRiskAcknowledged) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -430,7 +431,7 @@ fun PlayerOnlineCard(
     PlayerCard(
         username = player.name,
         subtitle = subtitle,
-        avatarUrl = "https://mc-heads.net/avatar/${player.name}/64",
+        avatarUrl = resolvePlayerAvatarUrl(player.name, player.uuid, 64),
         badgeText = if (player.isOp) "OPED" else if (isOnline) "ONLINE" else "OFFLINE",
         badgeColor = if (player.isOp) PocketColors.PrimaryDark else if (isOnline) PocketColors.Primary else Color.Gray,
         onClick = onOpenDetails,
@@ -725,7 +726,7 @@ fun PlayersListTab(
                     PlayerCard(
                         username = player.name,
                         subtitle = if (player.uuid.isNotEmpty()) player.uuid.take(8) else "Player info",
-                        avatarUrl = "https://mc-heads.net/avatar/${player.name}/64",
+                        avatarUrl = resolvePlayerAvatarUrl(player.name, player.uuid, 64),
                         badgeText = if (player.isOp) "OPED" else "MANAGED",
                         badgeColor = if (player.isOp) PocketColors.PrimaryDark else PocketColors.Primary,
                         onClick = { onPlayerSelected(player) },

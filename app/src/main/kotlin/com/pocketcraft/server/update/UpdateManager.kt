@@ -21,6 +21,7 @@ data class UpdateConfig(
 
 object UpdateManager {
     private const val TAG = "UpdateManager"
+    private const val TIMESTAMP_VERSION_CODE_THRESHOLD = 10_000_000
     private val db by lazy { FirebaseFirestore.getInstance() }
 
     fun getUpdateConfigFlow(context: Context): Flow<UpdateConfig?> = callbackFlow {
@@ -97,18 +98,16 @@ object UpdateManager {
             return UpdateConfig(enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt)
         }
 
-        if (latestVersion != null && compareVersionNames(currentVersionName, latestVersion) >= 0) {
-            Log.d(TAG, "Update config parsed: currentVersionName ($currentVersionName) >= latestVersion ($latestVersion). Skipping update popup.")
-            return UpdateConfig(enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt)
-        }
+        val isUpdateAvailable = isUpdateAvailable(
+            currentVersionName = currentVersionName,
+            currentVersionCode = currentVersionCode,
+            latestVersion = latestVersion,
+            latestVersionCode = latestVersionCode,
+            minimumVersionCode = versionCode
+        )
 
-        if (latestVersion == null && latestVersionCode != null && currentVersionCode >= latestVersionCode) {
-            Log.d(TAG, "Update config parsed: currentVersionCode ($currentVersionCode) >= latestVersionCode ($latestVersionCode). Skipping update popup.")
-            return UpdateConfig(enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt)
-        }
-
-        if (latestVersion == null && latestVersionCode == null && versionCode != null && currentVersionCode >= versionCode) {
-            Log.d(TAG, "Update config parsed: currentVersionCode ($currentVersionCode) >= target versionCode ($versionCode). Skipping update popup.")
+        if (!isUpdateAvailable) {
+            Log.d(TAG, "Update config parsed: No update available (current: $currentVersionName / $currentVersionCode). Skipping update popup.")
             return UpdateConfig(enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt)
         }
 
@@ -118,14 +117,19 @@ object UpdateManager {
             return UpdateConfig(enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt)
         }
 
-        Log.d(TAG, "Update config decision: SHOW popup. isForced=$isForced, playStoreUrl='$playStoreUrl', targetVersionCode=$versionCode")
+        val shouldForce = isForced && isBelowMinimumSupportedVersion(
+            currentVersionCode = currentVersionCode,
+            minimumVersionCode = versionCode
+        )
+
+        Log.d(TAG, "Update config decision: SHOW popup. isForced=$shouldForce, playStoreUrl='$playStoreUrl', targetVersionCode=$versionCode")
         return UpdateConfig(
             showUpdatePopup = showUpdatePopup,
             playStoreUrl = playStoreUrl,
             versionCode = versionCode,
             latestVersion = latestVersion,
             dismissKey = latestVersion ?: latestVersionCode?.toString() ?: versionCode?.toString(),
-            isForced = isForced,
+            isForced = shouldForce,
             enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt
         )
     }
@@ -172,6 +176,50 @@ object UpdateManager {
     private fun normalizeVersionName(versionName: String): String {
         return versionName.trim().removePrefix("v").removePrefix("V")
     }
+
+    private fun isUpdateAvailable(
+        currentVersionName: String,
+        currentVersionCode: Int,
+        latestVersion: String?,
+        latestVersionCode: Int?,
+        minimumVersionCode: Int?
+    ): Boolean {
+        if (!latestVersion.isNullOrBlank()) {
+            when (compareVersionNames(currentVersionName, latestVersion)) {
+                -1 -> return true
+                1 -> return false
+            }
+        }
+
+        if (isComparableVersionCode(currentVersionCode, latestVersionCode) && latestVersionCode != null) {
+            return currentVersionCode < latestVersionCode
+        }
+
+        if (minimumVersionCode == null) {
+            return false
+        }
+
+        return isBelowMinimumSupportedVersion(
+            currentVersionCode = currentVersionCode,
+            minimumVersionCode = minimumVersionCode
+        )
+    }
+
+    private fun isBelowMinimumSupportedVersion(
+        currentVersionCode: Int,
+        minimumVersionCode: Int?
+    ): Boolean {
+        if (minimumVersionCode == null) return false
+        if (!isComparableVersionCode(currentVersionCode, minimumVersionCode)) return false
+        return currentVersionCode < minimumVersionCode
+    }
+
+    private fun isComparableVersionCode(currentVersionCode: Int, remoteVersionCode: Int?): Boolean {
+        if (remoteVersionCode == null) return false
+        return !(isTimestampVersionCode(currentVersionCode) && !isTimestampVersionCode(remoteVersionCode))
+    }
+
+    private fun isTimestampVersionCode(code: Int): Boolean = code >= TIMESTAMP_VERSION_CODE_THRESHOLD
 
     private fun Any?.toFirestoreIntOrNull(): Int? {
         if (this == null) return null

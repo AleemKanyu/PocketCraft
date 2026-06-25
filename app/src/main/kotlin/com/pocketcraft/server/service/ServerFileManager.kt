@@ -111,7 +111,13 @@ object ServerFileManager {
         props.setProperty("server-port", "25565")
         props.setProperty("level-name", resolvedWorldName)
         props.setProperty("server-ip", "")                 // bind all interfaces
-        props.setProperty("online-mode", "false")
+        // Preserve the user's online-mode choice; only default to false when the
+        // property doesn't exist yet (new server, no prior value).
+        if (!props.containsKey("online-mode")) {
+            props.setProperty("online-mode", "false")
+        }
+        // enforce-secure-profile forces chat-signing requirements that break on some
+        // mobile client builds; always keep it false.
         props.setProperty("enforce-secure-profile", "false")
         // Ensure RCON is enabled for in-app console commands
         props.setProperty("enable-rcon", "true")

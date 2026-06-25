@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "52965868712-ahrli2q26ndkb5lbfd0dr29510j6cqa5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pocketcraft.server",
+            "certificate_hash": "c1f36afdf7184b0606f408bc24bb87d2d8b3e2aa"
+          }
+        },
+        {
           "client_id": "52965868712-inmbivc5kji28fpkeon457gg111f2qi2.apps.googleusercontent.com",
           "client_type": 3
         }

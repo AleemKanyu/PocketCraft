@@ -10,7 +10,7 @@ object BundledPluginInstaller {
     private val BUNDLED_PLUGINS = listOf(
         "Geyser-Spigot.jar",
         "floodgate-spigot.jar",
-        "ViaVersion-5.9.1.jar"
+        "ViaVersion.jar"
     )
 
     private val LEGACY_PLUGIN_NAMES = listOf(
@@ -20,7 +20,9 @@ object BundledPluginInstaller {
         "geyser-spigot.jar",
         "geyser-Spigot.jar",
         "Geyser-Spigot-latest.jar",
-        "floodgate-spigot-latest.jar"
+        "floodgate-spigot-latest.jar",
+        "ViaVersion-5.9.1.jar",
+        "ViaVersion-5.10.0.jar"
     )
 
     fun installBundledPlugins(context: Context, serverDir: File) {

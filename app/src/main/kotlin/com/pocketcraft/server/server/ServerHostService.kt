@@ -112,6 +112,8 @@ class ServerHostService : Service() {
     private val relayHealthFailures = AtomicInteger(0)
     private var relayStatusJob: Job? = null
     private var serverReadyFallbackJob: Job? = null
+    /** Set to true when MIUI's socket permission check message is seen in the output. */
+    private var miuiSocketCheckSeen = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -182,6 +184,7 @@ class ServerHostService : Service() {
             prefs.lastStartTimestamp = now
             if (prefs.consecutiveCrashCount > 2) {
                 persistRuntimeState(applicationContext, activeVersion, worldName, RUNTIME_STATE_OFFLINE)
+                sendEvent(activeVersion, EVENT_SERVER_CRASHED, "Server crashed repeatedly during startup.")
                 com.pocketcraft.server.notification.NotificationHelper.notifyServerCrashLoop(applicationContext)
                 try {
                     stopForeground(STOP_FOREGROUND_REMOVE)
@@ -219,6 +222,7 @@ class ServerHostService : Service() {
         serverReadyNotificationShown = false
         serverReadyHandled.set(false)
         setServerReadyState(false)
+        miuiSocketCheckSeen = false
         relayStatusPlayerCount.set(0)
         synchronized(relayOnlinePlayers) { relayOnlinePlayers.clear() }
         persistRuntimeState(applicationContext, versionId, worldName, RUNTIME_STATE_STARTING)
@@ -1498,6 +1502,33 @@ class ServerHostService : Service() {
     }
 
     private fun handleObservedOutputLine(versionId: String, line: String, isBacklog: Boolean = false) {
+        // ── MIUI Security kill detection ────────────────────────────────────────
+        // MIUI's security framework prints "[socket]:check permission begin!" when
+        // it intercepts socket creation in a child process and may terminate it.
+        // We suppress this noisy line from the console, but track it so we can
+        // give more targeted advice if the process is subsequently killed.
+        if (line.contains("[socket]:check permission begin", ignoreCase = true)) {
+            miuiSocketCheckSeen = true
+            // Don't forward this internal MIUI message to the user console.
+            return
+        }
+        // "unloaded from com.pocketcraft.server:server" is MIUI's signal that it
+        // has terminated the :server child process (the external JVM).
+        if (line.contains("unloaded from com.pocketcraft.server:server", ignoreCase = true)
+            || line.contains("unloaded from com.pocketcraft.server", ignoreCase = true) && line.contains(":server", ignoreCase = true)) {
+            if (miuiSocketCheckSeen) {
+                sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] ⚠ MIUI Security blocked the server process.")
+                sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] Fix: Open Security app → Permissions → Autostart → enable PocketCraft.")
+                sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] Also try: Settings → Developer Options → turn off MIUI Optimization.")
+                sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] Then force-stop PocketCraft and start the server again.")
+            } else {
+                sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] ⚠ Server process was terminated by the system (MIUI Security or OEM battery saver).")
+                sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] Fix: Open Security app → enable Autostart for PocketCraft, or disable battery restrictions.")
+            }
+            miuiSocketCheckSeen = false
+            return
+        }
+        // ── end MIUI detection ──────────────────────────────────────────────────
         addLogLine(line)
         sendEvent(versionId, EVENT_OUTPUT, line)
         if (isBacklog) return

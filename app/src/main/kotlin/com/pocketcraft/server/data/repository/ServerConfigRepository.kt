@@ -43,7 +43,7 @@ class ServerConfigRepository @Inject constructor(
             val worldName = worldNameOverride ?: runBlocking { AppPreferencesStore.getSelectedWorldFlow(context).first() }
             return ServerFileManager.getServerDir(context, worldName)
         }
-    private val serversDir: File get() = File(context.filesDir, "servers")
+    private val serversDir: File get() = File(serverDir, "profiles")
     private val activeServerFile: File get() = File(serverDir, ".active_server")
     private val propertiesFile: File get() = File(serverDir, "server.properties")
     private val spigotFile: File get() = File(serverDir, "spigot.yml")
@@ -267,7 +267,7 @@ class ServerConfigRepository @Inject constructor(
             difficulty = props["difficulty"] ?: "normal",
             gameMode = props["gamemode"] ?: "survival",
             onlineMode = props["online-mode"]?.toBoolean() ?: false,
-            motd = props["motd"] ?: "A PocketCraft Server",
+            motd = (props["motd"] ?: "A PocketCraft Server").removeSuffix(" - Hosted on Pocketcraft").trim(),
             pvp = props["pvp"]?.toBoolean() ?: true,
             viewDistance = props["pocketcraft-desired-view-distance"]?.toIntOrNull()
                 ?: props["view-distance"]?.toIntOrNull()

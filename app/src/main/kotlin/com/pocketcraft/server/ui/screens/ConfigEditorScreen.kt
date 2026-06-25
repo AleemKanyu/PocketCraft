@@ -67,10 +67,10 @@ fun ConfigEditorScreen(
             props.clear()
             loaded.forEach { key, value ->
                 val keyText = key.toString()
-                props[keyText] = if (keyText == "level-type") {
-                    sanitizeLevelType(value.toString())
-                } else {
-                    value.toString()
+                props[keyText] = when (keyText) {
+                    "level-type" -> sanitizeLevelType(value.toString())
+                    "motd" -> value.toString().removeSuffix(" - Hosted on Pocketcraft").trim()
+                    else -> value.toString()
                 }
             }
             isLoaded = true

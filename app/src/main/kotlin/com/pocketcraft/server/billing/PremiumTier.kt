@@ -30,8 +30,12 @@ data class SubscriptionOffer(
     val productId: String,
     val title: String,
     val price: String,
+    val recurringPrice: String,
     val tier: PremiumTier,
     val description: String,
+    val freeTrialDays: Int,
     val offerToken: String,
     val productDetails: com.android.billingclient.api.ProductDetails
-)
+) {
+    val hasFreeTrial: Boolean get() = freeTrialDays > 0
+}

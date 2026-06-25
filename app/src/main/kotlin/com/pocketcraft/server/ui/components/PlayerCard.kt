@@ -39,12 +39,26 @@ data class PlayerCardAction(
     val tint: Color? = null
 )
 
+/**
+ * Resolves the best avatar URL for a player.
+ * Prefers Crafatar (UUID-based, works reliably for online-mode Mojang players).
+ * Falls back to mc-heads by username for offline/Bedrock players who lack a UUID.
+ */
+fun resolvePlayerAvatarUrl(username: String, uuid: String? = null, size: Int = 64): String {
+    return if (!uuid.isNullOrBlank()) {
+        "https://crafatar.com/avatars/${uuid}?size=${size}&overlay"
+    } else {
+        "https://mc-heads.net/avatar/${username}/${size}"
+    }
+}
+
 @Composable
 fun PlayerCard(
     username: String,
     subtitle: String,
     modifier: Modifier = Modifier,
     avatarUrl: String? = null,
+    uuid: String? = null,
     badgeText: String? = null,
     badgeColor: Color = PocketColors.Primary,
     onClick: (() -> Unit)? = null,
@@ -69,7 +83,7 @@ fun PlayerCard(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             AsyncImage(
-                model = avatarUrl ?: "https://mc-heads.net/avatar/$username/64",
+                model = avatarUrl ?: resolvePlayerAvatarUrl(username, uuid, 64),
                 contentDescription = "$username avatar",
                 modifier = Modifier
                     .size(42.dp)

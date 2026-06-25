@@ -173,7 +173,7 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 720px;
+      min-width: max-content;
     }
     th, td {
       text-align: left;
@@ -196,6 +196,56 @@
       white-space: pre-wrap;
       word-break: break-word;
       margin: 0;
+    }
+    .short-cell {
+      white-space: nowrap;
+      display: inline-block;
+    }
+    .long-cell {
+      white-space: pre-wrap;
+      word-break: break-word;
+      min-width: 250px;
+      max-width: 600px;
+      margin: 0;
+      font-family: "Cascadia Code", "SFMono-Regular", monospace;
+      font-size: .85rem;
+      line-height: 1.4;
+    }
+    /* Enhanced Results Cards styles */
+    .card.result-card {
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.78);
+    }
+    .card.result-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(68, 45, 18, 0.08);
+      background: rgba(255, 255, 255, 0.92);
+    }
+    .card.result-card.type-poll {
+      border-left: 5px solid var(--amber);
+    }
+    .card.result-card.type-opt_in {
+      border-left: 5px solid var(--accent);
+    }
+    .result-section-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 20px 0 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .result-section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--line);
     }
     @media (max-width: 1080px) {
       .hero, .grid { grid-template-columns: 1fr; }
@@ -272,6 +322,15 @@
           </div>
           <label class="checkbox"><input id="broadcastActive" type="checkbox" checked>Broadcast is active</label>
           <label class="checkbox"><input id="broadcastDismissible" type="checkbox" checked>Users can dismiss it</label>
+          <!-- Timer section -->
+          <div style="margin-top:4px;padding-top:12px;border-top:1px solid var(--line);">
+            <div style="font-size:.82rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px;">⏱ Countdown Timer</div>
+            <label class="checkbox" style="margin-bottom:10px;"><input id="broadcastShowTimer" type="checkbox">Show countdown timer on banner card</label>
+            <div class="row" id="broadcastTimerDateRow" style="display:none;">
+              <label>Timer Ends — Date<input id="broadcastTimerExpiresDate" type="date"></label>
+              <label>Timer Ends — Time<input id="broadcastTimerExpiresTime" type="time" step="60" value="23:59"></label>
+            </div>
+          </div>
           <div class="actions">
             <button class="primary" id="broadcastSaveButton" type="submit">Save Broadcast</button>
             <button class="secondary" id="broadcastResetButton" type="button">New Blank Broadcast</button>
@@ -413,7 +472,10 @@
             <h2>Poll And Opt-In Results</h2>
             <p class="hint">Detailed result tables from `broadcast_results` and `broadcast_responses`.</p>
           </div>
-          <div class="actions"><button class="secondary" id="resultsRefreshButton" type="button">Refresh Results</button></div>
+          <div class="actions" style="display: flex; gap: 8px; align-items: center;">
+            <select id="resultsFilterSelect" style="width: auto; min-width: 200px; padding: 8px 12px; border-radius: 12px; border: 1px solid rgba(68,49,25,.18); background: rgba(255,255,255,.88); color: var(--text);"></select>
+            <button class="secondary" id="resultsRefreshButton" type="button">Refresh Results</button>
+          </div>
         </div>
         <div id="resultsCards" class="cards"></div>
       </div>
@@ -432,6 +494,28 @@
             <button class="secondary" id="collectionLoadButton" type="button">Load Collection</button>
           </div>
         </div>
+        <!-- Search and Sort Controls -->
+        <div class="toolbar" style="margin-top: 14px; margin-bottom: 0; padding-top: 12px; border-top: 1px solid var(--line);">
+          <div class="actions" style="flex: 1; display: flex; gap: 8px;">
+            <input id="collectionSearchInput" type="text" placeholder="Search across all fields..." style="max-width: 320px;">
+            <button class="primary" id="collectionSearchButton" type="button">Search</button>
+            <button class="secondary" id="collectionClearSearchButton" type="button">Clear</button>
+          </div>
+          <div class="actions">
+            <label style="flex-direction: row; align-items: center; gap: 8px; font-weight: normal; margin: 0;">
+              Sort By:
+              <select id="collectionSortSelect" style="width: auto; padding: 8px 12px; border-radius: 12px;">
+                <option value="default">Default (Firestore Order)</option>
+                <option value="id_asc">ID (A-Z)</option>
+                <option value="id_desc">ID (Z-A)</option>
+                <option value="time_newest">Time (Newest First)</option>
+                <option value="time_oldest">Time (Oldest First)</option>
+                <option value="name_asc">Name (A-Z)</option>
+                <option value="name_desc">Name (Z-A)</option>
+              </select>
+            </label>
+          </div>
+        </div>
         <div id="collectionStatus" class="status">Ready.</div>
         <div id="collectionTable" class="table-wrap" style="margin-top:14px;"></div>
       </div>
@@ -445,7 +529,8 @@
       remoteCommands: [],
       updateConfig: null,
       results: [],
-      collections: []
+      collections: [],
+      activeCollectionDocs: []
     };
 
     function escapeHtml(value) {
@@ -520,8 +605,15 @@
               <tr>
                 ${keys.map((key) => {
                   const value = row[key];
-                  const text = typeof value === "object" && value !== null ? prettyJson(value) : String(value ?? "");
-                  return `<td><pre>${escapeHtml(text)}</pre></td>`;
+                  const isObj = typeof value === "object" && value !== null;
+                  const text = isObj ? prettyJson(value) : String(value ?? "");
+                  const hasNewlines = text.includes("\n");
+                  const isLong = text.length > 50 || hasNewlines || isObj;
+                  if (isLong) {
+                    return `<td><pre class="long-cell">${escapeHtml(text)}</pre></td>`;
+                  } else {
+                    return `<td><span class="short-cell">${escapeHtml(text)}</span></td>`;
+                  }
                 }).join("")}
               </tr>
             `).join("")}
@@ -542,6 +634,11 @@
       document.getElementById("commandMessageFields").style.display = type === "show_message" ? "grid" : "none";
     }
 
+    function updateBroadcastTimerFields() {
+      const show = document.getElementById("broadcastShowTimer").checked;
+      document.getElementById("broadcastTimerDateRow").style.display = show ? "grid" : "none";
+    }
+
     function resetBroadcastForm() {
       document.getElementById("broadcastForm").reset();
       document.getElementById("broadcastType").value = "info";
@@ -550,6 +647,10 @@
       document.getElementById("broadcastTargetMaxVersion").value = 0;
       document.getElementById("broadcastActive").checked = true;
       document.getElementById("broadcastDismissible").checked = true;
+      document.getElementById("broadcastShowTimer").checked = false;
+      document.getElementById("broadcastTimerExpiresDate").value = "";
+      document.getElementById("broadcastTimerExpiresTime").value = "23:59";
+      updateBroadcastTimerFields();
       setMidnightDefault("broadcastStartDate", "broadcastStartTime");
       setMidnightDefault("broadcastExpiryDate", "broadcastExpiryTime");
       updateBroadcastInteractionFields();
@@ -589,12 +690,14 @@
               <span class="chip ${broadcast.active ? "live" : "off"}">${broadcast.active ? "Active" : "Inactive"}</span>
               <span class="chip">${escapeHtml(broadcast.interactionType)}</span>
               <span class="chip">${escapeHtml(broadcast.type)}</span>
+              ${broadcast.showTimer ? `<span class="chip" style="background:rgba(37,101,74,.14);color:var(--accent-strong);">⏱ Timer</span>` : ""}
             </div>
           </div>
           <div class="card-body">${escapeHtml(broadcast.body || "No body copy.")}</div>
           ${broadcast.question?.prompt ? `<small>Prompt: ${escapeHtml(broadcast.question.prompt)}</small>` : ""}
           ${(broadcast.question?.options || []).length ? `<div class="chips">${broadcast.question.options.map((option) => `<span class="chip">${escapeHtml(option)}</span>`).join("")}</div>` : ""}
           <small>Start: ${escapeHtml(broadcast.startDate || "Immediate")} | End: ${escapeHtml(broadcast.expiryDate || "No expiry")}</small>
+          ${broadcast.showTimer && broadcast.timerExpiresAt ? `<small style="color:var(--accent-strong);">⏱ Timer ends: ${escapeHtml(broadcast.timerExpiresAt)}</small>` : ""}
           <div class="card-actions">
             <button class="secondary" data-kind="broadcast" data-action="edit" data-id="${escapeHtml(broadcast.id)}">Edit</button>
             <button class="warning" data-kind="broadcast" data-action="duplicate" data-id="${escapeHtml(broadcast.id)}">Duplicate</button>
@@ -685,37 +788,94 @@
       `;
     }
 
+    function updateResultsFilterDropdown() {
+      const select = document.getElementById("resultsFilterSelect");
+      const currentSelected = select.value || "all";
+      
+      let html = `
+        <option value="all">Show All Broadcasts</option>
+        <option value="type:poll">Polls Only</option>
+        <option value="type:opt_in">Opt-Ins Only</option>
+      `;
+      
+      if (state.results.length) {
+        html += `<optgroup label="Specific Broadcasts">`;
+        state.results.forEach(result => {
+          const typeLabel = result.type || "unknown";
+          html += `<option value="id:${result.id}">Broadcast: ${escapeHtml(result.id)} (${escapeHtml(typeLabel)})</option>`;
+        });
+        html += `</optgroup>`;
+      }
+      
+      select.innerHTML = html;
+      
+      // Preserve selection if it still exists
+      if (Array.from(select.options).some(opt => opt.value === currentSelected)) {
+        select.value = currentSelected;
+      } else {
+        select.value = "all";
+      }
+    }
+
     function renderResults() {
       const container = document.getElementById("resultsCards");
       if (!state.results.length) {
         container.innerHTML = '<div class="empty">No poll or opt-in results found yet.</div>';
         return;
       }
-      container.innerHTML = state.results.map((result, index) => {
+      
+      const filterValue = document.getElementById("resultsFilterSelect").value || "all";
+      const filteredResults = state.results.filter(result => {
+        if (filterValue === "all") return true;
+        if (filterValue === "type:poll") return result.type === "poll";
+        if (filterValue === "type:opt_in") return result.type === "opt_in" || result.type === "optin";
+        if (filterValue.startsWith("id:")) {
+          const targetId = filterValue.substring(3);
+          return result.id === targetId;
+        }
+        return true;
+      });
+
+      if (!filteredResults.length) {
+        container.innerHTML = '<div class="empty">No results match the selected filter.</div>';
+        return;
+      }
+
+      container.innerHTML = filteredResults.map((result) => {
         const optionRows = Object.entries(result.optionCounts || {}).map(([option, count]) => ({ option, count }));
-        const responseTableId = `responses-table-${index}`;
-        const optionsTableId = `options-table-${index}`;
-        const optInsTableId = `optins-table-${index}`;
+        const responseTableId = `responses-table-${result.id}`;
+        const optionsTableId = `options-table-${result.id}`;
+        const optInsTableId = `optins-table-${result.id}`;
+        
+        // Generate side border color classes dynamically
+        const isOptIn = result.type === "opt_in" || result.type === "optin";
+        const cardClass = `card result-card ${isOptIn ? "type-opt_in" : "type-poll"}`;
+        
         setTimeout(() => {
           if (optionRows.length) renderDataTable(optionsTableId, optionRows);
           if (result.responses?.length) renderDataTable(responseTableId, result.responses);
           if (result.optIns?.length) renderDataTable(optInsTableId, result.optIns);
         }, 0);
         return `
-          <article class="card">
+          <article class="${cardClass}">
             <div class="card-header">
               <div>
-                <div class="card-title">${escapeHtml(result.id)}</div>
-                <small>Type: ${escapeHtml(result.type || "unknown")}</small>
+                <div class="card-title" style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size: 1.25rem;">${isOptIn ? "📨" : "🗳️"}</span>
+                  <span>${escapeHtml(result.id)}</span>
+                </div>
+                <small style="font-weight:bold; color: ${isOptIn ? "var(--accent)" : "var(--amber)"}; text-transform:uppercase; letter-spacing:0.04em;">
+                  ${isOptIn ? "Opt-In Campaign" : "Poll Survey"}
+                </small>
               </div>
               <div class="chips">
-                <span class="chip">${escapeHtml(String(result.responses?.length || 0))} responses</span>
-                <span class="chip">${escapeHtml(String(result.optIns?.length || 0))} opt-ins</span>
+                <span class="chip ${result.responses?.length ? "live" : ""}">${escapeHtml(String(result.responses?.length || 0))} responses</span>
+                <span class="chip ${result.optIns?.length ? "live" : ""}">${escapeHtml(String(result.optIns?.length || 0))} opt-ins</span>
               </div>
             </div>
-            ${optionRows.length ? `<h3 style="margin-top:14px;">Option Counts</h3><div id="${optionsTableId}" class="table-wrap" style="margin-top:8px;"></div>` : ""}
-            ${result.responses?.length ? `<h3 style="margin-top:14px;">Responses</h3><div id="${responseTableId}" class="table-wrap" style="margin-top:8px;"></div>` : ""}
-            ${result.optIns?.length ? `<h3 style="margin-top:14px;">Opt-In Entries</h3><div id="${optInsTableId}" class="table-wrap" style="margin-top:8px;"></div>` : ""}
+            ${optionRows.length ? `<div class="result-section-title">Option Counts</div><div id="${optionsTableId}" class="table-wrap" style="margin-top:8px;"></div>` : ""}
+            ${result.responses?.length ? `<div class="result-section-title">Responses</div><div id="${responseTableId}" class="table-wrap" style="margin-top:8px;"></div>` : ""}
+            ${result.optIns?.length ? `<div class="result-section-title">Opt-In Entries</div><div id="${optInsTableId}" class="table-wrap" style="margin-top:8px;"></div>` : ""}
           </article>
         `;
       }).join("");
@@ -731,6 +891,7 @@
       document.getElementById("broadcastQuestionOptions").value = (broadcast.question?.options || []).join("\n");
       const start = toLocalDateTimeParts(broadcast.startDate);
       const end = toLocalDateTimeParts(broadcast.expiryDate);
+      const timer = toLocalDateTimeParts(broadcast.timerExpiresAt);
       document.getElementById("broadcastStartDate").value = start.date;
       document.getElementById("broadcastStartTime").value = start.time || "00:00";
       document.getElementById("broadcastExpiryDate").value = end.date;
@@ -739,6 +900,10 @@
       document.getElementById("broadcastTargetMaxVersion").value = broadcast.targetMaxVersion ?? 0;
       document.getElementById("broadcastActive").checked = !!broadcast.active;
       document.getElementById("broadcastDismissible").checked = !!broadcast.dismissible;
+      document.getElementById("broadcastShowTimer").checked = !!broadcast.showTimer;
+      document.getElementById("broadcastTimerExpiresDate").value = timer.date;
+      document.getElementById("broadcastTimerExpiresTime").value = timer.time || "23:59";
+      updateBroadcastTimerFields();
       updateBroadcastInteractionFields();
       setStatus("broadcastStatus", `Editing ${broadcast.id}`);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -846,6 +1011,7 @@
       try {
         const payload = await fetchJson("/api/broadcast-results");
         state.results = payload.results || [];
+        updateResultsFilterDropdown();
         renderResults();
       } finally {
         document.getElementById("resultsRefreshButton").disabled = false;
@@ -863,14 +1029,89 @@
       }
     }
 
+    function findTimeValue(doc) {
+      const timeKeys = ['createdAt', 'timestamp', 'time', 'date', 'created', 'updatedAt', 'lastUpdated'];
+      for (const key of timeKeys) {
+        if (doc[key] !== undefined && doc[key] !== null) {
+          const val = doc[key];
+          if (typeof val === 'object' && val.seconds !== undefined) {
+            return val.seconds * 1000 + (val.nanoseconds || 0) / 1000000;
+          }
+          const date = new Date(val);
+          if (!isNaN(date.getTime())) {
+            return date.getTime();
+          }
+        }
+      }
+      return 0;
+    }
+
+    function findNameValue(doc) {
+      const nameKeys = ['name', 'title', 'displayName', 'label', 'id'];
+      for (const key of nameKeys) {
+        if (doc[key] !== undefined && doc[key] !== null) {
+          return String(doc[key]);
+        }
+      }
+      return '';
+    }
+
+    function applyCollectionFilterAndSort() {
+      if (!state.activeCollectionDocs) return;
+      
+      let docs = [...state.activeCollectionDocs];
+      
+      const search = (document.getElementById("collectionSearchInput").value || "").trim().toLowerCase();
+      if (search) {
+        docs = docs.filter(doc => {
+          return Object.entries(doc).some(([key, val]) => {
+            if (val === null || val === undefined) return false;
+            if (typeof val === 'object') {
+              return JSON.stringify(val).toLowerCase().includes(search);
+            }
+            return String(val).toLowerCase().includes(search);
+          });
+        });
+      }
+      
+      const sortVal = document.getElementById("collectionSortSelect").value;
+      if (sortVal !== "default") {
+        docs.sort((a, b) => {
+          if (sortVal === "id_asc") {
+            return String(a.id || "").localeCompare(String(b.id || ""));
+          } else if (sortVal === "id_desc") {
+            return String(b.id || "").localeCompare(String(a.id || ""));
+          } else if (sortVal === "time_newest") {
+            return findTimeValue(b) - findTimeValue(a);
+          } else if (sortVal === "time_oldest") {
+            return findTimeValue(a) - findTimeValue(b);
+          } else if (sortVal === "name_asc") {
+            return findNameValue(a).localeCompare(findNameValue(b));
+          } else if (sortVal === "name_desc") {
+            return findNameValue(b).localeCompare(findNameValue(a));
+          }
+          return 0;
+        });
+      }
+      
+      renderDataTable("collectionTable", docs);
+      
+      const collectionName = document.getElementById("collectionSelect").value;
+      let msg = `Showing ${docs.length} of ${state.activeCollectionDocs.length} docs from ${collectionName}.`;
+      if (search) {
+        msg += ` (Filtered by "${search}")`;
+      }
+      setStatus("collectionStatus", msg);
+    }
+
     async function loadCollectionData() {
       const collectionName = document.getElementById("collectionSelect").value;
       const limit = document.getElementById("collectionLimit").value || "100";
       document.getElementById("collectionLoadButton").disabled = true;
       try {
         const payload = await fetchJson(`/api/firestore/collection?name=${encodeURIComponent(collectionName)}&limit=${encodeURIComponent(limit)}`);
-        renderDataTable("collectionTable", payload.documents || []);
-        setStatus("collectionStatus", `Loaded ${payload.count} docs from ${payload.collection}.`);
+        state.activeCollectionDocs = payload.documents || [];
+        applyCollectionFilterAndSort();
       } catch (error) {
         setStatus("collectionStatus", error.message, true);
       } finally {
@@ -896,7 +1137,9 @@
           targetMinVersion: Number(document.getElementById("broadcastTargetMinVersion").value || 0),
           targetMaxVersion: Number(document.getElementById("broadcastTargetMaxVersion").value || 0),
           active: document.getElementById("broadcastActive").checked,
-          dismissible: document.getElementById("broadcastDismissible").checked
+          dismissible: document.getElementById("broadcastDismissible").checked,
+          showTimer: document.getElementById("broadcastShowTimer").checked,
+          timerExpiresAt: fromDateAndTime(document.getElementById("broadcastTimerExpiresDate").value, document.getElementById("broadcastTimerExpiresTime").value)
         };
         const response = await fetchJson("/api/broadcasts", { method: "POST", body: JSON.stringify(payload) });
         resetBroadcastForm();
@@ -1038,11 +1281,24 @@
     document.getElementById("commandRefreshButton").addEventListener("click", loadRemoteCommands);
     document.getElementById("updateRefreshButton").addEventListener("click", loadUpdateConfig);
     document.getElementById("resultsRefreshButton").addEventListener("click", loadResults);
+    document.getElementById("resultsFilterSelect").addEventListener("change", renderResults);
     document.getElementById("collectionLoadButton").addEventListener("click", loadCollectionData);
+    document.getElementById("collectionSearchButton").addEventListener("click", applyCollectionFilterAndSort);
+    document.getElementById("collectionClearSearchButton").addEventListener("click", () => {
+      document.getElementById("collectionSearchInput").value = "";
+      applyCollectionFilterAndSort();
+    });
+    document.getElementById("collectionSearchInput").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        applyCollectionFilterAndSort();
+      }
+    });
+    document.getElementById("collectionSortSelect").addEventListener("change", applyCollectionFilterAndSort);
     document.getElementById("broadcastResetButton").addEventListener("click", resetBroadcastForm);
     document.getElementById("promotionResetButton").addEventListener("click", resetPromotionForm);
     document.getElementById("commandResetButton").addEventListener("click", resetCommandForm);
     document.getElementById("broadcastInteractionType").addEventListener("change", updateBroadcastInteractionFields);
+    document.getElementById("broadcastShowTimer").addEventListener("change", updateBroadcastTimerFields);
     document.getElementById("commandType").addEventListener("change", updateCommandFields);
 
     resetBroadcastForm();

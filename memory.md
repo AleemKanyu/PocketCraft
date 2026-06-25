@@ -117,8 +117,9 @@ ssh -i ~/Downloads/pocketcraft-key1.pem ubuntu@13.201.57.41 "pm2 status"
 > To prevent massive latency spikes, compile errors, or connection issues, the following configurations are locked to the stable v1.6.0 release values:
 
 1. **Relay Manager Socket Buffers**:
-   - `SOCKET_BUFFER_SIZE` in `RelayManager.kt` MUST remain at `256 * 1024` (256KB).
-   - `PLAYER_BRIDGE_BUFFER_SIZE` in `RelayManager.kt` MUST remain at `64 * 1024` (64KB).
+   - `SOCKET_BUFFER_SIZE` in `RelayManager.kt` MUST remain at the optimized value of `64 * 1024` (64KB).
+   - `PLAYER_BRIDGE_BUFFER_SIZE` in `RelayManager.kt` MUST remain at the optimized value of `8 * 1024` (8KB).
+     *(Note: Keeping these queues deliberately small prevents chunk traffic from queueing ahead of keep-alive packets, stabilizing ping.)*
 2. **Bedrock Bridge Channel**:
    - `bedrockTxChannel` capacity in `RelayManager.kt` MUST remain at `256` (do not use unlimited capacity channels).
 3. **No Experimental Bindings**:
@@ -126,3 +127,30 @@ ssh -i ~/Downloads/pocketcraft-key1.pem ubuntu@13.201.57.41 "pm2 status"
 4. **Dynamic Fallback Region**:
    - Singapore is deleted. Do not reference it or add it back to config.
    - In `RelayManager.kt`, fallback selection is resolved dynamically: if the preferred server is Mumbai, the fallback is Europe; otherwise, the fallback is Mumbai.
+
+---
+
+## 5. Play Store Release Notes Localization Skill
+
+When the user asks to translate Play Store release notes / update text (e.g. "Fixed X, Fixed Y write this for playstore and only in supported language tags present in the app"):
+
+1. **Supported Locales/Languages**:
+   - `en-US` (English - United States)
+   - `de-DE` (German)
+   - `es-ES` (Spanish)
+   - `ru-RU` (Russian)
+   - `zh-CN` (Chinese - Simplified)
+
+2. **Required Format**:
+   Return the localized release notes in a single code block wrapped in XML-like tags, e.g.:
+   ```xml
+   <en-US>
+   - Fixed player count resetting after app restart
+   - Fixed account sign-up failure
+   </en-US>
+   ...
+   ```
+
+3. **Execution Steps**:
+   - Directly output the translation in the XML format.
+   - Save/overwrite it to [playstore_release_notes.txt](file:///home/aleemkanyu/.gemini/antigravity/scratch/PocketCraft/playstore_release_notes.txt) so the user can easily copy/view it.
