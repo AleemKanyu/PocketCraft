@@ -330,13 +330,9 @@ class ServerStateHolder(
         if (!isStarting) return
 
         val bridgeEnabled = try { PluginManager.isBedrockBridgeEnabled(appContext, activeWorld.ifBlank { "world" }) } catch (e: Exception) { false }
-        val canTransition = if (bridgeEnabled) {
-            isJavaServerDone && isGeyserDone && isRelayDone
-        } else {
-            isJavaServerDone && isRelayDone
-        }
+        val javaAndGeyserReady = if (bridgeEnabled) isJavaServerDone && isGeyserDone else isJavaServerDone
 
-        if (canTransition) {
+        if (javaAndGeyserReady) {
             markServerReady()
             markJoinable()
             bedrockBridgeEnabled = bridgeEnabled
@@ -2962,19 +2958,19 @@ class ServerStateHolder(
             while (isStarting) {
                 if (!isStopping) {
                     val elapsedMs = (SystemClock.elapsedRealtime() - (startupStartedAtRealtime ?: SystemClock.elapsedRealtime())).coerceAtLeast(0L)
-                    if (elapsedMs > 300_000L) {
-                        appendLog("[ERROR] Server startup timed out (exceeded 5 minutes).")
+                    if (elapsedMs > 420_000L) {
+                        appendLog("[ERROR] Server startup timed out (exceeded 7 minutes).")
                         stopServer()
-                        recordServerFailure("Server startup timed out (exceeded 5 minutes). Please verify your JRE settings or check the console log for errors.", duringStartup = true)
+                        recordServerFailure("Server startup timed out (exceeded 7 minutes). Please verify your JRE settings or check the console log for errors.", duringStartup = true)
                         break
                     }
                     val nextProgress = when {
-                        elapsedMs < 8_000L -> ((elapsedMs / 8_000f) * 18f)
-                        elapsedMs < 20_000L -> 18f + (((elapsedMs - 8_000L) / 12_000f) * 30f)
-                        elapsedMs < 35_000L -> 48f + (((elapsedMs - 20_000L) / 15_000f) * 24f)
-                        elapsedMs < 55_000L -> 72f + (((elapsedMs - 35_000L) / 20_000f) * 20f)
-                        else -> 92f
-                    }.toInt().coerceIn(minOf(startupProgressPercent, 92), 92)
+                        elapsedMs < 8_000L -> ((elapsedMs / 8_000f) * 20f)
+                        elapsedMs < 20_000L -> 20f + (((elapsedMs - 8_000L) / 12_000f) * 32f)
+                        elapsedMs < 35_000L -> 52f + (((elapsedMs - 20_000L) / 15_000f) * 26f)
+                        elapsedMs < 55_000L -> 78f + (((elapsedMs - 35_000L) / 20_000f) * 20f)
+                        else -> 98f
+                    }.toInt().coerceIn(minOf(startupProgressPercent, 98), 98)
 
                     startupProgressPercent = nextProgress
                     if (startupStatusMessage.isBlank() || startupStatusMessage == "Initializing..." || startupStatusMessage == "Preparing server...") {

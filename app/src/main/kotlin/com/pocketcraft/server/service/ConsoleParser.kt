@@ -24,8 +24,10 @@ sealed interface ServerEvent {
  */
 object ConsoleParser {
 
-    // e.g. "[17:30:01 INFO]: Done (5.123s)! For help, type "help""
-    private val DONE_REGEX = Regex("""Done \([\d.]+s\)! For help, type""")
+    // Paper's final ready line has changed format across versions. Match the
+    // canonical "Done (...)" prefix after stripping timestamps/log prefixes
+    // instead of depending on a specific help suffix.
+    private val DONE_PREFIX_REGEX = Regex("""^Done \([\d.,]+s\)!""", RegexOption.IGNORE_CASE)
 
     // e.g. "[17:30:00 INFO]: Preparing start region for dimension minecraft:overworld"
     private val PREPARING_START_REGION_REGEX = Regex("""Preparing start region for dimension""")
@@ -90,10 +92,13 @@ object ConsoleParser {
         )
     }
 
-    fun isDone(line: String): Boolean = DONE_REGEX.containsMatchIn(line)
+    fun isDone(line: String): Boolean {
+        val text = stripLogDecorations(stripAnsi(line))
+        return DONE_PREFIX_REGEX.containsMatchIn(text)
+    }
 
     fun parseEvent(line: String): ServerEvent? =
-        if (DONE_REGEX.containsMatchIn(line)) ServerEvent.ServerFullyReady else null
+        if (isDone(line)) ServerEvent.ServerFullyReady else null
 
     fun parseTps(line: String): Float? =
         TPS_REGEX.find(line)?.groupValues?.get(1)?.toFloatOrNull()
@@ -171,4 +176,10 @@ object ConsoleParser {
     /** Returns the cleaned console text, stripping ANSI color codes. */
     fun stripAnsi(text: String): String =
         text.replace(Regex("\u001B\\[[;\\d]*m"), "")
+
+    private fun stripLogDecorations(text: String): String =
+        text.trim()
+            .replace(PREFIX_REGEX_1, "")
+            .replace(PREFIX_REGEX_2, "")
+            .trim()
 }

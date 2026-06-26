@@ -170,6 +170,12 @@ async function routeConnection(playerSocket, bufferedBytes, hostname) {
   const backendSocket = net.connect({ host: '127.0.0.1', port: entry.port, timeout: BACKEND_CONNECT_TIMEOUT_MS });
   playerSocket.setNoDelay(true);
   playerSocket.setKeepAlive(true, 10000);
+  if (typeof playerSocket.setSendBufferSize === 'function') {
+    try { playerSocket.setSendBufferSize(64 * 1024); } catch (e) {}
+  }
+  if (typeof playerSocket.setRecvBufferSize === 'function') {
+    try { playerSocket.setRecvBufferSize(64 * 1024); } catch (e) {}
+  }
 
   const cleanup = () => {
     if (!playerSocket.destroyed) playerSocket.destroy();
@@ -179,6 +185,12 @@ async function routeConnection(playerSocket, bufferedBytes, hostname) {
   backendSocket.once('connect', () => {
     backendSocket.setNoDelay(true);
     backendSocket.setKeepAlive(true, 10000);
+    if (typeof backendSocket.setSendBufferSize === 'function') {
+      try { backendSocket.setSendBufferSize(64 * 1024); } catch (e) {}
+    }
+    if (typeof backendSocket.setRecvBufferSize === 'function') {
+      try { backendSocket.setRecvBufferSize(64 * 1024); } catch (e) {}
+    }
     backendSocket.write(bufferedBytes);
     playerSocket.pipe(backendSocket);
     backendSocket.pipe(playerSocket);
@@ -203,6 +215,12 @@ async function routeConnection(playerSocket, bufferedBytes, hostname) {
 const server = net.createServer((playerSocket) => {
   playerSocket.setNoDelay(true);
   playerSocket.setKeepAlive(true, 10000);
+  if (typeof playerSocket.setSendBufferSize === 'function') {
+    try { playerSocket.setSendBufferSize(64 * 1024); } catch (e) {}
+  }
+  if (typeof playerSocket.setRecvBufferSize === 'function') {
+    try { playerSocket.setRecvBufferSize(64 * 1024); } catch (e) {}
+  }
   let buffer = Buffer.alloc(0);
   let settled = false;
 

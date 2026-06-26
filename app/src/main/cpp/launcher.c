@@ -457,7 +457,6 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   "-Xshare:off",
                   "-XX:+UnlockExperimentalVMOptions",
                   "-XX:+UnlockDiagnosticVMOptions",
-                  "-XX:+AlwaysPreTouch",
                   "-XX:+UseStringDeduplication",
                   "-XX:+UseG1GC",
                   "-XX:+ParallelRefProcEnabled",

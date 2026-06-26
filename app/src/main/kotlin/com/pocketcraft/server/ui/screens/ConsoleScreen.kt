@@ -1793,14 +1793,13 @@ private fun ServerIdentityCard(
         topContentBetweenServerAndAddress?.invoke()
 
         val publicAddress = stateHolder.publicAddress?.takeIf { it.isNotBlank() }
-        val internetRelayAddress = publicAddress ?: "Not connected"
+        val internetRelayAddress = publicAddress ?: "No internet"
 
         val localWifiAddress = stateHolder.localIp
             .takeIf(::isShareableLanIp)
             ?.let { "$it:${stateHolder.config.port}" }
         val relayReady = !publicAddress.isNullOrBlank()
-        val canShareAddresses = stateHolder.serverUiState == ServerUiState.RUNNING &&
-            (relayReady || !localWifiAddress.isNullOrBlank())
+        val canShareAddresses = stateHolder.serverUiState == ServerUiState.RUNNING
         val joinCardShadowColor = pocketCardShadowColor()
         val joinCardBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
 
@@ -2221,7 +2220,7 @@ private fun AddressValueRow(
                 val canCopy = address.isNotBlank() &&
                     address != "Wi-Fi address unavailable" &&
                     address != "No relay address" &&
-                    address != "Not connected" &&
+                    address != "No internet" &&
                     address != "Start the server to generate internet join addresses."
                 if (canCopy) {
                     IconButton(

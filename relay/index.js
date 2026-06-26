@@ -66,6 +66,12 @@ function configureSocket(socket) {
   socket.setNoDelay(true);
   socket.setKeepAlive(true, SOCKET_KEEPALIVE_MS);
   socket.allowHalfOpen = false;
+  if (typeof socket.setSendBufferSize === 'function') {
+    try { socket.setSendBufferSize(64 * 1024); } catch (e) {}
+  }
+  if (typeof socket.setRecvBufferSize === 'function') {
+    try { socket.setRecvBufferSize(64 * 1024); } catch (e) {}
+  }
 }
 
 // userId validation
@@ -579,6 +585,7 @@ function clearBedrockPhoneSocket(tunnel) {
   tunnel.bedrockBuffer = Buffer.alloc(0);
   tunnel.bedrockChunks = [];
   tunnel.bedrockChunksLen = 0;
+  tunnel.bedrockWritable = true;
 }
 
 function attachBedrockPhoneSocket(tunnel, userId, phoneSocket) {
@@ -589,8 +596,17 @@ function attachBedrockPhoneSocket(tunnel, userId, phoneSocket) {
   tunnel.bedrockBuffer = Buffer.alloc(0);
   tunnel.bedrockChunks = [];
   tunnel.bedrockChunksLen = 0;
+  tunnel.bedrockWritable = true;
 
+  configureSocket(phoneSocket);
   phoneSocket.setTimeout(0);
+
+  const onDrain = () => {
+    tunnel.bedrockWritable = true;
+    console.log(`[bedrock] TCP socket write buffer drained, resuming UDP forwarding for ${userId}`);
+  };
+
+  phoneSocket.on('drain', onDrain);
 
   const onBedrockData = (chunk) => {
     if (!chunk || chunk.length === 0) return;
@@ -655,6 +671,7 @@ function attachBedrockPhoneSocket(tunnel, userId, phoneSocket) {
 
   const onSocketGone = () => {
     phoneSocket.removeListener('data', onBedrockData);
+    phoneSocket.removeListener('drain', onDrain);
     if (tunnel.bedrockPhoneSocket === phoneSocket) {
       clearBedrockPhoneSocket(tunnel);
     }
@@ -793,6 +810,16 @@ function startUserUdpSocket(userId, assignedPort, getPhoneSocket) {
     if (msg.length > MAX_UDP_PAYLOAD) return;
     if (!isValidUdpPort(rinfo.port) || !isValidIPv4(rinfo.address)) return;
 
+    const tunnel = activeTunnels.get(userId);
+    if (tunnel && tunnel.bedrockWritable === false && msg[0] !== 0x05 && msg[0] !== 0x07) {
+      if (!global.udpDropCount) global.udpDropCount = 0;
+      global.udpDropCount++;
+      if (global.udpDropCount <= 20 || global.udpDropCount % 500 === 0) {
+        console.warn(`[bedrock] TCP backpressure: dropping incoming UDP from client ${rinfo.address}:${rinfo.port} (#${global.udpDropCount})`);
+      }
+      return;
+    }
+
     // MTU Clamping: Intercept OpenConnectionRequest1 (0x05) and OpenConnectionRequest2 (0x07)
     // to negotiate a safe 1200 byte MTU, avoiding IP fragmentation later.
     let payload = msg;
@@ -839,7 +866,15 @@ function startUserUdpSocket(userId, assignedPort, getPhoneSocket) {
     if (!frame) return;
 
     try {
-      phoneSocket.write(frame);
+      const success = phoneSocket.write(frame);
+      if (!success && tunnel) {
+        tunnel.bedrockWritable = false;
+        if (!global.udpBackpressureCount) global.udpBackpressureCount = 0;
+        global.udpBackpressureCount++;
+        if (global.udpBackpressureCount <= 20 || global.udpBackpressureCount % 100 === 0) {
+          console.warn(`[bedrock] TCP write buffer full, enabling backpressure drop for ${userId} (#${global.udpBackpressureCount})`);
+        }
+      }
     } catch (err) {
       console.error(`[bedrock] frame write error for ${userId}:`, err.message);
     }

@@ -1206,7 +1206,7 @@ private fun serverFailureSummary(
 
     return when {
         "startup timed out" in combined || "startup timeout" in combined -> ServerFailureSummary(
-            reason = "The server took too long to start up (exceeded 5 minutes).",
+            reason = "The server took too long to start up (exceeded 7 minutes).",
             fix = "Please verify your JRE/Java settings, check the console log for any plugin/mod errors, or try starting again."
         )
         "modpack not installed" in combined || "install modpack" in combined -> ServerFailureSummary(

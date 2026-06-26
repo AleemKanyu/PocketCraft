@@ -43,7 +43,7 @@ data class ServerConfig(
     val levelType: String = "default",
     val maxWorldSize: Int = 29999984,
     val maxBuildHeight: Int = 320,
-    val useNativeTransport: Boolean = true,
+    val useNativeTransport: Boolean = false,
     // Performance settings
     val entityBroadcastRangePercentage: Int = 50,
     // App settings

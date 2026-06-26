@@ -10,7 +10,7 @@ object ServerPropertiesHelper {
      * and inflates Paper keepalive ping. The May 2026 regression was bridge buffer size,
      * not this value. See RelayManager KDoc.
      */
-    const val RELAY_READY_COMPRESSION_THRESHOLD = 256
+    const val RELAY_READY_COMPRESSION_THRESHOLD = 1024
     const val DEFAULT_VIEW_DISTANCE = 6
     const val DEFAULT_SIMULATION_DISTANCE = 4
     const val DESIRED_VIEW_DISTANCE_KEY = "pocketcraft-desired-view-distance"
@@ -49,6 +49,7 @@ object ServerPropertiesHelper {
             props["entity-broadcast-range-percentage"] = RELAY_READY_ENTITY_BROADCAST_PERCENT.toString()
             props["network-compression-threshold"] = RELAY_READY_COMPRESSION_THRESHOLD.toString()
             props["sync-chunk-writes"] = "false"
+            props["use-native-transport"] = "false"
             props["max-tick-time"] = "60000"
             props["enable-status-request"] = "true"
             props["query.port"] = "25565"

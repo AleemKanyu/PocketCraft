@@ -1,9 +1,0 @@
-JRE source compiled via https://github.com/AngelAuraMC/angelauramc-openjdk-build/tree/buildjre17-21 on March 12th 2026
-
-Open Source Notice
-
-This application utilizes OpenJDK open-source software libraries for its Java Runtime Environment (JRE). These binaries are sourced directly from upstream OpenJDK distributions and are provided under the GNU General Public License, version 2, with the Classpath Exception.
-
-Technical Attribution
-
-ARM-MC is an independent, original implementation. It does not incorporate, bundle, or utilize proprietary code, assets, or binaries from third-party Android runtime wrappers. ARM-MC is not affiliated with Oracle Corporation or the OpenJDK project. In accordance with license terms, source code for the OpenJDK components used is available upon request, contact contact@undefinedcompany.com

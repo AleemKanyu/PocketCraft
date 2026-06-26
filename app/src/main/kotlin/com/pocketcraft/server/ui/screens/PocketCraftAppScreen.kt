@@ -104,6 +104,7 @@ import com.pocketcraft.server.ui.components.PremiumUpgradeBottomSheet
 import com.pocketcraft.server.data.model.ServerType
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.service.ServerPropertiesHelper
+import com.pocketcraft.server.data.repository.ServerConfigRepository
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -322,12 +323,16 @@ fun PocketCraftApp(
         versionId = bootstrapVersion
 
         if (bootstrapVersion.isNotBlank() && worldVersion.isBlank()) {
+            val repository = ServerConfigRepository(context).apply {
+                setWorldNameOverride(activeWorld)
+            }
+            val loadedConfig = repository.loadConfig()
             stateHolder.saveSettings(
-                stateHolder.config.copy(
+                loadedConfig.copy(
                     serverType = initialServerType,
                     gameVersion = bootstrapVersion,
                     customJarPath = if (initialServerType == ServerType.MODPACK) {
-                        stateHolder.config.customJarPath?.takeIf { it.isNotBlank() } ?: bootstrapVersion
+                        loadedConfig.customJarPath?.takeIf { it.isNotBlank() } ?: bootstrapVersion
                     } else {
                         null
                     }
@@ -370,12 +375,16 @@ fun PocketCraftApp(
                 ?: if (targetVersion.isNotBlank()) selectedServerType else ServerType.PAPER
 
             if (targetVersion.isNotBlank() && rawTargetVersion.isBlank()) {
+                val repository = ServerConfigRepository(context).apply {
+                    setWorldNameOverride(stateHolder.activeWorld)
+                }
+                val loadedConfig = repository.loadConfig()
                 stateHolder.saveSettings(
-                    stateHolder.config.copy(
+                    loadedConfig.copy(
                         serverType = targetType,
                         gameVersion = targetVersion,
                         customJarPath = if (targetType == ServerType.MODPACK) {
-                            stateHolder.config.customJarPath?.takeIf { it.isNotBlank() } ?: targetVersion
+                            loadedConfig.customJarPath?.takeIf { it.isNotBlank() } ?: targetVersion
                         } else {
                             null
                         }

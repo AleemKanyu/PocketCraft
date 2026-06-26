@@ -917,9 +917,7 @@ class ServerHostService : Service() {
 
     @Keep
     private fun looksLikeServerReady(line: String): Boolean {
-        val normalized = line.lowercase()
-        return normalized.contains("done (") &&
-            normalized.contains("for help, type \"help\"")
+        return ConsoleParser.isDone(line)
     }
 
     private fun stopPortProbe() {
@@ -1574,6 +1572,17 @@ class ServerHostService : Service() {
 
         if (ConsoleParser.isPreparingStartRegion(line)) {
             sendEvent(versionId, EVENT_CHUNKS_LOADING, line)
+        }
+
+        ConsoleParser.parseChunkyProgress(line)?.let { progress ->
+            sendBroadcast(
+                Intent(ACTION_SERVER_EVENT).apply {
+                    setPackage(packageName)
+                    putExtra(EXTRA_VERSION_ID, versionId)
+                    putExtra(EXTRA_EVENT_TYPE, EVENT_CHUNKY_PROGRESS)
+                    putExtra(EXTRA_CHUNKY_PERCENT, progress.percent.toInt())
+                }
+            )
         }
     }
 

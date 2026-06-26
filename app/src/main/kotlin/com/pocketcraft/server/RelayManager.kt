@@ -16,7 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.channels.Channel
+import java.util.concurrent.LinkedBlockingDeque
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -79,8 +79,11 @@ class RelayManager(private val context: Context) {
     private var bedrockUdpBridge: BedrockUdpBridge? = null
     @Volatile
     private var activeBedrockSocket: Socket? = null
-    private val bedrockTxChannel = Channel<ByteArray>(capacity = 256)
-    private var bedrockTxJob: kotlinx.coroutines.Job? = null
+    // LinkedBlockingDeque allows offerFirst() for control packets (ACK/NAK/PONG/PING)
+    // so they jump ahead of bulk FrameSet chunk data in the send queue.
+    // Capacity 320 = 256 data slots + 64 headroom for control packets.
+    private val bedrockTxDeque = LinkedBlockingDeque<ByteArray>(320)
+    private var bedrockTxThread: Thread? = null
     private val droppedFrameCount = AtomicInteger(0)
 
 
@@ -191,23 +194,23 @@ class RelayManager(private val context: Context) {
     fun startBedrockBridge() {
         if (bedrockUdpBridge != null) return
 
-        bedrockTxJob?.cancel()
-        bedrockTxJob = poolScope.launch(Dispatchers.IO) {
+        bedrockTxThread?.run { interrupt() }
+        bedrockTxThread = Thread {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
             var currentSocket: java.net.Socket? = null
             var outStream: java.io.BufferedOutputStream? = null
 
-            while (poolScope.isActive) {
+            while (!Thread.currentThread().isInterrupted) {
                 val firstFrame = try {
-                    bedrockTxChannel.receive()
-                } catch (e: Exception) {
-                    break // Channel closed or job cancelled
+                    bedrockTxDeque.take()
+                } catch (e: InterruptedException) {
+                    break // Thread interrupted
                 }
 
                 var socket = activeBedrockSocket
                 var waitedMs = 0L
-                while ((socket == null || socket.isClosed) && waitedMs < 2_000L && poolScope.isActive) {
-                    delay(25)
+                while ((socket == null || socket.isClosed) && waitedMs < 2_000L && !Thread.currentThread().isInterrupted) {
+                    try { Thread.sleep(25) } catch (e: InterruptedException) { break }
                     waitedMs += 25
                     socket = activeBedrockSocket
                 }
@@ -228,12 +231,14 @@ class RelayManager(private val context: Context) {
                 try {
                     outStream?.write(firstFrame)
                     
-                    // Batch drain any other immediately available frames to reduce syscalls
-                    while (true) {
-                        val nextResult = bedrockTxChannel.tryReceive()
-                        if (nextResult.isSuccess) {
-                            val nextFrame = nextResult.getOrThrow()
+                    // Batch drain — limit to at most 3 additional frames (4 total per batch)
+                    // to prevent large writes from blocking the thread and delaying control packets.
+                    var extraCount = 0
+                    while (extraCount < 3) {
+                        val nextFrame = bedrockTxDeque.pollFirst()
+                        if (nextFrame != null) {
                             outStream?.write(nextFrame)
+                            extraCount++
                         } else {
                             break
                         }
@@ -247,6 +252,10 @@ class RelayManager(private val context: Context) {
                     outStream = null
                 }
             }
+        }.apply {
+            name = "BedrockOutboundBridge"
+            priority = Thread.MAX_PRIORITY
+            start()
         }
 
         // Always use 127.0.0.1 (loopback) for local Geyser UDP IPC.
@@ -258,24 +267,43 @@ class RelayManager(private val context: Context) {
         bedrockUdpBridge = BedrockUdpBridge(
             geyserHostProvider = { "127.0.0.1" }
         ) { frame ->
-            val result = bedrockTxChannel.trySend(frame)
-            if (result.isFailure) {
-                val dropped = droppedFrameCount.incrementAndGet()
-                if (dropped % 100 == 0) {
-                    android.util.Log.w("RelayManager", "Dropped $dropped Bedrock UDP frames due to channel capacity")
+            // Inspect the RakNet packet type (byte 9 = first byte of Geyser's UDP payload).
+            // Control packets (ACK/NAK/PONG/PING) are latency-critical and jump the queue.
+            // Bulk FrameSets (chunk data) go to the back so they never delay keep-alives.
+            val rakNetType = if (frame.size > 9) (frame[9].toInt() and 0xFF) else -1
+            val isControl = rakNetType == 0xC0  // ACK
+                         || rakNetType == 0xA0  // NAK
+                         || rakNetType == 0x03  // CONNECTED_PONG
+                         || rakNetType == 0x00  // CONNECTED_PING
+            val offered = if (isControl) {
+                // Control packets MUST be enqueued. Evict chunks from the back if full.
+                while (bedrockTxDeque.remainingCapacity() == 0) {
+                    bedrockTxDeque.pollLast()
                 }
+                bedrockTxDeque.offerFirst(frame)
+            } else {
+                // Reserve headroom for control packets: only enqueue data if size is < 192.
+                if (bedrockTxDeque.size < 192) {
+                    bedrockTxDeque.offerLast(frame)
+                } else {
+                    false
+                }
+            }
+            if (!offered) {
+                droppedFrameCount.incrementAndGet()
             }
         }
         bedrockUdpBridge?.start()
     }
 
     fun stopBedrockBridge() {
-        bedrockTxJob?.cancel()
-        bedrockTxJob = null
+        bedrockTxThread?.interrupt()
+        bedrockTxThread = null
         bedrockUdpBridge?.stop()
         bedrockUdpBridge = null
         activeBedrockSocket = null
         droppedFrameCount.set(0)
+        bedrockTxDeque.clear()
     }
 
     /**
@@ -746,115 +774,112 @@ class RelayManager(private val context: Context) {
         }
     }
 
-    private suspend fun bridgeBedrockConnection(relaySocket: Socket, firstByte: Int) {
-        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
-        android.util.Log.i("RelayManager", "Bedrock UDP bridge ACTIVE via TCP tunnel.")
-        android.util.Log.d(
-            "RelayManager",
-            "Active Bedrock relay socket assigned: remote=${relaySocket.inetAddress?.hostAddress}:${relaySocket.port}, local=${relaySocket.localAddress?.hostAddress}:${relaySocket.localPort}"
-        )
-        activeBedrockSocket = relaySocket
-        var handedOffToJavaBridge = false
-        
-        try {
-            val relayInput = java.io.BufferedInputStream(relaySocket.getInputStream(), 128 * 1024)
+    private fun bridgeBedrockConnection(relaySocket: Socket, firstByte: Int) {
+        Thread {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
+            android.util.Log.i("RelayManager", "Bedrock UDP bridge ACTIVE via TCP tunnel.")
+            android.util.Log.d(
+                "RelayManager",
+                "Active Bedrock relay socket assigned: remote=${relaySocket.inetAddress?.hostAddress}:${relaySocket.port}, local=${relaySocket.localAddress?.hostAddress}:${relaySocket.localPort}"
+            )
+            activeBedrockSocket = relaySocket
+            var handedOffToJavaBridge = false
             
-            // The first byte was already consumed (it was 0x02).
-            // Header is 9 bytes total: type (1), len (2), ip (4), port (2).
-            val headerBuffer = ByteArray(9)
-            headerBuffer[0] = firstByte.toByte()
-            
-            // Read next 8 bytes of the first frame header
-            var hOffset = 1
-            while (hOffset < 9) {
-                val read = relayInput.read(headerBuffer, hOffset, 9 - hOffset)
-                if (read == -1) return
-                hOffset += read
-            }
-            
-            val payloadLen = ((headerBuffer[1].toInt() and 0xFF) shl 8) or (headerBuffer[2].toInt() and 0xFF)
-            val firstFrame = ByteArray(9 + payloadLen)
-            System.arraycopy(headerBuffer, 0, firstFrame, 0, 9)
-            
-            var pOffset = 0
-            while (pOffset < payloadLen) {
-                val read = relayInput.read(firstFrame, 9 + pOffset, payloadLen - pOffset)
-                if (read == -1) break
-                pOffset += read
-            }
-            if (pOffset == payloadLen) {
-                val frameNo = inboundBedrockFrameCount.incrementAndGet()
-                android.util.Log.d(
-                    "RelayManager",
-                    "Received first Bedrock relay frame #$frameNo (${firstFrame.size} bytes, payload=$payloadLen); forwarding to local Geyser."
-                )
-                bedrockUdpBridge?.onIncomingFrame(firstFrame)
-            }
-            
-            // Now loop for subsequent frames on this same TCP socket
-            while (true) {
-                val type = relayInput.read()
-                if (type == -1) break
-                if (type != 0x02) {
+            try {
+                val relayInput = java.io.BufferedInputStream(relaySocket.getInputStream(), 128 * 1024)
+                
+                // The first byte was already consumed (it was 0x02).
+                // Header is 9 bytes total: type (1), len (2), ip (4), port (2).
+                val headerBuffer = ByteArray(9)
+                headerBuffer[0] = firstByte.toByte()
+                
+                // Read next 8 bytes of the first frame header
+                var hOffset = 1
+                while (hOffset < 9) {
+                    val read = relayInput.read(headerBuffer, hOffset, 9 - hOffset)
+                    if (read == -1) return@Thread
+                    hOffset += read
+                }
+                
+                val payloadLen = ((headerBuffer[1].toInt() and 0xFF) shl 8) or (headerBuffer[2].toInt() and 0xFF)
+                val firstFrame = ByteArray(9 + payloadLen)
+                System.arraycopy(headerBuffer, 0, firstFrame, 0, 9)
+                
+                var pOffset = 0
+                while (pOffset < payloadLen) {
+                    val read = relayInput.read(firstFrame, 9 + pOffset, payloadLen - pOffset)
+                    if (read == -1) break
+                    pOffset += read
+                }
+                if (pOffset == payloadLen) {
+                    bedrockUdpBridge?.onIncomingFrame(firstFrame)
+                }
+                
+                // Now loop for subsequent frames on this same TCP socket
+                while (true) {
+                    val type = relayInput.read()
+                    if (type == -1) break
+                    if (type != 0x02) {
+                        android.util.Log.i(
+                            "RelayManager",
+                            "Switching TCP socket from Bedrock to Java bridge (firstByte=$type, remote=${relaySocket.inetAddress?.hostAddress}:${relaySocket.port})"
+                        )
+                        val localPort = activeTunnelLocalPort ?: 25565
+                        if (activeBedrockSocket == relaySocket) {
+                            android.util.Log.d("RelayManager", "Clearing active Bedrock socket before Java handoff.")
+                            activeBedrockSocket = null
+                        }
+                        handedOffToJavaBridge = true
+                        runBlocking {
+                            bridgePlayerConnection(relaySocket, type, localPort)
+                        }
+                        return@Thread
+                    }
+                    
+                    val nextHeader = ByteArray(8)
+                    var nhOff = 0
+                    while (nhOff < 8) {
+                        val r = relayInput.read(nextHeader, nhOff, 8 - nhOff)
+                        if (r == -1) break
+                        nhOff += r
+                    }
+                    if (nhOff < 8) break
+                    
+                    val len = ((nextHeader[0].toInt() and 0xFF) shl 8) or (nextHeader[1].toInt() and 0xFF)
+                    val frame = ByteArray(9 + len)
+                    frame[0] = 0x02.toByte()
+                    System.arraycopy(nextHeader, 0, frame, 1, 8)
+                    
+                    var npOff = 0
+                    while (npOff < len) {
+                        val r = relayInput.read(frame, 9 + npOff, len - npOff)
+                        if (r == -1) break
+                        npOff += r
+                    }
+                    if (npOff < len) break
+
+                    inboundBedrockFrameCount.incrementAndGet()
+                    bedrockUdpBridge?.onIncomingFrame(frame)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("RelayManager", "Bedrock bridge error: ${e.message}")
+            } finally {
+                if (activeBedrockSocket == relaySocket) {
                     android.util.Log.i(
                         "RelayManager",
-                        "Switching TCP socket from Bedrock to Java bridge (firstByte=$type, remote=${relaySocket.inetAddress?.hostAddress}:${relaySocket.port})"
+                        "Bedrock relay socket closed: remote=${relaySocket.inetAddress?.hostAddress}:${relaySocket.port}, local=${relaySocket.localAddress?.hostAddress}:${relaySocket.localPort}"
                     )
-                    val localPort = activeTunnelLocalPort ?: 25565
-                    if (activeBedrockSocket == relaySocket) {
-                        android.util.Log.d("RelayManager", "Clearing active Bedrock socket before Java handoff.")
-                        activeBedrockSocket = null
-                    }
-                    handedOffToJavaBridge = true
-                    bridgePlayerConnection(relaySocket, type, localPort)
-                    return
+                    activeBedrockSocket = null
                 }
-                
-                val nextHeader = ByteArray(8)
-                var nhOff = 0
-                while (nhOff < 8) {
-                    val r = relayInput.read(nextHeader, nhOff, 8 - nhOff)
-                    if (r == -1) break
-                    nhOff += r
+                if (!handedOffToJavaBridge) {
+                    android.util.Log.d("RelayManager", "Closing Bedrock relay socket after bridge loop exit.")
+                    runCatching { relaySocket.close() }
                 }
-                if (nhOff < 8) break
-                
-                val len = ((nextHeader[0].toInt() and 0xFF) shl 8) or (nextHeader[1].toInt() and 0xFF)
-                val frame = ByteArray(9 + len)
-                frame[0] = 0x02.toByte()
-                System.arraycopy(nextHeader, 0, frame, 1, 8)
-                
-                var npOff = 0
-                while (npOff < len) {
-                    val r = relayInput.read(frame, 9 + npOff, len - npOff)
-                    if (r == -1) break
-                    npOff += r
-                }
-                if (npOff < len) break
-
-                val frameNo = inboundBedrockFrameCount.incrementAndGet()
-                if (frameNo <= 20 || frameNo % 25 == 0) {
-                    android.util.Log.d(
-                        "RelayManager",
-                        "Inbound Bedrock relay frame #$frameNo type=0x02 bytes=${frame.size} payload=$len client=${frame[3].toInt() and 0xFF}.${frame[4].toInt() and 0xFF}.${frame[5].toInt() and 0xFF}.${frame[6].toInt() and 0xFF}:${((frame[7].toInt() and 0xFF) shl 8) or (frame[8].toInt() and 0xFF)}"
-                    )
-                }
-                bedrockUdpBridge?.onIncomingFrame(frame)
             }
-        } catch (e: Exception) {
-            android.util.Log.e("RelayManager", "Bedrock bridge error: ${e.message}")
-        } finally {
-            if (activeBedrockSocket == relaySocket) {
-                android.util.Log.i(
-                    "RelayManager",
-                    "Bedrock relay socket closed: remote=${relaySocket.inetAddress?.hostAddress}:${relaySocket.port}, local=${relaySocket.localAddress?.hostAddress}:${relaySocket.localPort}"
-                )
-                activeBedrockSocket = null
-            }
-            if (!handedOffToJavaBridge) {
-                android.util.Log.d("RelayManager", "Closing Bedrock relay socket after bridge loop exit.")
-                runCatching { relaySocket.close() }
-            }
+        }.apply {
+            name = "BedrockInboundBridge"
+            priority = Thread.MAX_PRIORITY
+            start()
         }
     }
 

@@ -185,6 +185,16 @@ object ServerFileManager {
             android.util.Log.e("ServerFileManager", "Failed to bundle PocketCraftCompanion.jar: ${it.message}")
         }
 
+        runCatching {
+            context.assets.open("default_plugins/PocketCraftChunkLoader.jar").use { input ->
+                File(pluginsDir, "PocketCraftChunkLoader.jar").outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+        }.onFailure { 
+            android.util.Log.e("ServerFileManager", "Failed to bundle PocketCraftChunkLoader.jar: ${it.message}")
+        }
+
         serverDir.walkTopDown().forEach { file ->
             if (file.isFile && file.name.endsWith(".tmp")) {
                 runCatching { file.delete() }

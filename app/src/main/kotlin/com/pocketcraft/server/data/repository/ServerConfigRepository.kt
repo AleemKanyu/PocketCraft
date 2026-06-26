@@ -53,7 +53,21 @@ class ServerConfigRepository @Inject constructor(
         val activeServer = getActiveServerName()
         val file = serverFile(activeServer)
         when {
-            file.exists() -> parseConfig(file)
+            file.exists() -> {
+                val profileConfig = parseConfig(file)
+                if (propertiesFile.exists()) {
+                    val propsConfig = parseConfig(propertiesFile)
+                    if (propsConfig != profileConfig) {
+                        serversDir.mkdirs()
+                        writeConfigFile(file, propsConfig)
+                        propsConfig
+                    } else {
+                        profileConfig
+                    }
+                } else {
+                    profileConfig
+                }
+            }
             propertiesFile.exists() -> parseConfig(propertiesFile).also {
                 serversDir.mkdirs()
                 writeConfigFile(file, it)
@@ -292,7 +306,7 @@ class ServerConfigRepository @Inject constructor(
             generateStructures = props["generate-structures"]?.toBoolean() ?: true,
             levelType = props["level-type"] ?: "default",
             maxWorldSize = props["max-world-size"]?.toIntOrNull() ?: 29999984,
-            useNativeTransport = props["use-native-transport"]?.toBoolean() ?: true,
+            useNativeTransport = props["use-native-transport"]?.toBoolean() ?: false,
             maxBuildHeight = props["max-build-height"]?.toIntOrNull() ?: 320,
             joinMessageEnabled = true,
             joinMessageText = POCKETCRAFT_JOIN_MESSAGE_TEXT,

@@ -19,6 +19,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import okhttp3.Cache
 import okhttp3.CacheControl
 import okhttp3.OkHttpClient
@@ -291,13 +293,18 @@ object PluginManager {
             File(pluginsDir, "floodgate/key.pem").exists() -> "../floodgate/key.pem"
             else -> "../floodgate/key.pem"
         }
-        val geyserConfigFile = getGeyserConfigFile(context, worldName)
+                val geyserConfigFile = getGeyserConfigFile(context, worldName)
         geyserConfigFile.parentFile?.mkdirs()
         val original = if (geyserConfigFile.exists()) {
             runCatching { geyserConfigFile.readText() }.getOrDefault("")
         } else {
             ""
         }
+        val flightModeEnabled = runBlocking {
+            com.pocketcraft.server.data.preferences.AppPreferencesStore.isFlightModeEnabledFlow(context).first()
+        }
+        val geyserCompression = if (flightModeEnabled) "4" else "6"
+
         var updated = original
         // Fix 2: Patch Geyser config to prevent ioctl (SELinux denials)
         updated = ensureYamlSectionValue(updated, "bedrock", "address", "0.0.0.0")
@@ -307,9 +314,11 @@ object PluginManager {
         updated = ensureYamlSectionValue(updated, "bedrock", "enable-proxy-protocol", "false")
         updated = ensureYamlSectionValue(updated, "bedrock", "motd1", "PocketCraft Server")
         updated = ensureYamlSectionValue(updated, "bedrock", "motd2", "Tap to join")
-        updated = ensureTopLevelYamlValue(updated, "ping-passthrough-interval", "1")
+        updated = ensureYamlSectionValue(updated, "bedrock", "compression-level", geyserCompression)
+        updated = ensureTopLevelYamlValue(updated, "ping-passthrough-interval", "15")
         updated = ensureTopLevelYamlValue(updated, "async-motd", "false")
         updated = ensureTopLevelYamlValue(updated, "cache-chunks", "true")
+        updated = ensureTopLevelYamlValue(updated, "use-native-transport", "false")
         updated = ensureTopLevelYamlValue(updated, "max-auto-connect-attempts", "5")
         updated = ensureTopLevelYamlValue(updated, "forward-hostname", "false")
         updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "validate-bedrock-login", "false")

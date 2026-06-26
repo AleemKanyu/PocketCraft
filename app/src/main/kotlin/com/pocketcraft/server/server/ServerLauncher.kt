@@ -81,6 +81,27 @@ class ServerLauncher(private val context: Context) {
             throw IllegalStateException("Launch target not found: ${launchTarget.absolutePath}")
         }
 
+        // Java version guard: Minecraft 26.1+ requires Java 25. This build ships JRE 21 only.
+        // Surface a clear error instead of a cryptic JVM SIGSEGV or "requires Java 25" message
+        // buried deep in the crash log.
+        run {
+            // versionId may be "26.2", "1.21.4", "26.1-pre1", etc.
+            val parts = versionId.trimStart().split(".", "-")
+            val major = parts.getOrNull(0)?.toIntOrNull()
+            val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
+            if (major != null && (major > 26 || (major == 26 && minor >= 1))) {
+                val msg = buildString {
+                    appendLine("[PocketCraft] ❌ Minecraft $versionId is not supported.")
+                    appendLine("[PocketCraft] Minecraft 26.1 and newer requires Java 25.")
+                    appendLine("[PocketCraft] This version of PocketCraft includes Java 21 only.")
+                    appendLine("[PocketCraft] Please use Minecraft 26.0 or earlier.")
+                }
+                onError(msg)
+                onStopped(126)
+                return
+            }
+        }
+
 
         ServerFileManager.prepareEula(context, worldName)
         ServerFileManager.prepareServerProperties(context, worldName)
@@ -555,6 +576,10 @@ class ServerLauncher(private val context: Context) {
         val vmArgs = mutableListOf(
             "-Xmx${maxRamMb}m",
             "-Xms${minRamMb}m",
+            // Fabric/Paper startup involves deeply nested printf calls in libc on AArch64 Android.
+            // The default JVM thread stack (512KB) is insufficient — bump to 4MB to prevent SIGSEGV
+            // in __vfprintf (stack overflow, free space ~3KB at crash).
+            "-Xss4m",
             "-Djava.home=$jrePath",
             "-Djava.io.tmpdir=$tmpDir",
             "-Djna.tmpdir=$tmpDir",
@@ -586,13 +611,15 @@ class ServerLauncher(private val context: Context) {
             "-Xshare:off",
             "-XX:+UnlockExperimentalVMOptions",
             "-XX:+UnlockDiagnosticVMOptions",
+            "-XX:+AlwaysPreTouch",
             "-XX:+UseStringDeduplication",
             "-XX:+UseG1GC",
             "-XX:+ParallelRefProcEnabled",
-            "-XX:MaxGCPauseMillis=100",
+            "-XX:MaxGCPauseMillis=50",
             "-XX:+DisableExplicitGC",
             "-XX:G1NewSizePercent=30",
             "-XX:G1MaxNewSizePercent=40",
+            "-XX:G1HeapRegionSize=8m",
             "-XX:G1ReservePercent=20",
             "-XX:G1HeapWastePercent=5",
             "-XX:G1MixedGCCountTarget=4",
@@ -903,33 +930,30 @@ class ServerLauncher(private val context: Context) {
         val configDir = File(serverDir, "config").also { it.mkdirs() }
         val paperGlobal = File(configDir, "paper-global.yml")
         val original = runCatching { paperGlobal.readText() }.getOrDefault("")
-        val cellularRelay = com.pocketcraft.server.util.NetworkUtils.isCellular(context)
-        val chunkSendRate = if (cellularRelay) 28 else 40
 
         var updated = original
 
-        // Bound chunk bursts so movement cannot queue seconds of terrain ahead of
-        // keep-alives on the phone's relay connection.
+        // Remove chunk loading settings from paper-global.yml as they are world-specific in Paper 1.20+
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-generate-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-load-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-send-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "target-player-chunk-send-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-concurrent-sends")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "target-player-chunk-send-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "auto-config-send-distance")
         updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-loading-priority-override")
         updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-loads")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate", "20")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate", "50")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate", chunkSendRate.toString())
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-generates")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-loads")
 
-        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "auto-config-send-distance", "true")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-generates", "2")
-        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", "4")
         updated = removeYamlPathKey(updated, listOf("misc"), "io-threads")
         updated = removeYamlPathKey(updated, listOf("misc"), "worker-threads")
-        updated = ensureYamlSectionValue(updated, "chunk-system", "io-threads", "2")
-        updated = ensureYamlSectionValue(updated, "chunk-system", "worker-threads", "2")
-        updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "2")
+        updated = ensureYamlSectionValue(updated, "chunk-system", "io-threads", "3")
+        updated = ensureYamlSectionValue(updated, "chunk-system", "worker-threads", "3")
+        updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "3")
 
         // Disable bundled Spark profiler (fails to load native libraries on Android)
         updated = ensureYamlSectionValue(updated, "spark", "enabled", "false")
@@ -937,7 +961,7 @@ class ServerLauncher(private val context: Context) {
 
         if (updated != original) {
             paperGlobal.writeText(updated)
-            onOutput("[PocketCraft] Paper global tuning applied: $chunkSendRate chunk/s ${if (cellularRelay) "cellular" else "Wi-Fi"} relay cap + bounded chunk workers.")
+            onOutput("[PocketCraft] Paper global tuning applied (chunk system thread caps + disabled spark).")
         }
     }
 
@@ -979,6 +1003,28 @@ class ServerLauncher(private val context: Context) {
         val configDir = File(serverDir, "config").also { it.mkdirs() }
         val paperWorldDefaults = File(configDir, "paper-world-defaults.yml")
         val original = runCatching { paperWorldDefaults.readText() }.getOrDefault("")
+        val cellularRelay = com.pocketcraft.server.util.NetworkUtils.isCellular(context)
+        val flightModeEnabled = runBlocking { AppPreferencesStore.isFlightModeEnabledFlow(context).first() }
+
+        // Chunk rates — send rate is the critical knob.
+        // Too high → TCP tunnel saturated with chunk data → movement/ACK packets queued behind chunks → high ping.
+        // Target: keep chunk traffic below ~15-20% of available TCP bandwidth so keepalives/ACKs always get through.
+        //
+        //   genRate  = max chunks generated per second (CPU/world gen load)
+        //   loadRate = max chunks loaded from disk per second (I/O load)
+        //   sendRate = max chunks SENT to the client per second (NETWORK load — this is the key one)
+        //
+        // At ~15 KB/chunk average Bedrock packet size:
+        //   sendRate=12 → ~180 KB/s upload  (WiFi normal, leaves plenty of room for movement)
+        //   sendRate=20 → ~300 KB/s upload  (WiFi flight, fast area transitions)
+        //   sendRate=6  → ~90  KB/s upload  (cellular normal, conservative)
+        //   sendRate=10 → ~150 KB/s upload  (cellular flight)
+        val (genRate, loadRate, sendRate) = when {
+            !cellularRelay && !flightModeEnabled -> Triple(20.0, 50.0, 12.0)
+            !cellularRelay && flightModeEnabled  -> Triple(32.0, 80.0, 20.0)
+            cellularRelay && !flightModeEnabled  -> Triple(16.0, 30.0,  6.0)
+            else                                  -> Triple(24.0, 45.0, 10.0)
+        }
 
         var updated = original
 
@@ -988,14 +1034,18 @@ class ServerLauncher(private val context: Context) {
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "target-player-chunk-send-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-concurrent-sends")
 
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "target-player-chunk-send-rate")
+        // Write optimized chunk loading basic and advanced defaults as doubles
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate", genRate.toString())
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate", loadRate.toString())
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate", sendRate.toString())
 
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "auto-config-send-distance")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-generates")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-loads")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "auto-config-send-distance", "true")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-generates", "2")
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-loads", "4")
+        // Limit simultaneous chunk sends to 3 so entering a new area doesn't burst-flood the TCP tunnel.
+        // Without this cap, Paper can start sending many chunks at once even if sendRate is low,
+        // causing short bandwidth spikes that queue behind keepalive/movement packets.
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-sends", "3")
 
         // Maintain a small buffer so brief movement doesn't instantly cause chunk shedding.
         updated = ensureYamlPathValue(updated, listOf("chunks"), "delay-chunk-unloads-by", "10s")
@@ -1024,7 +1074,7 @@ class ServerLauncher(private val context: Context) {
 
         if (updated != original) {
             paperWorldDefaults.writeText(updated)
-            onOutput("[PocketCraft] Paper world defaults updated: entity limits + chunk unload buffer + anti-void walking + collision caps.")
+            onOutput("[PocketCraft] Paper world defaults updated: gen=$genRate, load=$loadRate, send=$sendRate, cellular=$cellularRelay, flight=$flightModeEnabled")
         }
     }
 

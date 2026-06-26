@@ -27,63 +27,20 @@ object JreExtractor {
         displayName = "Java 21"
     )
 
-    private val RUNTIME_JAVA_25 = RuntimeSpec(
-        id = "java25",
-        assetDir = "jre-runtime-25",
-        extractedDirName = "jre-runtime-25",
-        markerName = "jre25_v1_extracted",
-        displayName = "Java 25"
-    )
-
     /** Last-resort fallback used in internal error paths. */
     private val DEFAULT_RUNTIME = RUNTIME_JAVA_21
 
     /** Returns the best available runtime for the current device ABI. */
     fun defaultRuntimeForDevice(): RuntimeSpec {
-        val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
-        return if (abi.contains("arm64") || abi.contains("aarch64")) {
-            // JRE 25 is 16 KB page-aligned — use it on all modern arm64 devices.
-            RUNTIME_JAVA_25
-        } else {
-            // JRE 25 only ships arm64 binaries; fall back to JRE 21 for 32-bit.
-            RUNTIME_JAVA_21
-        }
+        return RUNTIME_JAVA_21
     }
 
     fun runtimeForVersion(versionId: String): RuntimeSpec {
-        val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
-        val isArm64 = abi.contains("arm64") || abi.contains("aarch64")
-
-        // Java 25 only ships arm64 binaries. 32-bit ARM devices (e.g. Redmi 10A,
-        // Samsung Galaxy A17) must always use Java 21, regardless of MC version.
-        if (!isArm64) {
-            return RUNTIME_JAVA_21
-        }
-
-        val is16KBPageSize = try {
-            android.system.Os.sysconf(android.system.OsConstants._SC_PAGESIZE) == 16384L
-        } catch (_: Exception) {
-            false
-        }
-        val requires16KBAlign = Build.VERSION.SDK_INT >= 35 || is16KBPageSize
-
-        if (requires16KBAlign) {
-            return RUNTIME_JAVA_25
-        }
-
-        // For arm64 devices without 16KB page-size requirements, pick runtime
-        // based on the Minecraft version's Java requirement.
-        val minecraftJavaMajor = parseMinecraftJavaMajor(versionId)
-        return when {
-            minecraftJavaMajor == null -> RUNTIME_JAVA_21
-            minecraftJavaMajor >= 26 -> RUNTIME_JAVA_25
-            else -> RUNTIME_JAVA_21
-        }
+        return RUNTIME_JAVA_21
     }
 
     fun findExtractedRuntime(context: Context): RuntimeSpec? {
-        return listOf(RUNTIME_JAVA_25, RUNTIME_JAVA_21)
-            .firstOrNull { isExtracted(context, it) }
+        return if (isExtracted(context, RUNTIME_JAVA_21)) RUNTIME_JAVA_21 else null
     }
 
     private fun normalizeAndroidPath(path: String): String {
@@ -209,30 +166,7 @@ object JreExtractor {
     }
 
     fun launchCandidatesForVersion(versionId: String): List<RuntimeSpec> {
-        val primary = runtimeForVersion(versionId)
-        val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
-        val isArm64 = abi.contains("arm64") || abi.contains("aarch64")
-
-        // 32-bit ARM devices can only run Java 21 — Java 25 has no 32-bit binaries.
-        if (!isArm64) {
-            return listOf(RUNTIME_JAVA_21)
-        }
-
-        val is16KBPageSize = try {
-            android.system.Os.sysconf(android.system.OsConstants._SC_PAGESIZE) == 16384L
-        } catch (_: Exception) {
-            false
-        }
-        val requires16KBAlign = Build.VERSION.SDK_INT >= 35 || is16KBPageSize
-
-        if (requires16KBAlign) {
-            // Devices with 16KB page alignment can only run the 16KB-aligned Java 25 build.
-            return listOf(RUNTIME_JAVA_25)
-        }
-
-        // arm64 without 16KB constraint: try primary, then offer both as fallbacks.
-        val defaults = listOf(primary, RUNTIME_JAVA_25, RUNTIME_JAVA_21)
-        return defaults.distinctBy { it.id }
+        return listOf(RUNTIME_JAVA_21)
     }
 
     private fun resetRuntime(context: Context, runtime: RuntimeSpec) {
