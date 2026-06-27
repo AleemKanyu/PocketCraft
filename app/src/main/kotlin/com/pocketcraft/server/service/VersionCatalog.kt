@@ -61,7 +61,8 @@ object VersionCatalog {
             .sortedWith(versionComparator)
             .take(limit)
 
-        if (combined.isNotEmpty()) return@withContext combined
+        val filtered = MinecraftVersionPolicy.filterInstallableVersions(combined)
+        if (filtered.isNotEmpty()) return@withContext filtered
 
         runCatching {
             val request = Request.Builder()
@@ -82,7 +83,7 @@ object VersionCatalog {
                     }
                 }.distinct().sortedWith(versionComparator).take(limit)
             }
-        }.getOrDefault(emptyList())
+        }.getOrDefault(emptyList()).let { MinecraftVersionPolicy.filterInstallableVersions(it) }
     }
 
     private val versionComparator = Comparator<String> { left, right ->

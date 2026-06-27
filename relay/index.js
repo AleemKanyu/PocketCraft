@@ -66,12 +66,6 @@ function configureSocket(socket) {
   socket.setNoDelay(true);
   socket.setKeepAlive(true, SOCKET_KEEPALIVE_MS);
   socket.allowHalfOpen = false;
-  if (typeof socket.setSendBufferSize === 'function') {
-    try { socket.setSendBufferSize(64 * 1024); } catch (e) {}
-  }
-  if (typeof socket.setRecvBufferSize === 'function') {
-    try { socket.setRecvBufferSize(64 * 1024); } catch (e) {}
-  }
 }
 
 // userId validation
@@ -512,28 +506,12 @@ function handlePhoneFrameData(userId, data) {
       continue;
     }
 
-    const clientMap = bedrockClientMap.get(userId);
-    const key = `${parsed.ip}:${parsed.port}`;
-    const clientEntry = clientMap ? clientMap.get(key) : null;
-
-    let rewrittenPayload;
-    if (clientEntry && clientEntry.serverHandshakeComplete) {
-      rewrittenPayload = parsed.payload;
-    } else {
-      rewrittenPayload = rewriteAdvertisedRelayAddress(
-        parsed.payload,
-        relayPort || parsed.port,
-        parsed.ip,
-        parsed.port
-      );
-      if (clientEntry && rewrittenPayload !== parsed.payload) {
-        const packetId = parsed.payload.readUInt8(0);
-        if (isRakNetFrameSet(packetId)) {
-          clientEntry.serverHandshakeComplete = true;
-          console.log(`[bedrock] Server handshake complete (0x10 rewritten) for ${userId} to ${key}`);
-        }
-      }
-    }
+    const rewrittenPayload = rewriteAdvertisedRelayAddress(
+      parsed.payload,
+      relayPort || parsed.port,
+      parsed.ip,
+      parsed.port
+    );
 
     // Only log the first few packets to avoid console.log blocking the event loop and causing high ping
     if (!global.udpSendCount) global.udpSendCount = 0;
@@ -585,7 +563,6 @@ function clearBedrockPhoneSocket(tunnel) {
   tunnel.bedrockBuffer = Buffer.alloc(0);
   tunnel.bedrockChunks = [];
   tunnel.bedrockChunksLen = 0;
-  tunnel.bedrockWritable = true;
 }
 
 function attachBedrockPhoneSocket(tunnel, userId, phoneSocket) {
@@ -596,17 +573,8 @@ function attachBedrockPhoneSocket(tunnel, userId, phoneSocket) {
   tunnel.bedrockBuffer = Buffer.alloc(0);
   tunnel.bedrockChunks = [];
   tunnel.bedrockChunksLen = 0;
-  tunnel.bedrockWritable = true;
 
-  configureSocket(phoneSocket);
   phoneSocket.setTimeout(0);
-
-  const onDrain = () => {
-    tunnel.bedrockWritable = true;
-    console.log(`[bedrock] TCP socket write buffer drained, resuming UDP forwarding for ${userId}`);
-  };
-
-  phoneSocket.on('drain', onDrain);
 
   const onBedrockData = (chunk) => {
     if (!chunk || chunk.length === 0) return;
@@ -671,7 +639,6 @@ function attachBedrockPhoneSocket(tunnel, userId, phoneSocket) {
 
   const onSocketGone = () => {
     phoneSocket.removeListener('data', onBedrockData);
-    phoneSocket.removeListener('drain', onDrain);
     if (tunnel.bedrockPhoneSocket === phoneSocket) {
       clearBedrockPhoneSocket(tunnel);
     }
@@ -699,12 +666,40 @@ function getBedrockPhoneSocket(userId) {
   return attachBedrockPhoneSocket(tunnel, userId, phoneSocket);
 }
 
+function wireBackpressure(src, dst) {
+  const onData = (chunk) => {
+    if (dst.destroyed) return;
+    const ok = dst.write(chunk);
+    if (!ok) src.pause();
+  };
+  const onDrain = () => {
+    if (!src.destroyed) src.resume();
+  };
+  src.on('data', onData);
+  dst.on('drain', onDrain);
+  return () => {
+    src.removeListener('data', onData);
+    dst.removeListener('drain', onDrain);
+  };
+}
+
 function pairSockets(playerSocket, phoneSocket, userId) {
   configureSocket(playerSocket);
   configureSocket(phoneSocket);
 
-  playerSocket.pipe(phoneSocket);
-  phoneSocket.pipe(playerSocket);
+  const unwirePlayerToPhone = wireBackpressure(playerSocket, phoneSocket);
+  const unwirePhoneToPlayer = wireBackpressure(phoneSocket, playerSocket);
+
+  if (playerSocket.initialChunk) {
+    const chunk = playerSocket.initialChunk;
+    playerSocket.initialChunk = null;
+    if (!phoneSocket.destroyed) {
+      const ok = phoneSocket.write(chunk);
+      if (!ok) playerSocket.pause();
+    }
+  }
+
+  playerSocket.resume();
 
   let killed = false;
 
@@ -712,8 +707,8 @@ function pairSockets(playerSocket, phoneSocket, userId) {
     if (killed) return;
     killed = true;
     console.log(`[relay] Pairing broken for ${userId} (source: ${src})`);
-    playerSocket.unpipe(phoneSocket);
-    phoneSocket.unpipe(playerSocket);
+    unwirePlayerToPhone();
+    unwirePhoneToPlayer();
     if (!playerSocket.destroyed) playerSocket.destroy();
     if (!phoneSocket.destroyed) phoneSocket.destroy();
   };
@@ -793,14 +788,13 @@ function startUserUdpSocket(userId, assignedPort, getPhoneSocket) {
   udpSock.on('message', (msg, rinfo) => {
     if (isRakNetPing(msg)) {
       try {
-        const pingTime = msg.readBigUInt64BE(1);
         const motd = getMotd(assignedPort);
-        if (motd) {
-          const pong = buildPong(pingTime, motd);
-          udpSock.send(pong, rinfo.port, rinfo.address, (err) => {
-            if (err) console.error('[udp] pong send error:', err.message);
-          });
-        }
+        if (!motd) return;
+        const pingTime = msg.readBigUInt64BE(1);
+        const pong = buildPong(pingTime, motd);
+        udpSock.send(pong, rinfo.port, rinfo.address, (err) => {
+          if (err) console.error('[udp] pong send error:', err.message);
+        });
       } catch (e) {
         console.error('[udp] ping handler error:', e.message);
       }
@@ -809,16 +803,6 @@ function startUserUdpSocket(userId, assignedPort, getPhoneSocket) {
 
     if (msg.length > MAX_UDP_PAYLOAD) return;
     if (!isValidUdpPort(rinfo.port) || !isValidIPv4(rinfo.address)) return;
-
-    const tunnel = activeTunnels.get(userId);
-    if (tunnel && tunnel.bedrockWritable === false && msg[0] !== 0x05 && msg[0] !== 0x07) {
-      if (!global.udpDropCount) global.udpDropCount = 0;
-      global.udpDropCount++;
-      if (global.udpDropCount <= 20 || global.udpDropCount % 500 === 0) {
-        console.warn(`[bedrock] TCP backpressure: dropping incoming UDP from client ${rinfo.address}:${rinfo.port} (#${global.udpDropCount})`);
-      }
-      return;
-    }
 
     // MTU Clamping: Intercept OpenConnectionRequest1 (0x05) and OpenConnectionRequest2 (0x07)
     // to negotiate a safe 1200 byte MTU, avoiding IP fragmentation later.
@@ -841,23 +825,10 @@ function startUserUdpSocket(userId, assignedPort, getPhoneSocket) {
       }
     }
 
-    const key = `${rinfo.address}:${rinfo.port}`;
-    let clientEntry = clientMap.get(key);
-    if (!clientEntry) {
-      clientEntry = { address: rinfo.address, port: rinfo.port, lastSeen: Date.now(), handshakeComplete: false };
-      clientMap.set(key, clientEntry);
-    } else {
-      clientEntry.lastSeen = Date.now();
-    }
+    payload = rewriteClientNewIncomingConnection(payload);
 
-    if (!clientEntry.handshakeComplete) {
-      const rew = rewriteClientNewIncomingConnection(payload);
-      if (rew !== payload) {
-        clientEntry.handshakeComplete = true;
-        console.log(`[bedrock] Client handshake complete (0x13 rewritten) for ${userId} from ${key}`);
-      }
-      payload = rew;
-    }
+    const key = `${rinfo.address}:${rinfo.port}`;
+    clientMap.set(key, { address: rinfo.address, port: rinfo.port, lastSeen: Date.now() });
 
     const phoneSocket = getBedrockPhoneSocket(userId);
     if (!phoneSocket) return;
@@ -866,15 +837,7 @@ function startUserUdpSocket(userId, assignedPort, getPhoneSocket) {
     if (!frame) return;
 
     try {
-      const success = phoneSocket.write(frame);
-      if (!success && tunnel) {
-        tunnel.bedrockWritable = false;
-        if (!global.udpBackpressureCount) global.udpBackpressureCount = 0;
-        global.udpBackpressureCount++;
-        if (global.udpBackpressureCount <= 20 || global.udpBackpressureCount % 100 === 0) {
-          console.warn(`[bedrock] TCP write buffer full, enabling backpressure drop for ${userId} (#${global.udpBackpressureCount})`);
-        }
-      }
+      phoneSocket.write(frame);
     } catch (err) {
       console.error(`[bedrock] frame write error for ${userId}:`, err.message);
     }
@@ -1008,13 +971,13 @@ app.post('/register', (req, res) => {
     playerSocket.once('data', (chunk) => {
       if (handleJavaPing(playerSocket, chunk, tunnel.port)) return;
 
-      playerSocket.pause();
-      playerSocket.unshift(chunk);
+      playerSocket.initialChunk = chunk;
       const phoneSocket = takeNextPhoneSocket(tunnel);
       if (phoneSocket) {
         pairSockets(playerSocket, phoneSocket, userId);
         return;
       }
+      playerSocket.pause();
       queuePlayer(tunnel, userId, playerSocket);
     });
   });
@@ -1064,13 +1027,13 @@ app.post(['/phone-ready', '/phone_ready', '/ready', '/phoneReady'], (req, res) =
       playerSocket.once('data', (chunk) => {
         if (handleJavaPing(playerSocket, chunk, tunnel.port)) return;
 
-        playerSocket.pause();
-        playerSocket.unshift(chunk);
+        playerSocket.initialChunk = chunk;
         const phoneSocket = takeNextPhoneSocket(tunnel);
         if (phoneSocket) {
           pairSockets(playerSocket, phoneSocket, userId);
           return;
         }
+        playerSocket.pause();
         queuePlayer(tunnel, userId, playerSocket);
       });
     });
@@ -1158,34 +1121,21 @@ app.get('/download/paper', async (req, res) => {
   }
 
   try {
-    const apiRes = await fetch(`https://fill.papermc.io/v3/projects/paper/versions/${version}/builds`, {
-      headers: {
-        'User-Agent': 'PocketCraft/1.0.0 (contact@pocketcraft.online)'
-      }
-    });
+    const apiRes = await fetch(`https://api.papermc.io/v2/projects/paper/versions/${version}`);
     if (!apiRes.ok) {
       return res.status(apiRes.status).send(`Failed to fetch version metadata from PaperMC: ${apiRes.statusText}`);
     }
-    const builds = await apiRes.json();
-    if (!builds || !Array.isArray(builds) || builds.length === 0) {
+    const data = await apiRes.json();
+    if (!data.builds || !Array.isArray(data.builds) || data.builds.length === 0) {
       return res.status(404).send('No builds found for this version.');
     }
 
-    const latestBuild = builds[0];
-    const downloads = latestBuild.downloads;
-    if (!downloads) {
-      return res.status(404).send('No downloads found for the latest build.');
-    }
-    const downloadInfo = downloads['server:default'] || downloads[Object.keys(downloads)[0]];
-    if (!downloadInfo || !downloadInfo.url) {
-      return res.status(404).send('Download URL not found in build metadata.');
-    }
-    const downloadUrl = downloadInfo.url;
-    const jarName = downloadInfo.name || `paper-${version}-${latestBuild.id}.jar`;
+    const latestBuild = data.builds[data.builds.length - 1];
+    const downloadUrl = `https://api.papermc.io/v2/projects/paper/versions/${version}/builds/${latestBuild}/downloads/paper-${version}-${latestBuild}.jar`;
 
     const jarRes = await fetch(downloadUrl, {
       headers: {
-        'User-Agent': 'PocketCraft/1.0.0 (contact@pocketcraft.online)'
+        'User-Agent': 'PocketCraft/1.0.0'
       }
     });
 
@@ -1194,7 +1144,7 @@ app.get('/download/paper', async (req, res) => {
     }
 
     res.setHeader('Content-Type', 'application/java-archive');
-    res.setHeader('Content-Disposition', `attachment; filename="${jarName}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="paper-${version}-${latestBuild}.jar"`);
 
     const readableStream = jarRes.body;
     if (readableStream && typeof readableStream.pipeTo === 'function') {
@@ -1332,12 +1282,14 @@ setInterval(() => {
     const hasUdp = userUdpSockets.has(userId);
     const hasRecentReady = t.lastReadyAt && (Date.now() - t.lastReadyAt) < STALE_TUNNEL_TIMEOUT_MS;
 
-    const isStale = (!t.lastReadyAt && (Date.now() - t.createdAt) > STALE_TUNNEL_TIMEOUT_MS) ||
-                    (t.lastReadyAt && (Date.now() - t.lastReadyAt) > STALE_TUNNEL_TIMEOUT_MS);
-
-    if (isStale) {
-      console.warn(`[cleanup] Closing stale tunnel for ${userId}: no recent heartbeat.`);
-      closeTunnel(userId, 'stale_no_heartbeat');
+    if (
+      poolSize === 0 &&
+      !hasBedrockSocket &&
+      t.pendingPlayers.length === 0 &&
+      false // disabled: phone pool can be temporarily empty during active Java bridges
+    ) {
+      console.warn(`[cleanup] Closing stale tunnel for ${userId}: no phone sockets or recent heartbeat.`);
+      closeTunnel(userId, 'stale_no_phone_sockets');
       continue;
     }
 

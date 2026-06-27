@@ -19,8 +19,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import okhttp3.Cache
 import okhttp3.CacheControl
 import okhttp3.OkHttpClient
@@ -300,11 +298,6 @@ object PluginManager {
         } else {
             ""
         }
-        val flightModeEnabled = runBlocking {
-            com.pocketcraft.server.data.preferences.AppPreferencesStore.isFlightModeEnabledFlow(context).first()
-        }
-        val geyserCompression = if (flightModeEnabled) "4" else "6"
-
         var updated = original
         // Fix 2: Patch Geyser config to prevent ioctl (SELinux denials)
         updated = ensureYamlSectionValue(updated, "bedrock", "address", "0.0.0.0")
@@ -314,15 +307,14 @@ object PluginManager {
         updated = ensureYamlSectionValue(updated, "bedrock", "enable-proxy-protocol", "false")
         updated = ensureYamlSectionValue(updated, "bedrock", "motd1", "PocketCraft Server")
         updated = ensureYamlSectionValue(updated, "bedrock", "motd2", "Tap to join")
-        updated = ensureYamlSectionValue(updated, "bedrock", "compression-level", geyserCompression)
-        updated = ensureTopLevelYamlValue(updated, "ping-passthrough-interval", "15")
+        updated = ensureTopLevelYamlValue(updated, "ping-passthrough-interval", "1")
         updated = ensureTopLevelYamlValue(updated, "async-motd", "false")
         updated = ensureTopLevelYamlValue(updated, "cache-chunks", "true")
         updated = ensureTopLevelYamlValue(updated, "use-native-transport", "false")
         updated = ensureTopLevelYamlValue(updated, "max-auto-connect-attempts", "5")
         updated = ensureTopLevelYamlValue(updated, "forward-hostname", "false")
         updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "validate-bedrock-login", "false")
-        updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "mtu", "1200")
+        updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "mtu", "1400")
         updated = ensureYamlSectionValue(updated, "advanced", "floodgate-key-file", floodgateKeyPath)
         updated = ensureYamlSectionValue(updated, "java", "auth-type", "floodgate")
 

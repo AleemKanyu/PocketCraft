@@ -10,6 +10,7 @@ import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.service.ServerPropertiesHelper
 import com.pocketcraft.server.server.ServerPropertiesWriter
 import com.pocketcraft.server.setup.JreExtractor
+import com.pocketcraft.server.util.NetworkUtils
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import java.util.Properties
 import java.util.concurrent.TimeUnit
+import kotlin.math.pow
 
 class ServerLauncher(private val context: Context) {
 
@@ -81,27 +83,6 @@ class ServerLauncher(private val context: Context) {
             throw IllegalStateException("Launch target not found: ${launchTarget.absolutePath}")
         }
 
-        // Java version guard: Minecraft 26.1+ requires Java 25. This build ships JRE 21 only.
-        // Surface a clear error instead of a cryptic JVM SIGSEGV or "requires Java 25" message
-        // buried deep in the crash log.
-        run {
-            // versionId may be "26.2", "1.21.4", "26.1-pre1", etc.
-            val parts = versionId.trimStart().split(".", "-")
-            val major = parts.getOrNull(0)?.toIntOrNull()
-            val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
-            if (major != null && (major > 26 || (major == 26 && minor >= 1))) {
-                val msg = buildString {
-                    appendLine("[PocketCraft] ❌ Minecraft $versionId is not supported.")
-                    appendLine("[PocketCraft] Minecraft 26.1 and newer requires Java 25.")
-                    appendLine("[PocketCraft] This version of PocketCraft includes Java 21 only.")
-                    appendLine("[PocketCraft] Please use Minecraft 26.0 or earlier.")
-                }
-                onError(msg)
-                onStopped(126)
-                return
-            }
-        }
-
 
         ServerFileManager.prepareEula(context, worldName)
         ServerFileManager.prepareServerProperties(context, worldName)
@@ -113,14 +94,8 @@ class ServerLauncher(private val context: Context) {
             }
             val config = runBlocking { configRepo.loadConfig() }
             val serverDir = ServerFileManager.getServerDir(context, worldName)
-            val resolvedProps = ServerPropertiesHelper.readProperties(serverDir)
-            val resolvedLevelName = resolvedProps.getProperty("level-name", worldName)
             val isPremium = AppPreferences(context).let { it.isPremiumUser || it.debugPremiumOverride }
-            ServerPropertiesWriter.apply(
-                serverDir, 
-                ServerPropertiesWriter.toSnapshot(config).copy(worldName = resolvedLevelName), 
-                isPremium
-            )
+            ServerPropertiesWriter.apply(serverDir, ServerPropertiesWriter.toSnapshot(config), isPremium)
         }.onFailure { e ->
             onOutput("[PocketCraft] Warning: Failed to sync configuration properties: ${e.message}")
         }
@@ -144,15 +119,6 @@ class ServerLauncher(private val context: Context) {
         val levelName = props.getProperty("level-name", "world")
         val worldDir = File(serverDirFileLocal, levelName)
         val levelDat = File(worldDir, "level.dat")
-        val sessionLock = File(worldDir, "session.lock")
-        if (sessionLock.exists()) {
-            try {
-                sessionLock.delete()
-                onOutput("[PocketCraft] Deleted stale session.lock file.")
-            } catch (e: Exception) {
-                onOutput("[PocketCraft] Warning: Failed to delete session.lock: ${e.message}")
-            }
-        }
         if (serverType != com.pocketcraft.server.data.model.ServerType.PAPER && levelDat.exists()) {
             try {
                 com.pocketcraft.server.service.NBTParser.cleanPaperDatapack(levelDat, onOutput)
@@ -171,10 +137,7 @@ class ServerLauncher(private val context: Context) {
         val shimDir = File(normalizeAndroidPath(File(context.filesDir, "lib-shims").also { it.mkdirs() }.absolutePath))
         ensureSystemShims(shimDir, File(tmpDir), onOutput)
         val forceExternal = AppPreferences(context).forceExternalJvm
-        
-        val preferInProcessJvm = launchMode == ServerFileManager.LaunchMode.JAR && 
-                                 !forceExternal && 
-                                 NativeLauncher.loadLibrary()
+        val preferInProcessJvm = launchMode == ServerFileManager.LaunchMode.JAR && !forceExternal && NativeLauncher.loadLibrary()
 
         val resolvedRuntime = ensureLaunchableRuntime(
             versionId = versionId,
@@ -248,24 +211,8 @@ class ServerLauncher(private val context: Context) {
         Thread {
             var result = -1
             try {
-                // Wait for port to be bindable (up to 20 seconds) to handle TIME_WAIT state
-                val serverPort = resolveServerPort(worldName)
-                var portBindable = false
-                for (i in 1..10) {
-                    if (isPortBindable(serverPort)) {
-                        portBindable = true
-                        break
-                    }
-                    onOutput("[PocketCraft] Waiting for port $serverPort to release (TIME_WAIT)...")
-                    try { Thread.sleep(2000L) } catch (_: InterruptedException) {}
-                }
-                if (!preferInProcessJvm) {
-                    val routingReason = when {
-                        forceExternal -> "ForceExternal=true"
-                        launchMode != ServerFileManager.LaunchMode.JAR -> "LaunchMode=$launchMode"
-                        else -> "JNI library load failed"
-                    }
-                    onOutput("[PocketCraft] Routing to out-of-process JVM execution ($routingReason)")
+                if (launchMode != ServerFileManager.LaunchMode.JAR || forceExternal) {
+                    onOutput("[PocketCraft] Routing to out-of-process JVM execution (ForceExternal=$forceExternal)")
                     result = launchExternalJvm(
                         javaBin = javaBin,
                         jrePath = jrePath,
@@ -566,20 +513,12 @@ class ServerLauncher(private val context: Context) {
             append(nativeLibDir)
         }
 
-        val jnaBootPath = if (File(nativeLibDir, "libjnidispatch.so").exists()) {
-            nativeLibDir
-        } else {
-            shimDir.absolutePath
-        }
+        val jnaBootPath = shimDir.absolutePath
         val jnaLibraryPath = jnaBootPath
  
         val vmArgs = mutableListOf(
             "-Xmx${maxRamMb}m",
             "-Xms${minRamMb}m",
-            // Fabric/Paper startup involves deeply nested printf calls in libc on AArch64 Android.
-            // The default JVM thread stack (512KB) is insufficient — bump to 4MB to prevent SIGSEGV
-            // in __vfprintf (stack overflow, free space ~3KB at crash).
-            "-Xss4m",
             "-Djava.home=$jrePath",
             "-Djava.io.tmpdir=$tmpDir",
             "-Djna.tmpdir=$tmpDir",
@@ -615,7 +554,7 @@ class ServerLauncher(private val context: Context) {
             "-XX:+UseStringDeduplication",
             "-XX:+UseG1GC",
             "-XX:+ParallelRefProcEnabled",
-            "-XX:MaxGCPauseMillis=50",
+            "-XX:MaxGCPauseMillis=200",
             "-XX:+DisableExplicitGC",
             "-XX:G1NewSizePercent=30",
             "-XX:G1MaxNewSizePercent=40",
@@ -636,7 +575,7 @@ class ServerLauncher(private val context: Context) {
             "-Dio.netty.recycler.maxCapacity=0",
             "-Dio.netty.recycler.maxCapacityPerThread=0",
             "-Dio.netty.recycler.linkCapacity=1024",
-            "-Dio.netty.allocator.type=pooled",
+            "-Dio.netty.allocator.type=unpooled",
             "-Djdk.lang.Process.launchMechanism=FORK",
         ).apply {
             when (launchMode) {
@@ -851,6 +790,49 @@ class ServerLauncher(private val context: Context) {
         return raw.coerceIn(512, 4096)
     }
 
+    private fun computeRelayChunkSendBudget(
+        cellularRelay: Boolean,
+        viewDistance: Int,
+        flightModeEnabled: Boolean
+    ): Int {
+        val vd = viewDistance.coerceIn(4, 32)
+        if (flightModeEnabled) {
+            val base = if (cellularRelay) 28 else 36
+            val viewScale = (7.5 / vd).pow(0.6).coerceIn(0.5, 1.0)
+            return (base * viewScale + 4).toInt().coerceIn(24, 46)
+        }
+        val base = if (cellularRelay) 18 else 24
+        val viewScale = (7.0 / vd).pow(0.65).coerceIn(0.55, 1.0)
+        return (base * viewScale).toInt().coerceIn(14, 22)
+    }
+
+    private fun computeRelayChunkConcurrency(
+        flightModeEnabled: Boolean
+    ): Triple<Int, Int, Int> {
+        return if (flightModeEnabled) {
+            Triple(5, 8, 3) // generate, load, send
+        } else {
+            Triple(3, 5, 1)
+        }
+    }
+
+    private fun computeRelayChunkPipelineRates(
+        chunkSendRate: Int,
+        flightModeEnabled: Boolean
+    ): Pair<Int, Int> {
+        return if (flightModeEnabled) {
+            Pair(
+                (chunkSendRate * 7).coerceIn(72, 120),
+                (chunkSendRate * 9).coerceIn(96, 150)
+            )
+        } else {
+            Pair(
+                (chunkSendRate * 5).coerceIn(48, 80),
+                (chunkSendRate * 7).coerceIn(64, 96)
+            )
+        }
+    }
+
     // Relay runtime tuning applied at server start. Java ping is dominated by bridge
     // buffer sizes in RelayManager — see RelayManager KDoc before changing compression.
     private fun applyRelayReadyRuntimeProfile(
@@ -914,6 +896,29 @@ class ServerLauncher(private val context: Context) {
             changed = true
         }
 
+        val desiredView = props.getProperty(ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull()
+            ?: props.getProperty("view-distance")?.toIntOrNull()
+            ?: ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE
+        val desiredSimulation = props.getProperty(ServerPropertiesHelper.DESIRED_SIMULATION_DISTANCE_KEY)?.toIntOrNull()
+            ?: props.getProperty("simulation-distance")?.toIntOrNull()
+            ?: ServerPropertiesHelper.DEFAULT_SIMULATION_DISTANCE
+        if (props.getProperty("view-distance")?.toIntOrNull() != desiredView) {
+            props["view-distance"] = desiredView.toString()
+            changed = true
+        }
+        if (props.getProperty("simulation-distance")?.toIntOrNull() != desiredSimulation) {
+            props["simulation-distance"] = desiredSimulation.toString()
+            changed = true
+        }
+        if (props.getProperty(ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull() != desiredView) {
+            props[ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY] = desiredView.toString()
+            changed = true
+        }
+        if (props.getProperty(ServerPropertiesHelper.DESIRED_SIMULATION_DISTANCE_KEY)?.toIntOrNull() != desiredSimulation) {
+            props[ServerPropertiesHelper.DESIRED_SIMULATION_DISTANCE_KEY] = desiredSimulation.toString()
+            changed = true
+        }
+
         if (changed) {
             ServerPropertiesHelper.saveProperties(serverDir, props)
             onOutput("[PocketCraft] Internet relay profile applied.")
@@ -921,6 +926,15 @@ class ServerLauncher(private val context: Context) {
         onOutput(
             "[PocketCraft] Relay runtime profile: compression=$tunedCompression, view=$currentView, simulation=$currentSimulation, entity-range=$tunedEntityBroadcast%"
         )
+        val viewDistance = props.getProperty(ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull()
+            ?: props.getProperty("view-distance")?.toIntOrNull()
+            ?: ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE
+        val chunkBudget = computeRelayChunkSendBudget(
+            cellularRelay = NetworkUtils.isCellular(context),
+            viewDistance = viewDistance,
+            flightModeEnabled = flightModeEnabled
+        )
+        onOutput("[PocketCraft] Relay chunk send budget: $chunkBudget/s (view=$viewDistance, reserves uplink for ping)")
     }
 
     private fun applyRelayReadyPaperGlobalConfig(
@@ -930,30 +944,51 @@ class ServerLauncher(private val context: Context) {
         val configDir = File(serverDir, "config").also { it.mkdirs() }
         val paperGlobal = File(configDir, "paper-global.yml")
         val original = runCatching { paperGlobal.readText() }.getOrDefault("")
+        val cellularRelay = NetworkUtils.isCellular(context)
+        val flightModeEnabled = runBlocking { AppPreferencesStore.isFlightModeEnabledFlow(context).first() }
+        val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
+        val viewDistance = props.getProperty(ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull()
+            ?: props.getProperty("view-distance")?.toIntOrNull()
+            ?: ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE
+        val chunkSendRate = computeRelayChunkSendBudget(cellularRelay, viewDistance, flightModeEnabled)
+        val (chunkGenerateRate, chunkLoadRate) = computeRelayChunkPipelineRates(chunkSendRate, flightModeEnabled)
+        val (concurrentGenerates, concurrentLoads, concurrentSends) =
+            computeRelayChunkConcurrency(flightModeEnabled)
+        val loadingPriority = if (flightModeEnabled) "5" else "3"
+        val profileLabel = if (flightModeEnabled) "flight" else "walking"
 
         var updated = original
 
-        // Remove chunk loading settings from paper-global.yml as they are world-specific in Paper 1.20+
+        // Clean up legacy chunk-loading paths if they exist
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-generate-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-load-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-send-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "target-player-chunk-send-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-concurrent-sends")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "target-player-chunk-send-rate")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "auto-config-send-distance")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-loading-priority-override")
         updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-loads")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-generates")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-loads")
 
-        updated = removeYamlPathKey(updated, listOf("misc"), "io-threads")
-        updated = removeYamlPathKey(updated, listOf("misc"), "worker-threads")
-        updated = ensureYamlSectionValue(updated, "chunk-system", "io-threads", "3")
-        updated = ensureYamlSectionValue(updated, "chunk-system", "worker-threads", "3")
-        updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "3")
+        // Relay hosting: cap sustained chunk bandwidth so keepalives are not queued on the phone uplink.
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate", chunkGenerateRate.toString())
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate", chunkLoadRate.toString())
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate", chunkSendRate.toString())
+        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "target-player-chunk-send-rate", chunkSendRate.toString())
+
+        // Geyser reports ~0ms loopback ping; auto-config ramps send rate and destroys relay latency.
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "auto-config-send-distance", "false")
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-loading-priority-override", loadingPriority)
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-generates", concurrentGenerates.toString())
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", concurrentLoads.toString())
+        updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-sends", concurrentSends.toString())
+
+        val cores = Runtime.getRuntime().availableProcessors()
+        val threads = ((cores * 2) / 3).coerceIn(3, 6)
+
+        updated = removeYamlPathKey(updated, listOf("chunk-system"), "io-threads")
+        updated = removeYamlPathKey(updated, listOf("chunk-system"), "worker-threads")
+        updated = ensureYamlSectionValue(updated, "misc", "io-threads", threads.toString())
+        updated = ensureYamlSectionValue(updated, "misc", "worker-threads", threads.toString())
+        updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "2")
 
         // Disable bundled Spark profiler (fails to load native libraries on Android)
         updated = ensureYamlSectionValue(updated, "spark", "enabled", "false")
@@ -961,7 +996,7 @@ class ServerLauncher(private val context: Context) {
 
         if (updated != original) {
             paperGlobal.writeText(updated)
-            onOutput("[PocketCraft] Paper global tuning applied (chunk system thread caps + disabled spark).")
+            onOutput("[PocketCraft] Paper global tuning applied ($profileLabel): $chunkSendRate chunk/s send (gen=$chunkGenerateRate, load=$chunkLoadRate, view=$viewDistance), concurrent=$concurrentSends.")
         }
     }
 
@@ -980,19 +1015,9 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlPathValue(updated, listOf("settings"), "moved-too-quickly-multiplier", "1000.0")
         updated = ensureYamlPathValue(updated, listOf("settings"), "moved-wrongly-threshold", "1000.0")
 
-        // Optimize entity ticking overhead
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "animals", "16")
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "monsters", "24")
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "raiders", "48")
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "misc", "8")
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "water", "12")
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "villagers", "24")
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "tick-inactive-villagers", "false")
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "nerf-spawner-mobs", "true")
-
         if (updated != original) {
             spigotFile.writeText(updated)
-            onOutput("[PocketCraft] Spigot tuning applied: entity activation ranges + spawner mob nerfs.")
+            onOutput("[PocketCraft] Spigot view-distance overrides cleared so server.properties stays in control.")
         }
     }
 
@@ -1003,28 +1028,6 @@ class ServerLauncher(private val context: Context) {
         val configDir = File(serverDir, "config").also { it.mkdirs() }
         val paperWorldDefaults = File(configDir, "paper-world-defaults.yml")
         val original = runCatching { paperWorldDefaults.readText() }.getOrDefault("")
-        val cellularRelay = com.pocketcraft.server.util.NetworkUtils.isCellular(context)
-        val flightModeEnabled = runBlocking { AppPreferencesStore.isFlightModeEnabledFlow(context).first() }
-
-        // Chunk rates — send rate is the critical knob.
-        // Too high → TCP tunnel saturated with chunk data → movement/ACK packets queued behind chunks → high ping.
-        // Target: keep chunk traffic below ~15-20% of available TCP bandwidth so keepalives/ACKs always get through.
-        //
-        //   genRate  = max chunks generated per second (CPU/world gen load)
-        //   loadRate = max chunks loaded from disk per second (I/O load)
-        //   sendRate = max chunks SENT to the client per second (NETWORK load — this is the key one)
-        //
-        // At ~15 KB/chunk average Bedrock packet size:
-        //   sendRate=12 → ~180 KB/s upload  (WiFi normal, leaves plenty of room for movement)
-        //   sendRate=20 → ~300 KB/s upload  (WiFi flight, fast area transitions)
-        //   sendRate=6  → ~90  KB/s upload  (cellular normal, conservative)
-        //   sendRate=10 → ~150 KB/s upload  (cellular flight)
-        val (genRate, loadRate, sendRate) = when {
-            !cellularRelay && !flightModeEnabled -> Triple(20.0, 50.0, 12.0)
-            !cellularRelay && flightModeEnabled  -> Triple(32.0, 80.0, 20.0)
-            cellularRelay && !flightModeEnabled  -> Triple(16.0, 30.0,  6.0)
-            else                                  -> Triple(24.0, 45.0, 10.0)
-        }
 
         var updated = original
 
@@ -1033,31 +1036,21 @@ class ServerLauncher(private val context: Context) {
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-send-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "target-player-chunk-send-rate")
         updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-concurrent-sends")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate")
+        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "target-player-chunk-send-rate")
 
-        // Write optimized chunk loading basic and advanced defaults as doubles
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-generate-rate", genRate.toString())
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate", loadRate.toString())
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate", sendRate.toString())
-
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "auto-config-send-distance", "true")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-generates", "2")
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-loads", "4")
-        // Limit simultaneous chunk sends to 3 so entering a new area doesn't burst-flood the TCP tunnel.
-        // Without this cap, Paper can start sending many chunks at once even if sendRate is low,
-        // causing short bandwidth spikes that queue behind keepalive/movement packets.
-        updated = ensureYamlPathValue(updated, listOf("chunk-loading-advanced"), "player-max-concurrent-chunk-sends", "3")
-
-        // Maintain a small buffer so brief movement doesn't instantly cause chunk shedding.
-        updated = ensureYamlPathValue(updated, listOf("chunks"), "delay-chunk-unloads-by", "10s")
-        // Do not load spawn chunks on startup to speed up boot times.
-        updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded", "false")
-        updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded-range", "4")
-        updated = ensureYamlPathValue(updated, listOf("chunks"), "max-auto-save-chunks-per-tick", "8")
-        updated = ensureYamlPathValue(updated, listOf("chunks"), "prevent-moving-into-unloaded-chunks", "true")
+        // Keep recently visited chunks around longer while exploring at speed (elytra / flight).
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "delay-chunk-unloads-by", "12s")
+        // Keep spawn chunks loaded so the first player to join sees terrain immediately.
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded", "true")
+        // Ensure spawn radius is fully loaded (default 10) to prevent chunks not loading when joining
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded-range", "10")
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "max-auto-save-chunks-per-tick", "2")
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "prevent-moving-into-unloaded-chunks", "false")
         updated = ensureYamlPathValue(updated, listOf("tick-rates"), "mob-spawner", "2")
         updated = ensureYamlPathValue(updated, listOf("tick-rates"), "grass-spread", "4")
-        updated = ensureYamlPathValue(updated, listOf("tick-rates"), "container-update", "3")
-        updated = ensureYamlPathValue(updated, listOf("collisions"), "max-entity-collisions", "2")
+        updated = ensureYamlPathValue(updated, listOf("tick-rates"), "container-update", "1")
         // Entity save limits to reduce chunk I/O overhead
         updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "arrow", "16")
         updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "dragon_fireball", "3")
@@ -1074,7 +1067,7 @@ class ServerLauncher(private val context: Context) {
 
         if (updated != original) {
             paperWorldDefaults.writeText(updated)
-            onOutput("[PocketCraft] Paper world defaults updated: gen=$genRate, load=$loadRate, send=$sendRate, cellular=$cellularRelay, flight=$flightModeEnabled")
+            onOutput("[PocketCraft] Paper world defaults updated: entity limits + chunk unload buffer + anti-void walking.")
         }
     }
 
@@ -1255,6 +1248,11 @@ class ServerLauncher(private val context: Context) {
 
     private fun chmodJreRuntime(context: Context, runtime: JreExtractor.RuntimeSpec) {
         val jreDir = JreExtractor.getJreDir(context, runtime)
+        val marker = File(jreDir, ".chmod_applied_v1")
+        if (marker.exists()) {
+            android.util.Log.d("ServerLauncher", "Skipping JRE chmod — already applied for ${runtime.displayName}")
+            return
+        }
         val jreBinDir = File(jreDir, "bin")
         val jreLibDir = File(jreDir, "lib")
 
@@ -1269,6 +1267,7 @@ class ServerLauncher(private val context: Context) {
                 }
             }
         }
+        runCatching { marker.writeText(runtime.displayName) }
         android.util.Log.d("ServerLauncher", "Finished chmod on jre-runtime (Android 10 compat)")
     }
 
@@ -1608,17 +1607,6 @@ class ServerLauncher(private val context: Context) {
             val movedLevelDatOld = File(worldDir, "level.dat_old.corrupt_$timestamp")
             levelDatOld.renameTo(movedLevelDatOld)
             onOutput("[PocketCraft] Moved corrupt level.dat_old to ${movedLevelDatOld.name}")
-        }
-    }
-
-    private fun isPortBindable(port: Int): Boolean {
-        return try {
-            java.net.ServerSocket(port).use {
-                it.reuseAddress = true
-                true
-            }
-        } catch (e: Exception) {
-            false
         }
     }
 }

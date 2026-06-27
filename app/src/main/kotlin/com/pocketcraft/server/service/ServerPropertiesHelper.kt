@@ -15,7 +15,7 @@ object ServerPropertiesHelper {
     const val DEFAULT_SIMULATION_DISTANCE = 4
     const val DESIRED_VIEW_DISTANCE_KEY = "pocketcraft-desired-view-distance"
     const val DESIRED_SIMULATION_DISTANCE_KEY = "pocketcraft-desired-simulation-distance"
-    const val RELAY_READY_ENTITY_BROADCAST_PERCENT = 35
+    const val RELAY_READY_ENTITY_BROADCAST_PERCENT = 22
     const val POCKETCRAFT_JOIN_MESSAGE_TEXT = "hosted on Pocketcraft"
     const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/7xw3Rd2vs2"
 
@@ -91,27 +91,41 @@ object ServerPropertiesHelper {
     private fun syncDesiredChunkDistances(props: Properties): Boolean {
         var changed = false
 
-        val currentView = props.getProperty("view-distance")?.toIntOrNull()?.coerceIn(3, 32)
-        val desiredView = props.getProperty(DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull()?.coerceIn(3, 32)
-        val resolvedView = currentView ?: desiredView ?: DEFAULT_VIEW_DISTANCE
-        if (desiredView != resolvedView) {
-            props[DESIRED_VIEW_DISTANCE_KEY] = resolvedView.toString()
-            changed = true
+        // Seed desired keys from legacy view-distance values once.
+        if (props.getProperty(DESIRED_VIEW_DISTANCE_KEY).isNullOrBlank()) {
+            props.getProperty("view-distance")?.toIntOrNull()?.coerceIn(3, 32)?.let { legacy ->
+                props[DESIRED_VIEW_DISTANCE_KEY] = legacy.toString()
+                changed = true
+            }
         }
-        if (currentView != resolvedView) {
-            props["view-distance"] = resolvedView.toString()
-            changed = true
+        if (props.getProperty(DESIRED_SIMULATION_DISTANCE_KEY).isNullOrBlank()) {
+            props.getProperty("simulation-distance")?.toIntOrNull()?.coerceIn(3, 32)?.let { legacy ->
+                props[DESIRED_SIMULATION_DISTANCE_KEY] = legacy.toString()
+                changed = true
+            }
         }
 
-        val currentSimulation = props.getProperty("simulation-distance")?.toIntOrNull()?.coerceIn(3, 32)
+        // User-selected desired values are the source of truth — never let a runtime
+        // view-distance write from Paper/crash recovery overwrite the saved preference.
+        val desiredView = props.getProperty(DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull()?.coerceIn(3, 32)
+            ?: DEFAULT_VIEW_DISTANCE
         val desiredSimulation = props.getProperty(DESIRED_SIMULATION_DISTANCE_KEY)?.toIntOrNull()?.coerceIn(3, 32)
-        val resolvedSimulation = currentSimulation ?: desiredSimulation ?: DEFAULT_SIMULATION_DISTANCE
-        if (desiredSimulation != resolvedSimulation) {
-            props[DESIRED_SIMULATION_DISTANCE_KEY] = resolvedSimulation.toString()
+            ?: DEFAULT_SIMULATION_DISTANCE
+
+        if (props.getProperty(DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull() != desiredView) {
+            props[DESIRED_VIEW_DISTANCE_KEY] = desiredView.toString()
             changed = true
         }
-        if (currentSimulation != resolvedSimulation) {
-            props["simulation-distance"] = resolvedSimulation.toString()
+        if (props.getProperty(DESIRED_SIMULATION_DISTANCE_KEY)?.toIntOrNull() != desiredSimulation) {
+            props[DESIRED_SIMULATION_DISTANCE_KEY] = desiredSimulation.toString()
+            changed = true
+        }
+        if (props.getProperty("view-distance")?.toIntOrNull() != desiredView) {
+            props["view-distance"] = desiredView.toString()
+            changed = true
+        }
+        if (props.getProperty("simulation-distance")?.toIntOrNull() != desiredSimulation) {
+            props["simulation-distance"] = desiredSimulation.toString()
             changed = true
         }
 

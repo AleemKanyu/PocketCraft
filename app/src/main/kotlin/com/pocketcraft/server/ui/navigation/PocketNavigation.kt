@@ -383,14 +383,14 @@ fun PocketTopBar(
                             )
                             .clip(RoundedCornerShape(17.dp))
                             .background(PocketColors.IconBtnBg)
-                            .clickable(enabled = !relayLocked) { relayMenuExpanded = true },
+                            .clickable { relayMenuExpanded = true },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Public,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
-                            tint = if (relayLocked) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f) else accentTint.copy(alpha = 0.86f)
+                            tint = accentTint.copy(alpha = 0.86f)
                         )
                     }
                     PocketDropdownMenu(
@@ -399,7 +399,11 @@ fun PocketTopBar(
                     ) {
                         MenuHeader(
                             title = "Relay Regions",
-                            subtitle = "Choose the best route for your players"
+                            subtitle = if (relayLocked) {
+                                "Switch relay while online — players may need to rejoin"
+                            } else {
+                                "Choose the best route for your players"
+                            }
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                         relayOptions.forEach { region ->
@@ -409,7 +413,9 @@ fun PocketTopBar(
                                 subtitle = if (isComingSoon) {
                                     "America region is coming soon"
                                 } else if (region.host == relayHost) {
-                                    "Currently selected"
+                                    if (relayLocked) "Currently active" else "Currently selected"
+                                } else if (relayLocked) {
+                                    "Switch relay now (players may rejoin)"
                                 } else {
                                     "Tap to switch relay region"
                                 },
@@ -419,7 +425,7 @@ fun PocketTopBar(
                                     relayMenuExpanded = false
                                     if (isComingSoon) {
                                         Toast.makeText(context, "America server coming soon", Toast.LENGTH_SHORT).show()
-                                    } else if (!relayLocked) {
+                                    } else {
                                         onRelayHostChange(region.host)
                                     }
                                 }

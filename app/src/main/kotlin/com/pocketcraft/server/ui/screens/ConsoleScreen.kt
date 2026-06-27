@@ -148,6 +148,7 @@ import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.components.PocketWorldIcon
 import com.pocketcraft.server.ui.components.PlayerCard
 import com.pocketcraft.server.ui.components.PlayerCardAction
+import com.pocketcraft.server.ui.components.ReleaseTrain26WarningBanner
 import com.pocketcraft.server.ui.components.VersionUpgradeCard
 import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
 import com.pocketcraft.server.ui.components.duoTextFieldShape
@@ -666,6 +667,13 @@ fun ConsoleScreen(
                     )
                 }
             }
+        }
+        item(key = "release_train_26_warning") {
+            ReleaseTrain26WarningBanner(
+                activeVersion = displayedRuntimeVersion,
+                onChangeVersion = onChangeVersion,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
         item {
             AnimatedEntranceContainer(index = 9) {

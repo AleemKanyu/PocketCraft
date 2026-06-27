@@ -2,6 +2,7 @@ package com.pocketcraft.server.server
 
 import android.util.Log
 import com.pocketcraft.server.service.VersionCacheManager
+import com.pocketcraft.server.service.MinecraftVersionPolicy
 import com.pocketcraft.server.data.model.ServerType
 import com.pocketcraft.server.service.VersionCatalog
 import kotlinx.coroutines.Dispatchers
@@ -53,7 +54,7 @@ object ServerJarManager {
         if (!forceRefresh) {
             val cached = VersionCacheManager.get(context, cacheKey, typeToken)
             if (cached != null) {
-                return@withContext cached
+                return@withContext MinecraftVersionPolicy.filterInstallableVersions(cached)
             }
         }
 
@@ -67,10 +68,11 @@ object ServerJarManager {
             ServerType.MODPACK -> emptyList()
         }
 
-        if (versions.isNotEmpty()) {
-            VersionCacheManager.put(context, cacheKey, versions)
+        val filtered = MinecraftVersionPolicy.filterInstallableVersions(versions)
+        if (filtered.isNotEmpty()) {
+            VersionCacheManager.put(context, cacheKey, filtered)
         }
-        versions
+        filtered
     }
 
     private fun fetchPaperVersions(): List<String> {
@@ -110,6 +112,7 @@ object ServerJarManager {
             .filter { stableVersionRegex.matches(it) }
             .distinct()
             .sortedWith(versionComparator)
+            .let { MinecraftVersionPolicy.filterInstallableVersions(it) }
     }
 
     private fun fetchPurpurVersions(): List<String> {

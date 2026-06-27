@@ -69,7 +69,7 @@ public class PocketCraftCompanion extends JavaPlugin {
                 }
             }
             getLogger().info(sb.toString());
-        }, 100L, 100L);
+        }, 20L, 20L);
     }
 
     /**

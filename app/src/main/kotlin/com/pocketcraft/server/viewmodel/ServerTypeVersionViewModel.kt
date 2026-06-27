@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.pocketcraft.server.data.model.ServerType
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.data.repository.ServerConfigRepository
+import com.pocketcraft.server.service.MinecraftVersionPolicy
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.service.ServerPropertiesHelper
 import com.pocketcraft.server.service.VersionCatalog
@@ -217,7 +218,7 @@ class ServerTypeVersionViewModel @Inject constructor(
             versions
         } else {
             versions.filterNot { isPreReleaseVersion(it) }
-        }
+        }.let { MinecraftVersionPolicy.filterInstallableVersions(it) }
         
         // If offline, only show downloaded versions
         val finalVersions = if (_isOffline.value) {
@@ -231,7 +232,8 @@ class ServerTypeVersionViewModel @Inject constructor(
         
         val previousSelection = _selectedVersion.value
         _selectedVersion.value = when {
-            preferredVersion != null && preferredVersion.isNotBlank() -> preferredVersion
+            preferredVersion != null && preferredVersion.isNotBlank() && !MinecraftVersionPolicy.isReleaseTrain26(preferredVersion) ->
+                preferredVersion
             previousSelection != null && finalVersions.contains(previousSelection) -> previousSelection
             else -> null
         }

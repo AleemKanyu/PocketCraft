@@ -29,6 +29,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import com.pocketcraft.server.BuildConfig
+import com.pocketcraft.server.RelayManager
 import com.pocketcraft.server.WorldImporter
 import com.pocketcraft.server.data.model.PlayerInfo
 import com.pocketcraft.server.data.model.ServerConfig
@@ -133,6 +134,7 @@ class ServerStateHolder(
     private var restartFallbackJob: Job? = null
     private var periodicWorldSaveJob: Job? = null
     private var periodicLocationJob: Job? = null
+    private var periodicPingJob: Job? = null
     private var lastRequestedServerType: ServerType? = null
     private var consoleVisibleAfterStart = false
     private var pendingRestart by mutableStateOf(false)
@@ -1142,6 +1144,7 @@ class ServerStateHolder(
         consoleVisibleAfterStart = true
         startPeriodicWorldSave()
         startPeriodicLocationPolling()
+        startPeriodicPingPolling()
         startupProgressPercent = 100
         startupStatusMessage = "Server ready!"
         if (tps <= 0f) tps = 20f
@@ -1402,6 +1405,13 @@ class ServerStateHolder(
         } else {
             sessionPlayers.add(mergedPlayer)
         }
+
+        scope.launch(Dispatchers.IO) {
+            delay(500)
+            if (isRunning && !isStopping) {
+                applyPingUpdatesFromRcon()
+            }
+        }
     }
 
     private fun applyPersistedRuntimeState(state: PersistedRuntimeState) {
@@ -1445,6 +1455,7 @@ class ServerStateHolder(
             isGeyserDone = true
             startPeriodicWorldSave()
             startPeriodicLocationPolling()
+            startPeriodicPingPolling()
             markJoinable()
         } else if (!isStarting) {
             if (logs.isNotEmpty()) {
@@ -1483,7 +1494,7 @@ class ServerStateHolder(
             tps = 20f
         }
 
-        if (state.isRunning && publicAddress.isNullOrBlank() && !state.publicAddress.isNullOrBlank()) {
+        if (state.isRunning && publicAddress.isNullOrBlank() && !state.publicAddress.isNullOrBlank() && !tunnelConnecting) {
             publicAddress = state.publicAddress
             tunnelError = null
         }
@@ -1932,15 +1943,46 @@ class ServerStateHolder(
     }
 
     suspend fun updateRelayHost(host: String): String = withContext(Dispatchers.IO) {
-        if (isNavigationLocked) {
-            return@withContext "Stop the server before changing relay location."
+        val normalizedHost = host.trim()
+        if (normalizedHost.isBlank()) {
+            return@withContext "Invalid relay location."
         }
-        com.pocketcraft.server.data.preferences.AppPreferences(appContext).relayHost = host
-        FirebaseAnalyticsManager.logSettingsChanged("relay_host", host)
+        val displayName = com.pocketcraft.server.config.RelayServers.getDisplayName(normalizedHost)
+        if (normalizedHost == relayHost) {
+            return@withContext "Relay is already set to $displayName."
+        }
+
+        val switchingLive = isNavigationLocked
+        val previousHost = relayHost
+
+        if (switchingLive) {
+            withContext(Dispatchers.Main) {
+                publicAddress = null
+                tunnelConnecting = true
+                tunnelError = null
+            }
+            runCatching {
+                kotlinx.coroutines.withTimeout(5_000L) {
+                    RelayManager(appContext).unregisterFromHost(previousHost)
+                }
+            }.onFailure { error ->
+                android.util.Log.w("ServerStateHolder", "Failed to unregister old relay $previousHost: ${error.message}")
+            }
+        }
+
+        com.pocketcraft.server.data.preferences.AppPreferences(appContext).setManualRelayHost(normalizedHost)
+        FirebaseAnalyticsManager.logSettingsChanged("relay_host", normalizedHost)
         withContext(Dispatchers.Main) {
-            relayHost = host
+            relayHost = normalizedHost
+            if (switchingLive) {
+                ServerHostService.reconnectRelay(appContext, skipUnregister = true)
+            }
         }
-        "Relay server location updated to ${if (host.contains("mine")) "Asia" else "Global"}."
+        if (switchingLive) {
+            "Switching relay to $displayName. Your internet address will update shortly — players may need to rejoin."
+        } else {
+            "Relay location set to $displayName."
+        }
     }
 
     suspend fun updateSeed(seed: String): String = withContext(Dispatchers.IO) {
@@ -3353,9 +3395,13 @@ class ServerStateHolder(
         val active = sanitizeWorldName(props.getProperty("level-name", "world"))
         if (!active.equals(normalized, ignoreCase = true)) return
 
-        val view = props.getProperty("view-distance", adaptiveViewDistance().toString()).toIntOrNull()
+        val view = props.getProperty(ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY)
+            ?.toIntOrNull()
+            ?: props.getProperty("view-distance", adaptiveViewDistance().toString()).toIntOrNull()
             ?: adaptiveViewDistance()
-        val simulation = props.getProperty("simulation-distance", adaptiveSimulationDistance().toString()).toIntOrNull()
+        val simulation = props.getProperty(ServerPropertiesHelper.DESIRED_SIMULATION_DISTANCE_KEY)
+            ?.toIntOrNull()
+            ?: props.getProperty("simulation-distance", adaptiveSimulationDistance().toString()).toIntOrNull()
             ?: adaptiveSimulationDistance()
 
         props["view-distance"] = view.coerceIn(3, 32).toString()
@@ -4516,49 +4562,75 @@ class ServerStateHolder(
                             android.util.Log.w("ServerStateHolder", "RCON dimension poll failed: ${error.message}")
                         }
                     delay(200)
-
-                    val type = config.serverType
-                    if (type == com.pocketcraft.server.data.model.ServerType.PURPUR ||
-                        type == com.pocketcraft.server.data.model.ServerType.PAPER) {
-                        runCatching {
-                            val rconResponse = sendRconCommand("ping ${escapeSelectorName(player.name)}")
-                            if (rconResponse.isNotBlank() && !rconResponse.startsWith("[RCON]")) {
-                                val pings = ConsoleParser.parsePing(rconResponse)
-                                if (pings.isNotEmpty()) {
-                                    withContext(Dispatchers.Main) {
-                                        onlinePlayers.replaceAll { p ->
-                                            val newPing = pings[p.name] ?: pings[p.name.lowercase()]
-                                            if (newPing != null) {
-                                                val updated = p.copy(
-                                                    pingMs = newPing.pingMs,
-                                                    ip = newPing.ip.ifBlank { p.ip }
-                                                )
-                                                val sessionIdx = sessionPlayers.indexOfFirst { canonicalPlayerName(it.name) == canonicalPlayerName(p.name) }
-                                                if (sessionIdx >= 0) {
-                                                    sessionPlayers[sessionIdx] = updated
-                                                }
-                                                updated
-                                            } else {
-                                                p
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        .onFailure { error ->
-                            android.util.Log.w("ServerStateHolder", "RCON ping poll failed: ${error.message}")
-                        }
-                        delay(200)
-                    }
                 }
             }
+        }
+    }
+
+    private fun startPeriodicPingPolling() {
+        periodicPingJob?.cancel()
+        periodicPingJob = scope.launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(2_000)
+                if (!isRunning || isStopping) continue
+                applyPingUpdatesFromRcon()
+            }
+        }
+    }
+
+    private suspend fun applyPingUpdatesFromRcon() {
+        val type = config.serverType
+        if (type != com.pocketcraft.server.data.model.ServerType.PURPUR &&
+            type != com.pocketcraft.server.data.model.ServerType.PAPER
+        ) {
+            return
+        }
+
+        val players = withContext(Dispatchers.Main) { onlinePlayers.toList() }
+        if (players.isEmpty()) return
+
+        for (player in players) {
+            runCatching {
+                val rconResponse = sendRconCommand("ping ${escapeSelectorName(player.name)}")
+                if (rconResponse.isBlank() || rconResponse.startsWith("[RCON]")) return@runCatching
+                val pings = ConsoleParser.parsePing(rconResponse)
+                if (pings.isEmpty()) return@runCatching
+                withContext(Dispatchers.Main) {
+                    onlinePlayers.replaceAll { p ->
+                        val newPing = pings[p.name] ?: pings[p.name.lowercase()]
+                        if (newPing != null) {
+                            val updated = p.copy(
+                                pingMs = newPing.pingMs,
+                                ip = newPing.ip.ifBlank { p.ip }
+                            )
+                            val sessionIdx = sessionPlayers.indexOfFirst {
+                                canonicalPlayerName(it.name) == canonicalPlayerName(p.name)
+                            }
+                            if (sessionIdx >= 0) {
+                                sessionPlayers[sessionIdx] = updated
+                            }
+                            updated
+                        } else {
+                            p
+                        }
+                    }
+                }
+            }.onFailure { error ->
+                android.util.Log.w("ServerStateHolder", "RCON ping poll failed: ${error.message}")
+            }
+            delay(100)
         }
     }
 
     private fun stopPeriodicLocationPolling() {
         periodicLocationJob?.cancel()
         periodicLocationJob = null
+        stopPeriodicPingPolling()
+    }
+
+    private fun stopPeriodicPingPolling() {
+        periodicPingJob?.cancel()
+        periodicPingJob = null
     }
 
     private fun flattenWorldStructure(specificWorld: String? = null) {

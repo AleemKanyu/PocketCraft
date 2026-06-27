@@ -662,7 +662,11 @@ fun SettingsScreen(
                         SettingsDropdownRow(
                             icon = Icons.Default.Router,
                             label = "Relay Server",
-                            description = "Closest location for best ping",
+                            description = if (stateHolder.isNavigationLocked) {
+                                "Switch relay while the server is online (players may rejoin)"
+                            } else {
+                                "Closest location for best ping"
+                            },
                             options = relayOptions.keys.toList(),
                             optionLabels = relayOptions,
                             selected = stateHolder.relayHost,
