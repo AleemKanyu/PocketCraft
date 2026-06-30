@@ -19,8 +19,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.yaml.snakeyaml.DumperOptions
-import org.yaml.snakeyaml.Yaml
 
 data class AfkFarmLocation(
     val id: String,
@@ -56,13 +54,6 @@ class AfkHelperManager(
 
     private val appContext = context.applicationContext
     private val dao = AfkHelperDatabase.getInstance(appContext).afkFarmLocationDao()
-    private val yaml = Yaml(
-        DumperOptions().apply {
-            defaultFlowStyle = DumperOptions.FlowStyle.BLOCK
-            isPrettyFlow = true
-            indent = 2
-        }
-    )
     private val liveDummyIds = linkedSetOf<String>()
     private val restartPendingIds = linkedSetOf<String>()
     private var cachedEntities: List<AfkFarmLocationEntity> = emptyList()
@@ -165,7 +156,7 @@ class AfkHelperManager(
         }
 
         val worldName = currentWorldName()
-        val activeWorldFarms = cachedEntities.filter {
+        val activeWorldFarms = dao.getAll().filter {
             it.worldName.equals(worldName, ignoreCase = true) && it.isActive
         }
 
@@ -180,9 +171,9 @@ class AfkHelperManager(
         renderCurrentWorld()
     }
 
-    suspend fun captureSuggestedLocation(): Triple<Int, Int, Int>? = withContext(Dispatchers.IO) {
-        val owner = onlinePlayersProvider().firstOrNull { it.uuid.isNotBlank() } ?: return@withContext null
-        val selector = playerSelector(owner.name)
+    suspend fun captureSuggestedLocation(playerName: String? = null): Triple<Int, Int, Int>? = withContext(Dispatchers.IO) {
+        val targetName = playerName ?: onlinePlayersProvider().firstOrNull { it.uuid.isNotBlank() }?.name ?: return@withContext null
+        val selector = playerSelector(targetName)
         val posLine = runCatching { sendRconCommand("data get entity $selector Pos") }.getOrNull() ?: return@withContext null
         NBTParser.parsePosition(posLine)?.let { (x, y, z) ->
             Triple(x.toInt(), y.toInt(), z.toInt())
@@ -217,7 +208,7 @@ class AfkHelperManager(
             ensureDummyPluginSupport(worldServerDir(prepared.worldName))
             val selector = playerSelector(onlineOwner.name)
             val createResponse = runCatching {
-                sendRconCommand("execute as $selector run dummy create ${prepared.dummyEntityName}")
+                sendRconCommand("execute as $selector at @s run dummy create ${prepared.dummyEntityName}")
             }.getOrElse { error ->
                 appendLog("[PocketCraft] AFK helper create failed for ${prepared.name}: ${error.message}")
                 ""
@@ -243,16 +234,7 @@ class AfkHelperManager(
             refreshNow()
             val liveNow = liveDummyIds.contains(synced.id)
             if (liveNow) {
-                val lowerCreate = createResponse.lowercase(Locale.getDefault())
-                if (
-                    lowerCreate.contains("created") ||
-                    lowerCreate.contains("dummy") ||
-                    lowerCreate.isBlank()
-                ) {
-                    "${synced.name} is live now. Restart once later if you want chunk-loading to fully rebind to the saved coordinates."
-                } else {
-                    "${synced.name} is live now."
-                }
+                "${synced.name} is live now."
             } else {
                 restartPendingIds += synced.id
                 renderCurrentWorld()
@@ -353,24 +335,18 @@ class AfkHelperManager(
         BundledPluginInstaller.installBundledPlugins(appContext, serverDir)
         ensureDummyPluginSupport(serverDir)
 
-        val activeFarms = cachedEntities.filter {
+        val activeFarms = dao.getAll().filter {
             it.worldName.equals(worldName, ignoreCase = true) &&
                 it.isActive &&
                 it.ownerPlayerUuid.isNotBlank()
         }
 
-        val dummiesFile = File(serverDir, "plugins/dummyplayers/dummies.yml")
-        val existing = readYamlRoot(dummiesFile).toMutableMap()
-        val existingDummies = (existing["dummies"] as? Map<*, *>)?.mapKeys { it.key.toString() }?.toMutableMap()
-            ?: linkedMapOf()
-
+        val dummiesFile = File(serverDir, "plugins/DummyPlayers/dummies.yml")
         val managedNames = activeFarms.map { it.dummyEntityName.lowercase(Locale.getDefault()) }.toSet()
-        val mergedDummies = linkedMapOf<String, Any?>()
-        existingDummies.forEach { (key, value) ->
-            val data = value as? Map<*, *> ?: return@forEach
-            val name = data["name"]?.toString()?.lowercase(Locale.getDefault()).orEmpty()
-            if (name !in managedNames) {
-                mergedDummies[key] = LinkedHashMap(data)
+        val mergedEntries = mutableListOf<DummyYamlEntry>()
+        parseDummiesYaml(dummiesFile).forEach { entry ->
+            if (entry.name.lowercase(Locale.getDefault()) !in managedNames) {
+                mergedEntries += entry
             }
         }
 
@@ -382,57 +358,38 @@ class AfkHelperManager(
                     dao.upsert(farm.copy(dummyUuid = uuid, createdAt = createdAt))
                 }
             }
-            mergedDummies[uuid] = linkedMapOf(
-                "name" to farm.dummyEntityName,
-                "uuid" to uuid,
-                "owner" to farm.ownerPlayerUuid,
-                "world" to worldName,
-                "x" to farm.x.toDouble(),
-                "y" to farm.y.toDouble(),
-                "z" to farm.z.toDouble(),
-                "yaw" to farm.yaw,
-                "pitch" to farm.pitch,
-                "created-at" to createdAt
+            mergedEntries += DummyYamlEntry(
+                keyUuid = uuid,
+                uuid = uuid,
+                name = farm.dummyEntityName,
+                ownerUuid = farm.ownerPlayerUuid,
+                world = worldName,
+                x = farm.x.toDouble(),
+                y = farm.y.toDouble(),
+                z = farm.z.toDouble(),
+                yaw = farm.yaw.toDouble(),
+                pitch = farm.pitch.toDouble(),
+                createdAt = createdAt
             )
         }
 
-        val root = linkedMapOf<String, Any?>()
-        root.putAll(existing.filterKeys { it != "dummies" })
-        root["dummies"] = mergedDummies
-        writeYamlRoot(dummiesFile, root)
+        writeDummiesYaml(dummiesFile, mergedEntries)
     }
 
     private fun ensureDummyPluginSupport(serverDir: File) {
-        val dataDir = File(serverDir, "plugins/dummyplayers").also { it.mkdirs() }
+        val dataDir = File(serverDir, "plugins/DummyPlayers").also { it.mkdirs() }
         val configFile = File(dataDir, "config.yml")
-        val config = linkedMapOf(
-            "max-dummies-per-player" to 8,
-            "name-prefix" to DUMMY_PREFIX,
-            "chunk-loading" to linkedMapOf(
-                "enabled" to true,
-                "radius" to 2
-            ),
-            "authentication" to linkedMapOf(
-                "enabled" to false
-            )
+        configFile.writeText(
+            """
+            max-dummies-per-player: 8
+            name-prefix: ${yamlScalar(DUMMY_PREFIX)}
+            chunk-loading:
+              enabled: true
+              radius: 2
+            authentication:
+              enabled: false
+            """.trimIndent() + "\n"
         )
-        writeYamlRoot(configFile, config)
-    }
-
-    private fun readYamlRoot(file: File): LinkedHashMap<String, Any?> {
-        if (!file.exists()) return linkedMapOf()
-        return runCatching {
-            @Suppress("UNCHECKED_CAST")
-            (yaml.load<Any?>(file.readText()) as? Map<String, Any?>)?.toMutableMap() as? LinkedHashMap<String, Any?>
-                ?: LinkedHashMap<String, Any?>().apply {
-                    putAll((yaml.load<Any?>(file.readText()) as? Map<String, Any?>).orEmpty())
-                }
-        }.getOrElse { linkedMapOf() }
-    }
-
-    private fun writeYamlRoot(file: File, data: Map<String, Any?>) {
-        file.parentFile?.mkdirs()
-        file.writeText(yaml.dump(data))
     }
 
     private fun nextDummyEntityName(name: String): String {
@@ -494,25 +451,127 @@ class AfkHelperManager(
         name.replace("\\", "\\\\").replace("\"", "\\\"")
 
     private fun readDummyRecordByName(worldName: String, dummyName: String): DummyYamlRecord? {
-        val dummiesFile = File(worldServerDir(worldName), "plugins/dummyplayers/dummies.yml")
-        val root = readYamlRoot(dummiesFile)
-        val dummies = root["dummies"] as? Map<*, *> ?: return null
-        dummies.forEach { (key, value) ->
-            val data = value as? Map<*, *> ?: return@forEach
-            if (data["name"]?.toString()?.equals(dummyName, ignoreCase = true) == true) {
+        val dummiesFile = File(worldServerDir(worldName), "plugins/DummyPlayers/dummies.yml")
+        parseDummiesYaml(dummiesFile).forEach { entry ->
+            if (entry.name.equals(dummyName, ignoreCase = true)) {
                 return DummyYamlRecord(
-                    uuid = data["uuid"]?.toString().orEmpty().ifBlank { key?.toString().orEmpty() },
-                    ownerUuid = data["owner"]?.toString().orEmpty(),
-                    createdAt = (data["created-at"] as? Number)?.toLong() ?: 0L
+                    uuid = entry.uuid.ifBlank { entry.keyUuid },
+                    ownerUuid = entry.ownerUuid,
+                    createdAt = entry.createdAt
                 )
             }
         }
         return null
     }
 
+    private fun parseDummiesYaml(file: File): List<DummyYamlEntry> {
+        if (!file.exists()) return emptyList()
+        val result = mutableListOf<DummyYamlEntry>()
+        var currentKey: String? = null
+        var fields = mutableMapOf<String, String>()
+
+        fun flush() {
+            val key = currentKey ?: return
+            result += DummyYamlEntry(
+                keyUuid = key,
+                uuid = fields["uuid"].orEmpty().ifBlank { key },
+                name = fields["name"].orEmpty(),
+                ownerUuid = fields["owner"].orEmpty(),
+                world = fields["world"].orEmpty(),
+                x = fields["x"]?.toDoubleOrNull(),
+                y = fields["y"]?.toDoubleOrNull(),
+                z = fields["z"]?.toDoubleOrNull(),
+                yaw = fields["yaw"]?.toDoubleOrNull(),
+                pitch = fields["pitch"]?.toDoubleOrNull(),
+                createdAt = fields["created-at"]?.toLongOrNull() ?: 0L
+            )
+            currentKey = null
+            fields = mutableMapOf()
+        }
+
+        file.readLines().forEach { rawLine ->
+            val line = rawLine.trimEnd()
+            if (line.isBlank() || line.trimStart().startsWith("#") || line.trim() == "dummies:") {
+                return@forEach
+            }
+
+            val keyMatch = Regex("""^\s{2}([^:#]+):\s*$""").find(line)
+            if (keyMatch != null) {
+                flush()
+                currentKey = keyMatch.groupValues[1].trim()
+                return@forEach
+            }
+
+            val fieldMatch = Regex("""^\s{4}([^:#]+):\s*(.*)$""").find(line)
+            if (fieldMatch != null && currentKey != null) {
+                val key = fieldMatch.groupValues[1].trim()
+                val value = parseYamlScalar(fieldMatch.groupValues[2].trim())
+                fields[key] = value
+            }
+        }
+        flush()
+        return result
+    }
+
+    private fun writeDummiesYaml(file: File, entries: List<DummyYamlEntry>) {
+        file.parentFile?.mkdirs()
+        if (entries.isEmpty()) {
+            file.writeText("dummies: {}\n")
+            return
+        }
+
+        val sortedEntries = entries.sortedBy { it.name.lowercase(Locale.getDefault()) }
+        val content = buildString {
+            appendLine("dummies:")
+            sortedEntries.forEach { entry ->
+                appendLine("  ${entry.keyUuid}:")
+                appendLine("    name: ${yamlScalar(entry.name)}")
+                appendLine("    uuid: ${yamlScalar(entry.uuid.ifBlank { entry.keyUuid })}")
+                appendLine("    owner: ${yamlScalar(entry.ownerUuid)}")
+                appendLine("    world: ${yamlScalar(entry.world)}")
+                appendLine("    x: ${entry.x ?: 0.0}")
+                appendLine("    y: ${entry.y ?: 0.0}")
+                appendLine("    z: ${entry.z ?: 0.0}")
+                appendLine("    yaw: ${entry.yaw ?: 0.0}")
+                appendLine("    pitch: ${entry.pitch ?: 0.0}")
+                appendLine("    created-at: ${entry.createdAt}")
+            }
+        }
+        file.writeText(content)
+    }
+
+    private fun parseYamlScalar(raw: String): String {
+        if (raw.length >= 2 && raw.startsWith("'") && raw.endsWith("'")) {
+            return raw.substring(1, raw.length - 1).replace("''", "'")
+        }
+        if (raw.length >= 2 && raw.startsWith("\"") && raw.endsWith("\"")) {
+            return raw.substring(1, raw.length - 1).replace("\\\"", "\"").replace("\\\\", "\\")
+        }
+        return raw
+    }
+
+    private fun yamlScalar(value: String?): String {
+        val safeValue = value.orEmpty()
+        return "'${safeValue.replace("'", "''")}'"
+    }
+
     private data class DummyYamlRecord(
         val uuid: String,
         val ownerUuid: String,
+        val createdAt: Long
+    )
+
+    private data class DummyYamlEntry(
+        val keyUuid: String,
+        val uuid: String,
+        val name: String,
+        val ownerUuid: String,
+        val world: String,
+        val x: Double?,
+        val y: Double?,
+        val z: Double?,
+        val yaw: Double?,
+        val pitch: Double?,
         val createdAt: Long
     )
 

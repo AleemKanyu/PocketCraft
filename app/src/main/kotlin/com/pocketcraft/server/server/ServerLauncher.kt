@@ -867,10 +867,10 @@ class ServerLauncher(private val context: Context) {
         val vd = viewDistance.coerceIn(4, 32)
         return if (!cellularRelay) {
             // Wi-Fi: High speed for fast chunk loading
-            if (flightModeEnabled) 160 else 100
+            if (flightModeEnabled) 90 else 60
         } else {
             // Cellular: Responsive chunk loading under 180ms ping
-            if (flightModeEnabled) 60 else 40
+            if (flightModeEnabled) 40 else 25
         }
     }
 
@@ -880,16 +880,16 @@ class ServerLauncher(private val context: Context) {
     ): Triple<Int, Int, Int> {
         return if (cellularRelay) {
             if (flightModeEnabled) {
-                Triple(6, 10, 6) // generate, load, send
+                Triple(4, 6, 4) // generate, load, send
             } else {
-                Triple(4, 6, 4)
+                Triple(3, 4, 3)
             }
         } else {
             // Wi-Fi: High-throughput async chunk loading pipeline
             if (flightModeEnabled) {
-                Triple(10, 18, 12)
+                Triple(6, 10, 6)
             } else {
-                Triple(6, 12, 8)
+                Triple(4, 6, 4)
             }
         }
     }

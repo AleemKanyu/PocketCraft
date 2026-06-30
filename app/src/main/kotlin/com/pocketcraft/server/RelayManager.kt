@@ -1170,7 +1170,6 @@ class RelayManager(private val context: Context) {
         poolTopUpScheduled.set(false)
         lastIdleSocketRefreshAtMs = 0L
         resolvedRelayIp = null
-        activeRelayHost = null
         activeRelayIsFallback = false
         preferFallbackRelay = false
         _isPoolReady.value = false
@@ -1180,8 +1179,6 @@ class RelayManager(private val context: Context) {
             socketPool.clear()
         }
         connectingSockets.set(0)
-        // assignedPort = null // Keep port persistent across restarts
-        activeRelaySessionId = null
         android.util.Log.i("RelayManager", "Tunnel disconnected and scope reset.")
     }
 

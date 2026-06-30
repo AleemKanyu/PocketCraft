@@ -253,6 +253,10 @@ fun PlayersOnlineTab(
     var searchQuery by remember { mutableStateOf("") }
     var visibleCount by remember { mutableIntStateOf(10) }
     var showAddAfkDialog by remember { mutableStateOf(false) }
+    var prefilledAfkName by remember { mutableStateOf("") }
+    var prefilledAfkX by remember { mutableStateOf("") }
+    var prefilledAfkY by remember { mutableStateOf("") }
+    var prefilledAfkZ by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     val players = stateHolder.sessionPlayers
@@ -385,6 +389,24 @@ fun PlayersOnlineTab(
                         onBan = { stateHolder.banPlayer(player.name) },
                         onOp = {
                             if (player.isOp) stateHolder.removeOp(player.name) else stateHolder.opPlayer(player.name)
+                        },
+                        onAddAfkHelper = {
+                            Toast.makeText(context, "Fetching player location...", Toast.LENGTH_SHORT).show()
+                            scope.launch {
+                                val location = stateHolder.suggestAfkFarmLocation(player.name)
+                                prefilledAfkName = "${player.name}'s Farm"
+                                if (location != null) {
+                                    prefilledAfkX = location.first.toString()
+                                    prefilledAfkY = location.second.toString()
+                                    prefilledAfkZ = location.third.toString()
+                                } else {
+                                    prefilledAfkX = ""
+                                    prefilledAfkY = ""
+                                    prefilledAfkZ = ""
+                                    Toast.makeText(context, "Could not fetch location; fill manually.", Toast.LENGTH_SHORT).show()
+                                }
+                                showAddAfkDialog = true
+                            }
                         }
                     )
                 }
@@ -411,7 +433,13 @@ fun PlayersOnlineTab(
                 Spacer(Modifier.height(20.dp))
                 AfkHelpersSection(
                     stateHolder = stateHolder,
-                    onAddClick = { showAddAfkDialog = true },
+                    onAddClick = {
+                        prefilledAfkName = ""
+                        prefilledAfkX = ""
+                        prefilledAfkY = ""
+                        prefilledAfkZ = ""
+                        showAddAfkDialog = true
+                    },
                     onMessage = { message ->
                         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                     }
@@ -423,9 +451,23 @@ fun PlayersOnlineTab(
     if (showAddAfkDialog) {
         AddAfkFarmDialog(
             stateHolder = stateHolder,
-            onDismiss = { showAddAfkDialog = false },
+            initialName = prefilledAfkName,
+            initialX = prefilledAfkX,
+            initialY = prefilledAfkY,
+            initialZ = prefilledAfkZ,
+            onDismiss = {
+                showAddAfkDialog = false
+                prefilledAfkName = ""
+                prefilledAfkX = ""
+                prefilledAfkY = ""
+                prefilledAfkZ = ""
+            },
             onSaved = { message ->
                 showAddAfkDialog = false
+                prefilledAfkName = ""
+                prefilledAfkX = ""
+                prefilledAfkY = ""
+                prefilledAfkZ = ""
                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
             }
         )
@@ -443,12 +485,12 @@ private fun AfkHelpersSection(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        color = PocketColors.SurfaceCard.copy(alpha = 0.94f),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            PocketColors.Primary.copy(alpha = 0.18f)
+            PocketColors.CardBorder.copy(alpha = 0.5f)
         )
     ) {
         Column(
@@ -461,6 +503,7 @@ private fun AfkHelpersSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
+                    modifier = Modifier.weight(1f),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -481,12 +524,13 @@ private fun AfkHelpersSection(
                         Text(
                             "AFK Helpers",
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 18.sp
+                            fontSize = 18.sp,
+                            color = PocketColors.TextPrimary
                         )
                         Text(
                             "Saved to this world and auto-respawned on next boot.",
                             fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f)
+                            color = PocketColors.TextSecondary
                         )
                     }
                 }
@@ -501,19 +545,19 @@ private fun AfkHelpersSection(
                         modifier = Modifier
                             .size(38.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(PocketColors.Primary.copy(alpha = 0.12f))
+                            .background(PocketColors.InactiveBg)
                     ) {
                         Icon(
                             Icons.Default.Refresh,
                             contentDescription = "Refresh AFK helpers",
-                            tint = PocketColors.Primary
+                            tint = PocketColors.TextPrimary
                         )
                     }
                     Button(
                         onClick = onAddClick,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = PocketColors.Primary,
-                            contentColor = Color.Black
+                            contentColor = PocketColors.PrimaryText
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -567,9 +611,10 @@ private fun AfkHelperRow(
 ) {
     val scope = rememberCoroutineScope()
     val statusColor = when {
-        farm.isLive -> Color(0xFF3DDC84)
+        farm.isLive -> PocketColors.Online
+        farm.requiresRestart -> PocketColors.Warning
         farm.isActive -> PocketColors.Primary
-        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f)
+        else -> PocketColors.TextMuted
     }
     val statusText = when {
         farm.isLive -> "LIVE"
@@ -581,10 +626,10 @@ private fun AfkHelperRow(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.background.copy(alpha = 0.86f),
+        color = PocketColors.SurfaceCard.copy(alpha = 0.86f),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            statusColor.copy(alpha = 0.22f)
+            PocketColors.CardBorder.copy(alpha = 0.4f)
         )
     ) {
         Column(
@@ -607,7 +652,12 @@ private fun AfkHelperRow(
                                 .clip(CircleShape)
                                 .background(statusColor)
                         )
-                        Text(farm.name, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                        Text(
+                            farm.name,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 16.sp,
+                            color = PocketColors.TextPrimary
+                        )
                         Surface(
                             shape = RoundedCornerShape(999.dp),
                             color = statusColor.copy(alpha = 0.15f)
@@ -625,7 +675,7 @@ private fun AfkHelperRow(
                     Text(
                         "X ${farm.x}  Y ${farm.y}  Z ${farm.z}",
                         fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                        color = PocketColors.TextSecondary,
                         fontWeight = FontWeight.SemiBold
                     )
                     val secondary = when {
@@ -637,7 +687,7 @@ private fun AfkHelperRow(
                     Text(
                         secondary,
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.56f)
+                        color = PocketColors.TextMuted
                     )
                 }
                 IconButton(
@@ -650,34 +700,59 @@ private fun AfkHelperRow(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFFF4757).copy(alpha = 0.10f))
+                        .background(PocketColors.DangerBg.copy(alpha = 0.12f))
                 ) {
                     Icon(
                         Icons.Default.DeleteOutline,
                         contentDescription = "Delete AFK helper",
-                        tint = Color(0xFFFF4757)
+                        tint = PocketColors.Danger
                     )
                 }
             }
 
-            Button(
-                onClick = {
-                    scope.launch {
-                        onMessage(stateHolder.toggleAfkFarm(farm.id))
-                    }
-                },
-                enabled = !stateHolder.isAfkHelperBusy,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (farm.isActive) Color(0xFF2B1B1F) else PocketColors.Primary,
-                    contentColor = if (farm.isActive) Color(0xFFFFB4B4) else Color.Black
-                )
-            ) {
-                Text(
-                    if (farm.isActive) "Disable Helper" else "Enable Helper",
-                    fontWeight = FontWeight.ExtraBold
-                )
+            if (farm.isActive) {
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            onMessage(stateHolder.toggleAfkFarm(farm.id))
+                        }
+                    },
+                    enabled = !stateHolder.isAfkHelperBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        PocketColors.InactiveBorder
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = PocketColors.TextPrimary
+                    )
+                ) {
+                    Text(
+                        "Disable Helper",
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            } else {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            onMessage(stateHolder.toggleAfkFarm(farm.id))
+                        }
+                    },
+                    enabled = !stateHolder.isAfkHelperBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PocketColors.Primary,
+                        contentColor = PocketColors.PrimaryText
+                    )
+                ) {
+                    Text(
+                        "Enable Helper",
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
             }
         }
     }
@@ -686,15 +761,19 @@ private fun AfkHelperRow(
 @Composable
 private fun AddAfkFarmDialog(
     stateHolder: ServerStateHolder,
+    initialName: String = "",
+    initialX: String = "",
+    initialY: String = "",
+    initialZ: String = "",
     onDismiss: () -> Unit,
     onSaved: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    var name by remember { mutableStateOf("") }
-    var x by remember { mutableStateOf("") }
-    var y by remember { mutableStateOf("") }
-    var z by remember { mutableStateOf("") }
+    var name by remember(initialName) { mutableStateOf(initialName) }
+    var x by remember(initialX) { mutableStateOf(initialX) }
+    var y by remember(initialY) { mutableStateOf(initialY) }
+    var z by remember(initialZ) { mutableStateOf(initialZ) }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
 
@@ -837,7 +916,8 @@ fun PlayerOnlineCard(
     onOpenDetails: () -> Unit,
     onKick: () -> Unit,
     onBan: () -> Unit,
-    onOp: () -> Unit
+    onOp: () -> Unit,
+    onAddAfkHelper: () -> Unit
 ) {
     val subtitle = if (isOnline) {
         player.pingText()
@@ -847,6 +927,7 @@ fun PlayerOnlineCard(
 
     val actions = mutableListOf<PlayerCardAction>()
     if (isOnline) {
+        actions.add(PlayerCardAction(label = "Add as AFK Helper", onClick = onAddAfkHelper))
         actions.add(PlayerCardAction(label = LocalAppStrings.current.kick, onClick = onKick))
         actions.add(PlayerCardAction(label = LocalAppStrings.current.ban, onClick = onBan, tint = PocketColors.Offline))
     }

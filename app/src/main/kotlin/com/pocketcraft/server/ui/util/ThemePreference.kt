@@ -47,12 +47,7 @@ object ThemePreferenceStore {
 
     fun load(context: Context): ThemePreference {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val resolvedPreference = ThemePreference.fromStorage(prefs.getString(KEY_THEME, null))
-        return if (resolvedPreference == ThemePreference.SYSTEM) {
-            ThemePreference.LIGHT.also { save(context, it) }
-        } else {
-            resolvedPreference
-        }
+        return ThemePreference.fromStorage(prefs.getString(KEY_THEME, null))
     }
 
     fun save(context: Context, preference: ThemePreference) {

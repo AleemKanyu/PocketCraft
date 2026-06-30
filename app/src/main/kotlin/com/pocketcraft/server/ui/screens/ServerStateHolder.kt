@@ -389,6 +389,16 @@ class ServerStateHolder(
             if (intent?.action != ServerHostService.ACTION_SERVER_EVENT) return
             if (intentVersionId != versionId) return
 
+            if (type != ServerHostService.EVENT_STOPPED &&
+                type != ServerHostService.EVENT_SERVER_CRASHED &&
+                type != ServerHostService.EVENT_ERROR
+            ) {
+                if (!isRunning && !isStarting) {
+                    isStarting = true
+                    isRunning = false
+                }
+            }
+
             if (type == ServerHostService.EVENT_STOPPED || type == ServerHostService.EVENT_SERVER_CRASHED) {
                 val prefs = AppPreferences(appContext)
                 if (prefs.hasStartedServer) {
@@ -454,9 +464,8 @@ class ServerStateHolder(
                         isJavaServerDone = true
                         isGeyserDone = true
                         areSpawnChunksLoaded = true
-                        if (isStarting) {
-                            attemptTransitionToOnline()
-                        }
+                        isStarting = true
+                        attemptTransitionToOnline()
                     }
                     ServerHostService.EVENT_OUTPUT -> appendLog(line)
                     ServerHostService.EVENT_TUNNEL_CONNECTING -> {
@@ -703,8 +712,8 @@ class ServerStateHolder(
         afkHelperManager.refreshNow()
     }
 
-    suspend fun suggestAfkFarmLocation(): Triple<Int, Int, Int>? =
-        afkHelperManager.captureSuggestedLocation()
+    suspend fun suggestAfkFarmLocation(playerName: String? = null): Triple<Int, Int, Int>? =
+        afkHelperManager.captureSuggestedLocation(playerName)
 
     var showEulaDialog by mutableStateOf(false)
         private set
@@ -3215,7 +3224,7 @@ class ServerStateHolder(
             simulationDistance = config.simulationDistance.coerceIn(3, 32)
         )
         val props = ServerPropertiesHelper.readProperties(targetDir)
-        ServerPropertiesWriter.overlayManagedValues(props, ServerPropertiesWriter.toSnapshot(enforcedConfig), isPremium)
+        ServerPropertiesWriter.overlayManagedValues(targetDir, props, ServerPropertiesWriter.toSnapshot(enforcedConfig), isPremium)
         ServerPropertiesHelper.saveProperties(targetDir, props)
 
 

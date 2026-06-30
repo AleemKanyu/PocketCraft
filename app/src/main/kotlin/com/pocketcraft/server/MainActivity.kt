@@ -344,6 +344,7 @@ class MainActivity : ComponentActivity() {
                                 PocketColors.isDark = enabled
                                 themePreference = nextPreference
                                 ThemePreferenceStore.save(this@MainActivity, nextPreference)
+                                com.pocketcraft.server.server.ServerHostService.pushWidgetUpdate(this@MainActivity)
                                 FirebaseAnalyticsManager.logThemeChanged(nextPreference.name.lowercase())
                             }
                         },
@@ -352,6 +353,7 @@ class MainActivity : ComponentActivity() {
                                 PocketColors.activeMobTheme = nextTheme
                                 mobTheme = nextTheme
                                 ThemePreferenceStore.saveMobTheme(this@MainActivity, nextTheme)
+                                com.pocketcraft.server.server.ServerHostService.pushWidgetUpdate(this@MainActivity)
                                 FirebaseAnalyticsManager.logThemeChanged(nextTheme.id)
                             }
                         }

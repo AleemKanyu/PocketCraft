@@ -48,7 +48,7 @@ object ServerPropertiesWriter {
     fun apply(serverDir: File, prefs: ServerPrefsSnapshot, isPremium: Boolean = false) {
         val file = File(serverDir, "server.properties")
         val props = loadExisting(file)
-        overlayManagedValues(props, prefs, isPremium)
+        overlayManagedValues(serverDir, props, prefs, isPremium)
         save(file, props)
         Log.d(
             TAG,
@@ -58,11 +58,11 @@ object ServerPropertiesWriter {
 
     fun write(file: File, prefs: ServerPrefsSnapshot, isPremium: Boolean = false) {
         val props = loadExisting(file)
-        overlayManagedValues(props, prefs, isPremium)
+        overlayManagedValues(file.parentFile, props, prefs, isPremium)
         save(file, props)
     }
 
-    fun overlayManagedValues(props: Properties, prefs: ServerPrefsSnapshot, isPremium: Boolean = false) {
+    fun overlayManagedValues(serverDir: File?, props: Properties, prefs: ServerPrefsSnapshot, isPremium: Boolean = false) {
         props["level-name"] = prefs.worldName
         props["level-seed"] = prefs.worldSeed
         val maxLimit = if (isPremium) 50 else 10
@@ -71,7 +71,29 @@ object ServerPropertiesWriter {
         props["server-port"] = "25565"
         props["difficulty"] = prefs.difficulty.lowercase()
         props["gamemode"] = prefs.gameMode.lowercase()
-        props["online-mode"] = prefs.onlineMode.toString()
+
+        var forceOffline = false
+        if (serverDir != null) {
+            val pluginsDir = File(serverDir, "plugins")
+            val geyserEnabled = pluginsDir.listFiles()?.any {
+                val name = it.name.lowercase()
+                name.contains("geyser") && name.endsWith(".jar")
+            } ?: false
+            val dummyEnabled = pluginsDir.listFiles()?.any {
+                val name = it.name.lowercase()
+                name.contains("dummyplayers") && name.endsWith(".jar")
+            } ?: false
+            if (geyserEnabled || dummyEnabled) {
+                forceOffline = true
+            }
+        }
+
+        if (forceOffline) {
+            props["online-mode"] = "false"
+        } else {
+            props["online-mode"] = prefs.onlineMode.toString()
+        }
+
         // enforce-secure-profile causes chat signing requirement which breaks on some
         // client builds; keep it false regardless of online-mode setting.
         props["enforce-secure-profile"] = "false"

@@ -346,20 +346,7 @@ private fun WidgetThemeTile(
                     )
                 )
         ) {
-            Box(
-                modifier = Modifier
-                    .padding(10.dp)
-                    .clip(RoundedCornerShape(30.dp))
-                    .background(Color(preview.statusBg))
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    text = "RUNNING",
-                    color = Color(preview.statusText),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp
-                )
-            }
+
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomStart)

@@ -564,6 +564,7 @@ fun ThemeMakerBottomSheet(
                         isSaved = true
                         ThemePreferenceStore.saveCustomColors(context)
                         ThemePreferenceStore.saveMobTheme(context, MobTheme.CUSTOM)
+                        com.pocketcraft.server.server.ServerHostService.pushWidgetUpdate(context)
                         onThemeApplied(MobTheme.CUSTOM)
                         onDismiss()
                     },

@@ -608,7 +608,7 @@ class ServerHostService : Service() {
                 relayStatusPlayerCount.set(0)
                 synchronized(relayOnlinePlayers) { relayOnlinePlayers.clear() }
                 try {
-                    ServerHostService.pushWidgetUpdate(applicationContext)
+                    com.pocketcraft.server.widget.ServerWidgetUpdater.push(applicationContext)
                 } catch (e: Exception) {
                     android.util.Log.e("ServerHostService", "Widget update failed on stop: ${e.message}")
                 }
