@@ -21,8 +21,10 @@ object BundledPluginInstaller {
         "geyser-Spigot.jar",
         "Geyser-Spigot-latest.jar",
         "floodgate-spigot-latest.jar",
+        "ViaVersion.jar.disabled",
         "ViaVersion-5.9.1.jar",
-        "ViaVersion-5.10.0.jar"
+        "ViaVersion-5.10.0.jar",
+        "ViaVersion-5.10.0.jar.disabled"
     )
 
     fun installBundledPlugins(context: Context, serverDir: File) {

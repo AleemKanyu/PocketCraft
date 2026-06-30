@@ -301,7 +301,7 @@ class ServerConfigRepository @Inject constructor(
             hardcore = props["hardcore"]?.toBoolean() ?: false,
             maxRamMb = props["pocketcraft-max-ram-mb"]?.toIntOrNull() ?: 1024,
             ramMode = props["pocketcraft-ram-mode"] ?: "low",
-            entityBroadcastRangePercentage = props["entity-broadcast-range-percentage"]?.toIntOrNull() ?: 50,
+            entityBroadcastRangePercentage = props["entity-broadcast-range-percentage"]?.toIntOrNull() ?: 70,
             enableRcon = props["enable-rcon"]?.toBoolean() ?: true,
             generateStructures = props["generate-structures"]?.toBoolean() ?: true,
             levelType = props["level-type"] ?: "default",

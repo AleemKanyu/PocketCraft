@@ -124,7 +124,7 @@ class BedrockUdpBridge(
             }
         }
         thread.name = "BedrockUDP-$clientIp:$clientPort"
-        thread.priority = Thread.MAX_PRIORITY
+        thread.priority = Thread.NORM_PRIORITY
         thread.start()
     }
 

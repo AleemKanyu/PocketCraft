@@ -174,6 +174,12 @@ object ServerPropertiesWriter {
     private fun loadExisting(file: File): Properties {
         val props = Properties()
         if (file.exists()) {
+            if (file.length() > 100_000L) {
+                Log.e(TAG, "server.properties is suspiciously large (${file.length()} bytes). Deleting corrupted file.")
+                runCatching { file.delete() }
+            }
+        }
+        if (file.exists()) {
             file.inputStream().use { input -> props.load(input) }
         }
         return props

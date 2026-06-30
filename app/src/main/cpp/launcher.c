@@ -407,6 +407,11 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
   char jna_path[1024];
   snprintf(jna_path, sizeof(jna_path), "%s/libjnidispatch.so", native_lib_dir);
   const char *jna_dir = path_exists(jna_path) ? native_lib_dir : shim_dir;
+  long cpu_count = sysconf(_SC_NPROCESSORS_ONLN);
+  if (cpu_count < 1) cpu_count = 4;
+  long netty_threads = cpu_count / 2;
+  if (netty_threads < 2) netty_threads = 2;
+  if (netty_threads > 4) netty_threads = 4;
 
   snprintf(jna_boot_opt, sizeof(jna_boot_opt), "-Djna.boot.library.path=%s", jna_dir);
   snprintf(jna_library_opt, sizeof(jna_library_opt), "-Djna.library.path=%s", jna_dir);
@@ -416,6 +421,8 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
   snprintf(os_name_opt, sizeof(os_name_opt), "-Dos.name=Linux");
   snprintf(os_version_opt, sizeof(os_version_opt), "-Dos.version=Android");
   snprintf(error_file_opt, sizeof(error_file_opt), "-XX:ErrorFile=%s/hs_err_pid%%p.log", server_dir);
+  char netty_threads_opt[64];
+  snprintf(netty_threads_opt, sizeof(netty_threads_opt), "-Dio.netty.eventLoopThreads=%ld", netty_threads);
   snprintf(lib_path_opt, sizeof(lib_path_opt),
            "-Djava.library.path=%s/lib/server:%s:%s:%s/lib:%s/lib:/system/lib64:/vendor/lib64:/vendor/lib64/hw:%s/lib/arm64",
            jre_path, shim_dir, tmp_dir, jre_path, jre_path, native_lib_dir);
@@ -438,7 +445,7 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   os_version_opt,
                   "-Djava.net.preferIPv4Stack=true",
                   "-Djava.net.preferIPv6Addresses=false",
-                  "-Dio.netty.eventLoopThreads=4",
+                  netty_threads_opt,
                   "-Dfile.encoding=UTF-8",
                   "-Dusing.aikars.flags=https://mcflags.emc.gs",
                   "-Dpaper.playerconnection.keepalive=90",
@@ -449,6 +456,10 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   "-Djdk.lang.Process.launchMechanism=FORK",
                   lib_path_opt,
                   "-DPaper.IgnoreJavaVersion=true",
+                  "-Dpaper.disable-update-check=true",
+                  "-Dpaper.disable-plugin-update-check=true",
+                  "-Dsun.net.client.defaultConnectTimeout=5000",
+                  "-Dsun.net.client.defaultReadTimeout=5000",
                   "-Dsun.zip.disableMemoryMapping=true",
                   "-Djdk.attach.allowAttachSelf=true",
                   "-Djna.nosys=true",
@@ -460,7 +471,7 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   "-XX:+UseStringDeduplication",
                   "-XX:+UseG1GC",
                   "-XX:+ParallelRefProcEnabled",
-                  "-XX:MaxGCPauseMillis=50",
+                  "-XX:MaxGCPauseMillis=80",
                   "-XX:+DisableExplicitGC",
                   "-XX:G1NewSizePercent=30",
                   "-XX:G1MaxNewSizePercent=40",
@@ -474,11 +485,14 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   "-XX:SurvivorRatio=32",
                   "-XX:MaxTenuringThreshold=1",
                   "-XX:+PerfDisableSharedMem",
-                  "-Dio.netty.recycler.maxCapacity=0",
-                  "-Dio.netty.recycler.maxCapacityPerThread=0",
+                  "-Dio.netty.recycler.maxCapacity=262144",
+                  "-Dio.netty.recycler.maxCapacityPerThread=1024",
                   "-Dio.netty.allocator.maxOrder=9",
                   "-Dio.netty.recycler.linkCapacity=1024",
                   "-Dio.netty.allocator.type=pooled",
+                  "-Dio.netty.leakDetection.level=disabled",
+                  "-Dio.netty.noPreferDirect=false",
+                  "-Dio.netty.noUnsafe=false",
                   "-XX:-UseContainerSupport",
                   error_file_opt,
                   "-Xrs",

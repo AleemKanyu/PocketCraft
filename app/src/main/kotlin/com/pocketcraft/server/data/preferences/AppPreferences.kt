@@ -8,10 +8,12 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.pocketcraft.server.config.RelayServers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.appPreferencesDataStore: DataStore<Preferences> by preferencesDataStore(name = "app_prefs")
@@ -57,7 +59,23 @@ object AppPreferencesKeys {
     val SERVER_TYPE_SETUP_GUIDE_SHOWN = booleanPreferencesKey("server_type_setup_guide_shown")
     val FLOATING_CHAT_ENABLED = booleanPreferencesKey("floating_chat_enabled")
     val FLOATING_CHAT_FIRST_TIME_SHOWN = booleanPreferencesKey("floating_chat_first_time_shown")
+    val WIDGET_THEME = stringPreferencesKey("widget_theme")
+    val WIDGET_THEME_MANUAL_OVERRIDE = booleanPreferencesKey("widget_theme_manual_override")
+    val WIDGET_CUSTOM_BACKGROUND = intPreferencesKey("widget_custom_background")
+    val WIDGET_CUSTOM_ACCENT = intPreferencesKey("widget_custom_accent")
+    val WIDGET_CUSTOM_TEXT_ON_ACCENT = intPreferencesKey("widget_custom_text_on_accent")
+    val WIDGET_CUSTOM_ICON_TINT = intPreferencesKey("widget_custom_icon_tint")
+    val SERVER_STARTED_AT_MILLIS = longPreferencesKey("server_started_at_millis")
 }
+
+data class WidgetThemeSettings(
+    val selectedTheme: String = "creeper",
+    val manualOverride: Boolean = false,
+    val customBackground: Int? = null,
+    val customAccent: Int? = null,
+    val customTextOnAccent: Int? = null,
+    val customIconTint: Int? = null
+)
 
 class AppPreferences(context: Context) {
     private val appContext = context.applicationContext
@@ -523,6 +541,61 @@ class AppPreferences(context: Context) {
 
 // Keep object-based API for backward compatibility with existing code
 object AppPreferencesStore {
+
+    fun getWidgetThemeSettingsFlow(context: Context): Flow<WidgetThemeSettings> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            WidgetThemeSettings(
+                selectedTheme = prefs[AppPreferencesKeys.WIDGET_THEME] ?: "creeper",
+                manualOverride = prefs[AppPreferencesKeys.WIDGET_THEME_MANUAL_OVERRIDE] ?: false,
+                customBackground = prefs[AppPreferencesKeys.WIDGET_CUSTOM_BACKGROUND],
+                customAccent = prefs[AppPreferencesKeys.WIDGET_CUSTOM_ACCENT],
+                customTextOnAccent = prefs[AppPreferencesKeys.WIDGET_CUSTOM_TEXT_ON_ACCENT],
+                customIconTint = prefs[AppPreferencesKeys.WIDGET_CUSTOM_ICON_TINT]
+            )
+        }
+
+    suspend fun getWidgetThemeSettings(context: Context): WidgetThemeSettings =
+        getWidgetThemeSettingsFlow(context).first()
+
+    suspend fun setWidgetThemeSelection(
+        context: Context,
+        themeKey: String,
+        manualOverride: Boolean
+    ) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.WIDGET_THEME] = themeKey
+            prefs[AppPreferencesKeys.WIDGET_THEME_MANUAL_OVERRIDE] = manualOverride
+        }
+    }
+
+    suspend fun setWidgetCustomColors(
+        context: Context,
+        background: Int,
+        accent: Int,
+        textOnAccent: Int,
+        iconTint: Int
+    ) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.WIDGET_CUSTOM_BACKGROUND] = background
+            prefs[AppPreferencesKeys.WIDGET_CUSTOM_ACCENT] = accent
+            prefs[AppPreferencesKeys.WIDGET_CUSTOM_TEXT_ON_ACCENT] = textOnAccent
+            prefs[AppPreferencesKeys.WIDGET_CUSTOM_ICON_TINT] = iconTint
+        }
+    }
+
+    fun getServerStartedAtMillisFlow(context: Context): Flow<Long> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.SERVER_STARTED_AT_MILLIS] ?: 0L
+        }
+
+    suspend fun getServerStartedAtMillis(context: Context): Long =
+        getServerStartedAtMillisFlow(context).first()
+
+    suspend fun setServerStartedAtMillis(context: Context, startedAtMillis: Long) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.SERVER_STARTED_AT_MILLIS] = startedAtMillis
+        }
+    }
 
     fun isSetupCompleteFlow(context: Context): Flow<Boolean> =
         context.appPreferencesDataStore.data.map { prefs ->

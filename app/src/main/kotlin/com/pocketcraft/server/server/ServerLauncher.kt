@@ -128,6 +128,7 @@ class ServerLauncher(private val context: Context) {
         }
         
         com.pocketcraft.server.service.DimensionMigrator.syncDimensionsForServerType(context, worldName, serverType)
+        PluginManager.preserveFloodgateKey(context, worldName)
         PluginManager.enforceBedrockBridgeLocalConfig(context, worldName)
         PlayerDataManager.warnIfFloodgateUsernamePrefixChanged(serverDirFileLocal)
 
@@ -515,7 +516,18 @@ class ServerLauncher(private val context: Context) {
 
         val jnaBootPath = shimDir.absolutePath
         val jnaLibraryPath = jnaBootPath
- 
+
+        val cores = Runtime.getRuntime().availableProcessors()
+        val nettyThreads = (cores / 2).coerceIn(2, 4)
+        val totalRam = getTotalRamMb(context)
+
+        val gcFlags = listOf(
+            "-XX:G1HeapWastePercent=10",
+            "-XX:G1MixedGCCountTarget=8",
+            "-XX:G1MixedGCLiveThresholdPercent=85",
+            "-XX:G1RSetUpdatingPauseTimePercent=10"
+        )
+
         val vmArgs = mutableListOf(
             "-Xmx${maxRamMb}m",
             "-Xms${minRamMb}m",
@@ -534,7 +546,7 @@ class ServerLauncher(private val context: Context) {
             "-Dos.version=Android-${Build.VERSION.RELEASE}",
             "-Djava.net.preferIPv4Stack=true",
             "-Djava.net.preferIPv6Addresses=false",
-            "-Dio.netty.eventLoopThreads=4",
+            "-Dio.netty.eventLoopThreads=$nettyThreads",
             "-Dfile.encoding=UTF-8",
             "-Dusing.aikars.flags=https://mcflags.emc.gs",
             "-Dpaper.playerconnection.keepalive=90",
@@ -544,40 +556,39 @@ class ServerLauncher(private val context: Context) {
             "-Djava.awt.headless=true",
             "-Djava.library.path=$javaLibraryPath",
             "-DPaper.IgnoreJavaVersion=true",
+            "-Dpaper.disable-update-check=true",
+            "-Dpaper.disable-plugin-update-check=true",
+            "-Dsun.net.client.defaultConnectTimeout=5000",
+            "-Dsun.net.client.defaultReadTimeout=5000",
             "-Dsun.zip.disableMemoryMapping=true",
             "-Djdk.attach.allowAttachSelf=true",
             "-Djna.nosys=true",
             "-Xshare:off",
             "-XX:+UnlockExperimentalVMOptions",
             "-XX:+UnlockDiagnosticVMOptions",
-            "-XX:+AlwaysPreTouch",
+            if (totalRam >= 4500) "-XX:+AlwaysPreTouch" else "-XX:-AlwaysPreTouch",
             "-XX:+UseStringDeduplication",
             "-XX:+UseG1GC",
             "-XX:+ParallelRefProcEnabled",
-            "-XX:MaxGCPauseMillis=200",
+            "-XX:MaxGCPauseMillis=80",
             "-XX:+DisableExplicitGC",
-            "-XX:G1NewSizePercent=30",
-            "-XX:G1MaxNewSizePercent=40",
-            "-XX:G1HeapRegionSize=8m",
-            "-XX:G1ReservePercent=20",
-            "-XX:G1HeapWastePercent=5",
-            "-XX:G1MixedGCCountTarget=4",
-            "-XX:InitiatingHeapOccupancyPercent=15",
-            "-XX:G1MixedGCLiveThresholdPercent=90",
-            "-XX:G1RSetUpdatingPauseTimePercent=5",
-            "-XX:SurvivorRatio=32",
-            "-XX:MaxTenuringThreshold=1",
-            "-XX:+PerfDisableSharedMem",
-            "-XX:-UsePerfData",
-            "-XX:-UseContainerSupport",
-            "-XX:ErrorFile=$errorFilePattern",
-            "-Dio.netty.allocator.maxOrder=9",
-            "-Dio.netty.recycler.maxCapacity=0",
-            "-Dio.netty.recycler.maxCapacityPerThread=0",
-            "-Dio.netty.recycler.linkCapacity=1024",
-            "-Dio.netty.allocator.type=unpooled",
-            "-Djdk.lang.Process.launchMechanism=FORK",
         ).apply {
+            addAll(gcFlags)
+            addAll(listOf(
+                "-XX:+PerfDisableSharedMem",
+                "-XX:-UsePerfData",
+                "-XX:-UseContainerSupport",
+                "-XX:ErrorFile=$errorFilePattern",
+                "-Dio.netty.allocator.maxOrder=9",
+                "-Dio.netty.recycler.maxCapacity=262144",
+                "-Dio.netty.recycler.maxCapacityPerThread=1024",
+                "-Dio.netty.recycler.linkCapacity=1024",
+                "-Dio.netty.allocator.type=pooled",
+                "-Dio.netty.leakDetection.level=disabled",
+                "-Dio.netty.noPreferDirect=false",
+                "-Dio.netty.noUnsafe=false",
+                "-Djdk.lang.Process.launchMechanism=FORK",
+            ))
             when (launchMode) {
                 ServerFileManager.LaunchMode.JAR -> {
                     add("-jar")
@@ -796,23 +807,32 @@ class ServerLauncher(private val context: Context) {
         flightModeEnabled: Boolean
     ): Int {
         val vd = viewDistance.coerceIn(4, 32)
-        if (flightModeEnabled) {
-            val base = if (cellularRelay) 28 else 36
-            val viewScale = (7.5 / vd).pow(0.6).coerceIn(0.5, 1.0)
-            return (base * viewScale + 4).toInt().coerceIn(24, 46)
+        return if (!cellularRelay) {
+            // Wi-Fi: High speed for fast chunk loading
+            if (flightModeEnabled) 160 else 100
+        } else {
+            // Cellular: Responsive chunk loading under 180ms ping
+            if (flightModeEnabled) 60 else 40
         }
-        val base = if (cellularRelay) 18 else 24
-        val viewScale = (7.0 / vd).pow(0.65).coerceIn(0.55, 1.0)
-        return (base * viewScale).toInt().coerceIn(14, 22)
     }
 
     private fun computeRelayChunkConcurrency(
+        cellularRelay: Boolean,
         flightModeEnabled: Boolean
     ): Triple<Int, Int, Int> {
-        return if (flightModeEnabled) {
-            Triple(5, 8, 3) // generate, load, send
+        return if (cellularRelay) {
+            if (flightModeEnabled) {
+                Triple(6, 10, 6) // generate, load, send
+            } else {
+                Triple(4, 6, 4)
+            }
         } else {
-            Triple(3, 5, 1)
+            // Wi-Fi: High-throughput async chunk loading pipeline
+            if (flightModeEnabled) {
+                Triple(10, 18, 12)
+            } else {
+                Triple(6, 12, 8)
+            }
         }
     }
 
@@ -822,13 +842,13 @@ class ServerLauncher(private val context: Context) {
     ): Pair<Int, Int> {
         return if (flightModeEnabled) {
             Pair(
-                (chunkSendRate * 7).coerceIn(72, 120),
-                (chunkSendRate * 9).coerceIn(96, 150)
+                (chunkSendRate * 1.5).toInt().coerceIn(24, 300),
+                (chunkSendRate * 2.0).toInt().coerceIn(36, 400)
             )
         } else {
             Pair(
-                (chunkSendRate * 5).coerceIn(48, 80),
-                (chunkSendRate * 7).coerceIn(64, 96)
+                (chunkSendRate * 1.2).toInt().coerceIn(16, 200),
+                (chunkSendRate * 1.5).toInt().coerceIn(24, 300)
             )
         }
     }
@@ -851,8 +871,6 @@ class ServerLauncher(private val context: Context) {
             "entity-broadcast-range-percentage",
             ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT.toString()
         ).toIntOrNull()
-        val currentView = props.getProperty("view-distance", ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE.toString())
-        val currentSimulation = props.getProperty("simulation-distance", ServerPropertiesHelper.DEFAULT_SIMULATION_DISTANCE.toString())
         val currentAllowFlight = props.getProperty("allow-flight", "false").toBoolean()
 
         var tunedAllowFlight = currentAllowFlight
@@ -864,9 +882,9 @@ class ServerLauncher(private val context: Context) {
 
         val tunedCompression = ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD
         val tunedEntityBroadcast = when {
-            currentEntityBroadcast == null -> ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
-            currentEntityBroadcast <= 0 -> ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
-            else -> currentEntityBroadcast.coerceAtMost(ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT)
+            currentEntityBroadcast == null -> 40
+            currentEntityBroadcast <= 0 -> 40
+            else -> currentEntityBroadcast.coerceIn(10, 40)
         }
 
         var changed = false
@@ -902,12 +920,18 @@ class ServerLauncher(private val context: Context) {
         val desiredSimulation = props.getProperty(ServerPropertiesHelper.DESIRED_SIMULATION_DISTANCE_KEY)?.toIntOrNull()
             ?: props.getProperty("simulation-distance")?.toIntOrNull()
             ?: ServerPropertiesHelper.DEFAULT_SIMULATION_DISTANCE
-        if (props.getProperty("view-distance")?.toIntOrNull() != desiredView) {
-            props["view-distance"] = desiredView.toString()
+
+        // Preserve the configured distances. Relay latency is handled by bounded
+        // socket queues and Paper's chunk send budget, not by shrinking the world.
+        val tunedView = desiredView.coerceIn(3, 32)
+        val tunedSimulation = desiredSimulation.coerceIn(3, 32)
+
+        if (props.getProperty("view-distance")?.toIntOrNull() != tunedView) {
+            props["view-distance"] = tunedView.toString()
             changed = true
         }
-        if (props.getProperty("simulation-distance")?.toIntOrNull() != desiredSimulation) {
-            props["simulation-distance"] = desiredSimulation.toString()
+        if (props.getProperty("simulation-distance")?.toIntOrNull() != tunedSimulation) {
+            props["simulation-distance"] = tunedSimulation.toString()
             changed = true
         }
         if (props.getProperty(ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull() != desiredView) {
@@ -924,10 +948,9 @@ class ServerLauncher(private val context: Context) {
             onOutput("[PocketCraft] Internet relay profile applied.")
         }
         onOutput(
-            "[PocketCraft] Relay runtime profile: compression=$tunedCompression, view=$currentView, simulation=$currentSimulation, entity-range=$tunedEntityBroadcast%"
+            "[PocketCraft] Relay runtime profile: compression=$tunedCompression, view=$tunedView (desired=$desiredView), simulation=$tunedSimulation (desired=$desiredSimulation), entity-range=$tunedEntityBroadcast%"
         )
-        val viewDistance = props.getProperty(ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull()
-            ?: props.getProperty("view-distance")?.toIntOrNull()
+        val viewDistance = props.getProperty("view-distance")?.toIntOrNull()
             ?: ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE
         val chunkBudget = computeRelayChunkSendBudget(
             cellularRelay = NetworkUtils.isCellular(context),
@@ -947,14 +970,13 @@ class ServerLauncher(private val context: Context) {
         val cellularRelay = NetworkUtils.isCellular(context)
         val flightModeEnabled = runBlocking { AppPreferencesStore.isFlightModeEnabledFlow(context).first() }
         val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
-        val viewDistance = props.getProperty(ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull()
-            ?: props.getProperty("view-distance")?.toIntOrNull()
+        val viewDistance = props.getProperty("view-distance")?.toIntOrNull()
             ?: ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE
         val chunkSendRate = computeRelayChunkSendBudget(cellularRelay, viewDistance, flightModeEnabled)
         val (chunkGenerateRate, chunkLoadRate) = computeRelayChunkPipelineRates(chunkSendRate, flightModeEnabled)
         val (concurrentGenerates, concurrentLoads, concurrentSends) =
-            computeRelayChunkConcurrency(flightModeEnabled)
-        val loadingPriority = if (flightModeEnabled) "5" else "3"
+            computeRelayChunkConcurrency(cellularRelay, flightModeEnabled)
+        val loadingPriority = "5"
         val profileLabel = if (flightModeEnabled) "flight" else "walking"
 
         var updated = original
@@ -982,21 +1004,34 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-sends", concurrentSends.toString())
 
         val cores = Runtime.getRuntime().availableProcessors()
-        val threads = ((cores * 2) / 3).coerceIn(3, 6)
+        val threads = (cores / 2).coerceIn(2, 3)
 
-        updated = removeYamlPathKey(updated, listOf("chunk-system"), "io-threads")
-        updated = removeYamlPathKey(updated, listOf("chunk-system"), "worker-threads")
-        updated = ensureYamlSectionValue(updated, "misc", "io-threads", threads.toString())
-        updated = ensureYamlSectionValue(updated, "misc", "worker-threads", threads.toString())
-        updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "2")
+        updated = removeYamlPathKey(updated, listOf("misc"), "io-threads")
+        updated = removeYamlPathKey(updated, listOf("misc"), "worker-threads")
+        updated = ensureYamlSectionValue(updated, "chunk-system", "io-threads", threads.toString())
+        updated = ensureYamlSectionValue(updated, "chunk-system", "worker-threads", threads.toString())
+        updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "3")
 
         // Disable bundled Spark profiler (fails to load native libraries on Android)
         updated = ensureYamlSectionValue(updated, "spark", "enabled", "false")
         updated = ensureYamlSectionValue(updated, "spark", "enable-immediately", "false")
 
+        // Disable Timings — not needed on Android, saves CPU and IO per tick.
+        updated = ensureYamlPathValue(updated, listOf("timings"), "enabled", "false")
+        updated = ensureYamlPathValue(updated, listOf("timings"), "really-enabled", "false")
+        updated = ensureYamlPathValue(updated, listOf("timings"), "server-name-privacy", "true")
+
+        // Keep-alive: extend timeout so high-latency relay players aren't kicked,
+        // and ensure keep-alives are sent on time even under chunk load.
+        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-timeout", "60")
+
+        // Disable updater and metrics submission checks to prevent slow network lookup stalls on startup
+        updated = ensureYamlPathValue(updated, listOf("updater"), "updater-status", "none")
+        updated = ensureYamlPathValue(updated, listOf("updater"), "submit-metrics-status", "none")
+
         if (updated != original) {
             paperGlobal.writeText(updated)
-            onOutput("[PocketCraft] Paper global tuning applied ($profileLabel): $chunkSendRate chunk/s send (gen=$chunkGenerateRate, load=$chunkLoadRate, view=$viewDistance), concurrent=$concurrentSends.")
+            onOutput("[PocketCraft] Paper global tuning applied ($profileLabel): $chunkSendRate chunk/s send (gen=$chunkGenerateRate, load=$chunkLoadRate, view=$viewDistance), concurrent=$concurrentSends. Disabled update/metrics check.")
         }
     }
 
@@ -1014,10 +1049,24 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "simulation-distance", "default")
         updated = ensureYamlPathValue(updated, listOf("settings"), "moved-too-quickly-multiplier", "1000.0")
         updated = ensureYamlPathValue(updated, listOf("settings"), "moved-wrongly-threshold", "1000.0")
+        updated = ensureYamlPathValue(updated, listOf("settings"), "user-suggest-updater", "false")
+
+        // Optimize entity activation ranges to save tick CPU
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "animals", "12")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "monsters", "16")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "raiders", "24")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "misc", "4")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "tick-inactive-villagers", "false")
+
+        // Optimize entity tracking ranges to save bandwith and cpu
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "players", "48")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "animals", "24")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "monsters", "32")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "misc", "16")
 
         if (updated != original) {
             spigotFile.writeText(updated)
-            onOutput("[PocketCraft] Spigot view-distance overrides cleared so server.properties stays in control.")
+            onOutput("[PocketCraft] Spigot optimizations applied: view distance overrides cleared + low-latency entity tracking/activation.")
         }
     }
 
@@ -1029,41 +1078,27 @@ class ServerLauncher(private val context: Context) {
         val paperWorldDefaults = File(configDir, "paper-world-defaults.yml")
         val original = runCatching { paperWorldDefaults.readText() }.getOrDefault("")
 
-        var updated = original
+        val sanitized = original
+            .replace("validatenearbypoi", "validate-nearby-poi")
+            .replace("secondarypoisensor", "secondary-poi-sensor")
 
-        // Clean up any broken chunk limits left over from previous experiments
-        updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-load-rate")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-chunk-send-rate")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading"), "target-player-chunk-send-rate")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading"), "player-max-concurrent-sends")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-load-rate")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "player-max-chunk-send-rate")
-        updated = removeYamlPathKey(updated, listOf("chunk-loading-basic"), "target-player-chunk-send-rate")
+        var updated = sanitized
 
-        // Keep recently visited chunks around longer while exploring at speed (elytra / flight).
-        updated = ensureYamlPathValue(updated, listOf("chunks"), "delay-chunk-unloads-by", "12s")
-        // Keep spawn chunks loaded so the first player to join sees terrain immediately.
-        updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded", "true")
-        // Ensure spawn radius is fully loaded (default 10) to prevent chunks not loading when joining
-        updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded-range", "10")
-        updated = ensureYamlPathValue(updated, listOf("chunks"), "max-auto-save-chunks-per-tick", "2")
-        updated = ensureYamlPathValue(updated, listOf("chunks"), "prevent-moving-into-unloaded-chunks", "false")
-        updated = ensureYamlPathValue(updated, listOf("tick-rates"), "mob-spawner", "2")
-        updated = ensureYamlPathValue(updated, listOf("tick-rates"), "grass-spread", "4")
-        updated = ensureYamlPathValue(updated, listOf("tick-rates"), "container-update", "1")
+        // paper-world-defaults.yml uses top-level sections. Nesting these under a
+        // synthetic "world-defaults" key makes Paper ignore every optimization.
+        updated = removeYamlTopLevelSection(updated, "world-defaults")
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "delay-chunk-unloads-by", "10s")
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "max-auto-save-chunks-per-tick", "4")
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "prevent-moving-into-unloaded-chunks", "true")
+        updated = ensureYamlPathValue(updated, listOf("collisions"), "max-entity-collisions", "2")
+
         // Entity save limits to reduce chunk I/O overhead
         updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "arrow", "16")
-        updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "dragon_fireball", "3")
-        updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "egg", "8")
         updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "ender_pearl", "8")
-        updated = removeYamlPathKey(updated, listOf("chunks", "entity-per-chunk-save-limit"), "experience_ball")
         updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "experience_orb", "8")
         updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "fireball", "8")
-        updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "firework_rocket", "8")
         updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "small_fireball", "8")
         updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "snowball", "8")
-        updated = removeYamlPathKey(updated, listOf("chunks", "entity-per-chunk-save-limit"), "thrown_exp_bottle")
-        updated = ensureYamlPathValue(updated, listOf("chunks", "entity-per-chunk-save-limit"), "experience_bottle", "3")
 
         if (updated != original) {
             paperWorldDefaults.writeText(updated)
@@ -1079,6 +1114,23 @@ class ServerLauncher(private val context: Context) {
         key: String,
         value: String
     ): String = ensureYamlPathValue(original, listOf(section), key, value)
+
+    private fun removeYamlTopLevelSection(original: String, section: String): String {
+        val lines = original.split('\n').toMutableList()
+        val start = lines.indexOfFirst { leadingYamlIndent(it) == 0 && it.trim() == "$section:" }
+        if (start == -1) return original
+        var end = lines.size
+        for (index in (start + 1) until lines.size) {
+            val line = lines[index]
+            if (line.isBlank() || line.trimStart().startsWith("#")) continue
+            if (leadingYamlIndent(line) == 0) {
+                end = index
+                break
+            }
+        }
+        lines.subList(start, end).clear()
+        return lines.joinToString("\n").trimEnd() + "\n"
+    }
 
     private fun ensureYamlPathValue(
         original: String,

@@ -185,14 +185,13 @@ object ServerFileManager {
             android.util.Log.e("ServerFileManager", "Failed to bundle PocketCraftCompanion.jar: ${it.message}")
         }
 
-        runCatching {
-            context.assets.open("default_plugins/PocketCraftChunkLoader.jar").use { input ->
-                File(pluginsDir, "PocketCraftChunkLoader.jar").outputStream().use { output ->
-                    input.copyTo(output)
-                }
+        // Paper's tuned async chunk pipeline already owns loading and send budgets.
+        // This legacy movement listener requested multiple chunks on every move event,
+        // competing with keepalives and causing high ping under exploration.
+        File(pluginsDir, "PocketCraftChunkLoader.jar").takeIf { it.exists() }?.let { plugin ->
+            if (!plugin.delete()) {
+                android.util.Log.w("ServerFileManager", "Could not remove legacy ${plugin.name}")
             }
-        }.onFailure { 
-            android.util.Log.e("ServerFileManager", "Failed to bundle PocketCraftChunkLoader.jar: ${it.message}")
         }
 
         serverDir.walkTopDown().forEach { file ->

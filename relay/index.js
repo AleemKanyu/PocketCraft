@@ -12,6 +12,7 @@ const net = require('net');
 const express = require('express');
 const dgram = require('dgram');
 const dns = require('dns');
+const { monitorEventLoopDelay } = require('perf_hooks');
 const { startBedrockPing, updateServerStatus } = require('./bedrock-ping');
 const { handleJavaPing } = require('./java-ping');
 
@@ -43,6 +44,7 @@ const REGISTER_RATE_LIMIT = 10;
 const STALE_TUNNEL_TIMEOUT_MS = 2 * 60_000;
 const MAX_USER_ID_LENGTH = 128;
 const VALID_USER_ID_RE = /^[a-zA-Z0-9_-]+$/;
+const STREAM_HIGH_WATER_MARK = 128 * 1024;
 const RELAY_SECRET = process.env.RELAY_SECRET || '';
 const APP_RELAY_SECRET = 'e7f5fbdda85c265419e519454f8d54643930116b89a1b58dcb2b86f91889d3d3';
 const PUBLIC_IP_ENV = process.env.PUBLIC_IP || '';
@@ -53,6 +55,8 @@ let RESOLVED_PUBLIC_IPV4 = null;
 
 const activeTunnels = new Map();
 const userPortMap = new Map();
+const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
+eventLoopDelay.enable();
 
 // Bedrock per-user state
 
@@ -66,6 +70,7 @@ function configureSocket(socket) {
   socket.setNoDelay(true);
   socket.setKeepAlive(true, SOCKET_KEEPALIVE_MS);
   socket.allowHalfOpen = false;
+  socket.setTimeout(0);
 }
 
 // userId validation
@@ -965,7 +970,10 @@ app.post('/register', (req, res) => {
     createdAt: Date.now(),
   };
 
-  tunnel.server = net.createServer({ allowHalfOpen: false }, (playerSocket) => {
+  tunnel.server = net.createServer({
+    allowHalfOpen: false,
+    highWaterMark: STREAM_HIGH_WATER_MARK,
+  }, (playerSocket) => {
     configureSocket(playerSocket);
 
     playerSocket.once('data', (chunk) => {
@@ -1021,7 +1029,10 @@ app.post(['/phone-ready', '/phone_ready', '/ready', '/phoneReady'], (req, res) =
       createdAt: Date.now(),
     };
 
-    tunnel.server = net.createServer({ allowHalfOpen: false }, (playerSocket) => {
+    tunnel.server = net.createServer({
+      allowHalfOpen: false,
+      highWaterMark: STREAM_HIGH_WATER_MARK,
+    }, (playerSocket) => {
       configureSocket(playerSocket);
 
       playerSocket.once('data', (chunk) => {
@@ -1106,10 +1117,22 @@ app.post('/bedrock-status', (req, res) => {
 });
 
 app.get('/health', (_req, res) => {
+  const memory = process.memoryUsage();
+  const phoneSockets = [...activeTunnels.values()].reduce((count, tunnel) => {
+    return count + tunnel.phoneSocketPool.filter((entry) => {
+      const socket = entry && entry.socket ? entry.socket : entry;
+      return socket && !socket.destroyed;
+    }).length;
+  }, 0);
   res.json({
     ok: true,
     tunnels: activeTunnels.size,
     portsUsed: userPortMap.size,
+    phoneSockets,
+    rssMb: Math.round(memory.rss / 1024 / 1024),
+    heapUsedMb: Math.round(memory.heapUsed / 1024 / 1024),
+    eventLoopP95Ms: Number((eventLoopDelay.percentile(95) / 1e6).toFixed(1)),
+    eventLoopMaxMs: Number((eventLoopDelay.max / 1e6).toFixed(1)),
     uptimeMs: (process.uptime() * 1000) | 0,
   });
 });
@@ -1162,7 +1185,10 @@ app.get('/download/paper', async (req, res) => {
 
 // Phone relay TCP listener
 
-const phoneServer = net.createServer({ allowHalfOpen: false }, (phoneSocket) => {
+const phoneServer = net.createServer({
+  allowHalfOpen: false,
+  highWaterMark: STREAM_HIGH_WATER_MARK,
+}, (phoneSocket) => {
   configureSocket(phoneSocket);
 
   let handshakeBuffer = Buffer.alloc(0);

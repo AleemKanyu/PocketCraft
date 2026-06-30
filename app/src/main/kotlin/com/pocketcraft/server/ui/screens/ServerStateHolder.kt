@@ -234,10 +234,21 @@ class ServerStateHolder(
         }
     
     private val _tunnelConnecting = mutableStateOf(false)
+    private val _relaySwitchInProgress = mutableStateOf(false)
+    var relaySwitchInProgress: Boolean
+        get() = _relaySwitchInProgress.value
+        private set(value) {
+            _relaySwitchInProgress.value = value
+            notifyStateChanged()
+        }
+
     var tunnelConnecting: Boolean
         get() = _tunnelConnecting.value
         private set(value) {
             _tunnelConnecting.value = value
+            if (!value) {
+                _relaySwitchInProgress.value = false
+            }
             notifyStateChanged()
         }
     
@@ -926,7 +937,10 @@ class ServerStateHolder(
     fun reconnectRelay() {
         if (!isRunning && !isStarting) return
         appendLog("[PocketCraft] Reconnecting internet relay...")
+        publicAddress = null
+        relaySwitchInProgress = false
         tunnelConnecting = true
+        tunnelError = null
         ServerHostService.reconnectRelay(appContext)
     }
 
@@ -1499,6 +1513,10 @@ class ServerStateHolder(
             tunnelError = null
         }
 
+        if (state.isRunning && state.publicAddress.isNullOrBlank() && tunnelConnecting) {
+            publicAddress = null
+        }
+
         if (!state.isRunning && !state.isStarting) {
             startedAtRealtime = null
             publicAddress = null
@@ -1524,15 +1542,17 @@ class ServerStateHolder(
 
     private fun readPersistedRuntimeState(): PersistedRuntimeState {
         val rawState = ServerHostService.getPersistedRuntimeState(appContext, versionId)
+        val address = ServerHostService.getPersistedPublicAddress(appContext, versionId)
+        val portOpen = isServerPortOpen(config.port)
+        val serviceActive = isServiceActive()
         
         if (rawState == ServerHostService.RUNTIME_STATE_RUNNING) {
-            val address = ServerHostService.getPersistedPublicAddress(appContext, versionId)
             // Verify if the server is actually running by checking its port
-            if (isServerPortOpen(config.port)) {
+            if (portOpen) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
             // If the port is closed, double check the process just in case
-            if (isServiceActive()) {
+            if (serviceActive) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
             ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
@@ -1540,9 +1560,12 @@ class ServerStateHolder(
         }
         
         if (rawState == ServerHostService.RUNTIME_STATE_STARTING) {
+            if (portOpen) {
+                return PersistedRuntimeState(isRunning = true, publicAddress = address)
+            }
             // If starting, just check if the service process is alive
-            if (isServiceActive()) {
-                return PersistedRuntimeState(isStarting = true)
+            if (serviceActive) {
+                return PersistedRuntimeState(isStarting = true, publicAddress = address)
             }
             // Dead state
             ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
@@ -1958,6 +1981,7 @@ class ServerStateHolder(
         if (switchingLive) {
             withContext(Dispatchers.Main) {
                 publicAddress = null
+                relaySwitchInProgress = true
                 tunnelConnecting = true
                 tunnelError = null
             }
@@ -1975,7 +1999,11 @@ class ServerStateHolder(
         withContext(Dispatchers.Main) {
             relayHost = normalizedHost
             if (switchingLive) {
-                ServerHostService.reconnectRelay(appContext, skipUnregister = true)
+                ServerHostService.reconnectRelay(
+                    appContext,
+                    skipUnregister = true,
+                    relayHost = normalizedHost
+                )
             }
         }
         if (switchingLive) {
@@ -4571,7 +4599,7 @@ class ServerStateHolder(
         periodicPingJob?.cancel()
         periodicPingJob = scope.launch(Dispatchers.IO) {
             while (isActive) {
-                delay(2_000)
+                delay(10_000)
                 if (!isRunning || isStopping) continue
                 applyPingUpdatesFromRcon()
             }

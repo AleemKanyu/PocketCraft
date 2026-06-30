@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.pocketcraft.server.BuildConfig
 import com.pocketcraft.server.data.model.Plugin
+import com.pocketcraft.server.data.model.ServerType
 import com.pocketcraft.server.server.BundledPluginInstaller
 import java.io.File
 import java.io.FileOutputStream
@@ -187,7 +188,7 @@ object PluginManager {
             File(pluginsDir, "Floodgate/config.yml"),
             File(pluginsDir, "Floodgate/floodgate.yml"),
             File(pluginsDir, "floodgate/floodgate.yml")
-        ).firstOrNull { it.exists() } ?: File(pluginsDir, "Floodgate/config.yml")
+        ).firstOrNull { it.exists() } ?: File(pluginsDir, "floodgate/config.yml")
     }
 
     fun getModsDir(context: Context, worldName: String): File =
@@ -241,6 +242,13 @@ object PluginManager {
         worldName: String,
         onProgress: (String) -> Unit = {}
     ): Result<Unit> = withContext(Dispatchers.IO) {
+        if (!supportsBundledBedrockBridge(context, worldName)) {
+            disableManagedPlugin(context, worldName, "viaversion")
+            return@withContext Result.failure(
+                IllegalStateException("Bedrock bridge is bundled only for Paper and Purpur worlds right now.")
+            )
+        }
+
         removeIncompatiblePlugins(context, worldName)
         onProgress("Installing bundled Bedrock bridge plugins...")
         val serverDir = ServerFileManager.getServerDir(context, worldName)
@@ -248,6 +256,8 @@ object PluginManager {
 
         ensureManagedPluginEnabled(context, worldName, "geyser")
         ensureManagedPluginEnabled(context, worldName, "floodgate")
+        ensureManagedPluginEnabled(context, worldName, "viaversion")
+        preserveFloodgateKey(context, worldName)
 
         enforceBedrockBridgeLocalConfig(context, worldName)
 
@@ -259,12 +269,21 @@ object PluginManager {
         worldName: String,
         onProgress: (String) -> Unit = {}
     ): Result<Unit> = withContext(Dispatchers.IO) {
+        if (!supportsBundledBedrockBridge(context, worldName)) {
+            disableManagedPlugin(context, worldName, "viaversion")
+            return@withContext Result.failure(
+                IllegalStateException("Bedrock bridge is bundled only for Paper and Purpur worlds right now.")
+            )
+        }
+
         onProgress("Refreshing bundled Bedrock bridge plugins...")
         val serverDir = ServerFileManager.getServerDir(context, worldName)
         BundledPluginInstaller.reinstallBundledPlugins(context, serverDir)
 
         ensureManagedPluginEnabled(context, worldName, "geyser")
         ensureManagedPluginEnabled(context, worldName, "floodgate")
+        ensureManagedPluginEnabled(context, worldName, "viaversion")
+        preserveFloodgateKey(context, worldName)
         
         enforceBedrockBridgeLocalConfig(context, worldName)
         
@@ -286,12 +305,14 @@ object PluginManager {
 
     fun enforceBedrockBridgeLocalConfig(context: Context, worldName: String) {
         val pluginsDir = getPluginsDir(context, worldName)
+        val floodgateConfigFile = getFloodgateConfigFile(context, worldName)
+        val floodgateDirName = floodgateConfigFile.parentFile?.name?.takeIf { it.isNotBlank() } ?: "floodgate"
         val floodgateKeyPath = when {
-            File(pluginsDir, "Floodgate/key.pem").exists() -> "../Floodgate/key.pem"
             File(pluginsDir, "floodgate/key.pem").exists() -> "../floodgate/key.pem"
-            else -> "../floodgate/key.pem"
+            File(pluginsDir, "Floodgate/key.pem").exists() -> "../Floodgate/key.pem"
+            else -> "../$floodgateDirName/key.pem"
         }
-                val geyserConfigFile = getGeyserConfigFile(context, worldName)
+        val geyserConfigFile = getGeyserConfigFile(context, worldName)
         geyserConfigFile.parentFile?.mkdirs()
         val original = if (geyserConfigFile.exists()) {
             runCatching { geyserConfigFile.readText() }.getOrDefault("")
@@ -313,8 +334,11 @@ object PluginManager {
         updated = ensureTopLevelYamlValue(updated, "use-native-transport", "false")
         updated = ensureTopLevelYamlValue(updated, "max-auto-connect-attempts", "5")
         updated = ensureTopLevelYamlValue(updated, "forward-hostname", "false")
+        updated = ensureTopLevelYamlValue(updated, "show-cooldown", "disabled")
+        updated = ensureTopLevelYamlValue(updated, "pending-authentication-timeout", "30")
+        updated = ensureTopLevelYamlValue(updated, "above-bedrock-nether-building", "true")
         updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "validate-bedrock-login", "false")
-        updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "mtu", "1400")
+        updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "mtu", "1200")
         updated = ensureYamlSectionValue(updated, "advanced", "floodgate-key-file", floodgateKeyPath)
         updated = ensureYamlSectionValue(updated, "java", "auth-type", "floodgate")
 
@@ -339,8 +363,27 @@ object PluginManager {
             geyserConfigFile.writeText(updated)
         }
 
-        // Disable require-link in Floodgate to ensure Bedrock players do NOT need a Java account
-        setFloodgateSectionValue(context, worldName, "player-link", "require-link", "false")
+        floodgateConfigFile.parentFile?.mkdirs()
+        val floodgateOriginal = if (floodgateConfigFile.exists()) {
+            runCatching { floodgateConfigFile.readText() }.getOrDefault("")
+        } else {
+            ""
+        }
+        var floodgateUpdated = floodgateOriginal
+        floodgateUpdated = ensureTopLevelYamlValue(floodgateUpdated, "send-floodgate-data", "true")
+        floodgateUpdated = ensureTopLevelYamlValue(floodgateUpdated, "username-prefix", ".")
+        // Android cannot load Floodgate's optional database implementation. Account
+        // linking is not required for Floodgate authentication, so leave it disabled.
+        floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "enabled", "false")
+        floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "require-link", "false")
+        // Different Floodgate builds have used both keys; keep both aligned to avoid
+        // falling back to global account linking on older config layouts.
+        floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "enable-global-linking", "false")
+        floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "use-global-linking", "false")
+        floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "link-code-timeout", "60")
+        if (floodgateUpdated != floodgateOriginal) {
+            floodgateConfigFile.writeText(floodgateUpdated)
+        }
     }
 
     /**
@@ -353,8 +396,8 @@ object PluginManager {
         val serverDir = ServerFileManager.getServerDir(context, worldName)
         val backupDir = File(context.filesDir, "servers/$worldName").also { it.mkdirs() }
         val floodgateDirs = listOf(
-            File(serverDir, "plugins/Floodgate"),
-            File(serverDir, "plugins/floodgate")
+            File(serverDir, "plugins/floodgate"),
+            File(serverDir, "plugins/Floodgate")
         )
         val keyFile = floodgateDirs.map { File(it, "key.pem") }.firstOrNull { it.exists() }
         val defaultKeyFile = File(floodgateDirs.first(), "key.pem")
@@ -630,6 +673,7 @@ object PluginManager {
     }
 
     fun isBedrockBridgeEnabled(context: Context, worldName: String): Boolean {
+        if (!supportsBundledBedrockBridge(context, worldName)) return false
         val hasGeyser = isManagedPluginEnabled(context, worldName, "geyser")
         val hasFloodgate = isManagedPluginEnabled(context, worldName, "floodgate")
         return hasGeyser && hasFloodgate
@@ -1625,6 +1669,23 @@ object PluginManager {
             }
     }
 
+    private fun disableManagedPlugin(context: Context, worldName: String, projectId: String) {
+        val pluginsDir = getPluginsDir(context, worldName)
+        pluginsDir.listFiles()
+            ?.filter { file ->
+                val name = file.name.lowercase()
+                name.contains(projectId.lowercase()) && name.endsWith(".jar")
+            }
+            ?.forEach { file ->
+                val disabledFile = File(pluginsDir, "${file.name}.disabled")
+                if (disabledFile.exists()) {
+                    runCatching { file.delete() }
+                } else {
+                    runCatching { file.renameTo(disabledFile) }
+                }
+            }
+    }
+
     private fun isManagedPluginInstalled(context: Context, worldName: String, projectId: String): Boolean {
         val pluginsDir = getPluginsDir(context, worldName)
         val normalizedId = projectId.lowercase()
@@ -1689,6 +1750,16 @@ object PluginManager {
             val n = it.name.lowercase()
             n.contains(projectId.lowercase()) && n.endsWith(".jar")
         } ?: false
+    }
+
+    private fun supportsBundledBedrockBridge(context: Context, worldName: String): Boolean {
+        val serverDir = ServerFileManager.getServerDirNoCreate(context, worldName)
+        if (!serverDir.exists()) return true
+        val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
+        return when (ServerType.fromString(props.getProperty("pocketcraft-server-type"))) {
+            ServerType.PAPER, ServerType.PURPUR -> true
+            ServerType.FABRIC, ServerType.MODPACK -> false
+        }
     }
 
     private fun isManagedBridgePlugin(plugin: Plugin): Boolean {

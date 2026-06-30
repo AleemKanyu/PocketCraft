@@ -227,6 +227,7 @@ fun SettingsScreen(
     var selectedForDeletion by remember { mutableStateOf<Set<String>>(emptySet()) }
     var isDeletingVersions by remember { mutableStateOf(false) }
     var showThemeMaker by remember { mutableStateOf(false) }
+    var showWidgetThemePicker by remember { mutableStateOf(false) }
     var showPremiumBottomSheet by remember { mutableStateOf(false) }
     var checkingForUpdate by remember { mutableStateOf(false) }
     var manualUpdateConfig by remember { mutableStateOf<UpdateConfig?>(null) }
@@ -374,6 +375,16 @@ fun SettingsScreen(
                 showPremiumBottomSheet = false
             }
         )
+    }
+
+    if (showWidgetThemePicker) {
+        com.pocketcraft.server.ui.screens.WidgetThemePickerScreen(
+            isPremium = isPremium,
+            onBack = { showWidgetThemePicker = false },
+            onPremiumUpgradeClick = { showPremiumBottomSheet = true },
+            onMessage = onMessage
+        )
+        return
     }
 
 
@@ -775,7 +786,7 @@ fun SettingsScreen(
                         SettingsSliderRow(
                             icon = Icons.Default.Person,
                             label = "Entity Broadcast Range",
-                            description = "How far entities are visible (%)",
+                            description = "How far entities are visible (%) — increasing this might increase ping",
                             min = 10, max = 100, step = 10,
                             value = currentState.config.entityBroadcastRangePercentage,
                             onValueChange = { currentState = currentState.copy(config = currentState.config.copy(entityBroadcastRangePercentage = it)) }
@@ -848,6 +859,42 @@ fun SettingsScreen(
                 }
                 item {
                     AnimatedEntranceContainer(index = 2) {
+                        GameCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showWidgetThemePicker = true },
+                            contentPadding = PaddingValues(vertical = 16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = "Widget Themes",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 15.sp
+                                    )
+                                    Text(
+                                        text = "Customize the home screen widget and Pro-only palettes",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Default.Palette,
+                                    contentDescription = null,
+                                    tint = PocketColors.PrimaryDark
+                                )
+                            }
+                        }
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 3) {
                         GameCard(
                             modifier = Modifier
                                 .fillMaxWidth()

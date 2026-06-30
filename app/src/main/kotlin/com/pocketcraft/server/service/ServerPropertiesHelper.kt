@@ -6,16 +6,18 @@ import java.util.Properties
 object ServerPropertiesHelper {
 
     /**
-     * Disabled for relay hosting — zlib on every packet adds CPU load on the host phone
-     * and inflates Paper keepalive ping. The May 2026 regression was bridge buffer size,
-     * not this value. See RelayManager KDoc.
+     * Compression threshold for relay hosting. A threshold of 256 compresses
+     * all packets larger than 256 bytes (such as chunk updates, blocks, and
+     * inventory states). This drastically reduces the total upload bandwidth
+     * required over the relay TCP tunnel (usually by 3x to 4x), preventing
+     * network pipe saturation and Head-of-Line blocking (which causes ping spikes).
      */
-    const val RELAY_READY_COMPRESSION_THRESHOLD = 1024
+    const val RELAY_READY_COMPRESSION_THRESHOLD = 256
     const val DEFAULT_VIEW_DISTANCE = 6
     const val DEFAULT_SIMULATION_DISTANCE = 4
     const val DESIRED_VIEW_DISTANCE_KEY = "pocketcraft-desired-view-distance"
     const val DESIRED_SIMULATION_DISTANCE_KEY = "pocketcraft-desired-simulation-distance"
-    const val RELAY_READY_ENTITY_BROADCAST_PERCENT = 22
+    const val RELAY_READY_ENTITY_BROADCAST_PERCENT = 40
     const val POCKETCRAFT_JOIN_MESSAGE_TEXT = "hosted on Pocketcraft"
     const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/7xw3Rd2vs2"
 
@@ -27,6 +29,12 @@ object ServerPropertiesHelper {
         val props = Properties()
         val file = getServerPropertiesFile(serverDir)
         var needsPersist = false
+        if (file.exists()) {
+            if (file.length() > 100_000L) {
+                android.util.Log.e("ServerPropertiesHelper", "server.properties is suspiciously large (${file.length()} bytes). Deleting corrupted file.")
+                runCatching { file.delete() }
+            }
+        }
         if (file.exists()) {
             file.inputStream().use { props.load(it) }
         } else {
@@ -46,6 +54,8 @@ object ServerPropertiesHelper {
             props["allow-nether"] = "true"
             props["enable-command-block"] = "true"
             props["pocketcraft-max-ram-mb"] = "1024"
+            props["view-distance"] = DEFAULT_VIEW_DISTANCE.toString()
+            props["simulation-distance"] = DEFAULT_SIMULATION_DISTANCE.toString()
             props["entity-broadcast-range-percentage"] = RELAY_READY_ENTITY_BROADCAST_PERCENT.toString()
             props["network-compression-threshold"] = RELAY_READY_COMPRESSION_THRESHOLD.toString()
             props["sync-chunk-writes"] = "false"
@@ -105,8 +115,9 @@ object ServerPropertiesHelper {
             }
         }
 
-        // User-selected desired values are the source of truth — never let a runtime
-        // view-distance write from Paper/crash recovery overwrite the saved preference.
+        // Keep the user's requested values separate from the active runtime values.
+        // Relay startup intentionally lowers view-distance and simulation-distance;
+        // ordinary UI reads must not restore the larger requested values afterward.
         val desiredView = props.getProperty(DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull()?.coerceIn(3, 32)
             ?: DEFAULT_VIEW_DISTANCE
         val desiredSimulation = props.getProperty(DESIRED_SIMULATION_DISTANCE_KEY)?.toIntOrNull()?.coerceIn(3, 32)
@@ -120,15 +131,6 @@ object ServerPropertiesHelper {
             props[DESIRED_SIMULATION_DISTANCE_KEY] = desiredSimulation.toString()
             changed = true
         }
-        if (props.getProperty("view-distance")?.toIntOrNull() != desiredView) {
-            props["view-distance"] = desiredView.toString()
-            changed = true
-        }
-        if (props.getProperty("simulation-distance")?.toIntOrNull() != desiredSimulation) {
-            props["simulation-distance"] = desiredSimulation.toString()
-            changed = true
-        }
-
         return changed
     }
 

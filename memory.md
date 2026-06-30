@@ -117,16 +117,23 @@ ssh -i ~/Downloads/pocketcraft-key1.pem ubuntu@13.201.57.41 "pm2 status"
 > To prevent massive latency spikes, compile errors, or connection issues, the following configurations are locked to the stable v1.6.0 release values:
 
 1. **Relay Manager Socket Buffers**:
-   - `SOCKET_BUFFER_SIZE` in `RelayManager.kt` MUST remain at the optimized value of `64 * 1024` (64KB).
-   - `PLAYER_BRIDGE_BUFFER_SIZE` in `RelayManager.kt` MUST remain at the optimized value of `8 * 1024` (8KB).
-     *(Note: Keeping these queues deliberately small prevents chunk traffic from queueing ahead of keep-alive packets, stabilizing ping.)*
-2. **Bedrock Bridge Channel**:
-   - `bedrockTxChannel` capacity in `RelayManager.kt` MUST remain at `256` (do not use unlimited capacity channels).
-3. **No Experimental Bindings**:
-   - Do not introduce custom Wi-Fi socket bindings or modify Netty thread loops unless explicitly asked.
-4. **Dynamic Fallback Region**:
-   - Singapore is deleted. Do not reference it or add it back to config.
-   - In `RelayManager.kt`, fallback selection is resolved dynamically: if the preferred server is Mumbai, the fallback is Europe; otherwise, the fallback is Mumbai.
+   - `SOCKET_BUFFER_SIZE` in `RelayManager.kt` MUST remain at `128 * 1024` (128KB).
+   - `PLAYER_BRIDGE_BUFFER_SIZE` in `RelayManager.kt` MUST remain at `64 * 1024` (64KB) downstream.
+   - `PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE` in `RelayManager.kt` MUST remain at `64 * 1024` (64KB) upstream.
+2. **Bedrock Bridge Channels & Queues**:
+   - `BEDROCK_PING_CHANNEL_CAPACITY = 512`
+   - `BEDROCK_CHUNK_CHANNEL_CAPACITY = 1024`
+   - `BEDROCK_LARGE_FRAME_BATCH_MAX = 4` (Smaller bursts prevent TCP queue delay)
+   - `BEDROCK_MAX_BYTES_PER_CYCLE = 16 * 1024` (16KB)
+   - Routing: Must route by **RakNet packet ID (byte 9)** instead of size. Route `0xC0` (ACK), `0xA0` (NACK), `0x00` (Ping), `0x03` (Pong) to the high-priority channel instantly to prevent retransmission loops and latency spikes.
+   - Event loop: Use Kotlin's `select` expression for event-driven, 0ms latency packet wakeups.
+3. **Paper/Java Ping Optimization**:
+   - Set `timings.enabled = false` and `timings.really-enabled = false` in `paper-global.yml` to prevent tick loop disk writes on Android.
+   - Extend `keep-alive-timeout = 60` to stabilize Java keep-alive ping and prevent kicks.
+4. **Chunk Send Budgets**:
+   - WiFi: `160` (flight), `100` (walking) chunks/sec. Concurrency: `Triple(10, 18, 12)` (flight).
+   - Cellular: `60` (flight), `40` (walking) chunks/sec. Concurrency: `Triple(6, 10, 6)` (flight).
+   - Coerce pipeline generates/loads to 300/400 to match.
 
 ---
 

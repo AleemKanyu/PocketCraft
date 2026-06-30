@@ -226,6 +226,7 @@ dependencies {
 
     implementation(libs.datastore.preferences)
     implementation(libs.play.billing)
+    implementation("androidx.glance:glance-appwidget:1.1.0")
 
 
     implementation(libs.retrofit)

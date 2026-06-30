@@ -1074,7 +1074,7 @@ fun ConsoleScreen(
                     }
 
                     val serverType = stateHolder.config.serverType
-                    val isGeyserCompatible = serverType == ServerType.PAPER || serverType == ServerType.PURPUR || serverType == ServerType.FABRIC
+                    val isGeyserCompatible = serverType == ServerType.PAPER || serverType == ServerType.PURPUR
 
                     if (isGeyserCompatible) {
                         Surface(
@@ -1090,7 +1090,7 @@ fun ConsoleScreen(
                             ) {
                                 Text("✅", fontSize = 14.sp)
                                 Text(
-                                    text = "Geyser (Bedrock compatibility) works on this server type (${serverType.displayName}).",
+                                    text = "Bedrock compatibility is bundled for this server type (${serverType.displayName}).",
                                     fontSize = 11.sp,
                                     color = Color(0xFF2E7D32),
                                     fontWeight = FontWeight.SemiBold,
@@ -1112,7 +1112,7 @@ fun ConsoleScreen(
                             ) {
                                 Text("⚠️", fontSize = 14.sp)
                                 Text(
-                                    text = "Geyser only works with Paper, Purpur, or Fabric. It does NOT work on this server type (${serverType.displayName}). Please run the Paper version instead.",
+                                    text = "The bundled Bedrock bridge only works with Paper or Purpur. ${serverType.displayName} worlds should be switched to Paper if Bedrock players need to join.",
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.error,
                                     fontWeight = FontWeight.Bold,
@@ -1801,7 +1801,16 @@ private fun ServerIdentityCard(
         topContentBetweenServerAndAddress?.invoke()
 
         val publicAddress = stateHolder.publicAddress?.takeIf { it.isNotBlank() }
-        val internetRelayAddress = publicAddress ?: "No internet"
+        val relayConnecting = stateHolder.tunnelConnecting
+        val relaySwitching = relayConnecting && stateHolder.relaySwitchInProgress
+        val internetRelayAddress = when {
+            relaySwitching -> "Switching relay connection..."
+            relayConnecting && stateHolder.isRunning -> "Reconnecting to the servers..."
+            relayConnecting -> "Opening internet relay..."
+            !publicAddress.isNullOrBlank() -> publicAddress
+            else -> "No internet"
+        }
+
 
         val localWifiAddress = stateHolder.localIp
             .takeIf(::isShareableLanIp)
@@ -1842,7 +1851,11 @@ private fun ServerIdentityCard(
 
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = if (relayReady) PocketColors.Online.copy(alpha = 0.15f) else PocketColors.Offline.copy(alpha = 0.15f),
+                            color = when {
+                                relayConnecting -> PocketColors.Starting.copy(alpha = 0.15f)
+                                relayReady -> PocketColors.Online.copy(alpha = 0.15f)
+                                else -> PocketColors.Offline.copy(alpha = 0.15f)
+                            },
                             modifier = Modifier.padding(start = 8.dp)
                         ) {
                             Row(
@@ -1853,13 +1866,30 @@ private fun ServerIdentityCard(
                                 Box(
                                     modifier = Modifier
                                         .size(6.dp)
-                                        .background(if (relayReady) PocketColors.Online else PocketColors.Offline, CircleShape)
+                                        .background(
+                                            when {
+                                                relayConnecting -> PocketColors.Starting
+                                                relayReady -> PocketColors.Online
+                                                else -> PocketColors.Offline
+                                            },
+                                            CircleShape
+                                        )
                                 )
                                 Text(
-                                    if (relayReady) "Relay Ready" else "Relay Offline",
+                                    when {
+                                        relaySwitching -> "Relay Switching"
+                                        relayConnecting && stateHolder.isRunning -> "Reconnecting"
+                                        relayConnecting -> "Relay Connecting"
+                                        relayReady -> "Relay Ready"
+                                        else -> "Relay Offline"
+                                    },
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (relayReady) PocketColors.Online else PocketColors.Offline
+                                    color = when {
+                                        relayConnecting -> PocketColors.Starting
+                                        relayReady -> PocketColors.Online
+                                        else -> PocketColors.Offline
+                                    }
                                 )
                             }
                         }
@@ -1872,9 +1902,7 @@ private fun ServerIdentityCard(
                         onEditClick = {
                             showIpBottomSheet = true
                         },
-                        onRetryClick = if (!relayReady) {
-                            { stateHolder.reconnectRelay() }
-                        } else null
+                        onRetryClick = { stateHolder.reconnectRelay() }
                     )
 
                     AddressValueRow(
@@ -2229,6 +2257,9 @@ private fun AddressValueRow(
                     address != "Wi-Fi address unavailable" &&
                     address != "No relay address" &&
                     address != "No internet" &&
+                    address != "Opening internet relay..." &&
+                    address != "Reconnecting to the servers..." &&
+                    address != "Switching relay connection..." &&
                     address != "Start the server to generate internet join addresses."
                 if (canCopy) {
                     IconButton(

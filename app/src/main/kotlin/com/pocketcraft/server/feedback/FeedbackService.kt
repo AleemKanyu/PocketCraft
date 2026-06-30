@@ -18,6 +18,8 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlin.time.Duration.Companion.seconds
 import java.util.concurrent.TimeoutException
 
@@ -162,9 +164,18 @@ private fun createFeedbackLogDump(context: Context, serverVersion: String): Feed
     val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
     val outFile = File(logsRoot, "feedback_${serverVersion}_$stamp.txt")
 
-    val serverLogFile = File(context.filesDir, "servers/$serverVersion/logs/latest.log")
+    val activeWorld = com.pocketcraft.server.server.ServerHostService.getPersistedActiveWorld(context)
+        .ifBlank {
+            runBlocking {
+                runCatching {
+                    com.pocketcraft.server.data.preferences.AppPreferencesStore.getSelectedWorldFlow(context).first()
+                }.getOrDefault("world")
+            }
+        }
+
+    val serverLogFile = File(context.filesDir, "servers/worlds/$activeWorld/logs/latest.log")
     val serverLogText = runCatching {
-        if (serverLogFile.exists()) serverLogFile.readText() else "No server log file found yet."
+        if (serverLogFile.exists()) serverLogFile.readText() else "No server log file found at ${serverLogFile.absolutePath}"
     }.getOrDefault("Could not read latest.log")
 
     val report = buildString {
