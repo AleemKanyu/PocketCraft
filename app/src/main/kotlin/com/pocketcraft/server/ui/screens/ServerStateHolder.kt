@@ -31,8 +31,6 @@ import kotlinx.coroutines.tasks.await
 import com.pocketcraft.server.BuildConfig
 import com.pocketcraft.server.RelayManager
 import com.pocketcraft.server.WorldImporter
-import com.pocketcraft.server.afk.AfkFarmLocation
-import com.pocketcraft.server.afk.AfkHelperManager
 import com.pocketcraft.server.data.model.PlayerInfo
 import com.pocketcraft.server.data.model.ServerConfig
 import com.pocketcraft.server.data.model.ServerType
@@ -110,7 +108,7 @@ data class WorldEntry(
 class ServerStateHolder(
     private val context: Context,
     val versionId: String,
-    initialWorld: String = "world"
+    var activeWorld: String = "world"
 ) {
     companion object {
         const val DEFAULT_SERVER_DESCRIPTION = "Hosted on Pocketcraft"
@@ -120,11 +118,6 @@ class ServerStateHolder(
     }
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    var activeWorld: String = initialWorld.ifBlank { "world" }
-        private set(value) {
-            field = value.ifBlank { "world" }
-            afkHelperManager.onWorldChanged()
-        }
     private val serverDir: File
         get() = ServerFileManager.getServerDir(appContext, activeWorld.ifBlank { "world" })
     private val serverPhotosDir: File
@@ -166,19 +159,6 @@ class ServerStateHolder(
         manager.getMemoryInfo(info)
         (info.totalMem / (1024L * 1024L * 1024L)).toInt().coerceAtLeast(1)
     }
-    private val afkHelperManager by lazy {
-        AfkHelperManager(
-            context = appContext,
-            scope = scope,
-            currentWorldProvider = { activeWorld },
-            isServerRunningProvider = { isRunning && !isStopping },
-            onlinePlayersProvider = { onlinePlayers.toList() },
-            knownPlayersProvider = { knownPlayers.toList() },
-            sendRconCommand = ::sendRconCommand,
-            appendLog = ::appendLog,
-            notifyStateChanged = ::notifyStateChanged
-        )
-    }
 
     private val _stateUpdateTrigger = MutableStateFlow(0)
     val stateUpdateTrigger: StateFlow<Int> = _stateUpdateTrigger.asStateFlow()
@@ -193,7 +173,6 @@ class ServerStateHolder(
         private set(value) {
             _isRunning.value = value
             updateServerUiState()
-            afkHelperManager.onServerStateChanged(value)
             notifyStateChanged()
         }
 
@@ -359,10 +338,6 @@ class ServerStateHolder(
     val bannedPlayers = mutableStateListOf<PlayerInfo>()
     val backups = mutableStateListOf<BackupEntry>()
     val worlds = mutableStateListOf<WorldEntry>()
-    val afkFarms: List<AfkFarmLocation>
-        get() = afkHelperManager.farms
-    val isAfkHelperBusy: Boolean
-        get() = afkHelperManager.isBusy
 
     private fun attemptTransitionToOnline() {
         if (!isStarting) return
@@ -683,28 +658,8 @@ class ServerStateHolder(
                 prefs.consecutiveCrashCount = 0
                 recordServerFailure(crashReasonText, duringStartup = true)
             }
-
-            withContext(Dispatchers.IO) {
-                afkHelperManager.refreshNow()
-            }
         }
     }
-
-    suspend fun addAfkFarm(name: String, x: Int, y: Int, z: Int): String =
-        afkHelperManager.addFarm(name = name, x = x, y = y, z = z)
-
-    suspend fun toggleAfkFarm(id: String): String =
-        afkHelperManager.toggleFarm(id)
-
-    suspend fun deleteAfkFarm(id: String): String =
-        afkHelperManager.deleteFarm(id)
-
-    suspend fun refreshAfkHelpers() {
-        afkHelperManager.refreshNow()
-    }
-
-    suspend fun suggestAfkFarmLocation(): Triple<Int, Int, Int>? =
-        afkHelperManager.captureSuggestedLocation()
 
     var showEulaDialog by mutableStateOf(false)
         private set
@@ -851,8 +806,8 @@ class ServerStateHolder(
         chunkyProgressPercent = null
         consoleVisibleAfterStart = true
         startStartupProgressTracking()
-        if (logsQueue.isNotEmpty()) {
-            appendLog("[PocketCraft] ----------------------------------------")
+        if (!isRestart) {
+            clearLogs()
         }
         consoleVisibleAfterStart = true
         onlinePlayers.clear()
@@ -1246,8 +1201,6 @@ class ServerStateHolder(
         consoleVisibleAfterStart = false
     }
 
-    fun currentLogLines(): List<String> = logsQueue.toList()
-
     private fun loadLogsFromDisk() {
         scope.launch(Dispatchers.IO) {
             val latestLogFile = File(serverDir, "logs/latest.log")
@@ -1493,6 +1446,7 @@ class ServerStateHolder(
                 stopWatchdogJob?.cancel()
                 stopWatchdogJob = null
                 resetJoinable()
+                clearLogs()
             }
             return
         }
@@ -1518,6 +1472,9 @@ class ServerStateHolder(
             startPeriodicPingPolling()
             markJoinable()
         } else if (!isStarting) {
+            if (logs.isNotEmpty()) {
+                clearLogs()
+            }
             stopPeriodicWorldSave()
             stopPeriodicLocationPolling()
             resetJoinable()

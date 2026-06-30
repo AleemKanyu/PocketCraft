@@ -1705,8 +1705,7 @@ fun SettingsScreen(
                                             val result = FeedbackService.submitFeedback(
                                                 context = context,
                                                 message = feedbackText,
-                                                serverVersion = stateHolder.config.gameVersion.ifBlank { "unknown" },
-                                                liveConsoleLines = stateHolder.currentLogLines()
+                                                serverVersion = stateHolder.config.gameVersion.ifBlank { "unknown" }
                                             )
                                             submittingFeedback = false
                                             result

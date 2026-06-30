@@ -23,8 +23,6 @@ import kotlinx.coroutines.runBlocking
 import kotlin.time.Duration.Companion.seconds
 import java.util.concurrent.TimeoutException
 
-private const val MAX_FIRESTORE_LOG_FIELD_CHARS = 240_000
-
 object FeedbackService {
 
     private const val FEEDBACK_COLLECTION = "beta_feedback"
@@ -35,18 +33,13 @@ object FeedbackService {
     private const val SOCIAL_PROMPTS_COLLECTION = "social_prompts"
     private const val FIELD_DISCORD_POPUP_SHOWN = "discordPopupShown"
 
-    suspend fun submitFeedback(
-        context: Context,
-        message: String,
-        serverVersion: String,
-        liveConsoleLines: List<String> = emptyList()
-    ): Result<Unit> {
+    suspend fun submitFeedback(context: Context, message: String, serverVersion: String): Result<Unit> {
         val trimmed = message.trim()
         if (trimmed.isBlank()) return Result.failure(IllegalArgumentException("Feedback cannot be empty."))
 
         return runCatching {
             val prefs = AppPreferences(context)
-            val logDump = createFeedbackLogDump(context, serverVersion, liveConsoleLines)
+            val logDump = createFeedbackLogDump(context, serverVersion)
             val payload = hashMapOf(
                 "message" to trimmed,
                 "userId" to prefs.userId,
@@ -62,10 +55,6 @@ object FeedbackService {
                 "logFilePath" to logDump.file.absolutePath,
                 "logFileName" to logDump.file.name,
                 "appLogExcerpt" to logDump.excerpt,
-                "currentConsoleLog" to logDump.consoleLog,
-                "serverLatestLog" to logDump.serverLatestLog,
-                "crashArtifacts" to logDump.crashArtifacts,
-                "runtimeState" to logDump.runtimeState,
                 "createdAt" to FieldValue.serverTimestamp()
             )
 
@@ -167,18 +156,10 @@ object FeedbackService {
 
 private data class FeedbackLogDump(
     val file: File,
-    val excerpt: String,
-    val consoleLog: String,
-    val serverLatestLog: String,
-    val crashArtifacts: String,
-    val runtimeState: String
+    val excerpt: String
 )
 
-private fun createFeedbackLogDump(
-    context: Context,
-    serverVersion: String,
-    liveConsoleLines: List<String>
-): FeedbackLogDump {
+private fun createFeedbackLogDump(context: Context, serverVersion: String): FeedbackLogDump {
     val logsRoot = File(context.filesDir, "feedback_logs").also { it.mkdirs() }
     val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
     val outFile = File(logsRoot, "feedback_${serverVersion}_$stamp.txt")
@@ -193,20 +174,9 @@ private fun createFeedbackLogDump(
         }
 
     val serverLogFile = File(context.filesDir, "servers/worlds/$activeWorld/logs/latest.log")
-    val serverLogText = readFileOrMessage(serverLogFile, "No server log file found at ${serverLogFile.absolutePath}")
-    val consoleLogText = liveConsoleLines.joinToString(separator = "\n").ifBlank {
-        "No in-app console lines were available."
-    }
-    val runtimeStateFile = File(context.filesDir, "runtime_state.json")
-    val runtimeStateText = readFileOrMessage(runtimeStateFile, "No runtime state file found at ${runtimeStateFile.absolutePath}")
-    val crashArtifactsText = buildString {
-        appendCrashArtifact(this, File(context.filesDir, "logs/last_crash_stderr.txt"), "last_crash_stderr.txt")
-        val hsErrFile = latestHsErrFile(context, activeWorld)
-        appendCrashArtifact(this, hsErrFile, hsErrFile?.name ?: "hs_err_pid*.log")
-        if (isBlank()) {
-            append("No crash artifacts found.")
-        }
-    }
+    val serverLogText = runCatching {
+        if (serverLogFile.exists()) serverLogFile.readText() else "No server log file found at ${serverLogFile.absolutePath}"
+    }.getOrDefault("Could not read latest.log")
 
     val report = buildString {
         appendLine("PocketCraft Feedback Log Dump")
@@ -219,59 +189,15 @@ private fun createFeedbackLogDump(
         appendLine("androidSdk=${Build.VERSION.SDK_INT}")
         appendLine("fingerprint=${Build.FINGERPRINT}")
         appendLine()
-        appendLine("---- runtime_state.json ----")
-        appendLine(runtimeStateText)
-        appendLine()
-        appendLine("---- current_console_log ----")
-        appendLine(consoleLogText)
-        appendLine()
         appendLine("---- latest.log ----")
-        appendLine(serverLogText)
-        appendLine()
-        appendLine("---- crash_artifacts ----")
-        appendLine(crashArtifactsText)
+        appendLine(serverLogText.takeLast(220_000))
     }
 
     outFile.writeText(report)
     return FeedbackLogDump(
         file = outFile,
-        excerpt = report.takeLast(12_000),
-        consoleLog = clampForFirestore(consoleLogText),
-        serverLatestLog = clampForFirestore(serverLogText),
-        crashArtifacts = clampForFirestore(crashArtifactsText),
-        runtimeState = clampForFirestore(runtimeStateText)
+        excerpt = report.takeLast(12_000)
     )
-}
-
-private fun readFileOrMessage(file: File, missingMessage: String): String {
-    return runCatching {
-        if (file.exists()) file.readText() else missingMessage
-    }.getOrDefault("Could not read ${file.name}")
-}
-
-private fun clampForFirestore(text: String): String {
-    return if (text.length <= MAX_FIRESTORE_LOG_FIELD_CHARS) {
-        text
-    } else {
-        text.takeLast(MAX_FIRESTORE_LOG_FIELD_CHARS)
-    }
-}
-
-private fun latestHsErrFile(context: Context, activeWorld: String): File? {
-    val serverDir = File(context.filesDir, "servers/worlds/$activeWorld")
-    return serverDir.listFiles()
-        .orEmpty()
-        .filter { it.isFile && it.name.startsWith("hs_err_pid") && it.extension == "log" }
-        .maxByOrNull { it.lastModified() }
-}
-
-private fun appendCrashArtifact(builder: StringBuilder, file: File?, label: String) {
-    if (file == null) return
-    builder.append("---- ")
-    builder.append(label)
-    builder.appendLine(" ----")
-    builder.appendLine(readFileOrMessage(file, "No crash artifact found at ${file.absolutePath}"))
-    builder.appendLine()
 }
 
 private suspend fun <T> Task<T>.awaitTask(): T = suspendCancellableCoroutine { continuation ->
