@@ -1236,7 +1236,32 @@ class RelayManager(private val context: Context) {
 
     suspend fun unregister() = withContext(Dispatchers.IO) {
         relayHostingAllowed.set(false)
+        val prefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
+        val preferredRelayHost = prefs.relayHost
+        val fallbackRelayHost = if (preferredRelayHost == RelayServers.MUMBAI.host) {
+            RelayServers.EUROPE.host
+        } else {
+            RelayServers.MUMBAI.host
+        }
+        val candidateHosts = buildList {
+            activeRelayHost?.let(::add)
+            lastRegisteredHost?.let(::add)
+            if (preferredRelayHost.isNotBlank()) add(preferredRelayHost)
+            add(fallbackRelayHost)
+        }.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+
+        candidateHosts.forEach { relayHost ->
+            runCatching { unregisterFromHost(relayHost) }
+                .onFailure { error ->
+                    android.util.Log.w("RelayManager", "Unregister from $relayHost failed: ${error.message}")
+                }
+        }
+
+        assignedPort = null
+        prefs.relayPort = null
         lastRegisteredHost = null
+        activeRelayHost = null
+        activeRelaySessionId = null
         disconnect()
     }
 

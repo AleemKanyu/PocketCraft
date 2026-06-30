@@ -62,6 +62,7 @@ private object ServerWidgetStateKeys {
     val maxPlayers = intPreferencesKey("max_players")
     val startedAtMillis = longPreferencesKey("started_at_millis")
     val themeKey = stringPreferencesKey("theme_key")
+    val themeManualOverride = booleanPreferencesKey("theme_manual_override")
     val customBackground = intPreferencesKey("custom_background")
     val customAccent = intPreferencesKey("custom_accent")
     val customTextOnAccent = intPreferencesKey("custom_text_on_accent")
@@ -96,16 +97,16 @@ class ServerWidget : GlanceAppWidget() {
 
     @Composable
     private fun WidgetContent(context: Context, prefs: Preferences) {
-        val themeKey = prefs[ServerWidgetStateKeys.themeKey] ?: WidgetThemePrefs.THEME_CREEPER
+        val themeKey = prefs[ServerWidgetStateKeys.themeKey] ?: WidgetThemePrefs.THEME_FOLLOW_APP
         val themeSettings = WidgetThemeSettings(
             selectedTheme = themeKey,
-            manualOverride = true,
+            manualOverride = prefs[ServerWidgetStateKeys.themeManualOverride] ?: false,
             customBackground = prefs[ServerWidgetStateKeys.customBackground],
             customAccent = prefs[ServerWidgetStateKeys.customAccent],
             customTextOnAccent = prefs[ServerWidgetStateKeys.customTextOnAccent],
             customIconTint = prefs[ServerWidgetStateKeys.customIconTint]
         )
-        val scheme = themeFor(themeKey, themeSettings)
+        val scheme = resolveWidgetThemeScheme(context, themeSettings)
         val status = prefs[ServerWidgetStateKeys.status] ?: ServerHostService.RUNTIME_STATE_OFFLINE
         val worldName = prefs[ServerWidgetStateKeys.worldName] ?: "world"
         val versionId = prefs[ServerWidgetStateKeys.versionId] ?: ""
@@ -236,7 +237,7 @@ private fun HeaderRow(
             modifier = GlanceModifier.width(42.dp).height(42.dp)
         )
 
-        Spacer(GlanceModifier.width(10.dp))
+        Spacer(GlanceModifier.width(8.dp))
 
         Column(modifier = GlanceModifier.defaultWeight()) {
             Text(
@@ -472,6 +473,7 @@ object ServerWidgetUpdater {
                     this[ServerWidgetStateKeys.maxPlayers] = snapshot.maxPlayers
                     this[ServerWidgetStateKeys.startedAtMillis] = snapshot.startedAtMillis
                     this[ServerWidgetStateKeys.themeKey] = snapshot.themeKey
+                    this[ServerWidgetStateKeys.themeManualOverride] = snapshot.themeSettings.manualOverride
                     writeOptionalColor(ServerWidgetStateKeys.customBackground, snapshot.themeSettings.customBackground)
                     writeOptionalColor(ServerWidgetStateKeys.customAccent, snapshot.themeSettings.customAccent)
                     writeOptionalColor(ServerWidgetStateKeys.customTextOnAccent, snapshot.themeSettings.customTextOnAccent)
@@ -501,7 +503,6 @@ object ServerWidgetUpdater {
             .takeIf { status == ServerHostService.RUNTIME_STATE_RUNNING }
             ?: 0L
         val themeSettings = WidgetThemePrefs.ensureAllowedTheme(context)
-        val activeThemeKey = WidgetThemePrefs.resolveActiveThemeKey(context, themeSettings)
         val maxPlayers = readMaxPlayers(context, activeWorld)
         val isRunning = status == ServerHostService.RUNTIME_STATE_RUNNING
         val isStarting = status == ServerHostService.RUNTIME_STATE_STARTING || status == "starting"
@@ -513,7 +514,7 @@ object ServerWidgetUpdater {
             players = if (isRunning || isStarting) ServerHostService.getPersistedPlayerCount(context) else 0,
             maxPlayers = maxPlayers,
             startedAtMillis = startedAt,
-            themeKey = activeThemeKey,
+            themeKey = themeSettings.selectedTheme.ifBlank { WidgetThemePrefs.THEME_FOLLOW_APP },
             themeSettings = themeSettings,
             startEnabled = !isRunning && !isStarting && !isStopping && versionId.isNotBlank(),
             stopEnabled = isRunning || isStarting,

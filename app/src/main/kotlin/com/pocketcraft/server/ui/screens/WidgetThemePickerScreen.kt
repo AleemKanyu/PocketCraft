@@ -63,6 +63,7 @@ import com.pocketcraft.server.server.ServerHostService
 import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.widget.WidgetThemePrefs
+import com.pocketcraft.server.widget.previewThemeScheme
 import com.pocketcraft.server.widget.themeFor
 import kotlin.math.abs
 import kotlinx.coroutines.launch
@@ -70,7 +71,9 @@ import kotlinx.coroutines.launch
 private data class WidgetThemeOption(
     val key: String,
     val title: String,
-    val proOnly: Boolean
+    val subtitle: String,
+    val proOnly: Boolean,
+    val fullSpan: Boolean = false
 )
 
 private data class WidgetPaletteState(
@@ -92,17 +95,42 @@ fun WidgetThemePickerScreen(
     val scope = rememberCoroutineScope()
     val options = remember {
         listOf(
-            WidgetThemeOption(WidgetThemePrefs.THEME_CREEPER, "Creeper", proOnly = false),
-            WidgetThemeOption(WidgetThemePrefs.THEME_CREEPER_DARK, "Creeper Dark", proOnly = false),
-            WidgetThemeOption(WidgetThemePrefs.THEME_DIAMOND, "Diamond", proOnly = true),
-            WidgetThemeOption(WidgetThemePrefs.THEME_NETHER, "Nether", proOnly = true),
-            WidgetThemeOption(WidgetThemePrefs.THEME_CUSTOM, "Custom", proOnly = true)
+            WidgetThemeOption(
+                key = WidgetThemePrefs.THEME_CREEPER,
+                title = "Creeper",
+                subtitle = "PocketCraft's classic widget look.",
+                proOnly = false
+            ),
+            WidgetThemeOption(
+                key = WidgetThemePrefs.THEME_CREEPER_DARK,
+                title = "Creeper Dark",
+                subtitle = "A darker version of the classic palette.",
+                proOnly = false
+            ),
+            WidgetThemeOption(
+                key = WidgetThemePrefs.THEME_DIAMOND,
+                title = "Diamond",
+                subtitle = "Cool blue glass and brighter contrast.",
+                proOnly = true
+            ),
+            WidgetThemeOption(
+                key = WidgetThemePrefs.THEME_NETHER,
+                title = "Nether",
+                subtitle = "Warm crimson tones for a bolder widget.",
+                proOnly = true
+            ),
+            WidgetThemeOption(
+                key = WidgetThemePrefs.THEME_CUSTOM,
+                title = "Custom Theme",
+                subtitle = "Build your own widget palette.",
+                proOnly = true,
+                fullSpan = true
+            )
         )
     }
 
-    var selectedTheme by remember { mutableStateOf(WidgetThemePrefs.THEME_CREEPER) }
+    var selectedTheme by remember { mutableStateOf(WidgetThemePrefs.THEME_FOLLOW_APP) }
     var manualOverride by remember { mutableStateOf(false) }
-    var effectiveTheme by remember { mutableStateOf(WidgetThemePrefs.THEME_CREEPER) }
     var customPalette by remember {
         mutableStateOf(
             WidgetPaletteState(
@@ -117,9 +145,8 @@ fun WidgetThemePickerScreen(
 
     LaunchedEffect(Unit) {
         val settings = WidgetThemePrefs.ensureAllowedTheme(context)
-        selectedTheme = settings.selectedTheme
+        selectedTheme = settings.selectedTheme.ifBlank { WidgetThemePrefs.THEME_FOLLOW_APP }
         manualOverride = settings.manualOverride
-        effectiveTheme = WidgetThemePrefs.resolveActiveThemeKey(context, settings)
         customPalette = WidgetPaletteState(
             background = Color(settings.customBackground ?: Color(0xFF182019).toArgb()),
             accent = Color(settings.customAccent ?: Color(0xFF6CBF57).toArgb()),
@@ -128,170 +155,132 @@ fun WidgetThemePickerScreen(
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Widget Themes") },
-            navigationIcon = {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp)
-                        .clickable(onClick = onBack)
-                )
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = PocketColors.BgApp,
-                titleContentColor = PocketColors.TextPrimary
-            )
-        )
+    val themeSettings = com.pocketcraft.server.data.preferences.WidgetThemeSettings(
+        selectedTheme = selectedTheme,
+        manualOverride = manualOverride,
+        customBackground = customPalette.background.toArgb(),
+        customAccent = customPalette.accent.toArgb(),
+        customTextOnAccent = customPalette.textOnAccent.toArgb(),
+        customIconTint = customPalette.iconTint.toArgb()
+    )
+    val previewScheme = previewThemeScheme(
+        context = context,
+        themeKey = if (manualOverride) selectedTheme else WidgetThemePrefs.THEME_FOLLOW_APP,
+        settings = themeSettings
+    )
 
-        Column(
+    androidx.compose.material3.Scaffold(
+        containerColor = PocketColors.BgApp,
+        topBar = {
+            TopAppBar(
+                title = { Text("Widget Themes") },
+                navigationIcon = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .clickable(onClick = onBack)
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = PocketColors.BgApp,
+                    titleContentColor = PocketColors.TextPrimary
+                )
+            )
+        }
+    ) { innerPadding ->
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 12.dp),
+                .padding(top = innerPadding.calculateTopPadding()),
+            contentPadding = PaddingValues(
+                start = 24.dp,
+                end = 24.dp,
+                top = 8.dp,
+                bottom = innerPadding.calculateBottomPadding() + 120.dp
+            ),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            GameCard(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "Premium Widget Styling",
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 18.sp,
-                    color = PocketColors.TextPrimary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Pick how PocketCraft looks on the home screen widget.",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    color = PocketColors.TextPrimary
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = if (manualOverride) {
-                        "Manual theme selected. System dark mode will not auto-switch until you reset to auto."
-                    } else {
-                        "Auto mode is active. Creeper Dark applies automatically when your phone is in dark mode."
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    PremiumMetaChip(label = if (manualOverride) "Manual Mode" else "Auto Mode")
-                    PremiumMetaChip(label = if (isPremium) "Pro Unlocked" else "Free Themes")
-                    PremiumMetaChip(label = "5 Theme Styles")
-                }
-                Spacer(modifier = Modifier.height(14.dp))
-                Button(
+            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                WidgetThemeTile(
+                    title = "Follow App Theme",
+                    subtitle = "Keeps the widget in sync with the app's current colors until you choose a widget-only style.",
+                    preview = previewThemeScheme(context, WidgetThemePrefs.THEME_FOLLOW_APP, themeSettings),
+                    active = !manualOverride || selectedTheme == WidgetThemePrefs.THEME_FOLLOW_APP,
+                    locked = false,
+                    badge = "Default",
                     onClick = {
                         scope.launch {
                             WidgetThemePrefs.saveSelection(
                                 context = context,
-                                themeKey = WidgetThemePrefs.THEME_CREEPER,
+                                themeKey = WidgetThemePrefs.THEME_FOLLOW_APP,
                                 manualOverride = false
                             )
                             ServerHostService.pushWidgetUpdate(context)
-                            val settings = WidgetThemePrefs.ensureAllowedTheme(context)
-                            selectedTheme = settings.selectedTheme
-                            manualOverride = settings.manualOverride
-                            effectiveTheme = WidgetThemePrefs.resolveActiveThemeKey(context, settings)
+                            selectedTheme = WidgetThemePrefs.THEME_FOLLOW_APP
+                            manualOverride = false
                         }
-                    },
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Text("Use Auto Creeper Theme")
+                    }
+                )
+            }
+
+            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                GameCard(modifier = Modifier.fillMaxWidth()) {
+                    SectionLabel(
+                        title = "Live Preview",
+                        subtitle = if (manualOverride) {
+                            "This preview reflects the widget's manual theme selection."
+                        } else {
+                            "This preview follows the app theme automatically."
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    WidgetPreviewCard(scheme = previewScheme)
                 }
             }
 
-            GameCard(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "Preview",
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Live Preview",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = PocketColors.TextPrimary
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                val scheme = themeFor(
-                    effectiveTheme,
-                    com.pocketcraft.server.data.preferences.WidgetThemeSettings(
-                        selectedTheme = selectedTheme,
-                        manualOverride = manualOverride,
-                        customBackground = customPalette.background.toArgb(),
-                        customAccent = customPalette.accent.toArgb(),
-                        customTextOnAccent = customPalette.textOnAccent.toArgb(),
-                        customIconTint = customPalette.iconTint.toArgb()
-                    )
-                )
-                WidgetPreviewCard(
-                    scheme = scheme
+            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                SectionLabel(
+                    title = "Theme Library",
+                    subtitle = "Pick a widget-only theme if you want it to look different from the app."
                 )
             }
 
-            SectionLabel(
-                title = "Theme Library",
-                subtitle = "Free styles first, Pro variants after that."
-            )
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                userScrollEnabled = false,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(388.dp)
-            ) {
-                items(options) { option ->
-                    val preview = themeFor(
-                        option.key,
-                        com.pocketcraft.server.data.preferences.WidgetThemeSettings(
-                            selectedTheme = selectedTheme,
-                            manualOverride = manualOverride,
-                            customBackground = customPalette.background.toArgb(),
-                            customAccent = customPalette.accent.toArgb(),
-                            customTextOnAccent = customPalette.textOnAccent.toArgb(),
-                            customIconTint = customPalette.iconTint.toArgb()
-                        )
-                    )
-                    val active = if (manualOverride) selectedTheme == option.key else effectiveTheme == option.key
-                    WidgetThemeTile(
-                        title = option.title,
-                        preview = preview,
-                        active = active,
-                        locked = option.proOnly && !isPremium,
-                        badge = if (option.proOnly) "Pro" else null,
-                        onClick = {
-                            if (option.proOnly && !isPremium) {
-                                onPremiumUpgradeClick()
-                                return@WidgetThemeTile
-                            }
-                            if (option.key == WidgetThemePrefs.THEME_CUSTOM) {
-                                showCustomEditor = true
-                            } else {
-                                scope.launch {
-                                    WidgetThemePrefs.saveSelection(context, option.key, manualOverride = true)
-                                    ServerHostService.pushWidgetUpdate(context)
-                                    selectedTheme = option.key
-                                    manualOverride = true
-                                    effectiveTheme = option.key
-                                }
+            items(
+                items = options,
+                key = { it.key },
+                span = { option ->
+                    androidx.compose.foundation.lazy.grid.GridItemSpan(if (option.fullSpan) maxLineSpan else 1)
+                }
+            ) { option ->
+                WidgetThemeTile(
+                    title = option.title,
+                    subtitle = option.subtitle,
+                    preview = previewThemeScheme(context, option.key, themeSettings),
+                    active = manualOverride && selectedTheme == option.key,
+                    locked = option.proOnly && !isPremium,
+                    badge = if (option.proOnly) "Pro" else null,
+                    onClick = {
+                        if (option.proOnly && !isPremium) {
+                            onPremiumUpgradeClick()
+                            return@WidgetThemeTile
+                        }
+                        if (option.key == WidgetThemePrefs.THEME_CUSTOM) {
+                            showCustomEditor = true
+                        } else {
+                            scope.launch {
+                                WidgetThemePrefs.saveSelection(context, option.key, manualOverride = true)
+                                ServerHostService.pushWidgetUpdate(context)
+                                selectedTheme = option.key
+                                manualOverride = true
                             }
                         }
-                    )
-                }
+                    }
+                )
             }
-
         }
     }
 
@@ -313,7 +302,6 @@ fun WidgetThemePickerScreen(
                     customPalette = palette
                     selectedTheme = WidgetThemePrefs.THEME_CUSTOM
                     manualOverride = true
-                    effectiveTheme = WidgetThemePrefs.THEME_CUSTOM
                     showCustomEditor = false
                     onMessage("Widget custom theme saved.")
                 }
@@ -325,6 +313,7 @@ fun WidgetThemePickerScreen(
 @Composable
 private fun WidgetThemeTile(
     title: String,
+    subtitle: String,
     preview: com.pocketcraft.server.widget.WidgetColorScheme,
     active: Boolean,
     locked: Boolean,
@@ -379,12 +368,23 @@ private fun WidgetThemeTile(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = title,
-                    color = Color(preview.textPrimary),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
-                )
+                Column(
+                    modifier = Modifier.padding(end = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = title,
+                        color = Color(preview.textPrimary),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                    Text(
+                        text = subtitle,
+                        color = Color(preview.textSecondary),
+                        fontSize = 11.sp,
+                        maxLines = 2
+                    )
+                }
                 if (locked) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -400,14 +400,16 @@ private fun WidgetThemeTile(
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = null,
-                        tint = Color(preview.onlineDotColor),
-                        modifier = Modifier.size(18.dp)
-                    )
+                            tint = Color(preview.onlineDotColor),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    } else if (badge != null) {
+                        Text(text = badge, color = Color(preview.textSecondary), fontSize = 11.sp)
+                    }
                 }
             }
         }
     }
-}
 
 @Composable
 private fun WidgetPreviewCard(scheme: com.pocketcraft.server.widget.WidgetColorScheme) {
@@ -432,7 +434,7 @@ private fun WidgetPreviewCard(scheme: com.pocketcraft.server.widget.WidgetColorS
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(
                         modifier = Modifier
                             .size(44.dp)
@@ -704,19 +706,6 @@ private fun WidgetCustomThemeBottomSheet(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun PremiumMetaChip(label: String) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f))
-            .border(1.dp, PocketColors.Primary.copy(alpha = 0.16f), RoundedCornerShape(999.dp))
-            .padding(horizontal = 12.dp, vertical = 7.dp)
-    ) {
-        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PocketColors.TextPrimary)
     }
 }
 

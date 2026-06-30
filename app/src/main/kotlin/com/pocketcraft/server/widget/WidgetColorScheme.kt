@@ -3,11 +3,20 @@ package com.pocketcraft.server.widget
 import android.content.Context
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import com.pocketcraft.server.R
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.data.preferences.WidgetThemeSettings
+import com.pocketcraft.server.ui.theme.CreeperDarkTheme
+import com.pocketcraft.server.ui.theme.CreeperLightTheme
+import com.pocketcraft.server.ui.theme.CustomThemePalette
+import com.pocketcraft.server.ui.theme.SimpleDarkTheme
+import com.pocketcraft.server.ui.theme.SimpleWhiteTheme
+import com.pocketcraft.server.ui.theme.SkeletonTheme
+import com.pocketcraft.server.ui.theme.ThemePalette
+import com.pocketcraft.server.ui.util.MobTheme
 import com.pocketcraft.server.ui.util.ThemePreferenceStore
 
 data class WidgetColorScheme(
@@ -35,6 +44,7 @@ data class WidgetColorScheme(
 )
 
 object WidgetThemePrefs {
+    const val THEME_FOLLOW_APP = "follow_app_theme"
     const val THEME_CREEPER = "creeper"
     const val THEME_CREEPER_DARK = "creeper_dark"
     const val THEME_DIAMOND = "diamond"
@@ -77,10 +87,10 @@ object WidgetThemePrefs {
         if (!isPremium && isLocked(settings.selectedTheme)) {
             AppPreferencesStore.setWidgetThemeSelection(
                 context = context,
-                themeKey = THEME_CREEPER,
+                themeKey = THEME_FOLLOW_APP,
                 manualOverride = false
             )
-            return settings.copy(selectedTheme = THEME_CREEPER, manualOverride = false)
+            return settings.copy(selectedTheme = THEME_FOLLOW_APP, manualOverride = false)
         }
         return settings
     }
@@ -91,10 +101,32 @@ object WidgetThemePrefs {
     }
 
     fun resolveActiveThemeKey(context: Context, settings: WidgetThemeSettings): String {
-        if (!settings.manualOverride && ThemePreferenceStore.isSystemDark(context)) {
-            return THEME_CREEPER_DARK
+        if (!settings.manualOverride || settings.selectedTheme == THEME_FOLLOW_APP) {
+            return THEME_FOLLOW_APP
         }
-        return settings.selectedTheme.ifBlank { THEME_CREEPER }
+        return settings.selectedTheme.ifBlank { THEME_FOLLOW_APP }
+    }
+}
+
+fun resolveWidgetThemeScheme(
+    context: Context,
+    settings: WidgetThemeSettings
+): WidgetColorScheme {
+    return when (WidgetThemePrefs.resolveActiveThemeKey(context, settings)) {
+        WidgetThemePrefs.THEME_FOLLOW_APP -> appThemeScheme(context)
+        else -> themeFor(settings.selectedTheme, settings)
+    }
+}
+
+fun previewThemeScheme(
+    context: Context,
+    themeKey: String,
+    settings: WidgetThemeSettings
+): WidgetColorScheme {
+    return if (themeKey == WidgetThemePrefs.THEME_FOLLOW_APP) {
+        appThemeScheme(context)
+    } else {
+        themeFor(themeKey, settings)
     }
 }
 
@@ -198,6 +230,53 @@ fun themeFor(
         WidgetThemePrefs.THEME_CUSTOM -> customScheme(settings)
         else -> themeFor(WidgetThemePrefs.THEME_CREEPER, settings)
     }
+}
+
+private fun appThemeScheme(context: Context): WidgetColorScheme {
+    ThemePreferenceStore.loadCustomColors(context)
+    val palette = when (ThemePreferenceStore.loadMobThemeSnapshot(context)) {
+        MobTheme.SKELETON -> SkeletonTheme
+        MobTheme.CREEPER -> if (ThemePreferenceStore.resolveDarkMode(context)) CreeperDarkTheme else CreeperLightTheme
+        MobTheme.SIMPLE_WHITE -> SimpleWhiteTheme
+        MobTheme.SIMPLE_DARK -> SimpleDarkTheme
+        MobTheme.CUSTOM -> CustomThemePalette
+    }
+    return schemeForPalette(palette)
+}
+
+private fun schemeForPalette(palette: ThemePalette): WidgetColorScheme {
+    val accent = palette.primary
+    val surface = palette.surfaceCard
+    val background = palette.bgApp
+    val textPrimary = palette.textPrimary
+    val textSecondary = palette.textSecondary
+    val textMuted = palette.textMuted
+    val accentText = if (accent.luminance() > 0.58f) palette.primaryText else Color.White
+    val startBg = lerp(surface, Color.Black, 0.08f).copy(alpha = 0.76f)
+    val disabledBg = lerp(surface, Color.Black, 0.14f).copy(alpha = 0.72f)
+    return scheme(
+        backgroundDrawableRes = 0,
+        backgroundColor = background,
+        borderColor = palette.cardBorder.copy(alpha = 0.86f),
+        cardGlowTint = accent.copy(alpha = 0.12f),
+        iconBadgeColor = palette.navActivePillBg,
+        iconTint = palette.iconBtnIcon,
+        textPrimary = textPrimary,
+        textSecondary = textSecondary,
+        textMuted = textMuted,
+        versionChipBg = palette.surfaceHover.copy(alpha = 0.92f),
+        onlineDotColor = palette.online,
+        statusBg = palette.online.copy(alpha = 0.18f),
+        statusText = palette.online,
+        buttonStartBg = startBg,
+        buttonStartTint = palette.inactiveText,
+        buttonStopBg = palette.danger.copy(alpha = 0.18f),
+        buttonStopTint = palette.dangerText,
+        buttonRestartBg = palette.warning.copy(alpha = 0.18f),
+        buttonRestartTint = lerp(palette.warning, Color.White, 0.18f),
+        buttonDisabledBg = disabledBg,
+        buttonDisabledTint = palette.inactiveText.copy(alpha = 0.84f)
+    )
 }
 
 private fun customScheme(settings: WidgetThemeSettings): WidgetColorScheme {

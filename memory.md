@@ -135,6 +135,14 @@ ssh -i ~/Downloads/pocketcraft-key1.pem ubuntu@13.201.57.41 "pm2 status"
    - Cellular: `60` (flight), `40` (walking) chunks/sec. Concurrency: `Triple(6, 10, 6)` (flight).
    - Coerce pipeline generates/loads to 300/400 to match.
 
+### Locked Stable Reference Commit
+- Stable networking + chunk baseline commit: `6261580` (`Optimize chunk loading speed, cellular budgets, RakNet frame classification, and Java keep-alive ping stability`)
+- Baseline snapshot before widget/server-sync UI fixes: `46214a8` (`chore: snapshot current state before widget sync fixes`)
+- Do not regress the following when touching relay/server lifecycle code:
+  - Keep `RelayManager.kt` socket buffers and Bedrock channel capacities exactly as listed above.
+  - Keep RakNet high-priority routing on packet ID, not frame size.
+  - Keep the WiFi/cellular chunk budgets and concurrency values above unchanged unless a user explicitly requests a networking retune.
+
 ---
 
 ## 5. Play Store Release Notes Localization Skill

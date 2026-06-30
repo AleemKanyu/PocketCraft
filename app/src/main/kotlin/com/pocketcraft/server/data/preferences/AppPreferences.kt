@@ -69,7 +69,7 @@ object AppPreferencesKeys {
 }
 
 data class WidgetThemeSettings(
-    val selectedTheme: String = "creeper",
+    val selectedTheme: String = "follow_app_theme",
     val manualOverride: Boolean = false,
     val customBackground: Int? = null,
     val customAccent: Int? = null,
@@ -545,7 +545,7 @@ object AppPreferencesStore {
     fun getWidgetThemeSettingsFlow(context: Context): Flow<WidgetThemeSettings> =
         context.appPreferencesDataStore.data.map { prefs ->
             WidgetThemeSettings(
-                selectedTheme = prefs[AppPreferencesKeys.WIDGET_THEME] ?: "creeper",
+                selectedTheme = prefs[AppPreferencesKeys.WIDGET_THEME] ?: "follow_app_theme",
                 manualOverride = prefs[AppPreferencesKeys.WIDGET_THEME_MANUAL_OVERRIDE] ?: false,
                 customBackground = prefs[AppPreferencesKeys.WIDGET_CUSTOM_BACKGROUND],
                 customAccent = prefs[AppPreferencesKeys.WIDGET_CUSTOM_ACCENT],

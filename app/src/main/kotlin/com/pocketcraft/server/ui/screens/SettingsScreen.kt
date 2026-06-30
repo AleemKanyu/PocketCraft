@@ -862,42 +862,6 @@ fun SettingsScreen(
                         GameCard(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { showWidgetThemePicker = true },
-                            contentPadding = PaddingValues(vertical = 16.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(
-                                        text = "Widget Themes",
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 15.sp
-                                    )
-                                    Text(
-                                        text = "Customize the home screen widget and Pro-only palettes",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontSize = 11.sp
-                                    )
-                                }
-                                Icon(
-                                    imageVector = Icons.Default.Palette,
-                                    contentDescription = null,
-                                    tint = PocketColors.PrimaryDark
-                                )
-                            }
-                        }
-                    }
-                }
-                item {
-                    AnimatedEntranceContainer(index = 3) {
-                        GameCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
                                 .clickable {
                                     if (isPremium) {
                                         showThemeMaker = true
@@ -929,6 +893,42 @@ fun SettingsScreen(
                                         )
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 3) {
+                        GameCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showWidgetThemePicker = true },
+                            contentPadding = PaddingValues(vertical = 16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = "Widget Themes",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 15.sp
+                                    )
+                                    Text(
+                                        text = "Choose whether the widget follows the app theme or uses its own style",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Default.Palette,
+                                    contentDescription = null,
+                                    tint = PocketColors.PrimaryDark
+                                )
                             }
                         }
                     }

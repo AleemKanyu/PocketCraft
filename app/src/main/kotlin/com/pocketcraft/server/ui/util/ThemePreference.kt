@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.ui.theme.CustomThemePalette
 import com.pocketcraft.server.billing.BillingManager
 
@@ -70,6 +71,21 @@ object ThemePreferenceStore {
             return MobTheme.CREEPER
         }
         return theme
+    }
+
+    fun loadMobThemeSnapshot(context: Context): MobTheme {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val theme = MobTheme.fromId(prefs.getString(KEY_MOB_THEME, null))
+        val preferences = AppPreferences(context.applicationContext)
+        return if (theme == MobTheme.CUSTOM && !preferences.isPremiumUser && !preferences.debugPremiumOverride) {
+            MobTheme.CREEPER
+        } else {
+            theme
+        }
+    }
+
+    fun resolveDarkMode(context: Context): Boolean {
+        return load(context).resolve(systemDark = isSystemDark(context))
     }
 
     fun saveMobTheme(context: Context, theme: MobTheme) {

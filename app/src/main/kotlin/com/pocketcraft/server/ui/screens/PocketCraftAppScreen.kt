@@ -102,6 +102,7 @@ import com.pocketcraft.server.billing.PremiumTier
 import com.pocketcraft.server.ui.components.PromotionBottomSheet
 import com.pocketcraft.server.ui.components.PremiumUpgradeBottomSheet
 import com.pocketcraft.server.data.model.ServerType
+import com.pocketcraft.server.server.ServerHostService
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.service.ServerPropertiesHelper
 import com.pocketcraft.server.data.repository.ServerConfigRepository
@@ -244,6 +245,10 @@ fun PocketCraftApp(
         if (preferences.lastLaunchedAppVersion != BuildConfig.VERSION_NAME) {
             preferences.lastLaunchedAppVersion = BuildConfig.VERSION_NAME
         }
+    }
+
+    LaunchedEffect(versionId, selectedWorld, currentMobTheme, isDarkTheme) {
+        ServerHostService.pushWidgetUpdate(context.applicationContext)
     }
 
     LaunchedEffect(entitlement.tier) {
