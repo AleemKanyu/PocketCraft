@@ -1,5 +1,6 @@
 package com.pocketcraft.server.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +33,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -43,10 +45,13 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.VideogameAsset
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -76,8 +81,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -242,8 +249,10 @@ fun PlayersOnlineTab(
     stateHolder: ServerStateHolder,
     onPlayerSelected: (PlayerInfo) -> Unit
 ) {
+    val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
     var visibleCount by remember { mutableIntStateOf(10) }
+    var showAddAfkDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     val players = stateHolder.sessionPlayers
@@ -380,25 +389,444 @@ fun PlayersOnlineTab(
                     )
                 }
             }
-        }
+            if (filtered.size > visibleCount) {
+                item {
+                    TextButton(
+                        onClick = { visibleCount += 10 },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                    ) {
+                        Text(
+                            "View ${filtered.size - visibleCount} more players online...",
+                            color = PocketColors.Primary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            }
 
-        // "View X more" button
-        if (filtered.size > visibleCount) {
-            TextButton(
-                onClick = { visibleCount += 10 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp)
-            ) {
-                Text(
-                    "View ${filtered.size - visibleCount} more players online...",
-                    color = PocketColors.Primary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
+            item {
+                Spacer(Modifier.height(20.dp))
+                AfkHelpersSection(
+                    stateHolder = stateHolder,
+                    onAddClick = { showAddAfkDialog = true },
+                    onMessage = { message ->
+                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                    }
                 )
             }
         }
     }
+
+    if (showAddAfkDialog) {
+        AddAfkFarmDialog(
+            stateHolder = stateHolder,
+            onDismiss = { showAddAfkDialog = false },
+            onSaved = { message ->
+                showAddAfkDialog = false
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+}
+
+@Composable
+private fun AfkHelpersSection(
+    stateHolder: ServerStateHolder,
+    onAddClick: () -> Unit,
+    onMessage: (String) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            PocketColors.Primary.copy(alpha = 0.18f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(PocketColors.Primary.copy(alpha = 0.14f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.VideogameAsset,
+                            contentDescription = null,
+                            tint = PocketColors.Primary
+                        )
+                    }
+                    Column {
+                        Text(
+                            "AFK Helpers",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 18.sp
+                        )
+                        Text(
+                            "Saved to this world and auto-respawned on next boot.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f)
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                stateHolder.refreshAfkHelpers()
+                                onMessage("AFK helper status refreshed.")
+                            }
+                        },
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(PocketColors.Primary.copy(alpha = 0.12f))
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Refresh AFK helpers",
+                            tint = PocketColors.Primary
+                        )
+                    }
+                    Button(
+                        onClick = onAddClick,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PocketColors.Primary,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Add Farm", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            if (stateHolder.afkFarms.isEmpty()) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.background.copy(alpha = 0.82f),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text("No AFK farms saved yet", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text(
+                            "Add a farm and PocketCraft will keep its dummy data synced for this world. Live spawn works best when a player is online; otherwise it comes up cleanly after the next restart.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f)
+                        )
+                    }
+                }
+            } else {
+                stateHolder.afkFarms.forEach { farm ->
+                    AfkHelperRow(
+                        stateHolder = stateHolder,
+                        farm = farm,
+                        onMessage = onMessage
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AfkHelperRow(
+    stateHolder: ServerStateHolder,
+    farm: com.pocketcraft.server.afk.AfkFarmLocation,
+    onMessage: (String) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val statusColor = when {
+        farm.isLive -> Color(0xFF3DDC84)
+        farm.isActive -> PocketColors.Primary
+        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f)
+    }
+    val statusText = when {
+        farm.isLive -> "LIVE"
+        farm.requiresRestart -> "RESTART"
+        farm.isActive -> "ARMED"
+        else -> "IDLE"
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.background.copy(alpha = 0.86f),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            statusColor.copy(alpha = 0.22f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(statusColor)
+                        )
+                        Text(farm.name, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = statusColor.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                statusText,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                color = statusColor,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "X ${farm.x}  Y ${farm.y}  Z ${farm.z}",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    val secondary = when {
+                        farm.requiresRestart -> "Needs a restart or an online owner to fully apply live state."
+                        farm.isLive -> "Dummy is loaded on the current server session."
+                        farm.isActive -> "Saved for auto-respawn on next world boot."
+                        else -> "Disabled. It will stay out until you arm it again."
+                    }
+                    Text(
+                        secondary,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.56f)
+                    )
+                }
+                IconButton(
+                    onClick = {
+                        scope.launch {
+                            onMessage(stateHolder.deleteAfkFarm(farm.id))
+                        }
+                    },
+                    enabled = !stateHolder.isAfkHelperBusy,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFFF4757).copy(alpha = 0.10f))
+                ) {
+                    Icon(
+                        Icons.Default.DeleteOutline,
+                        contentDescription = "Delete AFK helper",
+                        tint = Color(0xFFFF4757)
+                    )
+                }
+            }
+
+            Button(
+                onClick = {
+                    scope.launch {
+                        onMessage(stateHolder.toggleAfkFarm(farm.id))
+                    }
+                },
+                enabled = !stateHolder.isAfkHelperBusy,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (farm.isActive) Color(0xFF2B1B1F) else PocketColors.Primary,
+                    contentColor = if (farm.isActive) Color(0xFFFFB4B4) else Color.Black
+                )
+            ) {
+                Text(
+                    if (farm.isActive) "Disable Helper" else "Enable Helper",
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddAfkFarmDialog(
+    stateHolder: ServerStateHolder,
+    onDismiss: () -> Unit,
+    onSaved: (String) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var name by remember { mutableStateOf("") }
+    var x by remember { mutableStateOf("") }
+    var y by remember { mutableStateOf("") }
+    var z by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = {
+            if (!saving) onDismiss()
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val parsedX = x.toIntOrNull()
+                    val parsedY = y.toIntOrNull()
+                    val parsedZ = z.toIntOrNull()
+                    if (name.trim().isBlank() || parsedX == null || parsedY == null || parsedZ == null) {
+                        error = "Fill in a name and valid whole-number coordinates."
+                        return@Button
+                    }
+
+                    saving = true
+                    scope.launch {
+                        val message = stateHolder.addAfkFarm(
+                            name = name.trim(),
+                            x = parsedX,
+                            y = parsedY,
+                            z = parsedZ
+                        )
+                        saving = false
+                        error = null
+                        onSaved(message)
+                    }
+                },
+                enabled = !saving
+            ) {
+                Text(if (saving) "Saving..." else "Save Farm")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !saving) {
+                Text("Cancel")
+            }
+        },
+        title = {
+            Text("Add AFK Farm", fontWeight = FontWeight.ExtraBold)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Live spawn works best when one player is online. Otherwise PocketCraft will queue the helper for the next server boot.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f)
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                        error = null
+                    },
+                    label = { Text("Farm name") },
+                    singleLine = true,
+                    shape = duoTextFieldShape(),
+                    colors = duoOutlinedTextFieldColors()
+                )
+                OutlinedTextField(
+                    value = x,
+                    onValueChange = {
+                        x = it
+                        error = null
+                    },
+                    label = { Text("X") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = duoTextFieldShape(),
+                    colors = duoOutlinedTextFieldColors()
+                )
+                OutlinedTextField(
+                    value = y,
+                    onValueChange = {
+                        y = it
+                        error = null
+                    },
+                    label = { Text("Y") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = duoTextFieldShape(),
+                    colors = duoOutlinedTextFieldColors()
+                )
+                OutlinedTextField(
+                    value = z,
+                    onValueChange = {
+                        z = it
+                        error = null
+                    },
+                    label = { Text("Z") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = duoTextFieldShape(),
+                    colors = duoOutlinedTextFieldColors()
+                )
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            val location = stateHolder.suggestAfkFarmLocation()
+                            if (location == null) {
+                                Toast.makeText(
+                                    context,
+                                    "No online player location is available right now.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                x = location.first.toString()
+                                y = location.second.toString()
+                                z = location.third.toString()
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Use Current Online Player Location", fontWeight = FontWeight.Bold)
+                }
+                if (!error.isNullOrBlank()) {
+                    Text(
+                        error!!,
+                        color = Color(0xFFFF7A7A),
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
+    )
 }
 
 @Composable
@@ -737,5 +1165,3 @@ fun PlayersListTab(
         }
     }
 }
-
-

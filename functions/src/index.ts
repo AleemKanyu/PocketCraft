@@ -24,6 +24,10 @@ type FeedbackDoc = {
   deviceManufacturer?: string;
   deviceModel?: string;
   androidSdk?: number;
+  currentConsoleLog?: string;
+  serverLatestLog?: string;
+  crashArtifacts?: string;
+  runtimeState?: string;
 };
 
 type VerifyPurchaseRequest = {
@@ -72,6 +76,10 @@ export const forwardFeedbackEmail = onDocumentCreated(
     const manufacturer = data.deviceManufacturer || "unknown";
     const model = data.deviceModel || "unknown";
     const androidSdk = data.androidSdk ?? "unknown";
+    const currentConsoleLog = (data.currentConsoleLog || "").trim();
+    const serverLatestLog = (data.serverLatestLog || "").trim();
+    const crashArtifacts = (data.crashArtifacts || "").trim();
+    const runtimeState = (data.runtimeState || "").trim();
 
     const subject = `[PocketCraft Beta Feedback] ${appVersion} / ${serverVersion}`;
     const text = [
@@ -85,8 +93,15 @@ export const forwardFeedbackEmail = onDocumentCreated(
       `Android SDK: ${androidSdk}`,
       "",
       "Message:",
-      message
-    ].join("\n");
+      message,
+      "",
+      runtimeState ? `Runtime State:\n${runtimeState}` : "",
+      currentConsoleLog ? `Current Console Log:\n${currentConsoleLog}` : "",
+      serverLatestLog ? `Server latest.log:\n${serverLatestLog}` : "",
+      crashArtifacts ? `Crash Artifacts:\n${crashArtifacts}` : ""
+    ]
+      .filter((section) => section.trim().length > 0)
+      .join("\n");
 
     const html = `
       <h2>PocketCraft Beta Feedback</h2>
@@ -99,6 +114,10 @@ export const forwardFeedbackEmail = onDocumentCreated(
       <hr />
       <p><strong>Message:</strong></p>
       <pre style="white-space:pre-wrap;font-family:inherit">${escapeHtml(message)}</pre>
+      ${runtimeState ? `<hr /><p><strong>Runtime State:</strong></p><pre style="white-space:pre-wrap;font-family:inherit">${escapeHtml(runtimeState)}</pre>` : ""}
+      ${currentConsoleLog ? `<hr /><p><strong>Current Console Log:</strong></p><pre style="white-space:pre-wrap;font-family:inherit">${escapeHtml(currentConsoleLog)}</pre>` : ""}
+      ${serverLatestLog ? `<hr /><p><strong>Server latest.log:</strong></p><pre style="white-space:pre-wrap;font-family:inherit">${escapeHtml(serverLatestLog)}</pre>` : ""}
+      ${crashArtifacts ? `<hr /><p><strong>Crash Artifacts:</strong></p><pre style="white-space:pre-wrap;font-family:inherit">${escapeHtml(crashArtifacts)}</pre>` : ""}
     `;
 
     try {

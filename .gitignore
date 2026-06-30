@@ -46,3 +46,6 @@ window_dump.xml
 
 # Secrets
 *service-account.json
+
+# Local doc noise
+*.md

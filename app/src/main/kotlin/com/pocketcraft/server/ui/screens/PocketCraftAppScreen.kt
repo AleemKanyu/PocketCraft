@@ -1715,7 +1715,12 @@ fun PocketCraftApp(
                             }
                             sendingFeedbackPrompt = true
                             feedbackPromptError = null
-                            val result = FeedbackService.submitFeedback(context, message, versionId)
+                            val result = FeedbackService.submitFeedback(
+                                context = context,
+                                message = message,
+                                serverVersion = versionId,
+                                liveConsoleLines = stateHolder.currentLogLines()
+                            )
                             sendingFeedbackPrompt = false
                             if (result.isSuccess) {
                                 feedbackSheetState.hide()

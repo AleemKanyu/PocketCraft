@@ -22,11 +22,20 @@ import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import java.util.Locale
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 import kotlin.math.pow
 
 class ServerLauncher(private val context: Context) {
+
+    private data class DeviceStabilityProfile(
+        val forceExternalJvm: Boolean,
+        val constrainedHeap: Boolean,
+        val maxHeapCapMb: Int,
+        val minHeapFloorMb: Int,
+        val reason: String?
+    )
 
     private fun normalizeAndroidPath(path: String): String {
         return if (path.startsWith("/data/user/0/")) {
@@ -34,6 +43,36 @@ class ServerLauncher(private val context: Context) {
         } else {
             path
         }
+    }
+
+    private fun buildDeviceStabilityProfile(totalRamMb: Int, availableRamMb: Int): DeviceStabilityProfile {
+        val manufacturer = Build.MANUFACTURER.orEmpty().lowercase(Locale.US)
+        val model = Build.MODEL.orEmpty().lowercase(Locale.US)
+        val device = Build.DEVICE.orEmpty().lowercase(Locale.US)
+        val product = Build.PRODUCT.orEmpty().lowercase(Locale.US)
+        val isGalaxyA12Family = manufacturer.contains("samsung") && listOf(model, device, product).any { value ->
+            value.contains("a12") || value.contains("sm-a125") || value.contains("sm-a127")
+        }
+        val constrainedHeap = isGalaxyA12Family || totalRamMb <= 4096
+        val targetHeapCap = when {
+            isGalaxyA12Family -> minOf((availableRamMb * 0.52f).toInt(), 896)
+            totalRamMb <= 3072 -> minOf((availableRamMb * 0.58f).toInt(), 768)
+            totalRamMb <= 4096 -> minOf((availableRamMb * 0.62f).toInt(), 1024)
+            else -> minOf((availableRamMb * 0.72f).toInt(), (totalRamMb * 0.90f).toInt())
+        }
+        val minHeapFloor = if (isGalaxyA12Family || totalRamMb <= 3072) 384 else 512
+        val reason = when {
+            isGalaxyA12Family -> "Samsung Galaxy A12 low-memory profile active. Using safer heap limits to reduce short crash loops."
+            constrainedHeap -> "Low-memory device profile active. Heap is capped to reduce background crash risk."
+            else -> null
+        }
+        return DeviceStabilityProfile(
+            forceExternalJvm = false,
+            constrainedHeap = constrainedHeap,
+            maxHeapCapMb = targetHeapCap.coerceAtLeast(minHeapFloor),
+            minHeapFloorMb = minHeapFloor,
+            reason = reason
+        )
     }
 
     companion object {
@@ -137,7 +176,8 @@ class ServerLauncher(private val context: Context) {
         val tmpDir    = normalizeAndroidPath(File(context.filesDir, "runtime-tmp").also { it.mkdirs() }.absolutePath)
         val shimDir = File(normalizeAndroidPath(File(context.filesDir, "lib-shims").also { it.mkdirs() }.absolutePath))
         ensureSystemShims(shimDir, File(tmpDir), onOutput)
-        val forceExternal = AppPreferences(context).forceExternalJvm
+        val deviceProfile = buildDeviceStabilityProfile(totalRamMb = getTotalRamMb(context), availableRamMb = com.pocketcraft.server.util.RamUtils.getAvailableRamMb(context))
+        val forceExternal = AppPreferences(context).forceExternalJvm || deviceProfile.forceExternalJvm
         val preferInProcessJvm = launchMode == ServerFileManager.LaunchMode.JAR && !forceExternal && NativeLauncher.loadLibrary()
 
         val resolvedRuntime = ensureLaunchableRuntime(
@@ -167,21 +207,39 @@ class ServerLauncher(private val context: Context) {
         val maxRamMbFromProps = worldProps.getProperty("pocketcraft-max-ram-mb", "1024").toIntOrNull() ?: 1024
         
         val availRam = com.pocketcraft.server.util.RamUtils.getAvailableRamMb(context)
-        val maxAllowedRam = (totalRam * 0.90).toInt().coerceAtLeast(1024)
+        val maxAllowedRam = minOf((totalRam * 0.90).toInt(), deviceProfile.maxHeapCapMb)
+            .coerceAtLeast(deviceProfile.minHeapFloorMb)
         
-        val maxRamMb = when (ramModeFromProps) {
-            "low" -> if (totalRam >= 6000) 2048 else if (totalRam >= 4000) 1536 else 1024
+        val requestedMaxRamMb = when (ramModeFromProps) {
+            "low" -> when {
+                deviceProfile.constrainedHeap && totalRam <= 3500 -> 768
+                deviceProfile.constrainedHeap -> 896
+                totalRam >= 6000 -> 2048
+                totalRam >= 4000 -> 1536
+                else -> 1024
+            }
             "full" -> maxAllowedRam
-            "manual" -> maxRamMbFromProps.coerceIn(512, maxAllowedRam)
+            "manual" -> maxRamMbFromProps.coerceIn(deviceProfile.minHeapFloorMb, maxAllowedRam)
             else -> 1024
         }
-        val minRamMb = when (ramModeFromProps) {
-            "low" -> if (totalRam >= 6000) 1024 else if (totalRam >= 4000) 768 else 512
+        val requestedMinRamMb = when (ramModeFromProps) {
+            "low" -> when {
+                deviceProfile.constrainedHeap && totalRam <= 3500 -> 384
+                deviceProfile.constrainedHeap -> 512
+                totalRam >= 6000 -> 1024
+                totalRam >= 4000 -> 768
+                else -> 512
+            }
             "full" -> maxAllowedRam
-            "manual" -> maxRamMbFromProps.coerceIn(512, maxAllowedRam)
+            "manual" -> maxRamMbFromProps.coerceIn(deviceProfile.minHeapFloorMb, maxAllowedRam)
             else -> 512
         }
+        val maxRamMb = requestedMaxRamMb.coerceIn(deviceProfile.minHeapFloorMb, maxAllowedRam)
+        val minRamMb = requestedMinRamMb.coerceIn(deviceProfile.minHeapFloorMb, maxRamMb)
 
+        deviceProfile.reason?.let { reason ->
+            onOutput("[PocketCraft] Stability mode enabled: $reason")
+        }
         onOutput("[PocketCraft] JVM memory: mode=$ramModeFromProps, heap=${minRamMb}MB..${maxRamMb}MB, available=${availRam}MB, total=${totalRam}MB")
 
         val javaBin = File(normalizeAndroidPath(JreExtractor.getJavaBinary(context, resolvedRuntime).absolutePath))
