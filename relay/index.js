@@ -71,6 +71,8 @@ function configureSocket(socket) {
   socket.setKeepAlive(true, SOCKET_KEEPALIVE_MS);
   socket.allowHalfOpen = false;
   socket.setTimeout(0);
+
+
 }
 
 // userId validation

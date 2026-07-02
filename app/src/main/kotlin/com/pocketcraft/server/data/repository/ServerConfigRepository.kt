@@ -14,6 +14,7 @@ import org.json.JSONObject
 import com.pocketcraft.server.setup.JreExtractor
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.service.ServerFileManager
+import com.pocketcraft.server.service.ServerPropertiesHelper
 import com.pocketcraft.server.service.ServerPropertiesHelper.POCKETCRAFT_JOIN_MESSAGE_TEXT
 import com.pocketcraft.server.service.ServerPropertiesHelper.POCKETCRAFT_JOIN_MESSAGE_URL
 import com.pocketcraft.server.server.ServerPropertiesWriter
@@ -56,7 +57,7 @@ class ServerConfigRepository @Inject constructor(
             file.exists() -> {
                 val profileConfig = parseConfig(file)
                 if (propertiesFile.exists()) {
-                    val propsConfig = parseConfig(propertiesFile)
+                    val propsConfig = parseConfig(propertiesFile, profileConfig)
                     if (propsConfig != profileConfig) {
                         serversDir.mkdirs()
                         writeConfigFile(file, propsConfig)
@@ -231,6 +232,10 @@ class ServerConfigRepository @Inject constructor(
     }
 
     private fun writeSpigotYml(config: ServerConfig) {
+        val viewDistance = config.viewDistance.coerceIn(3, 32)
+        val simulationDistance = config.simulationDistance.coerceIn(3, 32)
+        val viewTrackingBlocks = viewDistance * 16
+        val simulationTrackingBlocks = simulationDistance * 16
         val content = """
             |settings:
             |  save-user-cache-on-stop-only: false
@@ -242,21 +247,27 @@ class ServerConfigRepository @Inject constructor(
             |  moved-wrongly-threshold: 0.0625
             |world-settings:
             |  default:
-            |    view-distance: ${config.viewDistance}
-            |    mob-spawn-range: 4
+            |    view-distance: $viewDistance
+            |    simulation-distance: $simulationDistance
+            |    mob-spawn-range: $simulationDistance
             |    entity-activation-range:
-            |      animals: 16
-            |      monsters: 24
-            |      raiders: 48
-            |      misc: 8
-            |      water: 8
-            |      villagers: 16
-            |      flying-monsters: 32
+            |      animals: $simulationTrackingBlocks
+            |      monsters: $simulationTrackingBlocks
+            |      raiders: $simulationTrackingBlocks
+            |      misc: $simulationTrackingBlocks
+            |      water: $simulationTrackingBlocks
+            |      villagers: $simulationTrackingBlocks
+            |      flying-monsters: $simulationTrackingBlocks
+            |    entity-tracking-range:
+            |      players: $viewTrackingBlocks
+            |      animals: $simulationTrackingBlocks
+            |      monsters: $simulationTrackingBlocks
+            |      misc: $simulationTrackingBlocks
         """.trimMargin()
         spigotFile.writeText(content)
     }
 
-    private fun parseConfig(file: File): ServerConfig {
+    private fun parseConfig(file: File, fallbackConfig: ServerConfig? = null): ServerConfig {
         val props = file.readLines()
             .filter { it.contains("=") && !it.startsWith("#") }
             .associate {
@@ -284,9 +295,11 @@ class ServerConfigRepository @Inject constructor(
             motd = (props["motd"] ?: "A PocketCraft Server").removeSuffix(" - Hosted on Pocketcraft").trim(),
             pvp = props["pvp"]?.toBoolean() ?: true,
             viewDistance = props["pocketcraft-desired-view-distance"]?.toIntOrNull()
+                ?: fallbackConfig?.viewDistance
                 ?: props["view-distance"]?.toIntOrNull()
                 ?: 6,
             simulationDistance = props["pocketcraft-desired-simulation-distance"]?.toIntOrNull()
+                ?: fallbackConfig?.simulationDistance
                 ?: props["simulation-distance"]?.toIntOrNull()
                 ?: 4,
             spawnProtection = props["spawn-protection"]?.toIntOrNull() ?: 16,
@@ -299,9 +312,14 @@ class ServerConfigRepository @Inject constructor(
             spawnAnimals = props["spawn-animals"]?.toBoolean() ?: true,
             spawnNpcs = props["spawn-npcs"]?.toBoolean() ?: true,
             hardcore = props["hardcore"]?.toBoolean() ?: false,
-            maxRamMb = props["pocketcraft-max-ram-mb"]?.toIntOrNull() ?: 1024,
-            ramMode = props["pocketcraft-ram-mode"] ?: "low",
-            entityBroadcastRangePercentage = props["entity-broadcast-range-percentage"]?.toIntOrNull() ?: 70,
+            maxRamMb = props["pocketcraft-max-ram-mb"]?.toIntOrNull()
+                ?: fallbackConfig?.maxRamMb
+                ?: 1024,
+            ramMode = props["pocketcraft-ram-mode"]
+                ?: fallbackConfig?.ramMode
+                ?: "low",
+            entityBroadcastRangePercentage = props["entity-broadcast-range-percentage"]?.toIntOrNull()
+                ?: ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT,
             enableRcon = props["enable-rcon"]?.toBoolean() ?: true,
             generateStructures = props["generate-structures"]?.toBoolean() ?: true,
             levelType = props["level-type"] ?: "default",
@@ -311,9 +329,14 @@ class ServerConfigRepository @Inject constructor(
             joinMessageEnabled = true,
             joinMessageText = POCKETCRAFT_JOIN_MESSAGE_TEXT,
             joinMessageUrl = POCKETCRAFT_JOIN_MESSAGE_URL,
-            serverType = ServerType.fromString(props["pocketcraft-server-type"]),
-            gameVersion = props["pocketcraft-game-version"] ?: "",
+            serverType = props["pocketcraft-server-type"]?.let { ServerType.fromString(it) }
+                ?: fallbackConfig?.serverType
+                ?: ServerType.PAPER,
+            gameVersion = props["pocketcraft-game-version"]
+                ?: fallbackConfig?.gameVersion
+                ?: "",
             customJarPath = props["pocketcraft-custom-jar-path"]
+                ?: fallbackConfig?.customJarPath
         )
     }
 
@@ -370,12 +393,13 @@ class ServerConfigRepository @Inject constructor(
             .any { it.isFile && it.extension == "jar" && it.length() > 50_000L }
         if (!hasDownloadedJar) return false
 
+        val is64Bit = android.os.Process.is64Bit()
         val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
         val arch = when {
-            abi.contains("arm64") || abi.contains("aarch64") -> "aarch64"
-            abi.contains("arm") -> "aarch32"
-            abi.contains("x86_64") -> "amd64"
-            abi.contains("x86") -> "i386"
+            (abi.contains("arm64") || abi.contains("aarch64")) && is64Bit -> "aarch64"
+            abi.contains("arm") || abi.contains("arm64") || abi.contains("aarch64") -> "aarch32"
+            abi.contains("x86_64") && is64Bit -> "amd64"
+            abi.contains("x86") || abi.contains("x86_64") -> "i386"
             else -> null
         } ?: return false
 

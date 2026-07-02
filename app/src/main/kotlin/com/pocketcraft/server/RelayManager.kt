@@ -51,10 +51,10 @@ class RelayManager(private val context: Context) {
         const val PHONE_TUNNEL_PORT = 9000
         // Bound kernel queues so chunks backpressure Paper before keepalives sit
         // behind seconds of unsent data on constrained mobile relay routes.
-        private const val SOCKET_BUFFER_SIZE = 128 * 1024
-        private const val PLAYER_BRIDGE_BUFFER_SIZE = 64 * 1024
+        private const val SOCKET_BUFFER_SIZE = 256 * 1024
+        private const val PLAYER_BRIDGE_BUFFER_SIZE = 8 * 1024
         // Smaller upstream reads so chunk blobs do not monopolize one relay socket write.
-        private const val PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE = 64 * 1024
+        private const val PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE = 8 * 1024
         private const val BEDROCK_TX_BUFFER_SIZE = 8 * 1024
         private const val BEDROCK_SMALL_FRAME_MAX_BYTES = 1024
         private const val BEDROCK_LARGE_FRAME_BATCH_MAX = 4
