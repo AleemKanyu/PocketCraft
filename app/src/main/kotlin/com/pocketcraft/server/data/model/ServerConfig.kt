@@ -45,7 +45,7 @@ data class ServerConfig(
     val maxBuildHeight: Int = 320,
     val useNativeTransport: Boolean = false,
     // Performance settings
-    val entityBroadcastRangePercentage: Int = 70,
+    val entityBroadcastRangePercentage: Int = 100,
     // App settings
     val maxRamMbApp: Int = 1024,
     val soundEnabled: Boolean = true,

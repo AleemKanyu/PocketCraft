@@ -3198,6 +3198,10 @@ class ServerStateHolder(
             spawnNpcs = props.getProperty("spawn-npcs", "true").toBoolean(),
             hardcore = props.getProperty("hardcore", "false").toBoolean(),
             maxRamMb = props.getProperty("pocketcraft-max-ram-mb", "1024").toIntOrNull() ?: 1024,
+            entityBroadcastRangePercentage = props.getProperty(
+                "entity-broadcast-range-percentage",
+                ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT.toString()
+            ).toIntOrNull() ?: ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT,
             generateStructures = props.getProperty("generate-structures", "true").toBoolean(),
             levelType = props.getProperty("level-type", "default"),
             serverType = props.getProperty("pocketcraft-server-type")

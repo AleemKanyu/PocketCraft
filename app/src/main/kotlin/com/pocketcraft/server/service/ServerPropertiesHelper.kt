@@ -12,12 +12,12 @@ object ServerPropertiesHelper {
      * required over the relay TCP tunnel (usually by 3x to 4x), preventing
      * network pipe saturation and Head-of-Line blocking (which causes ping spikes).
      */
-    const val RELAY_READY_COMPRESSION_THRESHOLD = 256
+    const val RELAY_READY_COMPRESSION_THRESHOLD = 128
     const val DEFAULT_VIEW_DISTANCE = 6
     const val DEFAULT_SIMULATION_DISTANCE = 4
     const val DESIRED_VIEW_DISTANCE_KEY = "pocketcraft-desired-view-distance"
     const val DESIRED_SIMULATION_DISTANCE_KEY = "pocketcraft-desired-simulation-distance"
-    const val RELAY_READY_ENTITY_BROADCAST_PERCENT = 40
+    const val RELAY_READY_ENTITY_BROADCAST_PERCENT = 100
     const val POCKETCRAFT_JOIN_MESSAGE_TEXT = "hosted on Pocketcraft"
     const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/7xw3Rd2vs2"
 

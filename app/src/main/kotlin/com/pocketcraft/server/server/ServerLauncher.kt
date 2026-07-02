@@ -939,11 +939,7 @@ class ServerLauncher(private val context: Context) {
         }
 
         val tunedCompression = ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD
-        val tunedEntityBroadcast = when {
-            currentEntityBroadcast == null -> 40
-            currentEntityBroadcast <= 0 -> 40
-            else -> currentEntityBroadcast.coerceIn(10, 40)
-        }
+        val tunedEntityBroadcast = ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
 
         var changed = false
         if (tunedCompression != currentCompression) {
@@ -1011,7 +1007,7 @@ class ServerLauncher(private val context: Context) {
         val viewDistance = props.getProperty("view-distance")?.toIntOrNull()
             ?: ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE
         val chunkBudget = computeRelayChunkSendBudget(
-            cellularRelay = NetworkUtils.isCellular(context),
+            cellularRelay = true, // Force cellular budget for relay to prevent uplink saturation
             viewDistance = viewDistance,
             flightModeEnabled = flightModeEnabled
         )
@@ -1025,7 +1021,7 @@ class ServerLauncher(private val context: Context) {
         val configDir = File(serverDir, "config").also { it.mkdirs() }
         val paperGlobal = File(configDir, "paper-global.yml")
         val original = runCatching { paperGlobal.readText() }.getOrDefault("")
-        val cellularRelay = NetworkUtils.isCellular(context)
+        val cellularRelay = true // Force cellular budget for relay to prevent uplink saturation
         val flightModeEnabled = runBlocking { AppPreferencesStore.isFlightModeEnabledFlow(context).first() }
         val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
         val viewDistance = props.getProperty("view-distance")?.toIntOrNull()
@@ -1080,8 +1076,10 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlPathValue(updated, listOf("timings"), "server-name-privacy", "true")
 
         // Keep-alive: extend timeout so high-latency relay players aren't kicked,
-        // and ensure keep-alives are sent on time even under chunk load.
+        // and send keepalives every tick (50ms) so the client tab ping reflects true RTT
+        // instead of RTT + up to 1000ms scheduling jitter.
         updated = ensureYamlSectionValue(updated, "misc", "keep-alive-timeout", "60")
+        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-interval", "1")
 
         // Disable updater and metrics submission checks to prevent slow network lookup stalls on startup
         updated = ensureYamlPathValue(updated, listOf("updater"), "updater-status", "none")
@@ -1099,32 +1097,45 @@ class ServerLauncher(private val context: Context) {
     ) {
         val spigotFile = File(serverDir, "spigot.yml")
         val original = runCatching { spigotFile.readText() }.getOrDefault("")
+        val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
+        val desiredView = props.getProperty(ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull()
+            ?: props.getProperty("view-distance")?.toIntOrNull()
+            ?: ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE
+        val desiredSimulation = props.getProperty(ServerPropertiesHelper.DESIRED_SIMULATION_DISTANCE_KEY)?.toIntOrNull()
+            ?: props.getProperty("simulation-distance")?.toIntOrNull()
+            ?: ServerPropertiesHelper.DEFAULT_SIMULATION_DISTANCE
+        val viewTrackingBlocks = desiredView.coerceIn(3, 32) * 16
+        val simulationTrackingBlocks = desiredSimulation.coerceIn(3, 32) * 16
 
         var updated = original
         // Spigot can override both distances; keep them on "default" so the current
         // server.properties value is always the one Paper actually uses.
         updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "view-distance", "default")
         updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "simulation-distance", "default")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "mob-spawn-range", desiredSimulation.coerceIn(3, 32).toString())
         updated = ensureYamlPathValue(updated, listOf("settings"), "moved-too-quickly-multiplier", "1000.0")
         updated = ensureYamlPathValue(updated, listOf("settings"), "moved-wrongly-threshold", "1000.0")
         updated = ensureYamlPathValue(updated, listOf("settings"), "user-suggest-updater", "false")
 
-        // Optimize entity activation ranges to save tick CPU
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "animals", "12")
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "monsters", "16")
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "raiders", "24")
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "misc", "4")
+        // Match Spigot activation and tracking limits to the configured world distances
+        // so entities stay active and visible across the full simulation range.
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "animals", simulationTrackingBlocks.toString())
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "monsters", simulationTrackingBlocks.toString())
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "raiders", simulationTrackingBlocks.toString())
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "misc", simulationTrackingBlocks.toString())
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "water", simulationTrackingBlocks.toString())
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "villagers", simulationTrackingBlocks.toString())
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "flying-monsters", simulationTrackingBlocks.toString())
         updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "tick-inactive-villagers", "false")
 
-        // Optimize entity tracking ranges to save bandwith and cpu
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "players", "48")
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "animals", "24")
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "monsters", "32")
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "misc", "16")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "players", viewTrackingBlocks.toString())
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "animals", simulationTrackingBlocks.toString())
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "monsters", simulationTrackingBlocks.toString())
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "misc", simulationTrackingBlocks.toString())
 
         if (updated != original) {
             spigotFile.writeText(updated)
-            onOutput("[PocketCraft] Spigot optimizations applied: view distance overrides cleared + low-latency entity tracking/activation.")
+            onOutput("[PocketCraft] Spigot entity ranges synced to view=$desiredView and simulation=$desiredSimulation.")
         }
     }
 
