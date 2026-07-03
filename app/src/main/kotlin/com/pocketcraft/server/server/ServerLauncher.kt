@@ -90,6 +90,10 @@ class ServerLauncher(private val context: Context) {
         @Volatile
         private var noexecCacheResult: Boolean? = null
 
+        /** Cached result of canonical Java binary execution safety; null = not yet checked. */
+        @Volatile
+        private var execSafeCache: Boolean? = null
+
         /**
          * Set to true when ALL writable directories (files/, code_cache/, external) are
          * noexec — meaning this device (e.g. Samsung Knox lockdown) prevents execution
@@ -294,7 +298,7 @@ class ServerLauncher(private val context: Context) {
                 if (launchMode != ServerFileManager.LaunchMode.JAR || forceExternal) {
                     onOutput("[PocketCraft] Routing to out-of-process JVM execution (ForceExternal=$forceExternal)")
                     result = launchExternalJvm(
-                        javaBin = javaBin,
+                        runtime = resolvedRuntime,
                         jrePath = jrePath,
                         launchTargetPath = normalizedJarPath,
                         launchMode = launchMode,
@@ -331,7 +335,7 @@ class ServerLauncher(private val context: Context) {
                     if (result != 0) {
                         onOutput("[PocketCraft] In-process JVM failed with code $result. Trying out-of-process JVM fallback...")
                         result = launchExternalJvm(
-                            javaBin = javaBin,
+                            runtime = resolvedRuntime,
                             jrePath = jrePath,
                             launchTargetPath = normalizedJarPath,
                             launchMode = launchMode,
@@ -566,7 +570,7 @@ class ServerLauncher(private val context: Context) {
     }
 
     private fun launchExternalJvm(
-        javaBin: File,
+        runtime: JreExtractor.RuntimeSpec,
         jrePath: String,
         launchTargetPath: String,
         launchMode: ServerFileManager.LaunchMode,
@@ -577,8 +581,10 @@ class ServerLauncher(private val context: Context) {
         maxRamMb: Int,
         worldName: String,
         onOutput: (String) -> Unit,
-        onError: (String) -> Unit
+        onError: (String) -> Unit,
+        isRetry: Boolean = false
     ): Int {
+        val javaBin = ensureExecSafeJavaBin(context, runtime)
         val errorFilePattern = File(serverDir, "hs_err_pid%p.log").absolutePath
         val nativeLibDir = normalizeAndroidPath(context.applicationInfo.nativeLibraryDir)
         val wrapperBin = File(normalizeAndroidPath(File(nativeLibDir, "libserverwrap.so").absolutePath))
@@ -720,20 +726,49 @@ class ServerLauncher(private val context: Context) {
         }
         val command = listOf("/system/bin/sh", "-c", shellCmd)
  
-        val process = ProcessBuilder(command)
-            .directory(File(serverDir))
-            .redirectErrorStream(true)
-            .apply {
-                environment()["POJAV_NATIVEDIR"] = nativeLibDir
-                environment()["JAVA_HOME"] = jrePath
-                environment()["HOME"] = serverDir
-                environment()["TMPDIR"] = tmpDir
-                environment()["LD_LIBRARY_PATH"] = "$jrePath/lib/server:$jrePath/lib:$jrePath/lib/jli:$ldLibraryPath"
-                environment()["PATH"] = "$jrePath/bin:/system/bin:/system/xbin:${javaBin.parent}:${System.getenv("PATH").orEmpty()}"
-                environment()["BIONIC_DISABLE_PTR_TAGGING"] = "1"
-            }
-            .start()
+        val startTime = System.currentTimeMillis()
+        val processResult = runCatching {
+            ProcessBuilder(command)
+                .directory(File(serverDir))
+                .redirectErrorStream(true)
+                .apply {
+                    environment()["POJAV_NATIVEDIR"] = nativeLibDir
+                    environment()["JAVA_HOME"] = jrePath
+                    environment()["HOME"] = serverDir
+                    environment()["TMPDIR"] = tmpDir
+                    environment()["LD_LIBRARY_PATH"] = "$jrePath/lib/server:$jrePath/lib:$jrePath/lib/jli:$ldLibraryPath"
+                    environment()["PATH"] = "$jrePath/bin:/system/bin:/system/xbin:${javaBin.parent}:${System.getenv("PATH").orEmpty()}"
+                    environment()["BIONIC_DISABLE_PTR_TAGGING"] = "1"
+                }
+                .start()
+        }
 
+        if (processResult.isFailure) {
+            val error = processResult.exceptionOrNull()
+            if (!isRetry && !javaBin.name.contains("libjava_exec")) {
+                onOutput("[PocketCraft] Out-of-process JVM execution failed to start: ${error?.message}. Retrying with Knox/noexec fallback...")
+                noexecCacheResult = true
+                execSafeCache = false
+                return launchExternalJvm(
+                    runtime = runtime,
+                    jrePath = jrePath,
+                    launchTargetPath = launchTargetPath,
+                    launchMode = launchMode,
+                    serverDir = serverDir,
+                    tmpDir = tmpDir,
+                    shimDir = shimDir,
+                    minRamMb = minRamMb,
+                    maxRamMb = maxRamMb,
+                    worldName = worldName,
+                    onOutput = onOutput,
+                    onError = onError,
+                    isRetry = true
+                )
+            }
+            throw error ?: Exception("Process start failed")
+        }
+
+        val process = processResult.getOrThrow()
         activeExternalProcess = process
         val pid = runCatching {
             val method = process.javaClass.getMethod("pid")
@@ -771,6 +806,32 @@ class ServerLauncher(private val context: Context) {
             activeExternalProcess = null
         }
         ServerHostService.persistExternalJvmPid(context, -1L)
+
+        val duration = System.currentTimeMillis() - startTime
+        if (!isRetry && 
+            !javaBin.name.contains("libjava_exec") && 
+            (exitCode == 126 || exitCode == 127 || (exitCode != 0 && duration < 2500))
+        ) {
+            onOutput("[PocketCraft] Out-of-process JVM execution failed (code=$exitCode, duration=${duration}ms). Retrying with Knox/noexec fallback...")
+            noexecCacheResult = true
+            execSafeCache = false
+            return launchExternalJvm(
+                runtime = runtime,
+                jrePath = jrePath,
+                launchTargetPath = launchTargetPath,
+                launchMode = launchMode,
+                serverDir = serverDir,
+                tmpDir = tmpDir,
+                shimDir = shimDir,
+                minRamMb = minRamMb,
+                maxRamMb = maxRamMb,
+                worldName = worldName,
+                onOutput = onOutput,
+                onError = onError,
+                isRetry = true
+            )
+        }
+
         if (exitCode != 0) {
             reportHotspotCrash(serverDir, onError)
         }
@@ -1487,10 +1548,41 @@ class ServerLauncher(private val context: Context) {
     ): File {
         val canonical = File(normalizeAndroidPath(JreExtractor.getJavaBinary(context, runtime).absolutePath))
 
-        // Fast path: if files/ is NOT on a noexec mount, use the canonical path directly.
-        if (!isFilesdirNoexec()) {
-            allStorageNoexecDetected = false
-            return canonical
+        // 1. If we have already verified that canonical is exec-safe, use it.
+        execSafeCache?.let { isSafe ->
+            if (isSafe) {
+                allStorageNoexecDetected = false
+                return canonical
+            }
+        }
+
+        // 2. If the canonical path exists, probe it directly.
+        if (canonical.exists()) {
+            val isSafe = runCatching {
+                android.system.Os.chmod(canonical.absolutePath, 0x1ED) // 0755
+                val p = ProcessBuilder("/system/bin/sh", "-c",
+                    "'${canonical.absolutePath}' -Xshare:off -version 2>&1"
+                ).redirectErrorStream(true).start()
+                val out = p.inputStream.bufferedReader().readText()
+                val finished = p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+                if (!finished) p.destroyForcibly()
+                finished && p.exitValue() == 0 && out.contains("version", ignoreCase = true)
+            }.getOrDefault(false)
+
+            if (isSafe) {
+                execSafeCache = true
+                allStorageNoexecDetected = false
+                return canonical
+            } else {
+                android.util.Log.w("ServerLauncher", "Canonical java binary failed execution probe (permission or ELF error). Triggering fallback.")
+            }
+        } else {
+            // If the canonical path doesn't exist yet, we check the general noexec status.
+            // If the files directory is generally exec-safe, we assume canonical will be safe once extracted.
+            if (!isFilesdirNoexec()) {
+                allStorageNoexecDetected = false
+                return canonical
+            }
         }
 
         // Try the bundled native library wrapper (libjava_exec.so) first.
