@@ -474,6 +474,20 @@ fun PluginsHubScreen(
                                 tab = currentTab(),
                                 packIcon = resourcePackIcons[item.fileName]
                             )
+                        },
+                        onUpdateClick = {
+                            val projectId = if (item.name.lowercase().contains("geyser")) "geyser" else "viaversion"
+                            val isGeyser = projectId == "geyser"
+                            pendingRemoteInstall = PluginManager.RemoteCatalogItem(
+                                source = if (isGeyser) "modrinth" else "hangar",
+                                projectId = projectId,
+                                title = if (isGeyser) "Geyser-Spigot" else "ViaVersion",
+                                slug = projectId,
+                                iconUrl = null,
+                                description = if (isGeyser) "Bedrock bridge for Java servers" else "Allows newer clients to connect to older server versions",
+                                downloads = 0,
+                                owner = if (isGeyser) null else "ViaVersion"
+                            )
                         }
                     )
                 }
@@ -952,8 +966,22 @@ private fun ContentRow(
     packIcon: File?,
     onToggle: () -> Unit,
     onDelete: () -> Unit,
-    onShowDetails: () -> Unit
+    onShowDetails: () -> Unit,
+    onUpdateClick: () -> Unit
 ) {
+    val isPreinstalled = remember(item) { PluginManager.isPreinstalledPlugin(item) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var latestVersion by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(item) {
+        if (isPreinstalled) {
+            val projectId = if (item.name.lowercase().contains("geyser")) "geyser" else "viaversion"
+            latestVersion = PluginManager.getLatestVersionFromModrinth(context, projectId)
+        }
+    }
+    val updateAvailable = remember(item.version, latestVersion) {
+        latestVersion?.let { remote -> PluginManager.isUpdateAvailable(item.version, remote) } ?: false
+    }
+
     PocketCraftCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -970,7 +998,32 @@ private fun ContentRow(
         ) {
             ItemIcon(item = item, tab = tab, packIcon = packIcon)
             Column(modifier = Modifier.weight(1f)) {
-                Text(item.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = item.name,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (isPreinstalled) {
+                        Box(
+                            modifier = Modifier
+                                .background(PocketColors.Primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "Preinstalled",
+                                color = PocketColors.Primary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
                 Text(
                     text = buildString {
                         if (item.version.isNotBlank()) {
@@ -985,16 +1038,32 @@ private fun ContentRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            if (isPreinstalled && updateAvailable) {
+                Button(
+                    onClick = onUpdateClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PocketColors.Success,
+                        contentColor = Color.White
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Text("Update", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
             Switch(
                 checked = item.enabled,
                 onCheckedChange = { onToggle() }
             )
-            IconButton(onClick = onDelete) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = PocketColors.Danger
-                )
+            if (!isPreinstalled) {
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = PocketColors.Danger
+                    )
+                }
             }
         }
     }

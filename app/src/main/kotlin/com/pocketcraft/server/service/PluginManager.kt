@@ -1762,9 +1762,69 @@ object PluginManager {
         }
     }
 
+    fun isPreinstalledPlugin(plugin: Plugin): Boolean {
+        val normalized = plugin.name.lowercase(Locale.US)
+        return normalized.contains("geyser") || normalized.contains("viaversion") || normalized.contains("floodgate")
+    }
+
+    private val latestVersionsCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    suspend fun getLatestVersionFromModrinth(context: Context, projectId: String): String? = withContext(Dispatchers.IO) {
+        val cached = latestVersionsCache[projectId]
+        if (cached != null) return@withContext cached
+
+        try {
+            val url = "https://api.modrinth.com/v2/project/$projectId/version"
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", userAgent())
+                .build()
+
+            getHttpClient(context).newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                val payload = response.body?.string().orEmpty()
+                if (payload.isBlank()) return@withContext null
+
+                val array = JSONArray(payload)
+                if (array.length() > 0) {
+                    val latestVersion = array.getJSONObject(0).optString("version_number")
+                    if (latestVersion.isNotBlank()) {
+                        latestVersionsCache[projectId] = latestVersion
+                        return@withContext latestVersion
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PluginManager", "Failed to fetch latest version for $projectId: ${e.message}")
+        }
+        null
+    }
+
+    fun isUpdateAvailable(localVersion: String, remoteVersion: String): Boolean {
+        if (localVersion.isBlank() || remoteVersion.isBlank()) return false
+        if (localVersion == remoteVersion) return false
+        
+        val localParts = localVersion.split(Regex("[^0-9]+")).filter { it.isNotEmpty() }.mapNotNull { it.toIntOrNull() }
+        val remoteParts = remoteVersion.split(Regex("[^0-9]+")).filter { it.isNotEmpty() }.mapNotNull { it.toIntOrNull() }
+        
+        val minSize = minOf(localParts.size, remoteParts.size)
+        for (i in 0 until minSize) {
+            if (remoteParts[i] > localParts[i]) return true
+            if (remoteParts[i] < localParts[i]) return false
+        }
+        return remoteParts.size > localParts.size
+    }
+
     private fun isManagedBridgePlugin(plugin: Plugin): Boolean {
         val candidates = listOf(plugin.name, plugin.fileName)
             .map(::normalizeCatalogKey)
+        
+        // Do not filter out geyser and viaversion so they can be shown in plugin lists
+        val isGeyserOrVia = candidates.any { normalized ->
+            normalized.contains("geyser") || normalized.contains("viaversion")
+        }
+        if (isGeyserOrVia) return false
+
         return candidates.any { normalized ->
             builtInBridgeKeywords.any { keyword -> normalized.contains(keyword) }
         }

@@ -198,19 +198,15 @@ class AfkHelperManager(
                 return "${prepared.name} will spawn automatically the next time this world starts."
             }
 
-            val onlineOwner = resolveOnlineOwner(prepared)
-            if (onlineOwner == null) {
-                restartPendingIds += prepared.id
-                renderCurrentWorld()
-                return "${prepared.name} is armed. Bring ${prepared.ownerPlayerName.ifBlank { "that owner" }} online or restart the server to spawn it."
-            }
-
             ensureDummyPluginSupport(worldServerDir(prepared.worldName))
-            val selector = playerSelector(onlineOwner.name)
+            
+            // Spawn the dummy player directly via console
+            // Format: /dummy create <name> <owner_uuid> <world> <x> <y> <z>
+            val command = "dummy create ${prepared.dummyEntityName} ${prepared.ownerPlayerUuid} ${prepared.worldName} ${prepared.x} ${prepared.y} ${prepared.z}"
             val createResponse = runCatching {
-                sendRconCommand("execute as $selector at @s run dummy create ${prepared.dummyEntityName}")
+                sendRconCommand(command)
             }.getOrElse { error ->
-                appendLog("[PocketCraft] AFK helper create failed for ${prepared.name}: ${error.message}")
+                appendLog("[PocketCraft] AFK helper console create failed for ${prepared.name}: ${error.message}")
                 ""
             }
 
@@ -225,15 +221,11 @@ class AfkHelperManager(
             dao.upsert(synced)
             syncWorldPluginFiles(synced.worldName)
 
-            runCatching {
-                sendRconCommand(
-                    "tp ${dummySelector(synced)} ${synced.x} ${synced.y} ${synced.z}"
-                )
-            }
-
             refreshNow()
             val liveNow = liveDummyIds.contains(synced.id)
             if (liveNow) {
+                restartPendingIds.remove(synced.id)
+                renderCurrentWorld()
                 "${synced.name} is live now."
             } else {
                 restartPendingIds += synced.id
@@ -253,14 +245,12 @@ class AfkHelperManager(
             syncWorldPluginFiles(disabled.worldName)
 
             if (isServerRunningProvider() && disabled.worldName.equals(currentWorldName(), ignoreCase = true)) {
-                resolveOnlineOwner(entity)?.let { onlineOwner ->
-                    val selector = playerSelector(onlineOwner.name)
-                    runCatching {
-                        sendRconCommand("execute as $selector run dummy remove ${entity.dummyEntityName}")
-                    }
+                val command = "dummy remove ${disabled.dummyEntityName} ${disabled.ownerPlayerUuid}"
+                runCatching {
+                    sendRconCommand(command)
                 }
-                runCatching { sendRconCommand("kick ${dummyDisplayName(entity)}") }
-                runCatching { sendRconCommand("kill ${dummySelector(entity)}") }
+                runCatching { sendRconCommand("kick ${dummyDisplayName(disabled)}") }
+                runCatching { sendRconCommand("kill ${dummySelector(disabled)}") }
                 delay(500)
                 refreshNow()
             } else {
