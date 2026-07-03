@@ -50,6 +50,7 @@ class AfkHelperManager(
         private const val DUMMY_PREFIX = "AFK_"
         private const val DUMMY_PLUGIN_NAME = "DummyPlayers.jar"
         private const val POLL_INTERVAL_MS = 15_000L
+        private const val HOT_RELOAD_WAIT_MS = 4_000L
     }
 
     private val appContext = context.applicationContext
@@ -198,20 +199,17 @@ class AfkHelperManager(
                 return "${prepared.name} will spawn automatically the next time this world starts."
             }
 
-            val onlineOwner = resolveOnlineOwner(prepared)
-            if (onlineOwner == null) {
-                restartPendingIds += prepared.id
-                renderCurrentWorld()
-                return "${prepared.name} is armed. Bring ${prepared.ownerPlayerName.ifBlank { "that owner" }} online or restart the server to spawn it."
-            }
-
             ensureDummyPluginSupport(worldServerDir(prepared.worldName))
-            val selector = playerSelector(onlineOwner.name)
-            val createResponse = runCatching {
-                sendRconCommand("execute as $selector at @s run dummy create ${prepared.dummyEntityName}")
-            }.getOrElse { error ->
-                appendLog("[PocketCraft] AFK helper create failed for ${prepared.name}: ${error.message}")
-                ""
+            val spawnExecutor = resolveSpawnExecutor(prepared)
+            if (spawnExecutor != null) {
+                val selector = playerSelector(spawnExecutor.name)
+                runCatching {
+                    sendRconCommand("execute as $selector at @s run dummy create ${prepared.dummyEntityName}")
+                }.onFailure { error ->
+                    appendLog("[PocketCraft] AFK helper create failed for ${prepared.name}: ${error.message}")
+                }
+            } else {
+                appendLog("[PocketCraft] No players online for ${prepared.name}; hot-reloading DummyPlayers from saved data.")
             }
 
             delay(750)
@@ -232,8 +230,14 @@ class AfkHelperManager(
             }
 
             refreshNow()
+            if (!liveDummyIds.contains(synced.id)) {
+                hotReloadDummyPlugin(synced)
+                refreshNow()
+            }
             val liveNow = liveDummyIds.contains(synced.id)
             if (liveNow) {
+                restartPendingIds.remove(synced.id)
+                renderCurrentWorld()
                 "${synced.name} is live now."
             } else {
                 restartPendingIds += synced.id
@@ -420,6 +424,11 @@ class AfkHelperManager(
             entity.ownerPlayerName.isNotBlank() && it.name.equals(entity.ownerPlayerName, ignoreCase = true)
         }
 
+    private fun resolveSpawnExecutor(entity: AfkFarmLocationEntity): PlayerInfo? =
+        resolveOnlineOwner(entity)
+            ?: onlinePlayersProvider().firstOrNull { it.uuid.isNotBlank() }
+            ?: onlinePlayersProvider().firstOrNull()
+
     private fun AfkFarmLocationEntity.resolveOwnerOrDefault(): PlayerInfo? {
         val existingOwner = resolveOnlineOwner(this)
             ?: knownPlayersProvider().firstOrNull {
@@ -436,6 +445,16 @@ class AfkHelperManager(
             sendRconCommand("data get entity ${dummySelector(entity)} Pos")
         }.getOrDefault("")
         return NBTParser.parsePosition(response) != null
+    }
+
+    private suspend fun hotReloadDummyPlugin(entity: AfkFarmLocationEntity) {
+        appendLog("[PocketCraft] Reloading DummyPlayers to live-spawn ${entity.name} without a full server restart.")
+        runCatching {
+            sendRconCommand("reload confirm")
+        }.onFailure { error ->
+            appendLog("[PocketCraft] DummyPlayers reload command failed for ${entity.name}: ${error.message}")
+        }
+        delay(HOT_RELOAD_WAIT_MS)
     }
 
     private fun playerSelector(playerName: String): String =

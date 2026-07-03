@@ -168,6 +168,10 @@ static void preload_shims(const char *shim_dir) {
 static void preload_library(const char *path, const char *label) {
   void *handle = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
   if (!handle) {
+    LOGI("preload_library: %s absolute path failed, trying default loader path...", label);
+    handle = dlopen(label, RTLD_NOW | RTLD_GLOBAL);
+  }
+  if (!handle) {
     LOGI("%s skipped: %s", label, dlerror());
     return;
   }
@@ -339,6 +343,10 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
 
   LOGI("dlopen: %s", libjli_path);
   void *jli_handle = dlopen(libjli_path, RTLD_LAZY | RTLD_GLOBAL);
+  if (!jli_handle) {
+    LOGI("libjli.so absolute path failed: %s. Trying default loader path...", dlerror());
+    jli_handle = dlopen("libjli.so", RTLD_LAZY | RTLD_GLOBAL);
+  }
   if (!jli_handle) {
     LOGE("libjli.so FAILED: %s", dlerror());
     result = -1;

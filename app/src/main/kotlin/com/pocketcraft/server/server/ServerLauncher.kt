@@ -53,6 +53,12 @@ class ServerLauncher(private val context: Context) {
         val isGalaxyA12Family = manufacturer.contains("samsung") && listOf(model, device, product).any { value ->
             value.contains("a12") || value.contains("sm-a125") || value.contains("sm-a127")
         }
+        // Galaxy M13 (SM-M135/SM-M136/SM-M137) silently stalls during in-process JVM
+        // initialisation on Android 14 — force external JVM to avoid the startup timeout.
+        val isGalaxyM13Family = manufacturer.contains("samsung") && listOf(model, device, product).any { value ->
+            value.contains("m13") || value.contains("sm-m135") ||
+            value.contains("sm-m136") || value.contains("sm-m137")
+        }
         val constrainedHeap = isGalaxyA12Family || totalRamMb <= 4096
         val targetHeapCap = when {
             isGalaxyA12Family -> minOf((availableRamMb * 0.52f).toInt(), 896)
@@ -62,12 +68,13 @@ class ServerLauncher(private val context: Context) {
         }
         val minHeapFloor = if (isGalaxyA12Family || totalRamMb <= 3072) 384 else 512
         val reason = when {
+            isGalaxyM13Family -> "Samsung Galaxy M13 detected. Using external JVM to prevent startup stall on Android 14."
             isGalaxyA12Family -> "Samsung Galaxy A12 low-memory profile active. Using safer heap limits to reduce short crash loops."
             constrainedHeap -> "Low-memory device profile active. Heap is capped to reduce background crash risk."
             else -> null
         }
         return DeviceStabilityProfile(
-            forceExternalJvm = false,
+            forceExternalJvm = isGalaxyM13Family,
             constrainedHeap = constrainedHeap,
             maxHeapCapMb = targetHeapCap.coerceAtLeast(minHeapFloor),
             minHeapFloorMb = minHeapFloor,
@@ -78,6 +85,19 @@ class ServerLauncher(private val context: Context) {
     companion object {
         @Volatile
         private var activeExternalProcess: Process? = null
+
+        /** Cached result of noexec mount detection; null = not yet checked. */
+        @Volatile
+        private var noexecCacheResult: Boolean? = null
+
+        /**
+         * Set to true when ALL writable directories (files/, code_cache/, external) are
+         * noexec — meaning this device (e.g. Samsung Knox lockdown) prevents execution
+         * of any user-placed binary. Used to show a device-specific error message.
+         */
+        @Volatile
+        var allStorageNoexecDetected: Boolean = false
+            private set
 
         fun hasActiveExternalProcess(): Boolean = activeExternalProcess?.isAlive == true
 
@@ -242,7 +262,8 @@ class ServerLauncher(private val context: Context) {
         }
         onOutput("[PocketCraft] JVM memory: mode=$ramModeFromProps, heap=${minRamMb}MB..${maxRamMb}MB, available=${availRam}MB, total=${totalRam}MB")
 
-        val javaBin = File(normalizeAndroidPath(JreExtractor.getJavaBinary(context, resolvedRuntime).absolutePath))
+        // Use exec-safe java binary path — falls back to codeCacheDir copy on noexec devices.
+        val javaBin = ensureExecSafeJavaBin(context, resolvedRuntime)
         val libjli = File(jrePath, "lib/libjli.so")
         val libjvm = File(jrePath, "lib/server/libjvm.so")
         if (!javaBin.exists()) {
@@ -429,7 +450,9 @@ class ServerLauncher(private val context: Context) {
         shimDir: File
     ): RuntimePreflightResult {
         val jrePath = normalizeAndroidPath(JreExtractor.getJreDir(context, runtime).absolutePath)
-        val javaBin = File(normalizeAndroidPath(JreExtractor.getJavaBinary(context, runtime).absolutePath))
+        // Use exec-safe path: on Samsung M13/A13x (Android 14) the files/ dir is noexec.
+        // ensureExecSafeJavaBin() transparently falls back to a codeCacheDir copy if needed.
+        val javaBin = ensureExecSafeJavaBin(context, runtime)
         val nativeLibDir = normalizeAndroidPath(context.applicationInfo.nativeLibraryDir)
         val wrapperBin = File(normalizeAndroidPath(File(nativeLibDir, "libserverwrap.so").absolutePath))
         if (wrapperBin.exists() && !wrapperBin.canExecute()) {
@@ -1370,6 +1393,19 @@ class ServerLauncher(private val context: Context) {
     private fun chmodJreRuntime(context: Context, runtime: JreExtractor.RuntimeSpec) {
         val jreDir = JreExtractor.getJreDir(context, runtime)
         val marker = File(jreDir, ".chmod_applied_v1")
+        val javaBin = JreExtractor.getJavaBinary(context, runtime)
+
+        // Always ensure the java binary is executable as a fast-path guard.
+        // On Samsung Knox / Android 14, execute bits in files/ can be silently reset
+        // after a cold boot, app update, or SELinux policy reload — even if chmod was
+        // previously applied. If the binary is not executable, delete the marker so the
+        // full chmod pass below is unconditionally re-applied.
+        if (javaBin.exists() && !javaBin.canExecute()) {
+            android.util.Log.w("ServerLauncher",
+                "java binary lost execute bit (Samsung Knox/SELinux reset?) — forcing full re-chmod for ${runtime.displayName}")
+            runCatching { marker.delete() }
+        }
+
         if (marker.exists()) {
             android.util.Log.d("ServerLauncher", "Skipping JRE chmod — already applied for ${runtime.displayName}")
             return
@@ -1390,6 +1426,141 @@ class ServerLauncher(private val context: Context) {
         }
         runCatching { marker.writeText(runtime.displayName) }
         android.util.Log.d("ServerLauncher", "Finished chmod on jre-runtime (Android 10 compat)")
+    }
+
+    /**
+     * Returns true if the app's `files/` directory is on a `noexec`-mounted filesystem.
+     *
+     * On some Samsung Galaxy devices running Android 14 (e.g. M13/A13x with Knox),
+     * `/data/data/<pkg>/files/` is mount-flagged `noexec`. `Os.chmod(0755)` succeeds
+     * at the syscall level but the kernel still refuses `execve()` — producing
+     * `Permission denied` (exit 127). We detect this by attempting to execute
+     * a temporary script directly.
+     */
+    private fun isFilesdirNoexec(): Boolean {
+        // Return cached result if available.
+        noexecCacheResult?.let { return it }
+
+        // Strategy: write a minimal shell script to files/, mark it executable,
+        // then try to exec it via /system/bin/sh. If sh reports "Permission denied",
+        // the directory is noexec. This is more reliable than parsing /proc/self/mountinfo
+        // because Samsung Knox uses bind mounts that inherit noexec without listing it.
+        val result = runCatching {
+            val probe = java.io.File(normalizeAndroidPath(context.filesDir.absolutePath), ".noexec_probe")
+            probe.writeText("#!/system/bin/sh\nexit 0\n")
+            runCatching { android.system.Os.chmod(probe.absolutePath, 0x1ED) } // 0755
+            val p = ProcessBuilder("/system/bin/sh", "-c",
+                "'${probe.absolutePath}' 2>&1; echo \"rc:\$?\""
+            ).redirectErrorStream(true).start()
+            val out = p.inputStream.bufferedReader().readText()
+            val timedOut = !p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+            if (timedOut) p.destroyForcibly()
+            probe.delete()
+            // If output contains "Permission denied" or rc is non-zero due to exec failure, it's noexec.
+            out.contains("Permission denied") || out.contains("cannot execute") || timedOut
+        }.getOrDefault(false)
+
+        noexecCacheResult = result
+        android.util.Log.w("ServerLauncher",
+            if (result) "Detected noexec on files/ — java binary will be copied to codeCacheDir"
+            else "files/ dir is exec-safe (probe passed)"
+        )
+        return result
+    }
+
+    /**
+     * Returns an exec-safe path to the java binary for the given runtime.
+     *
+     * On Samsung Galaxy M13/A13x (Android 14 with Knox), the entire /data/data/<pkg>/
+     * partition can be mounted noexec — including both `files/` AND `code_cache/`.
+     * We probe each candidate location in order and return the first one that can
+     * actually execute a script:
+     *   1. Canonical path (`files/jre-runtime/bin/java`) — fast path if exec-safe.
+     *   2. Copy to `code_cache/jre-bin/<id>/java` — usually exec-safe on normal Android.
+     *   3. Copy to `getExternalFilesDir("jre-bin")/<id>/java` — last resort.
+     * If all three fail, `allStorageNoexecDetected` is set to true so callers can
+     * surface a device-specific error (Samsung Knox restriction) to the user.
+     */
+    private fun ensureExecSafeJavaBin(
+        context: Context,
+        runtime: JreExtractor.RuntimeSpec
+    ): File {
+        val canonical = File(normalizeAndroidPath(JreExtractor.getJavaBinary(context, runtime).absolutePath))
+
+        // Fast path: if files/ is NOT on a noexec mount, use the canonical path directly.
+        if (!isFilesdirNoexec()) {
+            allStorageNoexecDetected = false
+            return canonical
+        }
+
+        // Try the bundled native library wrapper (libjava_exec.so) first.
+        // Since it is extracted to nativeLibraryDir by the package manager, it is guaranteed
+        // to be executable even on Knox-hardened devices where all writable directories are noexec.
+        val nativeJavaBin = File(context.applicationInfo.nativeLibraryDir, "libjava_exec.so")
+        if (nativeJavaBin.exists() && nativeJavaBin.canExecute()) {
+            allStorageNoexecDetected = false
+            android.util.Log.i("ServerLauncher", "Using bundled exec-safe java from nativeLibraryDir: ${nativeJavaBin.absolutePath}")
+            return nativeJavaBin
+        }
+
+        // files/ is noexec — try candidate directories in priority order.
+        val candidates = buildList {
+            // 1. code_cache/ (ART JIT cache dir, usually exec-safe on stock Android)
+            add(File(normalizeAndroidPath(context.codeCacheDir.absolutePath), "jre-bin/${runtime.id}"))
+            // 2. External files dir (app-scoped, no permission needed on Android 10+)
+            context.getExternalFilesDir("jre-bin/${runtime.id}")?.let { add(it) }
+        }
+
+        for (execDir in candidates) {
+            runCatching { execDir.mkdirs() }
+            val copy = File(execDir, "java")
+
+            // Copy only if source changed (re-extraction) or copy missing.
+            val needsCopy = !copy.exists()
+                || copy.length() != canonical.length()
+                || copy.lastModified() < canonical.lastModified()
+
+            var copyOk = true
+            if (needsCopy && canonical.exists()) {
+                copyOk = runCatching {
+                    canonical.inputStream().use { i -> copy.outputStream().use { o -> i.copyTo(o) } }
+                    android.system.Os.chmod(copy.absolutePath, 0x1ED) // 0755
+                }.onFailure {
+                    android.util.Log.e("ServerLauncher", "Failed to copy java to ${execDir.absolutePath}: ${it.message}")
+                }.isSuccess
+            } else if (copy.exists()) {
+                runCatching { android.system.Os.chmod(copy.absolutePath, 0x1ED) }
+            }
+
+            if (!copyOk || !copy.exists()) continue
+
+            // Verify the copy is actually executable (probe with a quick exec test).
+            val execSafe = runCatching {
+                val p = ProcessBuilder("/system/bin/sh", "-c",
+                    "'${copy.absolutePath}' -Xshare:off -version 2>&1 | head -c 256; echo \"rc:\$?\""
+                ).redirectErrorStream(true).start()
+                val out = p.inputStream.bufferedReader().readText()
+                p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+                // Success if we get java version output; fail if Permission denied
+                !out.contains("Permission denied") && !out.contains("cannot execute")
+            }.getOrDefault(false)
+
+            if (execSafe) {
+                allStorageNoexecDetected = false
+                android.util.Log.i("ServerLauncher",
+                    "Using exec-safe java copy at: ${copy.absolutePath} (noexec workaround for ${runtime.displayName})")
+                return copy
+            } else {
+                android.util.Log.w("ServerLauncher",
+                    "${execDir.absolutePath} is also noexec — trying next candidate")
+            }
+        }
+
+        // All candidate locations are noexec — device has full Knox storage lockdown.
+        allStorageNoexecDetected = true
+        android.util.Log.e("ServerLauncher",
+            "ALL storage locations are noexec — Samsung Knox total lockdown detected. Cannot exec java binary.")
+        return canonical // Return canonical so error surfaces from the actual exec attempt
     }
 
     private fun extractAndPatchJnaLibrary(paperJarPath: String, serverDir: File, shimDir: File): Boolean {

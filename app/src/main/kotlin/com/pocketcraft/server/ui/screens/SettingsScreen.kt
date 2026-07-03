@@ -1023,6 +1023,22 @@ fun SettingsScreen(
 
                 item {
                     AnimatedEntranceContainer(index = 6) {
+                        SettingsSection("TROUBLESHOOTING", Icons.Default.BuildCircle)
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 6) {
+                        SettingsToggleRow(
+                            icon = "⚙️",
+                            label = activeS.forceExternalJvm,
+                            description = activeS.forceExternalJvmDesc,
+                            checked = currentState.forceExternalJvm,
+                            onToggle = { currentState = currentState.copy(forceExternalJvm = it) }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 7) {
                         SettingsSection(activeS.sectionDeviceStorage, Icons.Default.Storage)
                     }
                 }

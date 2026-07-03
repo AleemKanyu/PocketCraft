@@ -66,6 +66,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import androidx.annotation.Keep
+import com.pocketcraft.server.afk.AfkDummyPluginSync
 
 class ServerHostService : Service() {
     override fun attachBaseContext(newBase: android.content.Context) {
@@ -326,6 +327,7 @@ class ServerHostService : Service() {
 
         launchJob = serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             migrateLegacyStorageIfNeeded(versionId, worldName)
+            AfkDummyPluginSync.syncWorldFromDatabase(applicationContext, worldName)
             val configRepo = com.pocketcraft.server.data.repository.ServerConfigRepository(applicationContext).apply {
                 setWorldNameOverride(worldName)
             }
@@ -411,7 +413,11 @@ class ServerHostService : Service() {
                     if (exitCode == 127) {
                         sendEvent(versionId, EVENT_SERVER_CRASHED, "exit_code=127")
                         sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Exit code 127: Java binary not executable on this device.")
-                        sendEvent(versionId, EVENT_ERROR, "[PocketCraft] [HINT] Go to Settings → Apps → PocketCraft → Storage → Clear Cache, then restart.")
+                        if (ServerLauncher.allStorageNoexecDetected) {
+                            sendEvent(versionId, EVENT_ERROR, "[PocketCraft] [DEVICE RESTRICTION] Samsung Knox security policy on this device marks ALL app storage as non-executable. PocketCraft cannot launch a Java server under these restrictions. Clearing cache will not help — this is a device-level OS policy.")
+                        } else {
+                            sendEvent(versionId, EVENT_ERROR, "[PocketCraft] [HINT] Go to Settings \u2192 Apps \u2192 PocketCraft \u2192 Storage \u2192 Clear Cache, then restart.")
+                        }
                     } else {
                         sendEvent(versionId, EVENT_SERVER_CRASHED, "exit_code=$exitCode")
                         sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Server exited unexpectedly (code $exitCode).")
@@ -794,7 +800,7 @@ class ServerHostService : Service() {
         // Log to Crashlytics if exit was abnormal
         if (exitCode != 0 && exitCode != 130 && exitCode != 143) { // 130/143 are SIGINT/SIGTERM
             val exception = RuntimeException("JVM exited abnormally: code=$exitCode")
-            FirebaseCrashlytics.getInstance().recordException(exception)
+            runCatching { FirebaseCrashlytics.getInstance().recordException(exception) }
         }
     }
 
@@ -1776,7 +1782,11 @@ class ServerHostService : Service() {
                     if (exitCode == 127) {
                         sendEvent(versionId, EVENT_SERVER_CRASHED, "exit_code=127")
                         sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Exit code 127: Java binary not executable on this device.")
-                        sendEvent(versionId, EVENT_ERROR, "[PocketCraft] [HINT] Go to Settings → Apps → PocketCraft → Storage → Clear Cache, then restart.")
+                        if (ServerLauncher.allStorageNoexecDetected) {
+                            sendEvent(versionId, EVENT_ERROR, "[PocketCraft] [DEVICE RESTRICTION] Samsung Knox security policy on this device marks ALL app storage as non-executable. PocketCraft cannot launch a Java server under these restrictions. Clearing cache will not help — this is a device-level OS policy.")
+                        } else {
+                            sendEvent(versionId, EVENT_ERROR, "[PocketCraft] [HINT] Go to Settings \u2192 Apps \u2192 PocketCraft \u2192 Storage \u2192 Clear Cache, then restart.")
+                        }
                     } else {
                         sendEvent(versionId, EVENT_SERVER_CRASHED, "exit_code=$exitCode")
                         sendEvent(versionId, EVENT_ERROR, "[PocketCraft] Server exited unexpectedly (code $exitCode).")
