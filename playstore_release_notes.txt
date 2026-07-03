@@ -1,44 +1,29 @@
 <en-US>
-- Fixed a server crash on Honor/Huawei devices and newer Android versions
-- Fixed a crash when checking for updates
-- Updated Via and Geyser plugins
+Fixes:
 - Fixed ping issues
-- Fixed port changing on Honor devices
-- Fixed minor UI bugs
+- Resolved minor UI bugs
 </en-US>
 
 <de-DE>
-- Serverabsturz auf Honor-/Huawei-Geräten und neueren Android-Versionen behoben
-- Absturz bei der Suche nach Updates behoben
-- Via- und Geyser-Plugins aktualisiert
+Fehlerbehebungen:
 - Ping-Probleme behoben
-- Portwechsel auf Honor-Geräten behoben
 - Kleinere UI-Fehler behoben
 </de-DE>
 
 <es-ES>
-- Se solucionó un bloqueo del servidor en dispositivos Honor/Huawei y versiones más recientes de Android
-- Se solucionó un bloqueo al buscar actualizaciones
-- Complementos Via y Geyser actualizados
-- Problemas de ping solucionados
-- Se corrigió el cambio de puerto en dispositivos Honor
+Correcciones:
+- Se corrigieron problemas de ping
 - Se corrigieron errores menores de la interfaz de usuario
 </es-ES>
 
 <ru-RU>
-- Исправлен сбой сервера на устройствах Honor/Huawei и новых версиях Android
-- Исправлен сбой при проверке обновлений
-- Обновлены плагины Via и Geyser
+Исправления:
 - Исправлены проблемы с пингом
-- Исправлена смена портов на устройствах Honor
 - Исправлены незначительные ошибки интерфейса
 </ru-RU>
 
 <zh-CN>
-- 修复了在荣耀/华为设备及较新 Android 版本上的服务器崩溃问题
-- 修复了检查更新时发生的崩溃问题
-- 更新了 Via 和 Geyser 插件
-- 修复了延迟/Ping问题
-- 修复了荣耀(Honor)设备上端口改变的问题
+修复：
+- 修复了延迟 (ping) 问题
 - 修复了轻微的 UI 问题
 </zh-CN>

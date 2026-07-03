@@ -50,6 +50,7 @@ class AfkHelperManager(
         private const val DUMMY_PREFIX = "AFK_"
         private const val DUMMY_PLUGIN_NAME = "DummyPlayers.jar"
         private const val POLL_INTERVAL_MS = 15_000L
+        private const val HOT_RELOAD_WAIT_MS = 4_000L
     }
 
     private val appContext = context.applicationContext
@@ -199,7 +200,6 @@ class AfkHelperManager(
             }
 
             ensureDummyPluginSupport(worldServerDir(prepared.worldName))
-            
             // Spawn the dummy player directly via console
             // Format: /dummy create <name> <owner_uuid> <world> <x> <y> <z>
             val command = "dummy create ${prepared.dummyEntityName} ${prepared.ownerPlayerUuid} ${prepared.worldName} ${prepared.x} ${prepared.y} ${prepared.z}"
@@ -222,6 +222,10 @@ class AfkHelperManager(
             syncWorldPluginFiles(synced.worldName)
 
             refreshNow()
+            if (!liveDummyIds.contains(synced.id)) {
+                hotReloadDummyPlugin(synced)
+                refreshNow()
+            }
             val liveNow = liveDummyIds.contains(synced.id)
             if (liveNow) {
                 restartPendingIds.remove(synced.id)
@@ -410,6 +414,11 @@ class AfkHelperManager(
             entity.ownerPlayerName.isNotBlank() && it.name.equals(entity.ownerPlayerName, ignoreCase = true)
         }
 
+    private fun resolveSpawnExecutor(entity: AfkFarmLocationEntity): PlayerInfo? =
+        resolveOnlineOwner(entity)
+            ?: onlinePlayersProvider().firstOrNull { it.uuid.isNotBlank() }
+            ?: onlinePlayersProvider().firstOrNull()
+
     private fun AfkFarmLocationEntity.resolveOwnerOrDefault(): PlayerInfo? {
         val existingOwner = resolveOnlineOwner(this)
             ?: knownPlayersProvider().firstOrNull {
@@ -426,6 +435,16 @@ class AfkHelperManager(
             sendRconCommand("data get entity ${dummySelector(entity)} Pos")
         }.getOrDefault("")
         return NBTParser.parsePosition(response) != null
+    }
+
+    private suspend fun hotReloadDummyPlugin(entity: AfkFarmLocationEntity) {
+        appendLog("[PocketCraft] Reloading DummyPlayers to live-spawn ${entity.name} without a full server restart.")
+        runCatching {
+            sendRconCommand("reload confirm")
+        }.onFailure { error ->
+            appendLog("[PocketCraft] DummyPlayers reload command failed for ${entity.name}: ${error.message}")
+        }
+        delay(HOT_RELOAD_WAIT_MS)
     }
 
     private fun playerSelector(playerName: String): String =

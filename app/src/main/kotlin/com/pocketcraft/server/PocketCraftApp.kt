@@ -36,9 +36,24 @@ open class PocketCraftApp : Application(), Configuration.Provider {
         AppPreferences.init(this)
 
         val processName = currentProcessName()
-        if (processName != packageName) {
-            // The Minecraft service has its own process. Do not initialize Firebase clients
-            // here: Firestore's disk cache is single-process and would crash the server process.
+        val isMainProcess = processName == packageName
+        val isServerProcess = processName == "$packageName:server"
+
+        if (!isMainProcess && !isServerProcess) {
+            // Unknown secondary process — skip all initialization.
+            return
+        }
+
+        // Initialize FirebaseApp in both the main process AND the :server process.
+        // The :server process needs it for Crashlytics (logJvmCrash). We intentionally
+        // skip Firestore and other disk-caching Firebase clients in :server to avoid
+        // single-process cache corruption, but Crashlytics is safe to use everywhere.
+        runCatching {
+            FirebaseApp.initializeApp(this)
+        }
+
+        if (!isMainProcess) {
+            // :server process — only Crashlytics is needed; skip UI / Firestore setup.
             return
         }
 
