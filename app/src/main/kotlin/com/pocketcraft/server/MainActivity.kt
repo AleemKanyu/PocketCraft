@@ -113,6 +113,21 @@ class MainActivity : ComponentActivity() {
         // Sync Firebase auth state to preferences for multi-process safety
         val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
         preferences.firebaseUserUid = currentUser?.uid
+        if (currentUser != null) {
+            var secret = preferences.dashboardSecret
+            if (secret.isNullOrBlank()) {
+                secret = java.util.UUID.randomUUID().toString()
+                preferences.dashboardSecret = secret
+            }
+            try {
+                com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                    .collection("users")
+                    .document(currentUser.uid)
+                    .set(mapOf("dashboardSecret" to secret), com.google.firebase.firestore.SetOptions.merge())
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Failed to upload dashboardSecret: ${e.message}")
+            }
+        }
 
         val onboardingCompleted = preferences.onboardingCompleted
         preferences.recordAppLaunch()

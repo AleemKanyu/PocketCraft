@@ -507,6 +507,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getString("firebase_user_uid", null)
         set(value) = prefs.edit().putString("firebase_user_uid", value).apply()
 
+    var dashboardSecret: String?
+        get() = prefs.getString("dashboard_secret", null)
+        set(value) = prefs.edit().putString("dashboard_secret", value).apply()
+
     var customSubdomain: String?
         get() = prefs.getString("custom_subdomain", null)
         set(value) = prefs.edit().putString("custom_subdomain", value).apply()

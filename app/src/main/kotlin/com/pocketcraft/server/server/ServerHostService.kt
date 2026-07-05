@@ -2355,7 +2355,8 @@ class ServerHostService : Service() {
             "afkBotEnabled" to afkBotEnabled,
             "subdomain" to subdomain,
             "whitelist" to whitelist,
-            "lastSeen" to com.google.firebase.Timestamp.now()
+            "lastSeen" to com.google.firebase.Timestamp.now(),
+            "secret" to (prefs.dashboardSecret ?: "")
         )
 
         try {
@@ -2403,7 +2404,8 @@ class ServerHostService : Service() {
                 "playersOnline" to emptyList<Map<String, String>>(),
                 "uptimeSeconds" to 0L,
                 "tps" to null,
-                "lastSeen" to com.google.firebase.Timestamp.now()
+                "lastSeen" to com.google.firebase.Timestamp.now(),
+                "secret" to (prefs.dashboardSecret ?: "")
             )
             serviceScope.launch(Dispatchers.IO) {
                 try {

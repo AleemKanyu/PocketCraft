@@ -146,6 +146,7 @@ object AccountManager {
             firebaseUser.delete().awaitVoidTask()
             FirebaseAuth.getInstance().signOut()
             AppPreferences(context).firebaseUserUid = null
+            AppPreferences(context).dashboardSecret = null
             "Account deleted permanently."
         }
     }
@@ -191,6 +192,7 @@ object AccountManager {
         // never gets stuck waiting on a network call.
         FirebaseAuth.getInstance().signOut()
         AppPreferences(context).firebaseUserUid = null
+        AppPreferences(context).dashboardSecret = null
         onComplete()
         // Best-effort: revoke Google session in the background. Wrapped in runCatching so
         // any exception (e.g. missing web_client_id resource) is silently discarded and
@@ -229,6 +231,7 @@ object AccountManager {
             firebaseUser.delete().awaitVoidTask()
             FirebaseAuth.getInstance().signOut()
             AppPreferences(context).firebaseUserUid = null
+            AppPreferences(context).dashboardSecret = null
             "Account deleted permanently."
         }
     }

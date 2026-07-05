@@ -32,11 +32,16 @@ class DashboardCommandListener(
     private var registration: ListenerRegistration? = null
 
     fun start() {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        val prefs = AppPreferences(context)
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+            ?: prefs.firebaseUserUid
+            ?: return
+        val secret = prefs.dashboardSecret ?: ""
         Log.d("DashboardCommandListener", "Starting listener for user: $uid")
 
         registration = db.collection("users").document(uid).collection("dashboard_commands")
             .whereEqualTo("status", "pending")
+            .whereEqualTo("secret", secret)
             .orderBy("createdAt", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshots, error ->
                 if (error != null) {
