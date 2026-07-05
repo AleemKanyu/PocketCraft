@@ -134,10 +134,21 @@ class AfkHelperManager(
         val entity = cachedEntities.firstOrNull { it.id == id }
             ?: return@withContext "That AFK helper no longer exists."
 
+        // Always attempt server-side cleanup on deletion
+        if (isServerRunningProvider() && entity.worldName.equals(currentWorldName(), ignoreCase = true)) {
+            val command = "dummy remove ${entity.dummyEntityName} ${entity.ownerPlayerUuid}"
+            runCatching { sendRconCommand(command) }
+            runCatching { sendRconCommand("kick ${dummyDisplayName(entity)}") }
+            runCatching { sendRconCommand(command) } // run remove again to ensure removal from list
+            runCatching { sendRconCommand("kill ${dummySelector(entity)}") }
+        }
+
         if (entity.isActive) {
             disableFarmInternal(entity)
         }
         dao.delete(entity)
+        liveDummyIds.remove(entity.id)
+        restartPendingIds.remove(entity.id)
         refreshNow()
         "Deleted ${entity.name}."
     }
@@ -200,6 +211,10 @@ class AfkHelperManager(
             }
 
             ensureDummyPluginSupport(worldServerDir(prepared.worldName))
+
+            val forceloadKey = "${prepared.x} ${prepared.z}"
+            runCatching { sendRconCommand("forceload add $forceloadKey") }
+
             // Spawn the dummy player directly via console
             // Format: /dummy create <name> <owner_uuid> <world> <x> <y> <z>
             val command = "dummy create ${prepared.dummyEntityName} ${prepared.ownerPlayerUuid} ${prepared.worldName} ${prepared.x} ${prepared.y} ${prepared.z}"
@@ -209,6 +224,8 @@ class AfkHelperManager(
                 appendLog("[PocketCraft] AFK helper console create failed for ${prepared.name}: ${error.message}")
                 ""
             }
+
+            runCatching { sendRconCommand("forceload remove $forceloadKey") }
 
             delay(750)
             val synced = readDummyRecordByName(prepared.worldName, prepared.dummyEntityName)?.let { record ->
@@ -222,10 +239,6 @@ class AfkHelperManager(
             syncWorldPluginFiles(synced.worldName)
 
             refreshNow()
-            if (!liveDummyIds.contains(synced.id)) {
-                hotReloadDummyPlugin(synced)
-                refreshNow()
-            }
             val liveNow = liveDummyIds.contains(synced.id)
             if (liveNow) {
                 restartPendingIds.remove(synced.id)
@@ -234,7 +247,7 @@ class AfkHelperManager(
             } else {
                 restartPendingIds += synced.id
                 renderCurrentWorld()
-                "${synced.name} was saved, but the live dummy did not appear. Restart the server to force-spawn it from the saved plugin data."
+                "${synced.name} was saved, but the live dummy did not appear. Check coordinates or reload the server."
             }
         } finally {
             isBusy = false
@@ -329,18 +342,30 @@ class AfkHelperManager(
         BundledPluginInstaller.installBundledPlugins(appContext, serverDir)
         ensureDummyPluginSupport(serverDir)
 
-        val activeFarms = dao.getAll().filter {
-            it.worldName.equals(worldName, ignoreCase = true) &&
-                it.isActive &&
-                it.ownerPlayerUuid.isNotBlank()
-        }
+        val allFarms = dao.getAll().filter { it.worldName.equals(worldName, ignoreCase = true) }
+        val activeFarms = allFarms.filter { it.isActive && it.ownerPlayerUuid.isNotBlank() }
 
-        val dummiesFile = File(serverDir, "plugins/DummyPlayers/dummies.yml")
-        val managedNames = activeFarms.map { it.dummyEntityName.lowercase(Locale.getDefault()) }.toSet()
+        val dummiesFile = File(serverDir, "plugins/dummyplayers/dummies.yml")
+        val managedNames = allFarms.flatMap {
+            listOf(
+                it.dummyEntityName.lowercase(Locale.getDefault()),
+                "$DUMMY_PREFIX${it.dummyEntityName}".lowercase(Locale.getDefault())
+            )
+        }.toSet()
+        val activeNames = activeFarms.flatMap {
+            listOf(
+                it.dummyEntityName.lowercase(Locale.getDefault()),
+                "$DUMMY_PREFIX${it.dummyEntityName}".lowercase(Locale.getDefault())
+            )
+        }.toSet()
+
         val mergedEntries = mutableListOf<DummyYamlEntry>()
         parseDummiesYaml(dummiesFile).forEach { entry ->
-            if (entry.name.lowercase(Locale.getDefault()) !in managedNames) {
-                mergedEntries += entry
+            val nameLower = entry.name.lowercase(Locale.getDefault())
+            if (nameLower !in managedNames || nameLower in activeNames) {
+                if (nameLower !in activeNames) {
+                    mergedEntries += entry
+                }
             }
         }
 
@@ -371,7 +396,7 @@ class AfkHelperManager(
     }
 
     private fun ensureDummyPluginSupport(serverDir: File) {
-        val dataDir = File(serverDir, "plugins/DummyPlayers").also { it.mkdirs() }
+        val dataDir = File(serverDir, "plugins/dummyplayers").also { it.mkdirs() }
         val configFile = File(dataDir, "config.yml")
         configFile.writeText(
             """
@@ -460,9 +485,9 @@ class AfkHelperManager(
         name.replace("\\", "\\\\").replace("\"", "\\\"")
 
     private fun readDummyRecordByName(worldName: String, dummyName: String): DummyYamlRecord? {
-        val dummiesFile = File(worldServerDir(worldName), "plugins/DummyPlayers/dummies.yml")
+        val dummiesFile = File(worldServerDir(worldName), "plugins/dummyplayers/dummies.yml")
         parseDummiesYaml(dummiesFile).forEach { entry ->
-            if (entry.name.equals(dummyName, ignoreCase = true)) {
+            if (entry.name.equals(dummyName, ignoreCase = true) || entry.name.equals("$DUMMY_PREFIX$dummyName", ignoreCase = true)) {
                 return DummyYamlRecord(
                     uuid = entry.uuid.ifBlank { entry.keyUuid },
                     ownerUuid = entry.ownerUuid,
