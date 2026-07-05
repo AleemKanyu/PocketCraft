@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -66,6 +67,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Memory
 import com.pocketcraft.server.ui.components.IpBottomSheet
@@ -1513,6 +1515,17 @@ private fun ServerIdentityCard(
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    DuoButton(
+                        text = "WEB DASHBOARD",
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://pocketcraft.online/dashboard/"))
+                            context.startActivity(intent)
+                        },
+                        variant = com.pocketcraft.server.ui.components.DuoButtonVariant.Pro,
+                        icon = Icons.Default.Language,
+                        minHeight = 44.dp
                     )
                 }
             }

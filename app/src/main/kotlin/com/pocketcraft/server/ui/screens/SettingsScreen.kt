@@ -1256,6 +1256,47 @@ fun SettingsScreen(
                         }
                     }
                 }
+                item {
+                    AnimatedEntranceContainer(index = 2) {
+                        SettingsSection("WEB DASHBOARD", Icons.Default.Language, isFirstSection = false)
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 2) {
+                        GameCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Access Web Dashboard",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 15.sp,
+                                    fontFamily = Monocraft,
+                                    textAlign = TextAlign.Center
+                                )
+                                Text(
+                                    text = "Control your server, edit files, manage plugins, and view console logs from any browser at pocketcraft.online.",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = 14.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                DuoButton(
+                                    text = "OPEN DASHBOARD 🌐",
+                                    onClick = {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://pocketcraft.online/dashboard/"))
+                                        context.startActivity(intent)
+                                    },
+                                    variant = DuoButtonVariant.Pro,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    minHeight = 44.dp
+                                )
+                            }
+                        }
+                    }
+                }
 
 
                 item {
