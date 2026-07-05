@@ -45,7 +45,8 @@ object RelayServers {
         region = "America",
         icon = "🇺🇸",
         description = "US East relay for North and South America",
-        bestFor = "Players in the Americas"
+        bestFor = "Players in the Americas",
+        fallbackIp = "18.225.223.45"
     )
 
     private val defaultRegionConfigs = listOf(MUMBAI, EUROPE, AMERICA)
@@ -150,9 +151,17 @@ object RelayServers {
     }
 
     fun getByHost(host: String?): RelayServerConfig {
-        return ALL.firstOrNull { it.host == host }
-            ?: metadataByHost[host]
-            ?: MUMBAI
+        if (host.isNullOrBlank()) return MUMBAI
+        val matched = ALL.firstOrNull { it.host == host } ?: metadataByHost[host]
+        if (matched != null) return matched
+        return RelayServerConfig(
+            host = host,
+            displayName = "Custom ($host)",
+            region = "Custom",
+            icon = "🌐",
+            description = "Private custom relay server",
+            bestFor = "Private server connections"
+        )
     }
 
     fun getDisplayName(host: String?): String {

@@ -42,13 +42,34 @@ object AfkDummyPluginSync {
         BundledPluginInstaller.installBundledPlugins(appContext, serverDir)
         ensureDummyPluginSupport(serverDir)
 
-        val dummiesFile = File(serverDir, "plugins/DummyPlayers/dummies.yml")
-        val managedNames = activeFarms.map { it.dummyEntityName.lowercase(Locale.getDefault()) }.toSet()
+        val dao = AfkHelperDatabase.getInstance(appContext).afkFarmLocationDao()
+        val allFarms = runCatching {
+            kotlinx.coroutines.runBlocking {
+                dao.getAll().filter { it.worldName.equals(worldName, ignoreCase = true) }
+            }
+        }.getOrElse { emptyList() }
+
+        val dummiesFile = File(serverDir, "plugins/dummyplayers/dummies.yml")
+        val managedNames = allFarms.flatMap {
+            listOf(
+                it.dummyEntityName.lowercase(Locale.getDefault()),
+                "$DUMMY_PREFIX${it.dummyEntityName}".lowercase(Locale.getDefault())
+            )
+        }.toSet()
+        val activeNames = activeFarms.flatMap {
+            listOf(
+                it.dummyEntityName.lowercase(Locale.getDefault()),
+                "$DUMMY_PREFIX${it.dummyEntityName}".lowercase(Locale.getDefault())
+            )
+        }.toSet()
         val mergedEntries = mutableListOf<DummyYamlEntry>()
 
         parseDummiesYaml(dummiesFile).forEach { entry ->
-            if (entry.name.lowercase(Locale.getDefault()) !in managedNames) {
-                mergedEntries += entry
+            val nameLower = entry.name.lowercase(Locale.getDefault())
+            if (nameLower !in managedNames || nameLower in activeNames) {
+                if (nameLower !in activeNames) {
+                    mergedEntries += entry
+                }
             }
         }
 
@@ -72,7 +93,7 @@ object AfkDummyPluginSync {
     }
 
     private fun ensureDummyPluginSupport(serverDir: File) {
-        val dataDir = File(serverDir, "plugins/DummyPlayers").also { it.mkdirs() }
+        val dataDir = File(serverDir, "plugins/dummyplayers").also { it.mkdirs() }
         val configFile = File(dataDir, "config.yml")
         configFile.writeText(
             """

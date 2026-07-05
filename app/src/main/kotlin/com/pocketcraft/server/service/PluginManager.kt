@@ -1767,6 +1767,71 @@ object PluginManager {
         return normalized.contains("geyser") || normalized.contains("viaversion") || normalized.contains("floodgate")
     }
 
+    private val resolvedProjectCache = java.util.concurrent.ConcurrentHashMap<String, RemoteCatalogItem>()
+
+    suspend fun resolveModrinthProjectByName(
+        context: Context,
+        name: String,
+        type: ContentType
+    ): RemoteCatalogItem? = withContext(Dispatchers.IO) {
+        val cacheKey = "${type.name}|$name"
+        resolvedProjectCache[cacheKey]?.let { return@withContext it }
+
+        // Clean up the name (remove file extensions, version numbers, brackets, etc.)
+        var cleanName = name.replace(Regex("\\.jar$", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("[-_]?[0-9\\.]+(-SNAPSHOT)?[-_]?.*$", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("[\\[\\(].*?[\\]\\)]"), "")
+            .trim()
+        if (cleanName.isBlank()) cleanName = name
+
+        try {
+            val facets = buildModrinthFacets(type)
+            val encodedQuery = java.net.URLEncoder.encode(cleanName, "UTF-8")
+            val encodedFacets = java.net.URLEncoder.encode(facets, "UTF-8")
+            val url = "$MODRINTH_BASE_URL/search?query=$encodedQuery&limit=1&index=relevance&facets=$encodedFacets"
+
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", userAgent())
+                .build()
+
+            getHttpClient(context).newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                val payload = response.body?.string().orEmpty()
+                if (payload.isBlank()) return@withContext null
+
+                val root = org.json.JSONObject(payload)
+                val hits = root.optJSONArray("hits") ?: return@withContext null
+                if (hits.length() > 0) {
+                    val hit = hits.getJSONObject(0)
+                    val projectId = hit.optString("project_id").ifBlank { hit.optString("projectId") }
+                    val slug = hit.optString("slug").ifBlank { projectId }
+                    val title = hit.optString("title").ifBlank { slug }
+                    val description = hit.optString("description")
+                    val iconUrl = hit.optString("icon_url")
+                    
+                    if (projectId.isNotBlank()) {
+                        val catalogItem = RemoteCatalogItem(
+                            source = "modrinth",
+                            projectId = projectId,
+                            title = title,
+                            slug = slug,
+                            iconUrl = iconUrl,
+                            description = description,
+                            downloads = hit.optLong("downloads"),
+                            owner = hit.optString("author")
+                        )
+                        resolvedProjectCache[cacheKey] = catalogItem
+                        return@withContext catalogItem
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PluginManager", "Failed to resolve Modrinth project for $name: ${e.message}")
+        }
+        null
+    }
+
     private val latestVersionsCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     suspend fun getLatestVersionFromModrinth(context: Context, projectId: String): String? = withContext(Dispatchers.IO) {

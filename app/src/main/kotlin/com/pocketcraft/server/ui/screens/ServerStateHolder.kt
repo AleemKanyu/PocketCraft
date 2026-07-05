@@ -1937,7 +1937,7 @@ class ServerStateHolder(
                 config = next
             }
 
-            val rconResult = applyWhitelistRuntimeState(next)
+            val rconResult = applyRuntimeSettingsState(next, onlyWhitelist = true)
 
             withContext(Dispatchers.Main) {
                 if (rconResult == null) {
@@ -1970,7 +1970,7 @@ class ServerStateHolder(
         }
 
         if (isRunning) {
-            val rconResult = applyWhitelistRuntimeState(enforced)
+            val rconResult = applyRuntimeSettingsState(enforced, onlyWhitelist = false)
             if (rconResult != null) {
                 android.util.Log.w("ServerStateHolder", "Settings dynamic update RCON failed, fell back to stdin: $rconResult")
             }
@@ -1982,18 +1982,26 @@ class ServerStateHolder(
         "Settings saved."
     }
 
-    private fun applyWhitelistRuntimeState(config: ServerConfig): String? {
-        val whitelistCmd = if (config.whiteList) "whitelist on" else "whitelist off"
+    private fun applyRuntimeSettingsState(config: ServerConfig, onlyWhitelist: Boolean = false): String? {
+        val commands = buildList {
+            add(if (config.whiteList) "whitelist on" else "whitelist off")
+            add("whitelist reload")
+            if (!onlyWhitelist) {
+                add("difficulty ${config.difficulty.lowercase()}")
+                add("defaultgamemode ${config.gameMode.lowercase()}")
+                add("gamemode ${config.gameMode.lowercase()} @a")
+                add("gamerule pvp ${config.pvp}")
+                add("gamerule doMobSpawning ${config.spawnMonsters}")
+            }
+        }
         return runCatching {
-            sendRconCommand(whitelistCmd)
-            sendRconCommand("whitelist reload")
+            commands.forEach { sendRconCommand(it) }
             if (config.whiteList && config.enforceWhitelist) {
                 kickPlayersNotOnWhitelist(::sendRconCommand)
             }
             null
         }.getOrElse { error ->
-            com.pocketcraft.server.server.ServerLauncher.sendCommand(whitelistCmd)
-            com.pocketcraft.server.server.ServerLauncher.sendCommand("whitelist reload")
+            commands.forEach { com.pocketcraft.server.server.ServerLauncher.sendCommand(it) }
             if (config.whiteList && config.enforceWhitelist) {
                 kickPlayersNotOnWhitelist(com.pocketcraft.server.server.ServerLauncher::sendCommand)
             }
@@ -3168,54 +3176,11 @@ class ServerStateHolder(
     }
 
     private fun loadConfig(): ServerConfig {
-        val props = ServerPropertiesHelper.readProperties(serverDir)
-        var loaded = ServerConfig(
-            worldName = props.getProperty("level-name", activeWorld),
-            worldSeed = props.getProperty("level-seed", ""),
-            maxPlayers = (props.getProperty("max-players", adaptiveMaxPlayers().toString()).toIntOrNull() ?: adaptiveMaxPlayers()).coerceIn(1, 50),
-            port = singleServerPort,
-            difficulty = props.getProperty("difficulty", "normal"),
-            gameMode = props.getProperty("gamemode", "survival"),
-            onlineMode = props.getProperty("online-mode", "false").toBoolean(),
-            motd = props.getProperty("motd", "A PocketCraft Server").removeSuffix(" - Hosted on Pocketcraft").trim(),
-            pvp = props.getProperty("pvp", "true").toBoolean(),
-            viewDistance = props.getProperty(ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY)
-                ?.toIntOrNull()
-                ?: props.getProperty("view-distance", adaptiveViewDistance().toString()).toIntOrNull()
-                ?: adaptiveViewDistance(),
-            simulationDistance = props.getProperty(ServerPropertiesHelper.DESIRED_SIMULATION_DISTANCE_KEY)
-                ?.toIntOrNull()
-                ?: props.getProperty("simulation-distance", adaptiveSimulationDistance().toString()).toIntOrNull()
-                ?: adaptiveSimulationDistance(),
-            spawnProtection = props.getProperty("spawn-protection", "16").toIntOrNull() ?: 16,
-            allowFlight = props.getProperty("allow-flight", "false").toBoolean(),
-            whiteList = props.getProperty("white-list", "false").toBoolean(),
-            enforceWhitelist = props.getProperty("enforce-whitelist", "false").toBoolean(),
-            commandBlocks = props.getProperty("enable-command-block", "true").toBoolean(),
-            netherEnabled = props.getProperty("allow-nether", "true").toBoolean(),
-            spawnMonsters = props.getProperty("spawn-monsters", "true").toBoolean(),
-            spawnAnimals = props.getProperty("spawn-animals", "true").toBoolean(),
-            spawnNpcs = props.getProperty("spawn-npcs", "true").toBoolean(),
-            hardcore = props.getProperty("hardcore", "false").toBoolean(),
-            maxRamMb = props.getProperty("pocketcraft-max-ram-mb", "1024").toIntOrNull() ?: 1024,
-            entityBroadcastRangePercentage = props.getProperty(
-                "entity-broadcast-range-percentage",
-                ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT.toString()
-            ).toIntOrNull() ?: ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT,
-            generateStructures = props.getProperty("generate-structures", "true").toBoolean(),
-            levelType = props.getProperty("level-type", "default"),
-            serverType = props.getProperty("pocketcraft-server-type")
-                ?.takeIf { it.isNotBlank() }
-                ?.let(ServerType::fromString)
-                ?: ServerType.PAPER,
-            gameVersion = props.getProperty("pocketcraft-game-version", ""),
-            customJarPath = props.getProperty("pocketcraft-custom-jar-path")?.takeIf { it.isNotBlank() }
-        )
-        return loaded.copy(
-            joinMessageEnabled = true,
-            joinMessageText = POCKETCRAFT_JOIN_MESSAGE_TEXT,
-            joinMessageUrl = POCKETCRAFT_JOIN_MESSAGE_URL
-        )
+        return kotlinx.coroutines.runBlocking {
+            ServerConfigRepository(appContext).apply {
+                setWorldNameOverride(activeWorld)
+            }.loadConfig()
+        }
     }
 
     private fun saveConfig(config: ServerConfig, targetDir: File = serverDir) {

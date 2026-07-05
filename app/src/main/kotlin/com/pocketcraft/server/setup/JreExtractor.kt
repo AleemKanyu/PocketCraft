@@ -240,24 +240,26 @@ object JreExtractor {
     }
 
     private fun abiArchiveName(): String {
+        val is64Bit = android.os.Process.is64Bit()
         val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
         return when {
-            abi.contains("arm64") || abi.contains("aarch64") -> "arm64"
-            abi.contains("arm") -> "arm"
-            abi.contains("x86_64") -> "x86_64"
-            abi.contains("x86") -> "x86"
-            else -> "arm64"
+            (abi.contains("arm64") || abi.contains("aarch64")) && is64Bit -> "arm64"
+            abi.contains("arm") || abi.contains("arm64") || abi.contains("aarch64") -> "arm"
+            abi.contains("x86_64") && is64Bit -> "x86_64"
+            abi.contains("x86") || abi.contains("x86_64") -> "x86"
+            else -> if (is64Bit) "arm64" else "arm"
         }
     }
 
     private fun runtimeArchDirName(): String {
+        val is64Bit = android.os.Process.is64Bit()
         val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
         return when {
-            abi.contains("arm64") || abi.contains("aarch64") -> "aarch64"
-            abi.contains("arm") -> "aarch32"
-            abi.contains("x86_64") -> "amd64"
-            abi.contains("x86") -> "i386"
-            else -> "aarch64"
+            (abi.contains("arm64") || abi.contains("aarch64")) && is64Bit -> "aarch64"
+            abi.contains("arm") || abi.contains("arm64") || abi.contains("aarch64") -> "aarch32"
+            abi.contains("x86_64") && is64Bit -> "amd64"
+            abi.contains("x86") || abi.contains("x86_64") -> "i386"
+            else -> if (is64Bit) "aarch64" else "aarch32"
         }
     }
 

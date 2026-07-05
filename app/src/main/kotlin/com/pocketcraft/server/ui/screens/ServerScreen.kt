@@ -45,6 +45,8 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -977,6 +979,9 @@ fun ServerFailureDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    var isSending by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var ticketNumber by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var submitError by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     val failureSummary = remember(reason, details, duringStartup) {
         serverFailureSummary(reason = reason, details = details, duringStartup = duringStartup)
     }
@@ -1069,6 +1074,52 @@ fun ServerFailureDialog(
                     icon = Icons.Default.Lightbulb
                 )
 
+                if (ticketNumber != null) {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = PocketColors.Online.copy(alpha = 0.12f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, PocketColors.Online.copy(alpha = 0.35f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "LOCKED IN SUPPORT TICKET",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = PocketColors.Online,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = ticketNumber!!,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = PocketColors.Online,
+                                letterSpacing = 2.sp
+                            )
+                            Text(
+                                text = "Logs submitted! Join our Discord server and drop this ticket number in the support channel.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                                textAlign = TextAlign.Center,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                } else if (!submitError.isNullOrBlank()) {
+                    Text(
+                        text = "Error: $submitError",
+                        color = Color(0xFFFF5252),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1111,27 +1162,73 @@ fun ServerFailureDialog(
                         Text("Discord", modifier = Modifier.padding(vertical = 2.dp), fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
                     }
 
-                    androidx.compose.material3.OutlinedButton(
-                        onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(
-                                ClipData.newPlainText(
-                                    "PocketCraft server issue",
-                                    details.ifBlank { reason }
+                    if (ticketNumber == null) {
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                isSending = true
+                                submitError = null
+                                val ticket = "PC-" + String.format("%06d", java.util.Random().nextInt(1000000))
+                                val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                                val data = hashMapOf(
+                                    "ticket" to ticket,
+                                    "reason" to reason,
+                                    "details" to details,
+                                    "device" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (Android ${android.os.Build.VERSION.RELEASE})",
+                                    "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
                                 )
+                                db.collection("tickets").document(ticket).set(data)
+                                    .addOnSuccessListener {
+                                        ticketNumber = ticket
+                                        isSending = false
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                        val clip = android.content.ClipData.newPlainText("PocketCraft Ticket", ticket)
+                                        clipboard.setPrimaryClip(clip)
+                                        Toast.makeText(context, "Ticket created & copied to clipboard!", Toast.LENGTH_LONG).show()
+                                    }
+                                    .addOnFailureListener { e ->
+                                        submitError = e.message ?: "Failed to upload logs"
+                                        isSending = false
+                                    }
+                            },
+                            enabled = !isSending,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(15.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.2.dp, PocketColors.Primary.copy(alpha = if (isDarkTheme) 0.58f else 0.42f)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = PocketColors.Primary
                             )
-                            Toast.makeText(context, "Full issue copied. Paste it in Discord.", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(15.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.2.dp, glassBorder.copy(alpha = 0.64f)),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(7.dp))
-                        Text("Copy Issue", modifier = Modifier.padding(vertical = 2.dp), fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+                        ) {
+                            if (isSending) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = PocketColors.Primary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(7.dp))
+                                Text("Send Logs", modifier = Modifier.padding(vertical = 2.dp), fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+                            }
+                        }
+                    } else {
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("PocketCraft Ticket", ticketNumber!!)
+                                clipboard.setPrimaryClip(clip)
+                                Toast.makeText(context, "Ticket copied!", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(15.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.2.dp, PocketColors.Online.copy(alpha = if (isDarkTheme) 0.58f else 0.42f)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = PocketColors.Online
+                            )
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(7.dp))
+                            Text("Copy Ticket", modifier = Modifier.padding(vertical = 2.dp), fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+                        }
                     }
                 }
             }

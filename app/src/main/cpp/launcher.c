@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <fcntl.h>
+#include <sys/system_properties.h>
 
 #define TAG "PocketCraft"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -79,21 +80,25 @@ static bool has_suffix(const char *value, const char *suffix) {
 }
 
 static void disable_heap_tagging(void) {
-#if defined(__aarch64__)
-  if (prctl(PR_SET_TAGGED_ADDR_CTRL, 0, 0, 0, 0) != 0) {
-    LOGI("prctl(PR_SET_TAGGED_ADDR_CTRL, 0) failed: %s", strerror(errno));
-  } else {
-    LOGI("Tagged address control disabled");
-  }
-#endif
-
-#if defined(M_BIONIC_SET_HEAP_TAGGING_LEVEL) && defined(__ANDROID_API__) &&    \
-    (__ANDROID_API__ >= 30)
-  if (mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, M_HEAP_TAGGING_LEVEL_NONE) ==
-      0) {
-    LOGI("mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, NONE) failed");
-  } else {
-    LOGI("Heap tagging disabled");
+  // Do NOT call prctl(PR_SET_TAGGED_ADDR_CTRL, 0) here!
+  // That disables TBI (Top Byte Ignore), which causes the CPU to reject
+  // ANY address with non-zero high bits — including the JVM's own G1GC heap
+  // which legitimately lives at 0x000000070... (bit 59 set). Disabling TBI
+  // causes SEGV_MAPERR in JVM_DesiredAssertionStatus when the JVM dereferences
+  // its own heap OOPs.
+  //
+  // Instead, only disable Scudo's active pointer tagging so that malloc()
+  // allocations return clean addresses without tag bytes.
+#if defined(__ANDROID__)
+  char api_str[8] = {0};
+  __system_property_get("ro.build.version.sdk", api_str);
+  int api_level = atoi(api_str);
+  if (api_level >= 30) {
+    if (mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, M_HEAP_TAGGING_LEVEL_NONE) == 0) {
+      LOGI("mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, NONE) failed");
+    } else {
+      LOGI("Heap tagging level set to NONE");
+    }
   }
 #endif
 }
@@ -127,7 +132,7 @@ static void reset_signal_handlers(void) {
     if (signal_id >= 32) continue;
     if (signal_id == SIGKILL || signal_id == SIGSTOP) continue;
 
-    clean_action.sa_handler = (signal_id == SIGSEGV) ? SIG_IGN : SIG_DFL;
+    clean_action.sa_handler = SIG_DFL;
     sigaction(signal_id, &clean_action, NULL);
   }
 }
@@ -354,11 +359,11 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
   }
   LOGI("libjli.so loaded");
 
-  void *jvm_handle = dlopen("libjvm.so", RTLD_NOW | RTLD_GLOBAL);
+  LOGI("dlopen: %s", libjvm_path);
+  void *jvm_handle = dlopen(libjvm_path, RTLD_NOW | RTLD_GLOBAL);
   if (!jvm_handle) {
-    LOGI("libjvm.so via loader path failed: %s", dlerror());
-    LOGI("dlopen: %s", libjvm_path);
-    jvm_handle = dlopen(libjvm_path, RTLD_NOW | RTLD_GLOBAL);
+    LOGI("libjvm.so absolute path failed: %s. Trying default loader path...", dlerror());
+    jvm_handle = dlopen("libjvm.so", RTLD_NOW | RTLD_GLOBAL);
   }
   if (!jvm_handle) {
     LOGE("libjvm.so FAILED: %s", dlerror());
@@ -503,7 +508,6 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   "-Dio.netty.noUnsafe=false",
                   "-XX:-UseContainerSupport",
                   error_file_opt,
-                  "-Xrs",
                   "-XX:+DisableAttachMechanism",
                   "-jar",
                   (char *)jar_path,

@@ -1,0 +1,40 @@
+name: Deploy Web Dashboard to Hostinger
+
+on:
+  push:
+    branches:
+      - feature/web-dashboard
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install Dependencies
+        run: |
+          cd dashboard
+          npm ci
+
+      - name: Build App
+        run: |
+          cd dashboard
+          npm run build
+
+      - name: Deploy to Hostinger via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.HOSTINGER_FTP_SERVER }}
+          username: ${{ secrets.HOSTINGER_FTP_USERNAME }}
+          password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
+          local-dir: dashboard/dist/
+          server-dir: public_html/  # Change if deploying to a subdomain folder (e.g., public_html/dashboard/)
+          dangerous-clean-slate: false  # Set to true only if you want to wipe files not in the build folder

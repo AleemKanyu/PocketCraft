@@ -175,6 +175,32 @@ fun SettingsScreen(
     var deleteReAuthError by remember { mutableStateOf("") }
     var accountActionError by remember { mutableStateOf("") }
     android.util.Log.d("POCKETCRAFT_TEST", "SettingsScreen composition! showSignOutConfirm=$showSignOutConfirm")
+    val authRecoveryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val acc = AccountManager.currentDriveAccount(context)
+            if (acc != null) {
+                signedInAccount = acc
+                scope.launch {
+                    try {
+                        driveStatus = "Synchronizing app settings..."
+                        val restored = DriveBackupManager.restoreAppSettings(context, acc)
+                        if (restored) {
+                            driveStatus = "Restored app settings from cloud backup."
+                            context.findActivity()?.recreate()
+                        } else {
+                            DriveBackupManager.uploadAppSettings(context, acc)
+                            driveStatus = "Signed in with Google as ${acc.email ?: acc.displayName.orEmpty()}. Settings backed up to cloud."
+                        }
+                    } catch (e: Exception) {
+                        driveStatus = "Signed in, but settings sync failed: ${e.message}"
+                    }
+                }
+            }
+        }
+    }
+
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -203,7 +229,12 @@ fun SettingsScreen(
                             driveStatus = "Signed in with Google as ${signedInAccount?.email ?: signedInAccount?.displayName.orEmpty()}. Settings backed up to cloud."
                         }
                     } catch (e: Exception) {
-                        driveStatus = "Signed in, but settings sync failed: ${e.message}"
+                        val cause = e.cause ?: e
+                        if (cause is com.google.android.gms.auth.UserRecoverableAuthException && cause.intent != null) {
+                            authRecoveryLauncher.launch(cause.intent!!)
+                        } else {
+                            driveStatus = "Signed in, but settings sync failed: ${e.message}"
+                        }
                     }
                 }
             }

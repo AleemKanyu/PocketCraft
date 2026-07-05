@@ -407,7 +407,7 @@ fun PocketTopBar(
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                         relayOptions.forEach { region ->
-                            val isComingSoon = region.host == RelayServers.AMERICA.host
+                            val isComingSoon = false
                             PremiumDropdownItem(
                                 title = region.label,
                                 subtitle = if (isComingSoon) {

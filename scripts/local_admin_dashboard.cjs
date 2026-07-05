@@ -649,6 +649,40 @@ async function listBroadcastResults() {
     .sort((left, right) => right.id.localeCompare(left.id));
 }
 
+async function listBetaFeedbacks() {
+  let snapshot;
+  try {
+    snapshot = await db.collection("beta_feedback").orderBy("emailCheckedAt", "desc").limit(50).get();
+  } catch (error) {
+    try {
+      snapshot = await db.collection("beta_feedback").limit(50).get();
+    } catch (e) {
+      snapshot = { docs: [] };
+    }
+  }
+  return snapshot.docs.map((doc) => {
+    const data = doc.data() || {};
+    return {
+      id: doc.id,
+      message: ensureString(data.message),
+      userId: ensureString(data.userId),
+      appVersion: ensureString(data.appVersion),
+      appVersionCode: data.appVersionCode == null ? "" : ensureNumber(data.appVersionCode),
+      serverVersion: ensureString(data.serverVersion),
+      deviceManufacturer: ensureString(data.deviceManufacturer),
+      deviceModel: ensureString(data.deviceModel),
+      androidSdk: data.androidSdk == null ? "" : ensureNumber(data.androidSdk),
+      currentConsoleLog: ensureString(data.currentConsoleLog),
+      serverLatestLog: ensureString(data.serverLatestLog),
+      crashArtifacts: ensureString(data.crashArtifacts),
+      runtimeState: ensureString(data.runtimeState),
+      emailStatus: ensureString(data.emailStatus),
+      emailError: ensureString(data.emailError),
+      emailSentAt: toIso(data.emailSentAt || data.emailCheckedAt || data.updatedAt)
+    };
+  });
+}
+
 async function listRootCollections() {
   const collections = await db.listCollections();
   return collections.map((collection) => collection.id).sort((left, right) => left.localeCompare(right));
@@ -808,6 +842,12 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && pathname === "/api/firestore/collections") {
       const collections = await listRootCollections();
       sendJson(res, 200, { ok: true, collections });
+      return;
+    }
+
+    if (req.method === "GET" && pathname === "/api/beta-feedbacks") {
+      const feedbacks = await listBetaFeedbacks();
+      sendJson(res, 200, { ok: true, feedbacks });
       return;
     }
 

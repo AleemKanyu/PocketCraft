@@ -48,6 +48,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import com.google.firebase.crashlytics.FirebaseCrashlytics
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.Timestamp
+import com.pocketcraft.server.data.model.PlayerInfo
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -105,6 +109,7 @@ class ServerHostService : Service() {
     private val relayManager by lazy { RelayManager(this) }
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    private var wifiLowLatencyLock: WifiManager.WifiLock? = null
     private var multicastLock: WifiManager.MulticastLock? = null
     private var stopReason: String = "unknown"
     private var autoRecoverWindowStartMs: Long = 0L
@@ -121,6 +126,10 @@ class ServerHostService : Service() {
     private val relayHealthFailures = AtomicInteger(0)
     private var relayStatusJob: Job? = null
     private var widgetUpdateJob: Job? = null
+    private val currentPlayersList = mutableListOf<PlayerInfo>()
+    private var dashboardStatusJob: Job? = null
+    private var dashboardCommandListener: com.pocketcraft.server.broadcast.DashboardCommandListener? = null
+    private var currentServerTps: Float = 20.0f
     private var serverReadyFallbackJob: Job? = null
     /** Set to true when MIUI's socket permission check message is seen in the output. */
     private var miuiSocketCheckSeen = false
@@ -291,6 +300,8 @@ class ServerHostService : Service() {
         resetNotificationState(ServerStage.STARTING_SERVER.notificationText)
         pushWidgetUpdate()
         startWidgetUpdateHeartbeat()
+        synchronized(currentPlayersList) { currentPlayersList.clear() }
+        startDashboardStatusHeartbeat(versionId)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
@@ -480,6 +491,7 @@ class ServerHostService : Service() {
     }
 
     override fun onDestroy() {
+        stopDashboardStatusAndClear()
         relayReconnectJob?.cancel()
         relayReconnectJob = null
         widgetUpdateJob?.cancel()
@@ -514,8 +526,8 @@ class ServerHostService : Service() {
         serverReadyFallbackJob = null
         setServerReadyState(false)
         releaseWakeLock()
-        // Don't stop server on app close - only stop if explicitly requested by user
-        // The service will keep running in background
+        // Ensure widget is updated to OFFLINE when the service is destroyed
+        pushWidgetUpdate(applicationContext)
         super.onDestroy()
         serviceScope.cancel()
     }
@@ -528,6 +540,7 @@ class ServerHostService : Service() {
 
     private fun stopServer() {
         if (!stopInProgress.compareAndSet(false, true)) return
+        stopDashboardStatusAndClear()
         launchJob?.cancel()
         launchJob = null
         serverReadyFallbackJob?.cancel()
@@ -1426,6 +1439,8 @@ class ServerHostService : Service() {
         autoRecoverAttempts = 0
         autoRecoverWindowStartMs = 0L
         startWidgetUpdateHeartbeat()
+        afkHelperManager.onServerStateChanged(true)
+        triggerDashboardStatusUpdate()
     }
 
     private fun scheduleServerReadyFallback(versionId: String) {
@@ -1470,29 +1485,38 @@ class ServerHostService : Service() {
 
         // Keep WiFi out of power-save between game packets. Without this, the radio
         // parks after ~50ms idle and adds a 20–150ms wake penalty on the next packet.
+        // We acquire BOTH WifiManager.WIFI_MODE_FULL_HIGH_PERF (to keep Wi-Fi awake when screen is off)
+        // and WifiManager.WIFI_MODE_FULL_LOW_LATENCY (on Android 10+, to minimize jitter when screen is on).
         if (wifiLock == null) {
             runCatching {
                 val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-                val wifiMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    WifiManager.WIFI_MODE_FULL_LOW_LATENCY
-                } else {
-                    @Suppress("DEPRECATION")
-                    WifiManager.WIFI_MODE_FULL_HIGH_PERF
-                }
                 @Suppress("DEPRECATION")
                 wifiLock = wm.createWifiLock(
-                    wifiMode,
-                    "PocketCraft:ServerWifiLock"
+                    WifiManager.WIFI_MODE_FULL_HIGH_PERF,
+                    "PocketCraft:ServerWifiLockHighPerf"
                 ).also {
                     it.setReferenceCounted(false)
                     it.acquire()
-                    android.util.Log.i(
-                        "ServerHostService",
-                        "WiFi low-latency lock acquired (mode=$wifiMode)."
-                    )
+                    android.util.Log.i("ServerHostService", "WiFi high-performance lock acquired.")
                 }
             }.onFailure { e ->
-                android.util.Log.w("ServerHostService", "WiFi lock unavailable: ${e.message}")
+                android.util.Log.w("ServerHostService", "WiFi high-performance lock unavailable: ${e.message}")
+            }
+        }
+
+        if (wifiLowLatencyLock == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            runCatching {
+                val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                wifiLowLatencyLock = wm.createWifiLock(
+                    WifiManager.WIFI_MODE_FULL_LOW_LATENCY,
+                    "PocketCraft:ServerWifiLockLowLatency"
+                ).also {
+                    it.setReferenceCounted(false)
+                    it.acquire()
+                    android.util.Log.i("ServerHostService", "WiFi low-latency lock acquired.")
+                }
+            }.onFailure { e ->
+                android.util.Log.w("ServerHostService", "WiFi low-latency lock unavailable: ${e.message}")
             }
         }
 
@@ -1532,6 +1556,17 @@ class ServerHostService : Service() {
             android.util.Log.e("ServerHostService", "Error releasing WiFi lock: ${e.message}")
         } finally {
             wifiLock = null
+        }
+
+        try {
+            wifiLowLatencyLock?.let {
+                if (it.isHeld) it.release()
+                android.util.Log.i("ServerHostService", "WiFi low-latency lock released.")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ServerHostService", "Error releasing WiFi low-latency lock: ${e.message}")
+        } finally {
+            wifiLowLatencyLock = null
         }
 
         try {
@@ -1670,6 +1705,8 @@ class ServerHostService : Service() {
         resetNotificationState(ServerStage.STARTING_SERVER.notificationText)
         pushWidgetUpdate()
         startWidgetUpdateHeartbeat()
+        synchronized(currentPlayersList) { currentPlayersList.clear() }
+        startDashboardStatusHeartbeat(versionId)
         startLogcatBridge(versionId)
         val serverPort = resolveServerPort(worldName)
         currentServerPort = serverPort
@@ -1892,7 +1929,17 @@ class ServerHostService : Service() {
         addLogLine(line)
         sendEvent(versionId, EVENT_OUTPUT, line)
         if (isBacklog) return
-        ConsoleParser.parseJoin(line)?.let { (name, _) ->
+        ConsoleParser.parseTps(line)?.let { parsedTps ->
+            currentServerTps = parsedTps
+            triggerDashboardStatusUpdate()
+        }
+        ConsoleParser.parseJoin(line)?.let { (name, uuid) ->
+            synchronized(currentPlayersList) {
+                if (currentPlayersList.none { it.name.equals(name, ignoreCase = true) }) {
+                    currentPlayersList.add(PlayerInfo(name = name, uuid = uuid))
+                }
+            }
+            triggerDashboardStatusUpdate()
             val isNewJoin = synchronized(relayOnlinePlayers) {
                 val added = relayOnlinePlayers.add(name.lowercase())
                 relayStatusPlayerCount.set(relayOnlinePlayers.size)
@@ -1914,6 +1961,10 @@ class ServerHostService : Service() {
             }
         }
         ConsoleParser.parseLeave(line)?.let { name ->
+            synchronized(currentPlayersList) {
+                currentPlayersList.removeAll { it.name.equals(name, ignoreCase = true) }
+            }
+            triggerDashboardStatusUpdate()
             val remainingPlayers = synchronized(relayOnlinePlayers) {
                 relayOnlinePlayers.remove(name.lowercase())
                 relayStatusPlayerCount.set(relayOnlinePlayers.size)
@@ -1994,33 +2045,38 @@ class ServerHostService : Service() {
     }
 
     private suspend fun resolvePublicRelayAddress(address: RelayManager.RelayAddress): String {
-        if (address.isFallback) return address.toString()
+        val region = relayRegionWireValue(address.host)
+        val defaultDomain = when (region) {
+            "as" -> "mine.pocketcraft.online"
+            "eu" -> "eu.pocketcraft.online"
+            "us" -> "us.pocketcraft.online"
+            else -> address.host
+        }
 
         val prefs = AppPreferences(applicationContext)
         val isPremium = prefs.isPremiumUser || prefs.debugPremiumOverride
         if (!isPremium) {
-            return address.toString()
+            return "$defaultDomain:${address.port}"
         }
 
         val subdomain = prefs.customSubdomain?.trim()?.lowercase().orEmpty()
-        val region = relayRegionWireValue(address.host)
-            ?: prefs.customSubdomainRegion?.trim()?.lowercase()
-
         if (subdomain.isBlank()) {
-            return address.toString()
+            return "$defaultDomain:${address.port}"
         }
 
         val host = when (region) {
             "as" -> "$subdomain.as.pocketcraft.online"
             "eu" -> "$subdomain.eu.pocketcraft.online"
-            else -> "$subdomain.pocketcraft.online"
+            "us" -> "$subdomain.us.pocketcraft.online"
+            else -> defaultDomain
         }
         return "$host:${address.port}"
     }
 
     private fun relayRegionWireValue(host: String): String? = when (host.trim().lowercase()) {
-        "mine.pocketcraft.online" -> "as"
-        "eu.pocketcraft.online" -> "eu"
+        "mine.pocketcraft.online", "13.201.57.41" -> "as"
+        "eu.pocketcraft.online", "54.93.247.2" -> "eu"
+        "us.pocketcraft.online", "18.225.223.45" -> "us"
         else -> null
     }
 
@@ -2127,6 +2183,233 @@ class ServerHostService : Service() {
             }
         } catch (e: Exception) {
             android.util.Log.e("ServerHostService", "RCON stop failed: ${e.message}")
+        }
+    }
+
+    private val afkHelperManager by lazy {
+        com.pocketcraft.server.afk.AfkHelperManager(
+            context = this,
+            scope = serviceScope,
+            currentWorldProvider = { currentWorldName ?: "world" },
+            isServerRunningProvider = { serverReadyHandled.get() },
+            onlinePlayersProvider = { synchronized(currentPlayersList) { currentPlayersList.toList() } },
+            knownPlayersProvider = { emptyList() },
+            sendRconCommand = ::sendRconCommandSuspended,
+            appendLog = { line -> sendEvent(currentVersionId ?: "", EVENT_OUTPUT, line) },
+            notifyStateChanged = {
+                triggerDashboardStatusUpdate()
+            }
+        )
+    }
+
+    private suspend fun sendRconCommandSuspended(command: String): String = withContext(Dispatchers.IO) {
+        val password = "pocketcraft-internal-rcon"
+        val port = 25575
+        runCatching {
+            Socket().use { socket ->
+                socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 3000)
+                socket.soTimeout = 5000
+                val out = java.io.DataOutputStream(socket.getOutputStream().buffered())
+                val inp = java.io.DataInputStream(socket.getInputStream().buffered())
+
+                fun sendPacket(id: Int, type: Int, payload: String) {
+                    val payloadBytes = payload.toByteArray(java.nio.charset.StandardCharsets.UTF_8)
+                    val length = 4 + 4 + payloadBytes.size + 2
+                    out.write(length and 0xFF)
+                    out.write((length shr 8) and 0xFF)
+                    out.write((length shr 16) and 0xFF)
+                    out.write((length shr 24) and 0xFF)
+
+                    out.write(id and 0xFF)
+                    out.write((id shr 8) and 0xFF)
+                    out.write((id shr 16) and 0xFF)
+                    out.write((id shr 24) and 0xFF)
+
+                    out.write(type and 0xFF)
+                    out.write((type shr 8) and 0xFF)
+                    out.write((type shr 16) and 0xFF)
+                    out.write((type shr 24) and 0xFF)
+
+                    out.write(payloadBytes)
+                    out.write(0)
+                    out.write(0)
+                    out.flush()
+                }
+
+                fun readIntLE(): Int {
+                    val b0 = inp.read(); val b1 = inp.read(); val b2 = inp.read(); val b3 = inp.read()
+                    if (b0 == -1 || b1 == -1 || b2 == -1 || b3 == -1) throw java.io.IOException("EOF")
+                    return (b0 and 0xFF) or ((b1 and 0xFF) shl 8) or ((b2 and 0xFF) shl 16) or ((b3 and 0xFF) shl 24)
+                }
+
+                fun readPacket(): Triple<Int, Int, String> {
+                    val length = readIntLE()
+                    val id = readIntLE()
+                    val type = readIntLE()
+                    val payloadLen = (length - 10).coerceAtLeast(0)
+                    val payload = if (payloadLen > 0) ByteArray(payloadLen).also { inp.readFully(it) } else ByteArray(0)
+                    inp.read()
+                    inp.read()
+                    return Triple(id, type, payload.toString(java.nio.charset.StandardCharsets.UTF_8))
+                }
+
+                // Auth
+                sendPacket(1, 3, password)
+                val (authId, _, _) = readPacket()
+                if (authId == -1) return@use "[RCON] Authentication failed."
+
+                // Command
+                sendPacket(2, 2, command)
+                val (_, _, response) = readPacket()
+                response.ifBlank { "[OK]" }
+            }
+        }.getOrElse { error ->
+            when (error) {
+                is java.net.SocketTimeoutException -> "[RCON] Timed out waiting for response."
+                is java.net.ConnectException -> "[RCON] Connection refused."
+                is java.io.IOException -> "[RCON] Connection failed: ${error.message ?: error.javaClass.simpleName}"
+                else -> "[RCON] Failed: ${error.message ?: error.javaClass.simpleName}"
+            }
+        }
+    }
+
+    private fun startDashboardStatusHeartbeat(versionId: String) {
+        dashboardStatusJob?.cancel()
+        
+        dashboardCommandListener?.stop()
+        dashboardCommandListener = com.pocketcraft.server.broadcast.DashboardCommandListener(
+            context = this,
+            scope = serviceScope,
+            sendRconCommand = ::sendRconCommandSuspended,
+            toggleAfkBot = { enabled ->
+                val dbDao = com.pocketcraft.server.afk.AfkHelperDatabase.getInstance(this).afkFarmLocationDao()
+                val currentWorld = currentWorldName ?: "world"
+                val worldFarms = dbDao.getAll().filter { it.worldName.equals(currentWorld, ignoreCase = true) }
+                for (farm in worldFarms) {
+                    if (farm.isActive != enabled) {
+                        afkHelperManager.toggleFarm(farm.id)
+                    }
+                }
+            }
+        )
+        dashboardCommandListener?.start()
+
+        dashboardStatusJob = serviceScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                updateDashboardStatus(versionId)
+                delay(15_000)
+            }
+        }
+    }
+
+    private fun triggerDashboardStatusUpdate() {
+        val versionId = currentVersionId ?: return
+        serviceScope.launch(Dispatchers.IO) {
+            updateDashboardStatus(versionId)
+        }
+    }
+
+    private suspend fun updateDashboardStatus(versionId: String) {
+        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: return
+        val prefs = com.pocketcraft.server.data.preferences.AppPreferences(this)
+        
+        val serverRunning = serverReadyHandled.get()
+        
+        val playersOnline = synchronized(currentPlayersList) {
+            currentPlayersList.map { player ->
+                mapOf("name" to player.name, "uuid" to player.uuid)
+            }
+        }
+        
+        val startedAt = serverStartTimeMillis
+        val uptimeSeconds = if (startedAt > 0L && serverRunning) {
+            ((System.currentTimeMillis() - startedAt) / 1000L).coerceAtLeast(0L)
+        } else {
+            0L
+        }
+        
+        val currentTps = if (serverRunning) {
+            val tpsVal = currentServerTps
+            if (tpsVal > 0f) tpsVal.toDouble() else 20.0
+        } else {
+            null
+        }
+        
+        val dbDao = com.pocketcraft.server.afk.AfkHelperDatabase.getInstance(this).afkFarmLocationDao()
+        val currentWorld = currentWorldName ?: "world"
+        val afkBotEnabled = dbDao.getAll()
+            .filter { it.worldName.equals(currentWorld, ignoreCase = true) }
+            .any { it.isActive }
+            
+        val subdomain = prefs.customSubdomain
+        
+        val whitelist = readWhitelistNames(this, currentWorld)
+
+        val statusDoc = mapOf(
+            "serverRunning" to serverRunning,
+            "playersOnline" to playersOnline,
+            "uptimeSeconds" to uptimeSeconds,
+            "tps" to currentTps,
+            "afkBotEnabled" to afkBotEnabled,
+            "subdomain" to subdomain,
+            "whitelist" to whitelist,
+            "lastSeen" to com.google.firebase.Timestamp.now()
+        )
+
+        try {
+            FirebaseFirestore.getInstance().collection("users").document(uid)
+                .collection("dashboard_status").document("status")
+                .set(statusDoc, SetOptions.merge())
+        } catch (e: Exception) {
+            android.util.Log.e("ServerHostService", "Failed to update dashboard status: ${e.message}")
+        }
+    }
+
+    private fun readWhitelistNames(context: Context, worldName: String): List<String> {
+        val serverDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(context, worldName)
+        val file = File(serverDir, "whitelist.json")
+        if (!file.exists()) return emptyList()
+        return try {
+            val arr = org.json.JSONArray(file.readText())
+            val list = mutableListOf<String>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val name = obj.optString("name").trim()
+                if (name.isNotEmpty()) {
+                    list.add(name)
+                }
+            }
+            list
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun stopDashboardStatusAndClear() {
+        dashboardStatusJob?.cancel()
+        dashboardStatusJob = null
+        dashboardCommandListener?.stop()
+        dashboardCommandListener = null
+        synchronized(currentPlayersList) { currentPlayersList.clear() }
+
+        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        if (uid != null) {
+            val statusDoc = mapOf(
+                "serverRunning" to false,
+                "playersOnline" to emptyList<Map<String, String>>(),
+                "uptimeSeconds" to 0L,
+                "tps" to null,
+                "lastSeen" to com.google.firebase.Timestamp.now()
+            )
+            serviceScope.launch(Dispatchers.IO) {
+                try {
+                    FirebaseFirestore.getInstance().collection("users").document(uid)
+                        .collection("dashboard_status").document("status")
+                        .set(statusDoc, SetOptions.merge())
+                } catch (e: Exception) {
+                    android.util.Log.e("ServerHostService", "Failed to update offline status: ${e.message}")
+                }
+            }
         }
     }
 

@@ -54,7 +54,6 @@ let RESOLVED_PUBLIC_IPV4 = null;
 // State
 
 const activeTunnels = new Map();
-const userPortMap = new Map();
 const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
 eventLoopDelay.enable();
 
@@ -83,10 +82,8 @@ function parseUserId(raw) {
   return id;
 }
 
-// Port assignment
-
 function getOrAssignPort(userId) {
-  if (userPortMap.has(userId)) return userPortMap.get(userId);
+  if (activeTunnels.has(userId)) return activeTunnels.get(userId).port;
 
   let hash = 0;
   for (let i = 0; i < userId.length; i++) {
@@ -97,10 +94,9 @@ function getOrAssignPort(userId) {
   const range = PORT_POOL_END - PORT_POOL_START + 1;
   let port = PORT_POOL_START + (Math.abs(hash) % range);
 
-  const usedPorts = new Set([
-    ...[...activeTunnels.values()].map((t) => t.port),
-    ...userPortMap.values(),
-  ]);
+  const usedPorts = new Set(
+    [...activeTunnels.values()].map((t) => t.port)
+  );
 
   let attempts = 0;
   while (usedPorts.has(port)) {
@@ -109,7 +105,6 @@ function getOrAssignPort(userId) {
     if (++attempts >= range) return null;
   }
 
-  userPortMap.set(userId, port);
   return port;
 }
 
@@ -1127,7 +1122,7 @@ app.get('/health', (_req, res) => {
   res.json({
     ok: true,
     tunnels: activeTunnels.size,
-    portsUsed: userPortMap.size,
+    portsUsed: activeTunnels.size,
     phoneSockets,
     rssMb: Math.round(memory.rss / 1024 / 1024),
     heapUsedMb: Math.round(memory.heapUsed / 1024 / 1024),

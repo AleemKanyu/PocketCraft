@@ -628,4 +628,42 @@ object NBTParser {
             false
         }
     }
+
+    fun updateDifficultyInLevelDat(levelFile: File, difficultyStr: String): Boolean {
+        if (!levelFile.exists()) return false
+        val difficultyByte = when (difficultyStr.lowercase(java.util.Locale.US).trim()) {
+            "peaceful" -> 0.toByte()
+            "easy" -> 1.toByte()
+            "normal" -> 2.toByte()
+            "hard" -> 3.toByte()
+            else -> 2.toByte()
+        }
+        return try {
+            val bytes = GZIPInputStream(FileInputStream(levelFile)).use { it.readBytes() }
+            val idx = indexOfTag(bytes, "Difficulty", 1)
+            if (idx != -1) {
+                val valueOffset = idx + 1 + 2 + "Difficulty".length
+                if (valueOffset < bytes.size) {
+                    val mutableBytes = bytes.copyOf()
+                    mutableBytes[valueOffset] = difficultyByte
+                    
+                    val lockedIdx = indexOfTag(mutableBytes, "DifficultyLocked", 1)
+                    if (lockedIdx != -1) {
+                        val lockedOffset = lockedIdx + 1 + 2 + "DifficultyLocked".length
+                        if (lockedOffset < mutableBytes.size) {
+                            mutableBytes[lockedOffset] = 0.toByte()
+                        }
+                    }
+                    
+                    GZIPOutputStream(FileOutputStream(levelFile)).use { it.write(mutableBytes) }
+                    android.util.Log.i("NBTParser", "Updated difficulty in level.dat to $difficultyByte")
+                    return true
+                }
+            }
+            false
+        } catch (e: Exception) {
+            android.util.Log.e("NBTParser", "Failed to update difficulty in level.dat: ${e.message}")
+            false
+        }
+    }
 }

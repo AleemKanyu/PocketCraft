@@ -972,7 +972,7 @@ private fun RelayRegionOnboardingScreen(
                 color = onboardingTextSecondary()
             )
         }
-        RelayServers.ALL.filter { server -> regions.any { it.host == server.host } && server.host != RelayServers.AMERICA.host }.forEach { server ->
+        RelayServers.ALL.filter { server -> regions.any { it.host == server.host } }.forEach { server ->
             val selected = server.host == selectedHost
             Surface(
                 modifier = Modifier

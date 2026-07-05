@@ -55,19 +55,7 @@ class ServerConfigRepository @Inject constructor(
         val file = serverFile(activeServer)
         when {
             file.exists() -> {
-                val profileConfig = parseConfig(file)
-                if (propertiesFile.exists()) {
-                    val propsConfig = parseConfig(propertiesFile, profileConfig)
-                    if (propsConfig != profileConfig) {
-                        serversDir.mkdirs()
-                        writeConfigFile(file, propsConfig)
-                        propsConfig
-                    } else {
-                        profileConfig
-                    }
-                } else {
-                    profileConfig
-                }
+                parseConfig(file)
             }
             propertiesFile.exists() -> parseConfig(propertiesFile).also {
                 serversDir.mkdirs()
@@ -303,7 +291,9 @@ class ServerConfigRepository @Inject constructor(
                 ?: props["simulation-distance"]?.toIntOrNull()
                 ?: 4,
             spawnProtection = props["spawn-protection"]?.toIntOrNull() ?: 16,
-            allowFlight = props["allow-flight"]?.toBoolean() ?: true,
+            allowFlight = props["allow-flight"]?.toBoolean()?.let { diskVal ->
+                if (diskVal && fallbackConfig != null) fallbackConfig.allowFlight else diskVal
+            } ?: fallbackConfig?.allowFlight ?: true,
             whiteList = props["white-list"]?.toBoolean() ?: false,
             enforceWhitelist = props["enforce-whitelist"]?.toBoolean() ?: false,
             commandBlocks = props["enable-command-block"]?.toBoolean() ?: true,
@@ -318,13 +308,20 @@ class ServerConfigRepository @Inject constructor(
             ramMode = props["pocketcraft-ram-mode"]
                 ?: fallbackConfig?.ramMode
                 ?: "low",
-            entityBroadcastRangePercentage = props["entity-broadcast-range-percentage"]?.toIntOrNull()
-                ?: ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT,
+            entityBroadcastRangePercentage = props["entity-broadcast-range-percentage"]?.toIntOrNull()?.let { diskVal ->
+                if (fallbackConfig != null && diskVal == diskVal.coerceIn(70, 100)) {
+                    fallbackConfig.entityBroadcastRangePercentage
+                } else {
+                    diskVal
+                }
+            } ?: fallbackConfig?.entityBroadcastRangePercentage ?: ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT,
             enableRcon = props["enable-rcon"]?.toBoolean() ?: true,
             generateStructures = props["generate-structures"]?.toBoolean() ?: true,
             levelType = props["level-type"] ?: "default",
             maxWorldSize = props["max-world-size"]?.toIntOrNull() ?: 29999984,
-            useNativeTransport = props["use-native-transport"]?.toBoolean() ?: false,
+            useNativeTransport = props["use-native-transport"]?.toBoolean()?.let { diskVal ->
+                if (!diskVal && fallbackConfig != null) fallbackConfig.useNativeTransport else diskVal
+            } ?: fallbackConfig?.useNativeTransport ?: false,
             maxBuildHeight = props["max-build-height"]?.toIntOrNull() ?: 320,
             joinMessageEnabled = true,
             joinMessageText = POCKETCRAFT_JOIN_MESSAGE_TEXT,
@@ -393,12 +390,13 @@ class ServerConfigRepository @Inject constructor(
             .any { it.isFile && it.extension == "jar" && it.length() > 50_000L }
         if (!hasDownloadedJar) return false
 
+        val is64Bit = android.os.Process.is64Bit()
         val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
         val arch = when {
-            abi.contains("arm64") || abi.contains("aarch64") -> "aarch64"
-            abi.contains("arm") -> "aarch32"
-            abi.contains("x86_64") -> "amd64"
-            abi.contains("x86") -> "i386"
+            (abi.contains("arm64") || abi.contains("aarch64")) && is64Bit -> "aarch64"
+            abi.contains("arm") || abi.contains("arm64") || abi.contains("aarch64") -> "aarch32"
+            abi.contains("x86_64") && is64Bit -> "amd64"
+            abi.contains("x86") || abi.contains("x86_64") -> "i386"
             else -> null
         } ?: return false
 

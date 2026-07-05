@@ -8,6 +8,9 @@
         <domain includeSubdomains="true">mine.pocketcraft.online</domain>
         <domain includeSubdomains="true">eu.pocketcraft.online</domain>
         <domain includeSubdomains="true">us.pocketcraft.online</domain>
+        <domain includeSubdomains="true">13.201.57.41</domain>
+        <domain includeSubdomains="true">54.93.247.2</domain>
+        <domain includeSubdomains="true">18.225.223.45</domain>
         <!-- Add any specific Minecraft server domains that require cleartext -->
     </domain-config>
     <!-- All other traffic must use HTTPS -->

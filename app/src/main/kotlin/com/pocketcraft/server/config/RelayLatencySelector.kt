@@ -28,11 +28,12 @@ object RelayLatencySelector {
         }
     }
 
-    fun measureRelayLatency(host: String, port: Int = 25565): Long {
+    fun measureRelayLatency(host: String, port: Int = 8080): Long {
+        val targetHost = RelayServers.getByHost(host).fallbackIp ?: host
         return try {
             val start = System.currentTimeMillis()
             Socket().use { socket ->
-                socket.connect(InetSocketAddress(host, port), 2_000)
+                socket.connect(InetSocketAddress(targetHost, port), 2_000)
             }
             System.currentTimeMillis() - start
         } catch (_: Exception) {

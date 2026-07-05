@@ -475,19 +475,8 @@ fun PluginsHubScreen(
                                 packIcon = resourcePackIcons[item.fileName]
                             )
                         },
-                        onUpdateClick = {
-                            val projectId = if (item.name.lowercase().contains("geyser")) "geyser" else "viaversion"
-                            val isGeyser = projectId == "geyser"
-                            pendingRemoteInstall = PluginManager.RemoteCatalogItem(
-                                source = if (isGeyser) "modrinth" else "hangar",
-                                projectId = projectId,
-                                title = if (isGeyser) "Geyser-Spigot" else "ViaVersion",
-                                slug = projectId,
-                                iconUrl = null,
-                                description = if (isGeyser) "Bedrock bridge for Java servers" else "Allows newer clients to connect to older server versions",
-                                downloads = 0,
-                                owner = if (isGeyser) null else "ViaVersion"
-                            )
+                        onUpdateClick = { resolvedItem ->
+                            pendingRemoteInstall = resolvedItem
                         }
                     )
                 }
@@ -967,17 +956,52 @@ private fun ContentRow(
     onToggle: () -> Unit,
     onDelete: () -> Unit,
     onShowDetails: () -> Unit,
-    onUpdateClick: () -> Unit
+    onUpdateClick: (PluginManager.RemoteCatalogItem) -> Unit
 ) {
     val isPreinstalled = remember(item) { PluginManager.isPreinstalledPlugin(item) }
     val context = androidx.compose.ui.platform.LocalContext.current
+    var resolvedCatalogItem by remember { mutableStateOf<PluginManager.RemoteCatalogItem?>(null) }
     var latestVersion by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(item) {
         if (isPreinstalled) {
-            val projectId = if (item.name.lowercase().contains("geyser")) "geyser" else "viaversion"
+            val projectId = when {
+                item.name.lowercase().contains("geyser") -> "geyser"
+                item.name.lowercase().contains("floodgate") -> "floodgate"
+                else -> "viaversion"
+            }
+            val title = when {
+                item.name.lowercase().contains("geyser") -> "Geyser-Spigot"
+                item.name.lowercase().contains("floodgate") -> "Floodgate"
+                else -> "ViaVersion"
+            }
+            val description = when {
+                item.name.lowercase().contains("geyser") -> "Bedrock bridge for Java servers"
+                item.name.lowercase().contains("floodgate") -> "Allows Bedrock players to join without Java accounts"
+                else -> "Allows newer clients to connect to older server versions"
+            }
+            val catalogItem = PluginManager.RemoteCatalogItem(
+                source = if (projectId == "geyser" || projectId == "floodgate") "modrinth" else "hangar",
+                projectId = projectId,
+                title = title,
+                slug = projectId,
+                iconUrl = null,
+                description = description,
+                downloads = 0,
+                owner = if (projectId == "viaversion") "ViaVersion" else null
+            )
+            resolvedCatalogItem = catalogItem
             latestVersion = PluginManager.getLatestVersionFromModrinth(context, projectId)
+        } else {
+            // For custom mods/plugins/packs
+            val resolved = PluginManager.resolveModrinthProjectByName(context, item.name, tab.type)
+            if (resolved != null) {
+                resolvedCatalogItem = resolved
+                latestVersion = PluginManager.getLatestVersionFromModrinth(context, resolved.projectId)
+            }
         }
     }
+
     val updateAvailable = remember(item.version, latestVersion) {
         latestVersion?.let { remote -> PluginManager.isUpdateAvailable(item.version, remote) } ?: false
     }
@@ -1038,9 +1062,9 @@ private fun ContentRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            if (isPreinstalled && updateAvailable) {
+            if (resolvedCatalogItem != null && updateAvailable) {
                 Button(
-                    onClick = onUpdateClick,
+                    onClick = { onUpdateClick(resolvedCatalogItem!!) },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = PocketColors.Success,
                         contentColor = Color.White

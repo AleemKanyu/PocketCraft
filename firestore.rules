@@ -16,6 +16,12 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, write: if isOwner(userId);
     }
+    match /users/{userId}/dashboard_commands/{commandId} {
+      allow read, write: if isOwner(userId);
+    }
+    match /users/{userId}/dashboard_status/{statusId} {
+      allow read, write: if isOwner(userId);
+    }
     match /subdomains/{subdomain} {
       allow read: if true;
       allow create: if signedIn()

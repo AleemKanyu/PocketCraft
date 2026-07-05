@@ -34,10 +34,10 @@
         android:theme="@style/Theme.PocketCraft"
         tools:targetApi="31">
 
-        <!-- Disable pointer tagging for JRE compatibility -->
+        <!-- Enable 16KB page size compatibility mode for 4KB aligned JVM libraries -->
         <meta-data
             android:name="com.android.dynamic_linker.use_16kb_app_compat"
-            android:value="false" />
+            android:value="true" />
 
         <provider
             android:name="androidx.startup.InitializationProvider"

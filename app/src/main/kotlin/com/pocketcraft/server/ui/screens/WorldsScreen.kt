@@ -824,7 +824,12 @@ private fun BackupsManagementCard(
                     }
                 }.onFailure { err ->
                     withContext(Dispatchers.Main) {
-                        cloudStatusMessage = "Failed: ${err.message}"
+                        val cause = err.cause ?: err
+                        if (cause is com.google.android.gms.auth.UserRecoverableAuthException) {
+                            cloudStatusMessage = "Drive authentication expired. Tap BACKUP TO CLOUD to re-authorize."
+                        } else {
+                            cloudStatusMessage = "Failed: ${err.message}"
+                        }
                         loadingCloudBackups = false
                     }
                 }
@@ -856,6 +861,16 @@ private fun BackupsManagementCard(
                 }
                 cloudActionBusy = false
             }
+        }
+    }
+
+    val authRecoveryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            Toast.makeText(context, "Google Drive authorized. Retrying...", Toast.LENGTH_SHORT).show()
+            account = AccountManager.currentDriveAccount(context)
+            refreshCloudBackups()
         }
     }
 
@@ -938,10 +953,15 @@ private fun BackupsManagementCard(
                                         Toast.makeText(context, uploadMsg, Toast.LENGTH_LONG).show()
                                     }
                                 } catch (e: Exception) {
-                                    val errMsg = e.message ?: "Backup upload failed."
-                                    android.util.Log.e("WorldsScreen", "Cloud backup upload failed", e)
-                                    cloudStatusMessage = "Upload failed: $errMsg"
-                                    Toast.makeText(context, "Failed: $errMsg", Toast.LENGTH_LONG).show()
+                                    val cause = e.cause ?: e
+                                    if (cause is com.google.android.gms.auth.UserRecoverableAuthException && cause.intent != null) {
+                                        authRecoveryLauncher.launch(cause.intent!!)
+                                    } else {
+                                        val errMsg = e.message ?: "Backup upload failed."
+                                        android.util.Log.e("WorldsScreen", "Cloud backup upload failed", e)
+                                        cloudStatusMessage = "Upload failed: $errMsg"
+                                        Toast.makeText(context, "Failed: $errMsg", Toast.LENGTH_LONG).show()
+                                    }
                                 } finally {
                                     actionStatusMessage = ""
                                     cloudActionBusy = false
@@ -1169,7 +1189,12 @@ private fun BackupsManagementCard(
                                                     val msg = stateHolder.restoreBackupFile(tempFile, backup.remoteBackup.name)
                                                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                                 } catch (e: Exception) {
-                                                    Toast.makeText(context, "Restore failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                                    val cause = e.cause ?: e
+                                                    if (cause is com.google.android.gms.auth.UserRecoverableAuthException && cause.intent != null) {
+                                                        authRecoveryLauncher.launch(cause.intent!!)
+                                                    } else {
+                                                        Toast.makeText(context, "Restore failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                                    }
                                                 } finally {
                                                     tempFile.delete()
                                                     onRestoringBackupNameChange(null)
@@ -1225,7 +1250,12 @@ private fun BackupsManagementCard(
                                                     val msg = stateHolder.downloadBackup(entry)
                                                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                                 } catch (e: Exception) {
-                                                    Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                                    val cause = e.cause ?: e
+                                                    if (cause is com.google.android.gms.auth.UserRecoverableAuthException && cause.intent != null) {
+                                                        authRecoveryLauncher.launch(cause.intent!!)
+                                                    } else {
+                                                        Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                                    }
                                                 } finally {
                                                     tempFile.delete()
                                                     actionStatusMessage = ""

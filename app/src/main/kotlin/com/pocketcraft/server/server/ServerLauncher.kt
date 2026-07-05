@@ -190,6 +190,15 @@ class ServerLauncher(private val context: Context) {
             }
         }
         
+        if (levelDat.exists()) {
+            try {
+                val difficultyStr = props.getProperty("difficulty", "normal")
+                com.pocketcraft.server.service.NBTParser.updateDifficultyInLevelDat(levelDat, difficultyStr)
+            } catch (e: Exception) {
+                onOutput("[PocketCraft] Failed to sync difficulty to level.dat: ${e.message}")
+            }
+        }
+        
         com.pocketcraft.server.service.DimensionMigrator.syncDimensionsForServerType(context, worldName, serverType)
         PluginManager.preserveFloodgateKey(context, worldName)
         PluginManager.enforceBedrockBridgeLocalConfig(context, worldName)
@@ -657,7 +666,7 @@ class ServerLauncher(private val context: Context) {
             "-XX:+UseStringDeduplication",
             "-XX:+UseG1GC",
             "-XX:+ParallelRefProcEnabled",
-            "-XX:MaxGCPauseMillis=80",
+            "-XX:MaxGCPauseMillis=200",
             "-XX:+DisableExplicitGC",
         ).apply {
             addAll(gcFlags)
@@ -950,11 +959,11 @@ class ServerLauncher(private val context: Context) {
     ): Int {
         val vd = viewDistance.coerceIn(4, 32)
         return if (!cellularRelay) {
-            // Wi-Fi: High speed for fast chunk loading
-            if (flightModeEnabled) 90 else 60
+            // Wi-Fi: Favorable rate to prevent upload link saturation
+            if (flightModeEnabled) 45 else 30
         } else {
             // Cellular: Responsive chunk loading under 180ms ping
-            if (flightModeEnabled) 40 else 25
+            if (flightModeEnabled) 25 else 20
         }
     }
 
@@ -963,17 +972,13 @@ class ServerLauncher(private val context: Context) {
         flightModeEnabled: Boolean
     ): Triple<Int, Int, Int> {
         return if (cellularRelay) {
-            if (flightModeEnabled) {
-                Triple(4, 6, 4) // generate, load, send
-            } else {
-                Triple(3, 4, 3)
-            }
+            Triple(2, 3, 2)
         } else {
-            // Wi-Fi: High-throughput async chunk loading pipeline
+            // Wi-Fi: Favorable concurrency to prevent 100% CPU thread starvation on mobile cores
             if (flightModeEnabled) {
-                Triple(6, 10, 6)
+                Triple(3, 4, 3)
             } else {
-                Triple(4, 6, 4)
+                Triple(2, 3, 2)
             }
         }
     }
@@ -1023,7 +1028,7 @@ class ServerLauncher(private val context: Context) {
         }
 
         val tunedCompression = ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD
-        val tunedEntityBroadcast = ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
+        val tunedEntityBroadcast = currentEntityBroadcast?.coerceIn(70, 100) ?: 70
 
         var changed = false
         if (tunedCompression != currentCompression) {
@@ -1059,10 +1064,10 @@ class ServerLauncher(private val context: Context) {
             ?: props.getProperty("simulation-distance")?.toIntOrNull()
             ?: ServerPropertiesHelper.DEFAULT_SIMULATION_DISTANCE
 
-        // Preserve the configured distances. Relay latency is handled by bounded
-        // socket queues and Paper's chunk send budget, not by shrinking the world.
-        val tunedView = desiredView.coerceIn(3, 32)
-        val tunedSimulation = desiredSimulation.coerceIn(3, 32)
+        val isCellular = com.pocketcraft.server.util.NetworkUtils.isCellular(context)
+        // Keep user's settings rigid and permanent as requested
+        val tunedView = desiredView
+        val tunedSimulation = desiredSimulation
 
         if (props.getProperty("view-distance")?.toIntOrNull() != tunedView) {
             props["view-distance"] = tunedView.toString()
@@ -1091,7 +1096,7 @@ class ServerLauncher(private val context: Context) {
         val viewDistance = props.getProperty("view-distance")?.toIntOrNull()
             ?: ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE
         val chunkBudget = computeRelayChunkSendBudget(
-            cellularRelay = true, // Force cellular budget for relay to prevent uplink saturation
+            cellularRelay = isCellular,
             viewDistance = viewDistance,
             flightModeEnabled = flightModeEnabled
         )
@@ -1105,7 +1110,7 @@ class ServerLauncher(private val context: Context) {
         val configDir = File(serverDir, "config").also { it.mkdirs() }
         val paperGlobal = File(configDir, "paper-global.yml")
         val original = runCatching { paperGlobal.readText() }.getOrDefault("")
-        val cellularRelay = true // Force cellular budget for relay to prevent uplink saturation
+        val cellularRelay = com.pocketcraft.server.util.NetworkUtils.isCellular(context)
         val flightModeEnabled = runBlocking { AppPreferencesStore.isFlightModeEnabledFlow(context).first() }
         val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
         val viewDistance = props.getProperty("view-distance")?.toIntOrNull()
@@ -1164,6 +1169,7 @@ class ServerLauncher(private val context: Context) {
         // instead of RTT + up to 1000ms scheduling jitter.
         updated = ensureYamlSectionValue(updated, "misc", "keep-alive-timeout", "60")
         updated = ensureYamlSectionValue(updated, "misc", "keep-alive-interval", "1")
+        updated = ensureYamlSectionValue(updated, "misc", "compression-level", "9")
 
         // Disable updater and metrics submission checks to prevent slow network lookup stalls on startup
         updated = ensureYamlPathValue(updated, listOf("updater"), "updater-status", "none")

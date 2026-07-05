@@ -485,6 +485,21 @@
       <div class="panel list-panel">
         <div class="toolbar">
           <div>
+            <h2>Beta Feedback Manager</h2>
+            <p class="hint">Inspect beta user feedback submissions, device specifications, and runtime crash logs. Includes local crash analysis tools.</p>
+          </div>
+          <div class="actions">
+            <button class="secondary" id="feedbackRefreshButton" type="button">Refresh Feedback</button>
+          </div>
+        </div>
+        <div id="feedbackList" class="cards" style="margin-top: 14px;"></div>
+      </div>
+    </section>
+
+    <section class="section wide-grid">
+      <div class="panel list-panel">
+        <div class="toolbar">
+          <div>
             <h2>Firestore Data Explorer</h2>
             <p class="hint">Browse other Firestore collections directly from this page. This is read-only.</p>
           </div>
@@ -530,7 +545,8 @@
       updateConfig: null,
       results: [],
       collections: [],
-      activeCollectionDocs: []
+      activeCollectionDocs: [],
+      feedbacks: []
     };
 
     function escapeHtml(value) {
@@ -760,6 +776,134 @@
           </div>
         </article>
       `).join("");
+    }
+
+    async function loadFeedbacks() {
+      try {
+        const payload = await fetchJson("/api/beta-feedbacks");
+        state.feedbacks = payload.feedbacks || [];
+        renderFeedbacks();
+      } catch (error) {
+        console.error("Failed to load feedbacks:", error);
+      }
+    }
+
+    function toggleDetails(id) {
+      const el = document.getElementById(id);
+      if (el.style.display === "none") {
+        el.style.display = "block";
+      } else {
+        el.style.display = "none";
+      }
+    }
+    window.toggleDetails = toggleDetails;
+
+    function renderFeedbacks() {
+      const list = document.getElementById("feedbackList");
+      if (!state.feedbacks.length) {
+        list.innerHTML = '<div class="empty">No beta feedback submissions found.</div>';
+        return;
+      }
+      list.innerHTML = state.feedbacks.map((f) => {
+        const emailSentAt = f.emailSentAt ? new Date(f.emailSentAt).toLocaleString() : "Pending";
+        const emailStatusClass = f.emailStatus === "sent" ? "live" : f.emailStatus === "failed" ? "off" : "";
+        
+        const analyzeLogs = (consoleLog, latestLog, crashArt) => {
+          const errors = [];
+          const logs = [consoleLog, latestLog, crashArt].join("\n");
+          
+          if (logs.includes("java.lang.OutOfMemoryError")) {
+            errors.push("🚨 <strong>OutOfMemoryError</strong>: The server ran out of allocated RAM. Suggest allocating more memory in settings.");
+          }
+          if (logs.includes("BindException") || logs.includes("Address already in use")) {
+            errors.push("🚨 <strong>BindException (Address already in use)</strong>: Another process is using the server port (usually 25565 or RCON 25575). Try restarting the app.");
+          }
+          if (logs.includes("NullPointerException")) {
+            const match = logs.match(/[a-zA-Z0-9\._]*NullPointerException[^\n]*/);
+            errors.push(`🚨 <strong>NullPointerException</strong>: <code>${match ? match[0] : "Null pointer encountered in server plugin."}</code>`);
+          }
+          if (logs.includes("PluginLoadException") || logs.includes("PluginLoader")) {
+            errors.push("⚠️ <strong>Plugin Error</strong>: A plugin failed to load or crashed during initialization.");
+          }
+          if (logs.includes("UnsupportedClassVersionError") || logs.includes("has been compiled by a more recent version")) {
+            errors.push("🚨 <strong>Java Class Version Mismatch</strong>: A plugin requires a newer Java/JRE version than the server is currently running.");
+          }
+          
+          const exceptionRegex = /(?:[a-zA-Z0-9\._]+Exception):[^\n]+/g;
+          let match;
+          let count = 0;
+          const seen = new Set();
+          while ((match = exceptionRegex.exec(logs)) !== null && count < 3) {
+            const errStr = match[0].trim();
+            if (!seen.has(errStr)) {
+              seen.add(errStr);
+              errors.push(`🔍 <strong>Caught Exception</strong>: <code>${errStr}</code>`);
+              count++;
+            }
+          }
+          
+          return errors.length ? errors.join("<br/>") : "🟢 <strong>No critical system crashes detected in logs.</strong>";
+        };
+
+        const diagnosisHtml = analyzeLogs(f.currentConsoleLog, f.serverLatestLog, f.crashArtifacts);
+
+        return `
+        <article class="card" style="border-left: 5px solid var(--accent);">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Feedback from User: <code>${escapeHtml(f.userId || "Anonymous")}</code></div>
+              <small>ID: ${escapeHtml(f.id)} | Submitted: ${escapeHtml(emailSentAt)}</small>
+            </div>
+            <div class="chips">
+              <span class="chip">App: ${escapeHtml(f.appVersion)} (${escapeHtml(f.appVersionCode)})</span>
+              <span class="chip">Server: ${escapeHtml(f.serverVersion)}</span>
+              <span class="chip">Device: ${escapeHtml(f.deviceManufacturer)} ${escapeHtml(f.deviceModel)} (SDK ${escapeHtml(f.androidSdk)})</span>
+              <span class="chip ${emailStatusClass}">Email: ${escapeHtml(f.emailStatus || "pending")}</span>
+            </div>
+          </div>
+          
+          <div class="card-body" style="margin-top:12px; padding:12px; background:rgba(85,64,34,0.04); border-radius:8px; border-left:3px solid var(--amber); color: var(--text);">
+            <strong>Message:</strong> ${escapeHtml(f.message || "(No message)")}
+          </div>
+
+          <div style="margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.5);">
+            <div style="font-weight:700; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); margin-bottom:8px;">💡 Auto-Diagnosis Report:</div>
+            <div style="font-size:0.9rem; line-height:1.45;">${diagnosisHtml}</div>
+          </div>
+
+          <div class="card-actions" style="margin-top: 14px;">
+            ${f.runtimeState ? `<button class="secondary" onclick="toggleDetails('${f.id}-runtime')">Runtime State</button>` : ""}
+            ${f.currentConsoleLog ? `<button class="secondary" onclick="toggleDetails('${f.id}-console')">App Console Log</button>` : ""}
+            ${f.serverLatestLog ? `<button class="secondary" onclick="toggleDetails('${f.id}-latest')">Server latest.log</button>` : ""}
+            ${f.crashArtifacts ? `<button class="secondary" onclick="toggleDetails('${f.id}-crash')">Crash Artifacts</button>` : ""}
+          </div>
+
+          ${f.runtimeState ? `
+          <div id="${f.id}-runtime" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
+            <strong>Runtime State:</strong>
+            <pre class="long-cell">${escapeHtml(f.runtimeState)}</pre>
+          </div>` : ""}
+
+          ${f.currentConsoleLog ? `
+          <div id="${f.id}-console" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
+            <strong>App Console Log:</strong>
+            <pre class="long-cell">${escapeHtml(f.currentConsoleLog)}</pre>
+          </div>` : ""}
+
+          ${f.serverLatestLog ? `
+          <div id="${f.id}-latest" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
+            <strong>Server latest.log:</strong>
+            <pre class="long-cell">${escapeHtml(f.serverLatestLog)}</pre>
+          </div>` : ""}
+
+          ${f.crashArtifacts ? `
+          <div id="${f.id}-crash" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
+            <strong>Crash Artifacts:</strong>
+            <pre class="long-cell">${escapeHtml(f.crashArtifacts)}</pre>
+          </div>` : ""}
+        </article>
+        `;
+      }).join("");
     }
 
     function renderUpdateConfig() {
@@ -1282,6 +1426,7 @@
     document.getElementById("updateRefreshButton").addEventListener("click", loadUpdateConfig);
     document.getElementById("resultsRefreshButton").addEventListener("click", loadResults);
     document.getElementById("resultsFilterSelect").addEventListener("change", renderResults);
+    document.getElementById("feedbackRefreshButton").addEventListener("click", loadFeedbacks);
     document.getElementById("collectionLoadButton").addEventListener("click", loadCollectionData);
     document.getElementById("collectionSearchButton").addEventListener("click", applyCollectionFilterAndSort);
     document.getElementById("collectionClearSearchButton").addEventListener("click", () => {
@@ -1300,7 +1445,7 @@
     document.getElementById("broadcastInteractionType").addEventListener("change", updateBroadcastInteractionFields);
     document.getElementById("broadcastShowTimer").addEventListener("change", updateBroadcastTimerFields);
     document.getElementById("commandType").addEventListener("change", updateCommandFields);
-
+ 
     resetBroadcastForm();
     resetPromotionForm();
     resetCommandForm();
@@ -1311,7 +1456,8 @@
       loadRemoteCommands(),
       loadUpdateConfig(),
       loadResults(),
-      loadCollections()
+      loadCollections(),
+      loadFeedbacks()
     ]).then(() => loadCollectionData()).catch((error) => {
       setStatus("broadcastStatus", error.message, true);
       setStatus("promotionStatus", error.message, true);
