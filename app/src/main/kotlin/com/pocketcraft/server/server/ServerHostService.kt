@@ -2310,8 +2310,10 @@ class ServerHostService : Service() {
     }
 
     private suspend fun updateDashboardStatus(versionId: String) {
-        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: return
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(this)
+        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+            ?: prefs.firebaseUserUid
+            ?: return
         
         val serverRunning = serverReadyHandled.get()
         
@@ -2392,7 +2394,9 @@ class ServerHostService : Service() {
         dashboardCommandListener = null
         synchronized(currentPlayersList) { currentPlayersList.clear() }
 
+        val prefs = com.pocketcraft.server.data.preferences.AppPreferences(this)
         val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+            ?: prefs.firebaseUserUid
         if (uid != null) {
             val statusDoc = mapOf(
                 "serverRunning" to false,

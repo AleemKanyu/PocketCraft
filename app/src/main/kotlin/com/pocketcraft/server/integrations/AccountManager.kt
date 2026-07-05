@@ -16,6 +16,7 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
 import com.pocketcraft.server.R
+import com.pocketcraft.server.data.preferences.AppPreferences
 import com.google.api.services.drive.DriveScopes
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -36,6 +37,7 @@ object AccountManager {
     }
 
     fun signInWithEmail(
+        context: Context,
         email: String,
         password: String,
         onResult: (Result<FirebaseUser>) -> Unit
@@ -45,6 +47,7 @@ object AccountManager {
             .addOnSuccessListener { result ->
                 val user = result.user
                 if (user != null) {
+                    AppPreferences(context).firebaseUserUid = user.uid
                     onResult(Result.success(user))
                 } else {
                     onResult(Result.failure(IllegalStateException("No user was returned.")))
@@ -56,6 +59,7 @@ object AccountManager {
     }
 
     fun createAccountWithEmail(
+        context: Context,
         email: String,
         password: String,
         onResult: (Result<FirebaseUser>) -> Unit
@@ -65,6 +69,7 @@ object AccountManager {
             .addOnSuccessListener { result ->
                 val user = result.user
                 if (user != null) {
+                    AppPreferences(context).firebaseUserUid = user.uid
                     onResult(Result.success(user))
                 } else {
                     onResult(Result.failure(IllegalStateException("No user was returned.")))
@@ -140,6 +145,7 @@ object AccountManager {
             }
             firebaseUser.delete().awaitVoidTask()
             FirebaseAuth.getInstance().signOut()
+            AppPreferences(context).firebaseUserUid = null
             "Account deleted permanently."
         }
     }
@@ -169,6 +175,10 @@ object AccountManager {
         FirebaseAuth.getInstance()
             .signInWithCredential(GoogleAuthProvider.getCredential(idToken, null))
             .addOnSuccessListener { result ->
+                val user = result.user
+                if (user != null) {
+                    AppPreferences(context).firebaseUserUid = user.uid
+                }
                 onResult(account, result.user, null)
             }
             .addOnFailureListener { error ->
@@ -180,6 +190,7 @@ object AccountManager {
         // Firebase sign-out is purely local — invoke the callback immediately so the UI
         // never gets stuck waiting on a network call.
         FirebaseAuth.getInstance().signOut()
+        AppPreferences(context).firebaseUserUid = null
         onComplete()
         // Best-effort: revoke Google session in the background. Wrapped in runCatching so
         // any exception (e.g. missing web_client_id resource) is silently discarded and
@@ -217,6 +228,7 @@ object AccountManager {
             // Delete the Firebase account — may throw FirebaseAuthRecentLoginRequiredException
             firebaseUser.delete().awaitVoidTask()
             FirebaseAuth.getInstance().signOut()
+            AppPreferences(context).firebaseUserUid = null
             "Account deleted permanently."
         }
     }

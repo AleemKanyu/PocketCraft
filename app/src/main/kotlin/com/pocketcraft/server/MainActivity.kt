@@ -110,6 +110,10 @@ class MainActivity : ComponentActivity() {
         }
 
         val preferences = AppPreferences(this)
+        // Sync Firebase auth state to preferences for multi-process safety
+        val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+        preferences.firebaseUserUid = currentUser?.uid
+
         val onboardingCompleted = preferences.onboardingCompleted
         preferences.recordAppLaunch()
         ThemePreferenceStore.loadCustomColors(this)

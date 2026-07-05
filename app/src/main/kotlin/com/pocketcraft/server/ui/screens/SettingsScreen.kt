@@ -1487,7 +1487,7 @@ fun SettingsScreen(
                                             onClick = {
                                                 authBusy = true
                                                 try {
-                                                    AccountManager.signInWithEmail(emailInput.trim(), passwordInput) { result ->
+                                                    AccountManager.signInWithEmail(context, emailInput.trim(), passwordInput) { result ->
                                                         result
                                                             .onSuccess { user ->
                                                                 firebaseUser = user
@@ -1542,7 +1542,7 @@ fun SettingsScreen(
                                             onClick = {
                                                 authBusy = true
                                                 try {
-                                                    AccountManager.createAccountWithEmail(emailInput.trim(), passwordInput) { result ->
+                                                    AccountManager.createAccountWithEmail(context, emailInput.trim(), passwordInput) { result ->
                                                         result
                                                             .onSuccess { user ->
                                                                 firebaseUser = user

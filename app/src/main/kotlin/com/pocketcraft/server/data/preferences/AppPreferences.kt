@@ -503,6 +503,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean("debug_premium_override", false)
         set(value) = prefs.edit().putBoolean("debug_premium_override", value).apply()
 
+    var firebaseUserUid: String?
+        get() = prefs.getString("firebase_user_uid", null)
+        set(value) = prefs.edit().putString("firebase_user_uid", value).apply()
+
     var customSubdomain: String?
         get() = prefs.getString("custom_subdomain", null)
         set(value) = prefs.edit().putString("custom_subdomain", value).apply()
