@@ -36,5 +36,5 @@ jobs:
           username: ${{ secrets.HOSTINGER_FTP_USERNAME }}
           password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
           local-dir: dashboard/dist/
-          server-dir: public_html/dashboard/
+          server-dir: nodejs/dashboard/
           dangerous-clean-slate: false  # Set to true only if you want to wipe files not in the build folder
