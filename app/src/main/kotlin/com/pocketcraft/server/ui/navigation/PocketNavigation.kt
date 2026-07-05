@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Group
@@ -313,6 +314,33 @@ fun PocketTopBar(
                         contentDescription = "Join Discord",
                         modifier = Modifier.size(18.dp),
                         tint = if (pocketIsDarkTheme()) Color.White else Color.Unspecified
+                    )
+                }
+
+                // Web Dashboard button
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .raisedBorder(
+                            color = glassButtonBorder,
+                            depthColor = glassButtonDepth,
+                            cornerRadius = 17.dp,
+                            borderWidth = 1.dp,
+                            depthWidth = 2.5.dp
+                        )
+                        .clip(RoundedCornerShape(17.dp))
+                        .background(PocketColors.IconBtnBg)
+                        .clickable {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://pocketcraft.online/dashboard/"))
+                            context.startActivity(intent)
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Language,
+                        contentDescription = "Web Dashboard",
+                        modifier = Modifier.size(16.dp),
+                        tint = PocketColors.Primary
                     )
                 }
 

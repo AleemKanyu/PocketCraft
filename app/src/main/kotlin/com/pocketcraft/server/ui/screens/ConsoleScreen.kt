@@ -174,6 +174,7 @@ import com.pocketcraft.server.ui.theme.pocketWarningBorderColor
 import com.pocketcraft.server.ui.theme.pocketWarningIconChipColor
 import com.pocketcraft.server.ui.theme.pocketWarningSurfaceColor
 import com.pocketcraft.server.ui.theme.pocketWarningTitleColor
+import com.pocketcraft.server.ui.theme.raisedBorder
 import com.pocketcraft.server.util.RamUtils
 import com.pocketcraft.server.util.LocalAppStrings
 import kotlinx.coroutines.Dispatchers
@@ -1395,7 +1396,7 @@ private fun ServerIdentityCard(
                         Column(modifier = Modifier.weight(1f)) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
                                     text = stateHolder.serverName.ifBlank { stateHolder.activeWorld.ifBlank { "world" } },
@@ -1407,6 +1408,32 @@ private fun ServerIdentityCard(
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f, fill = false)
                                 )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .raisedBorder(
+                                            color = PocketColors.IconBtnBorder,
+                                            depthColor = PocketColors.IconBtnBorderBottom,
+                                            cornerRadius = 12.dp,
+                                            borderWidth = 1.dp,
+                                            depthWidth = 1.5.dp
+                                        )
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(PocketColors.IconBtnBg)
+                                        .clickable {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://pocketcraft.online/dashboard/"))
+                                            context.startActivity(intent)
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Language,
+                                        contentDescription = "Web Dashboard",
+                                        modifier = Modifier.size(12.dp),
+                                        tint = PocketColors.Primary
+                                    )
+                                }
                             }
                             Text(
                                 text = stateHolder.serverDescription.ifBlank { "Hosted on PocketCraft" },
@@ -1515,17 +1542,6 @@ private fun ServerIdentityCard(
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    DuoButton(
-                        text = "WEB DASHBOARD",
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://pocketcraft.online/dashboard/"))
-                            context.startActivity(intent)
-                        },
-                        variant = com.pocketcraft.server.ui.components.DuoButtonVariant.Pro,
-                        icon = Icons.Default.Language,
-                        minHeight = 44.dp
                     )
                 }
             }
