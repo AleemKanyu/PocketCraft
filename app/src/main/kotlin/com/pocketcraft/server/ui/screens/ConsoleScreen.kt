@@ -331,12 +331,15 @@ fun ConsoleScreen(
         }
     }
 
-    // Poll RAM usage every 2 seconds while server is running
+    // Poll actual Minecraft server JVM process RAM usage every 3 seconds while online.
+    // We retrieve the resident set size (RSS) of the server child process.
+    // The cap is the configured server RAM allocation (manualRamMb) so the bar
+    // fills against what the user gave to the server.
     LaunchedEffect(stateHolder.status == ServerStatus.ONLINE) {
         if (stateHolder.status == ServerStatus.ONLINE) {
             while (stateHolder.status == ServerStatus.ONLINE) {
-                usedRamMb = RamUtils.getUsedRamMb(context)
-                delay(5000)
+                usedRamMb = RamUtils.getProcessRamMb(context)
+                delay(3000)
             }
         } else {
             usedRamMb = 0
@@ -738,7 +741,9 @@ fun ConsoleScreen(
         if (stateHolder.status == ServerStatus.ONLINE) {
             item {
                 AnimatedEntranceContainer(index = 12) {
-                    RamUsageCard(usedMb = usedRamMb, maxMb = totalRamMb)
+                    // Show JVM heap used vs the user-configured server RAM cap.
+                    // manualRamMb is the -Xmx value given to the Minecraft server.
+                    RamUsageCard(usedMb = usedRamMb, maxMb = manualRamMb.coerceAtLeast(256))
                 }
             }
         }
