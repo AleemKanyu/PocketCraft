@@ -52,8 +52,15 @@ open class PocketCraftApp : Application(), Configuration.Provider {
             FirebaseApp.initializeApp(this)
         }
 
-        if (!isMainProcess) {
-            // :server process — only Crashlytics is needed; skip UI / Firestore setup.
+        if (isServerProcess) {
+            // Disable Firestore disk persistence in the background process to prevent database locks/crashes
+            runCatching {
+                val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                val settings = com.google.firebase.firestore.FirebaseFirestoreSettings.Builder()
+                    .setPersistenceEnabled(false)
+                    .build()
+                db.firestoreSettings = settings
+            }
             return
         }
 
