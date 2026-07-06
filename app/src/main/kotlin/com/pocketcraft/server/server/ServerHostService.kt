@@ -2331,7 +2331,12 @@ class ServerHostService : Service() {
         
         val playersOnline = synchronized(currentPlayersList) {
             currentPlayersList.map { player ->
-                mapOf("name" to player.name, "uuid" to player.uuid)
+                mapOf(
+                    "name" to player.name,
+                    "uuid" to player.uuid,
+                    "ping" to player.pingMs,
+                    "pingText" to player.pingText()
+                )
             }
         }
         
@@ -2372,12 +2377,17 @@ class ServerHostService : Service() {
         val relayAddress = getPersistedPublicAddress(this, versionId) ?: ""
         
         val whitelist = readWhitelistNames(this, currentWorld)
+        val consoleLines = synchronized(logBuffer) {
+            logBuffer.toList().takeLast(50)
+        }
+        val allPlayers = getRegisteredPlayers(currentWorld)
 
         val statusDoc = mapOf(
             "serverRunning" to serverRunning,
             "serverState" to serverState,
             "bootProgress" to lastNotificationText,
             "playersOnline" to playersOnline,
+            "allPlayers" to allPlayers,
             "uptimeSeconds" to uptimeSeconds,
             "tps" to currentTps,
             "afkBotEnabled" to afkBotEnabled,
@@ -2385,6 +2395,7 @@ class ServerHostService : Service() {
             "subdomain" to subdomain,
             "relayAddress" to relayAddress,
             "whitelist" to whitelist,
+            "consoleLines" to consoleLines,
             "lastSeen" to com.google.firebase.Timestamp.now(),
             "secret" to (prefs.dashboardSecret ?: ""),
             "localIp" to (com.pocketcraft.server.server.ServerAddressResolver.getLocalIpAddress() ?: ""),
@@ -2532,6 +2543,103 @@ class ServerHostService : Service() {
                 }
             }
         }
+    }
+
+    private fun getRegisteredPlayers(worldName: String): List<Map<String, Any>> {
+        val serverDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(this, worldName)
+        val worldDir = java.io.File(serverDir, worldName)
+        
+        val uuidToName = mutableMapOf<String, String>()
+        val userCacheFile = java.io.File(serverDir, "usercache.json")
+        if (userCacheFile.exists()) {
+            try {
+                val arr = org.json.JSONArray(userCacheFile.readText())
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val name = obj.optString("name")
+                    val uuid = obj.optString("uuid")
+                    if (name.isNotBlank() && uuid.isNotBlank()) {
+                        uuidToName[uuid.lowercase()] = name
+                    }
+                }
+            } catch (e: Exception) {}
+        }
+        
+        val playerdataDir = java.io.File(worldDir, "playerdata")
+        if (playerdataDir.exists() && playerdataDir.isDirectory) {
+            playerdataDir.listFiles()?.filter { it.isFile && it.extension == "dat" }?.forEach { file ->
+                val uuid = file.nameWithoutExtension.lowercase()
+                if (!uuidToName.containsKey(uuid)) {
+                    try {
+                        val bytes = java.util.zip.GZIPInputStream(file.inputStream()).use { it.readBytes() }
+                        val name = findLastKnownNameForService(bytes)
+                        if (!name.isNullOrBlank()) {
+                            uuidToName[uuid] = name
+                        } else {
+                            uuidToName[uuid] = "OfflinePlayer_${uuid.take(5)}"
+                        }
+                    } catch (e: Exception) {
+                        uuidToName[uuid] = "OfflinePlayer_${uuid.take(5)}"
+                    }
+                }
+            }
+        }
+        
+        return uuidToName.map { (uuid, name) ->
+            val datFile = java.io.File(playerdataDir, "$uuid.dat")
+            val snapshot = if (datFile.exists()) {
+                com.pocketcraft.server.service.NBTParser.parsePlayerData(datFile)
+            } else null
+            
+            val isOnline = synchronized(currentPlayersList) {
+                currentPlayersList.any { it.name.equals(name, ignoreCase = true) }
+            }
+            
+            mapOf(
+                "name" to name,
+                "uuid" to uuid,
+                "x" to (snapshot?.currentPos?.x ?: 0.0),
+                "y" to (snapshot?.currentPos?.y ?: 0.0),
+                "z" to (snapshot?.currentPos?.z ?: 0.0),
+                "dimension" to (snapshot?.currentPos?.dimension ?: "minecraft:overworld"),
+                "deathX" to (snapshot?.lastDeathPos?.x ?: 0.0),
+                "deathY" to (snapshot?.lastDeathPos?.y ?: 0.0),
+                "deathZ" to (snapshot?.lastDeathPos?.z ?: 0.0),
+                "deathDim" to (snapshot?.lastDeathPos?.dimension ?: ""),
+                "health" to (snapshot?.health ?: 20.0f),
+                "hunger" to (snapshot?.hunger ?: 20),
+                "online" to isOnline
+            )
+        }
+    }
+
+    private fun findLastKnownNameForService(bytes: ByteArray): String? {
+        val tags = listOf("lastKnownName", "last_known_name", "Name", "playerName", "author")
+        for (tag in tags) {
+            val idx = indexOfTagInRangeForService(bytes, tag, 8, 0, bytes.size.coerceAtMost(100000))
+            if (idx != -1) {
+                val start = idx + 1 + 2 + tag.length
+                if (start + 2 <= bytes.size) {
+                    val len = ((bytes[start].toInt() and 0xFF) shl 8) or (bytes[start + 1].toInt() and 0xFF)
+                    if (start + 2 + len <= bytes.size) {
+                        val name = String(bytes, start + 2, len, Charsets.UTF_8)
+                        if (name.isNotBlank()) return name
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    private fun indexOfTagInRangeForService(data: ByteArray, name: String, type: Byte, start: Int, end: Int): Int {
+        val nameBytes = name.toByteArray(Charsets.UTF_8)
+        for (i in start until end - nameBytes.size - 3) {
+            if (data[i] == type) {
+                val len = ((data[i + 1].toInt() and 0xFF) shl 8) or (data[i + 2].toInt() and 0xFF)
+                if (len == nameBytes.size && nameBytes.indices.all { data[i + 3 + it] == nameBytes[it] }) return i
+            }
+        }
+        return -1
     }
 
     companion object {
