@@ -2319,6 +2319,15 @@ class ServerHostService : Service() {
             ?: return
         
         val serverRunning = serverReadyHandled.get()
+        val processAlive = serverProcess?.isAlive == true ||
+            com.pocketcraft.server.server.ServerLauncher.hasActiveExternalProcess() ||
+            isLocalServerPortOpen(currentServerPort)
+            
+        val serverState = when {
+            serverRunning -> "running"
+            processAlive -> "starting"
+            else -> "stopped"
+        }
         
         val playersOnline = synchronized(currentPlayersList) {
             currentPlayersList.map { player ->
@@ -2360,17 +2369,21 @@ class ServerHostService : Service() {
         }
             
         val subdomain = prefs.customSubdomain
+        val relayAddress = getPersistedPublicAddress(this, versionId) ?: ""
         
         val whitelist = readWhitelistNames(this, currentWorld)
 
         val statusDoc = mapOf(
             "serverRunning" to serverRunning,
+            "serverState" to serverState,
+            "bootProgress" to lastNotificationText,
             "playersOnline" to playersOnline,
             "uptimeSeconds" to uptimeSeconds,
             "tps" to currentTps,
             "afkBotEnabled" to afkBotEnabled,
             "afkBots" to afkBotsList,
             "subdomain" to subdomain,
+            "relayAddress" to relayAddress,
             "whitelist" to whitelist,
             "lastSeen" to com.google.firebase.Timestamp.now(),
             "secret" to (prefs.dashboardSecret ?: ""),
@@ -2391,22 +2404,83 @@ class ServerHostService : Service() {
     private fun readServerProperties(worldName: String): Map<String, String> {
         val serverDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(this, worldName)
         val file = java.io.File(serverDir, "server.properties")
+        val propsMap = try {
+            if (file.exists()) {
+                val props = java.util.Properties()
+                file.inputStream().use { props.load(it) }
+                mapOf(
+                    "difficulty" to props.getProperty("difficulty", "normal"),
+                    "gamemode" to props.getProperty("gamemode", "survival"),
+                    "pvp" to props.getProperty("pvp", "true"),
+                    "maxPlayers" to props.getProperty("max-players", "10"),
+                    "viewDistance" to props.getProperty("view-distance", "10"),
+                    "simulationDistance" to props.getProperty("simulation-distance", "10"),
+                    "allowNether" to props.getProperty("allow-nether", "true"),
+                    "whiteList" to props.getProperty("white-list", "false")
+                )
+            } else {
+                emptyMap()
+            }
+        } catch (e: Exception) {
+            emptyMap()
+        }
+        
+        val gamerulesMap = readWorldGamerules(worldName)
+        return propsMap + gamerulesMap
+    }
+
+    private fun readWorldGamerules(worldName: String): Map<String, String> {
+        val serverDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(this, worldName)
+        val worldDir = java.io.File(serverDir, worldName)
+        val file = java.io.File(worldDir, "level.dat")
         if (!file.exists()) return emptyMap()
         return try {
-            val props = java.util.Properties()
-            file.inputStream().use { props.load(it) }
+            val bytes = java.util.zip.GZIPInputStream(java.io.FileInputStream(file)).use { it.readBytes() }
+            
+            val keepInvIdx = indexOfTagForGamerule(bytes, "keepInventory")
+            val keepInventoryVal = if (keepInvIdx != -1) findStringValueAt(bytes, keepInvIdx, "keepInventory") else "false"
+            
+            val daylightIdx = indexOfTagForGamerule(bytes, "doDaylightCycle")
+            val daylightVal = if (daylightIdx != -1) findStringValueAt(bytes, daylightIdx, "doDaylightCycle") else "true"
+            
+            val griefingIdx = indexOfTagForGamerule(bytes, "mobGriefing")
+            val mobGriefingVal = if (griefingIdx != -1) findStringValueAt(bytes, griefingIdx, "mobGriefing") else "true"
+            
             mapOf(
-                "difficulty" to props.getProperty("difficulty", "normal"),
-                "gamemode" to props.getProperty("gamemode", "survival"),
-                "pvp" to props.getProperty("pvp", "true"),
-                "maxPlayers" to props.getProperty("max-players", "10"),
-                "viewDistance" to props.getProperty("view-distance", "10"),
-                "allowNether" to props.getProperty("allow-nether", "true"),
-                "whiteList" to props.getProperty("white-list", "false")
+                "keepInventory" to keepInventoryVal,
+                "doDaylightCycle" to daylightVal,
+                "mobGriefing" to mobGriefingVal
             )
         } catch (e: Exception) {
             emptyMap()
         }
+    }
+
+    private fun indexOfTagForGamerule(data: ByteArray, name: String): Int {
+        val nameBytes = name.toByteArray(Charsets.UTF_8)
+        for (i in 0 until data.size - nameBytes.size - 3) {
+            if (data[i] == 8.toByte()) { // type 8 is String tag
+                val len = ((data[i + 1].toInt() and 0xFF) shl 8) or (data[i + 2].toInt() and 0xFF)
+                if (len == nameBytes.size) {
+                    var match = true
+                    for (j in nameBytes.indices) {
+                        if (data[i + 3 + j] != nameBytes[j]) {
+                            match = false
+                            break
+                        }
+                    }
+                    if (match) return i
+                }
+            }
+        }
+        return -1
+    }
+
+    private fun findStringValueAt(data: ByteArray, idx: Int, name: String): String {
+        val start = idx + 1 + 2 + name.length
+        if (start + 2 > data.size) return "false"
+        val len = ((data[start].toInt() and 0xFF) shl 8) or (data[start + 1].toInt() and 0xFF)
+        return if (start + 2 + len <= data.size) String(data, start + 2, len, Charsets.UTF_8) else "false"
     }
 
     private fun readWhitelistNames(context: Context, worldName: String): List<String> {
