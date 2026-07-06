@@ -39,6 +39,8 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -100,7 +102,7 @@ class MainActivity : ComponentActivity() {
             ?: prefs.firebaseUserUid
         if (uid != null) {
             uiHeartbeatJob = lifecycleScope.launch(Dispatchers.IO) {
-                while (kotlinx.coroutines.isActive) {
+                while (isActive) {
                     val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
                     val secret = prefs.dashboardSecret ?: ""
                     if (!com.pocketcraft.server.server.ServerHostService.isServiceRunning) {
@@ -117,7 +119,7 @@ class MainActivity : ComponentActivity() {
                             // Ignore
                         }
                     }
-                    kotlinx.coroutines.delay(10000L)
+                    delay(10000L)
                 }
             }
         }
