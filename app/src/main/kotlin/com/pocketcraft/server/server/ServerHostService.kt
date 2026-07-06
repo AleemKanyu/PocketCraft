@@ -2359,7 +2359,10 @@ class ServerHostService : Service() {
             "subdomain" to subdomain,
             "whitelist" to whitelist,
             "lastSeen" to com.google.firebase.Timestamp.now(),
-            "secret" to (prefs.dashboardSecret ?: "")
+            "secret" to (prefs.dashboardSecret ?: ""),
+            "localIp" to (com.pocketcraft.server.server.ServerAddressResolver.getLocalIpAddress() ?: ""),
+            "serverPort" to currentServerPort,
+            "properties" to readServerProperties(currentWorld)
         )
 
         try {
@@ -2368,6 +2371,26 @@ class ServerHostService : Service() {
                 .set(statusDoc, SetOptions.merge())
         } catch (e: Exception) {
             android.util.Log.e("ServerHostService", "Failed to update dashboard status: ${e.message}")
+        }
+    }
+
+    private fun readServerProperties(worldName: String): Map<String, String> {
+        val serverDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(this, worldName)
+        val file = java.io.File(serverDir, "server.properties")
+        if (!file.exists()) return emptyMap()
+        return try {
+            val props = java.util.Properties()
+            file.inputStream().use { props.load(it) }
+            mapOf(
+                "difficulty" to props.getProperty("difficulty", "normal"),
+                "gamemode" to props.getProperty("gamemode", "survival"),
+                "pvp" to props.getProperty("pvp", "true"),
+                "maxPlayers" to props.getProperty("max-players", "10"),
+                "viewDistance" to props.getProperty("view-distance", "10"),
+                "allowNether" to props.getProperty("allow-nether", "true")
+            )
+        } catch (e: Exception) {
+            emptyMap()
         }
     }
 
