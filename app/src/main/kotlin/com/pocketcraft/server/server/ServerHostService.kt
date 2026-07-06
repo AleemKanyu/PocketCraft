@@ -2300,7 +2300,7 @@ class ServerHostService : Service() {
         dashboardStatusJob = serviceScope.launch(Dispatchers.IO) {
             while (isActive) {
                 updateDashboardStatus(versionId)
-                delay(15_000)
+                delay(5_000)
             }
         }
     }
@@ -2342,9 +2342,22 @@ class ServerHostService : Service() {
         
         val dbDao = com.pocketcraft.server.afk.AfkHelperDatabase.getInstance(this).afkFarmLocationDao()
         val currentWorld = currentWorldName ?: "world"
-        val afkBotEnabled = dbDao.getAll()
-            .filter { it.worldName.equals(currentWorld, ignoreCase = true) }
-            .any { it.isActive }
+        val rawBots = dbDao.getAll().filter { it.worldName.equals(currentWorld, ignoreCase = true) }
+        val afkBotEnabled = rawBots.any { it.isActive }
+        val afkBotsList = rawBots.map { bot ->
+            mapOf(
+                "id" to bot.id,
+                "name" to bot.name,
+                "dummyName" to bot.dummyEntityName,
+                "x" to bot.x,
+                "y" to bot.y,
+                "z" to bot.z,
+                "world" to bot.worldName,
+                "active" to bot.isActive,
+                "owner" to bot.ownerPlayerName,
+                "ownerUuid" to bot.ownerPlayerUuid
+            )
+        }
             
         val subdomain = prefs.customSubdomain
         
@@ -2356,6 +2369,7 @@ class ServerHostService : Service() {
             "uptimeSeconds" to uptimeSeconds,
             "tps" to currentTps,
             "afkBotEnabled" to afkBotEnabled,
+            "afkBots" to afkBotsList,
             "subdomain" to subdomain,
             "whitelist" to whitelist,
             "lastSeen" to com.google.firebase.Timestamp.now(),
@@ -2387,7 +2401,8 @@ class ServerHostService : Service() {
                 "pvp" to props.getProperty("pvp", "true"),
                 "maxPlayers" to props.getProperty("max-players", "10"),
                 "viewDistance" to props.getProperty("view-distance", "10"),
-                "allowNether" to props.getProperty("allow-nether", "true")
+                "allowNether" to props.getProperty("allow-nether", "true"),
+                "whiteList" to props.getProperty("white-list", "false")
             )
         } catch (e: Exception) {
             emptyMap()
