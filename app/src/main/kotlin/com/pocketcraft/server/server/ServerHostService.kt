@@ -138,6 +138,7 @@ class ServerHostService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        isServiceRunning = true
         autoRestartEnabled = AppPreferences(applicationContext).autoRestart
         serverStartTimeMillis = runBlocking {
             AppPreferencesStore.getServerStartedAtMillis(applicationContext)
@@ -491,6 +492,7 @@ class ServerHostService : Service() {
     }
 
     override fun onDestroy() {
+        isServiceRunning = false
         stopDashboardStatusAndClear()
         relayReconnectJob?.cancel()
         relayReconnectJob = null
@@ -2280,6 +2282,7 @@ class ServerHostService : Service() {
         dashboardCommandListener = com.pocketcraft.server.broadcast.DashboardCommandListener(
             context = this,
             scope = serviceScope,
+            isMainProcess = false,
             sendRconCommand = ::sendRconCommandSuspended,
             toggleAfkBot = { enabled ->
                 val dbDao = com.pocketcraft.server.afk.AfkHelperDatabase.getInstance(this).afkFarmLocationDao()
@@ -2468,6 +2471,8 @@ class ServerHostService : Service() {
         const val RUNTIME_STATE_OFFLINE = "offline"
         const val RUNTIME_STATE_STARTING = "starting"
         const val RUNTIME_STATE_RUNNING = "running"
+        @Keep
+        var isServiceRunning = false
         @Keep
         private val _serverReadyState = MutableStateFlow(false)
         @Keep

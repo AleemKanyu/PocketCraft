@@ -25,8 +25,9 @@ import org.json.JSONArray
 class DashboardCommandListener(
     private val context: Context,
     private val scope: CoroutineScope,
-    private val sendRconCommand: suspend (String) -> String,
-    private val toggleAfkBot: suspend (Boolean) -> Unit
+    private val isMainProcess: Boolean,
+    private val sendRconCommand: (suspend (String) -> String)? = null,
+    private val toggleAfkBot: (suspend (Boolean) -> Unit)? = null
 ) {
     private val db by lazy { FirebaseFirestore.getInstance() }
     private var registration: ListenerRegistration? = null
@@ -42,7 +43,6 @@ class DashboardCommandListener(
         registration = db.collection("users").document(uid).collection("dashboard_commands")
             .whereEqualTo("status", "pending")
             .whereEqualTo("secret", secret)
-            .orderBy("createdAt", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshots, error ->
                 if (error != null) {
                     Log.e("DashboardCommandListener", "Error listening to dashboard commands", error)
@@ -50,7 +50,10 @@ class DashboardCommandListener(
                 }
                 if (snapshots == null || snapshots.isEmpty) return@addSnapshotListener
 
-                for (doc in snapshots.documents) {
+                val sortedDocs = snapshots.documents.sortedBy { doc ->
+                    doc.getTimestamp("createdAt")
+                }
+                for (doc in sortedDocs) {
                     val commandId = doc.id
                     val type = doc.getString("type") ?: continue
                     val payload = doc.get("payload") as? Map<String, Any> ?: emptyMap()
@@ -78,6 +81,35 @@ class DashboardCommandListener(
     }
 
     private suspend fun handleCommand(type: String, payload: Map<String, Any>, uid: String, commandId: String) {
+        if (isMainProcess) {
+            when (type) {
+                "start_server" -> {
+                    val versionId = AppPreferencesStore.getSelectedVersionFlow(context).first().orEmpty()
+                    val worldName = AppPreferencesStore.getSelectedWorldFlow(context).first()
+                    withContext(Dispatchers.Main) {
+                        ServerHostService.start(context, versionId, worldName)
+                    }
+                    updateCommandResult(uid, commandId, status = "done", result = "Server start initiated.")
+                }
+                "restart_server" -> {
+                    withContext(Dispatchers.Main) {
+                        ServerHostService.restart(context)
+                    }
+                    updateCommandResult(uid, commandId, status = "done", result = "Server restart initiated.")
+                }
+                else -> {
+                    if (ServerHostService.isServiceRunning) {
+                        // Skip updating or marking so the service process can read and handle it!
+                        return
+                    } else {
+                        updateCommandResult(uid, commandId, status = "failed", errorMsg = "Server is stopped.")
+                    }
+                }
+            }
+            return
+        }
+
+        // Service Process Command Handling
         when (type) {
             "start_server" -> {
                 val versionId = AppPreferencesStore.getSelectedVersionFlow(context).first().orEmpty()
@@ -93,35 +125,41 @@ class DashboardCommandListener(
                 }
                 updateCommandResult(uid, commandId, status = "done", result = "Server stop initiated.")
             }
+            "restart_server" -> {
+                withContext(Dispatchers.Main) {
+                    ServerHostService.restart(context)
+                }
+                updateCommandResult(uid, commandId, status = "done", result = "Server restart initiated.")
+            }
             "rcon" -> {
                 val command = payload["command"] as? String ?: throw IllegalArgumentException("Missing command parameter")
-                val response = sendRconCommand(command)
+                val response = sendRconCommand?.invoke(command) ?: "RCON not available."
                 updateCommandResult(uid, commandId, status = "done", result = response)
             }
             "toggle_afk_bot" -> {
                 val enabled = payload["enabled"] as? Boolean ?: throw IllegalArgumentException("Missing enabled parameter")
-                toggleAfkBot(enabled)
+                toggleAfkBot?.invoke(enabled)
                 updateCommandResult(uid, commandId, status = "done", result = "AFK bot toggled to $enabled.")
             }
             "kick" -> {
                 val playerName = payload["playerName"] as? String ?: throw IllegalArgumentException("Missing playerName parameter")
-                val response = sendRconCommand("kick @a[name=\"${escapeSelectorName(playerName)}\",limit=1] Removed by PocketCraft Web Dashboard")
+                val response = sendRconCommand?.invoke("kick @a[name=\"${escapeSelectorName(playerName)}\",limit=1] Removed by PocketCraft Web Dashboard") ?: "RCON not available."
                 updateCommandResult(uid, commandId, status = "done", result = response)
             }
             "ban" -> {
                 val playerName = payload["playerName"] as? String ?: throw IllegalArgumentException("Missing playerName parameter")
                 val reason = payload["reason"] as? String ?: "Banned from PocketCraft Web Dashboard"
-                val response = sendRconCommand("ban $playerName $reason")
+                val response = sendRconCommand?.invoke("ban $playerName $reason") ?: "RCON not available."
                 updateCommandResult(uid, commandId, status = "done", result = response)
             }
             "whitelist_add" -> {
                 val playerName = payload["playerName"] as? String ?: throw IllegalArgumentException("Missing playerName parameter")
-                val response = sendRconCommand("whitelist add $playerName")
+                val response = sendRconCommand?.invoke("whitelist add $playerName") ?: "RCON not available."
                 updateCommandResult(uid, commandId, status = "done", result = response)
             }
             "whitelist_remove" -> {
                 val playerName = payload["playerName"] as? String ?: throw IllegalArgumentException("Missing playerName parameter")
-                val response = sendRconCommand("whitelist remove $playerName")
+                val response = sendRconCommand?.invoke("whitelist remove $playerName") ?: "RCON not available."
                 updateCommandResult(uid, commandId, status = "done", result = response)
             }
             "set_subdomain" -> {

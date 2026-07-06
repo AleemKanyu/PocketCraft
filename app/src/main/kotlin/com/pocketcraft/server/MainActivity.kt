@@ -78,16 +78,61 @@ class MainActivity : ComponentActivity() {
         private val RATE_REQUEST_COOLDOWN_MS = TimeUnit.DAYS.toMillis(30)
     }
 
+    private var uiCommandListener: com.pocketcraft.server.broadcast.DashboardCommandListener? = null
+    private var uiHeartbeatJob: kotlinx.coroutines.Job? = null
+
     override fun onStart() {
         super.onStart()
         isAppInForeground = true
         com.pocketcraft.server.broadcast.RemoteCommandListener.startListening(this)
+
+        if (uiCommandListener == null) {
+            uiCommandListener = com.pocketcraft.server.broadcast.DashboardCommandListener(
+                context = this,
+                scope = lifecycleScope,
+                isMainProcess = true
+            )
+            uiCommandListener?.start()
+        }
+
+        val prefs = AppPreferences(this)
+        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+            ?: prefs.firebaseUserUid
+        if (uid != null) {
+            uiHeartbeatJob = lifecycleScope.launch(Dispatchers.IO) {
+                while (kotlinx.coroutines.isActive) {
+                    val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                    val secret = prefs.dashboardSecret ?: ""
+                    if (!com.pocketcraft.server.server.ServerHostService.isServiceRunning) {
+                        try {
+                            val statusDoc = mapOf(
+                                "serverRunning" to false,
+                                "lastSeen" to com.google.firebase.Timestamp.now(),
+                                "secret" to secret
+                            )
+                            db.collection("users").document(uid)
+                                .collection("dashboard_status").document("status")
+                                .set(statusDoc, com.google.firebase.firestore.SetOptions.merge())
+                        } catch (e: Exception) {
+                            // Ignore
+                        }
+                    }
+                    kotlinx.coroutines.delay(10000L)
+                }
+            }
+        }
     }
 
     override fun onStop() {
         super.onStop()
         isAppInForeground = false
         com.pocketcraft.server.broadcast.RemoteCommandListener.stopListening()
+
+        uiCommandListener?.stop()
+        uiCommandListener = null
+
+        uiHeartbeatJob?.cancel()
+        uiHeartbeatJob = null
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
