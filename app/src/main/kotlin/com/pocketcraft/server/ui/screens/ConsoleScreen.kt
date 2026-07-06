@@ -1408,32 +1408,7 @@ private fun ServerIdentityCard(
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f, fill = false)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .raisedBorder(
-                                            color = PocketColors.IconBtnBorder,
-                                            depthColor = PocketColors.IconBtnBorderBottom,
-                                            cornerRadius = 12.dp,
-                                            borderWidth = 1.dp,
-                                            depthWidth = 1.5.dp
-                                        )
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(PocketColors.IconBtnBg)
-                                        .clickable {
-                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://pocketcraft.online/dashboard/"))
-                                            context.startActivity(intent)
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Language,
-                                        contentDescription = "Web Dashboard",
-                                        modifier = Modifier.size(12.dp),
-                                        tint = PocketColors.Primary
-                                    )
-                                }
+
                             }
                             Text(
                                 text = stateHolder.serverDescription.ifBlank { "Hosted on PocketCraft" },
