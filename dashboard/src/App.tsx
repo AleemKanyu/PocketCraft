@@ -173,7 +173,6 @@ function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Email auth states
-  const [emailMode, setEmailMode] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -247,8 +246,6 @@ function App() {
       ) : (
         <LoginPage 
           onLogin={handleLogin}
-          emailMode={emailMode}
-          setEmailMode={setEmailMode}
           emailInput={emailInput}
           setEmailInput={setEmailInput}
           passwordInput={passwordInput}
@@ -275,8 +272,6 @@ function App() {
 // --- Login Page Component ---
 function LoginPage({ 
   onLogin,
-  emailMode,
-  setEmailMode,
   emailInput,
   setEmailInput,
   passwordInput,
@@ -286,8 +281,6 @@ function LoginPage({
   handleEmailAuth
 }: { 
   onLogin: () => void;
-  emailMode: boolean;
-  setEmailMode: (v: boolean) => void;
   emailInput: string;
   setEmailInput: (v: string) => void;
   passwordInput: string;
@@ -298,82 +291,65 @@ function LoginPage({
 }) {
   return (
     <div className="auth-container">
-      <div className="auth-card">
+      <div className="auth-card" style={{ maxWidth: '400px', width: '90%' }}>
         <h1 className="auth-title">PocketCraft</h1>
-        <p className="auth-subtitle">Server Web Control Dashboard</p>
+        <p className="auth-subtitle" style={{ marginBottom: '24px' }}>Server Web Control Dashboard</p>
         
-        {emailMode ? (
-          <form onSubmit={handleEmailAuth} style={{ display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: '700', marginBottom: '4px', textAlign: 'center' }}>
-              {isRegisterMode ? 'Create Account' : 'Sign In with Email'}
-            </h3>
-            
-            <div className="form-group">
-              <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Email Address</label>
-              <input 
-                type="email" 
-                className="form-control"
-                placeholder="your@email.com"
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                required
-              />
-            </div>
-            
-            <div className="form-group">
-              <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Password</label>
-              <input 
-                type="password" 
-                className="form-control"
-                placeholder="••••••••"
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                required
-              />
-            </div>
+        <form onSubmit={handleEmailAuth} style={{ display: 'flex', flexDirection: 'column', gap: '14px', textAlign: 'left' }}>
+          <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '600' }}>Email Address</label>
+            <input 
+              type="email" 
+              className="form-control"
+              placeholder="your@email.com"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--panel-border)', color: 'var(--text-primary)' }}
+              required
+            />
+          </div>
+          
+          <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '600' }}>Password</label>
+            <input 
+              type="password" 
+              className="form-control"
+              placeholder="••••••••"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--panel-border)', color: 'var(--text-primary)' }}
+              required
+            />
+          </div>
 
-            <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', marginTop: '8px' }}>
-              {isRegisterMode ? 'Register & Sign In' : 'Sign In'}
+          <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', marginTop: '6px', fontSize: '14px', fontWeight: '700' }}>
+            {isRegisterMode ? 'Register & Sign In' : 'Sign In'}
+          </button>
+          
+          <div style={{ textAlign: 'center', marginTop: '4px' }}>
+            <button 
+              type="button" 
+              style={{ background: 'none', border: 'none', color: 'var(--accent-color)', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
+              onClick={() => setIsRegisterMode(!isRegisterMode)}
+            >
+              {isRegisterMode ? 'Already have an account? Sign In' : "Don't have an account? Register"}
             </button>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginTop: '8px' }}>
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
-                style={{ padding: '4px 8px', fontSize: '11px' }}
-                onClick={() => setIsRegisterMode(!isRegisterMode)}
-              >
-                {isRegisterMode ? 'Switch to Sign In' : 'Switch to Register'}
-              </button>
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
-                style={{ padding: '4px 8px', fontSize: '11px' }}
-                onClick={() => setEmailMode(false)}
-              >
-                Use Google Login
-              </button>
-            </div>
-          </form>
-        ) : (
-          <>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px', lineHeight: '1.5' }}>
-              Connect securely to control your Minecraft server, players, AFK bots, and domains directly from your browser.
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <button className="btn btn-primary" onClick={onLogin} style={{ width: '100%', padding: '14px' }}>
-                Sign In with Google
-              </button>
-              <button 
-                className="btn btn-secondary" 
-                onClick={() => setEmailMode(true)} 
-                style={{ width: '100%', padding: '12px' }}
-              >
-                Sign In with Email
-              </button>
-            </div>
-          </>
-        )}
+          </div>
+        </form>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '24px 0 16px 0' }}>
+          <div style={{ flex: 1, height: '1px', background: 'var(--panel-border)' }} />
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>or</span>
+          <div style={{ flex: 1, height: '1px', background: 'var(--panel-border)' }} />
+        </div>
+
+        <button 
+          className="btn btn-secondary" 
+          onClick={onLogin} 
+          style={{ width: '100%', padding: '12px', fontSize: '14px', fontWeight: '700', background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', border: '1px solid var(--panel-border)' }}
+        >
+          Sign In with Google
+        </button>
       </div>
     </div>
   );
@@ -406,6 +382,12 @@ function DashboardPage({
     onConfirm: () => void;
   } | null>(null);
 
+  // Local slider states for immediate UI updates
+  const [sliderMaxPlayers, setSliderMaxPlayers] = useState<string | null>(null);
+  const [sliderSpawnProtection, setSliderSpawnProtection] = useState<string | null>(null);
+  const [sliderViewDistance, setSliderViewDistance] = useState<string | null>(null);
+  const [sliderSimulationDistance, setSliderSimulationDistance] = useState<string | null>(null);
+
   // Snapshot Listeners
   useEffect(() => {
     // 1. Listen to dashboard status
@@ -414,6 +396,10 @@ function DashboardPage({
       if (snapshot.exists()) {
         const data = snapshot.data() as DashboardStatus;
         setStatus(data);
+        setSliderMaxPlayers(null);
+        setSliderSpawnProtection(null);
+        setSliderViewDistance(null);
+        setSliderSimulationDistance(null);
       } else {
         setStatus(null);
       }
@@ -591,6 +577,11 @@ function DashboardPage({
       return a.name.localeCompare(b.name);
     });
   })();
+
+  const maxPlayersVal = sliderMaxPlayers ?? status.properties?.maxPlayers ?? '10';
+  const spawnProtectionVal = sliderSpawnProtection ?? status.properties?.spawnProtection ?? '16';
+  const viewDistanceVal = sliderViewDistance ?? status.properties?.viewDistance ?? '10';
+  const simulationDistanceVal = sliderSimulationDistance ?? status.properties?.simulationDistance ?? '10';
 
   return (
     <div className="dashboard-container">
@@ -895,103 +886,85 @@ function DashboardPage({
             </div>
 
             {/* Max Players */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Max Players</p>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Maximum concurrent players (1-50)</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Max Players: <span style={{ color: 'var(--accent-color)', fontWeight: '800' }}>{maxPlayersVal}</span></p>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Maximum concurrent players (1-50)</p>
+                </div>
               </div>
               <input 
-                type="number"
-                className="form-control"
-                style={{ width: '80px', textAlign: 'center', padding: '6px 8px', background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)', border: '1px solid var(--panel-border)', borderRadius: '8px' }}
-                defaultValue={status.properties?.maxPlayers || '10'}
-                onBlur={(e) => {
-                  const val = Math.max(1, Math.min(50, parseInt(e.target.value) || 10)).toString();
-                  if (val !== status.properties?.maxPlayers) {
-                    handleAction('update_property', { key: 'max-players', value: val }, `Max players set to ${val}`);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.currentTarget.blur();
-                  }
-                }}
+                type="range"
+                min="1"
+                max="50"
+                style={{ width: '100%', accentColor: 'var(--accent-color)', cursor: 'pointer', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px' }}
+                value={maxPlayersVal}
+                onChange={(e) => setSliderMaxPlayers(e.target.value)}
+                onMouseUp={(e) => handleAction('update_property', { key: 'max-players', value: e.currentTarget.value }, `Max players set to ${e.currentTarget.value}`)}
+                onTouchEnd={(e) => handleAction('update_property', { key: 'max-players', value: e.currentTarget.value }, `Max players set to ${e.currentTarget.value}`)}
                 disabled={!phoneOnline}
               />
             </div>
 
             {/* Spawn Protection */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Spawn Protection</p>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Spawn area protection radius in blocks</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Spawn Protection: <span style={{ color: 'var(--accent-color)', fontWeight: '800' }}>{spawnProtectionVal} blocks</span></p>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Spawn area protection radius in blocks (0-128)</p>
+                </div>
               </div>
               <input 
-                type="number"
-                className="form-control"
-                style={{ width: '80px', textAlign: 'center', padding: '6px 8px', background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)', border: '1px solid var(--panel-border)', borderRadius: '8px' }}
-                defaultValue={status.properties?.spawnProtection || '16'}
-                onBlur={(e) => {
-                  const val = Math.max(0, parseInt(e.target.value) || 0).toString();
-                  handleAction('update_property', { key: 'spawn-protection', value: val }, `Spawn protection set to ${val}`);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.currentTarget.blur();
-                  }
-                }}
+                type="range"
+                min="0"
+                max="128"
+                style={{ width: '100%', accentColor: 'var(--accent-color)', cursor: 'pointer', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px' }}
+                value={spawnProtectionVal}
+                onChange={(e) => setSliderSpawnProtection(e.target.value)}
+                onMouseUp={(e) => handleAction('update_property', { key: 'spawn-protection', value: e.currentTarget.value }, `Spawn protection set to ${e.currentTarget.value}`)}
+                onTouchEnd={(e) => handleAction('update_property', { key: 'spawn-protection', value: e.currentTarget.value }, `Spawn protection set to ${e.currentTarget.value}`)}
                 disabled={!phoneOnline}
               />
             </div>
 
             {/* View Distance */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>View Distance</p>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Render distance in chunks (3-32)</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>View Distance: <span style={{ color: 'var(--accent-color)', fontWeight: '800' }}>{viewDistanceVal} chunks</span></p>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Render distance in chunks (3-32)</p>
+                </div>
               </div>
               <input 
-                type="number"
-                className="form-control"
-                style={{ width: '80px', textAlign: 'center', padding: '6px 8px', background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)', border: '1px solid var(--panel-border)', borderRadius: '8px' }}
-                defaultValue={status.properties?.viewDistance || '10'}
-                onBlur={(e) => {
-                  const val = Math.max(3, Math.min(32, parseInt(e.target.value) || 10)).toString();
-                  if (val !== status.properties?.viewDistance) {
-                    handleAction('update_property', { key: 'view-distance', value: val }, `View distance set to ${val}`);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.currentTarget.blur();
-                  }
-                }}
+                type="range"
+                min="3"
+                max="32"
+                style={{ width: '100%', accentColor: 'var(--accent-color)', cursor: 'pointer', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px' }}
+                value={viewDistanceVal}
+                onChange={(e) => setSliderViewDistance(e.target.value)}
+                onMouseUp={(e) => handleAction('update_property', { key: 'view-distance', value: e.currentTarget.value }, `View distance set to ${e.currentTarget.value}`)}
+                onTouchEnd={(e) => handleAction('update_property', { key: 'view-distance', value: e.currentTarget.value }, `View distance set to ${e.currentTarget.value}`)}
                 disabled={!phoneOnline}
               />
             </div>
 
             {/* Simulation Distance */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Simulation Distance</p>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Simulation radius in chunks (3-32)</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Simulation Distance: <span style={{ color: 'var(--accent-color)', fontWeight: '800' }}>{simulationDistanceVal} chunks</span></p>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Simulation radius in chunks (3-32)</p>
+                </div>
               </div>
               <input 
-                type="number"
-                className="form-control"
-                style={{ width: '80px', textAlign: 'center', padding: '6px 8px', background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)', border: '1px solid var(--panel-border)', borderRadius: '8px' }}
-                defaultValue={status.properties?.simulationDistance || '10'}
-                onBlur={(e) => {
-                  const val = Math.max(3, Math.min(32, parseInt(e.target.value) || 10)).toString();
-                  if (val !== status.properties?.simulationDistance) {
-                    handleAction('update_property', { key: 'simulation-distance', value: val }, `Simulation distance set to ${val}`);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.currentTarget.blur();
-                  }
-                }}
+                type="range"
+                min="3"
+                max="32"
+                style={{ width: '100%', accentColor: 'var(--accent-color)', cursor: 'pointer', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px' }}
+                value={simulationDistanceVal}
+                onChange={(e) => setSliderSimulationDistance(e.target.value)}
+                onMouseUp={(e) => handleAction('update_property', { key: 'simulation-distance', value: e.currentTarget.value }, `Simulation distance set to ${e.currentTarget.value}`)}
+                onTouchEnd={(e) => handleAction('update_property', { key: 'simulation-distance', value: e.currentTarget.value }, `Simulation distance set to ${e.currentTarget.value}`)}
                 disabled={!phoneOnline}
               />
             </div>
@@ -1289,6 +1262,46 @@ function DashboardPage({
                     <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Game Mode</p>
                     <p style={{ fontSize: '13px', fontWeight: '700', margin: 0 }}>
                       {profilePlayer.gamemode || 'Survival'}
+                    </p>
+                  </div>
+
+                  {/* Playtime */}
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+                    <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Playtime</p>
+                    <p style={{ fontSize: '13px', fontWeight: '700', margin: 0 }}>
+                      ⏱️ {profilePlayer.playtime !== undefined ? (() => {
+                        const sec = parseInt(profilePlayer.playtime);
+                        if (!sec) return '0m';
+                        const h = Math.floor(sec / 3600);
+                        const m = Math.floor((sec % 3600) / 60);
+                        return h > 0 ? `${h}h ${m}m` : `${m}m`;
+                      })() : 'N/A'}
+                    </p>
+                  </div>
+
+                  {/* Hunger */}
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+                    <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Hunger</p>
+                    <p style={{ fontSize: '13px', fontWeight: '700', color: '#f97316', margin: 0 }}>
+                      🍖 {profilePlayer.hunger !== undefined ? `${profilePlayer.hunger}/20` : '20/20'}
+                    </p>
+                  </div>
+
+                  {/* Deaths */}
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+                    <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Deaths</p>
+                    <p style={{ fontSize: '13px', fontWeight: '700', color: '#ef4444', margin: 0 }}>
+                      💀 {profilePlayer.deaths !== undefined ? profilePlayer.deaths : '0'}
+                    </p>
+                  </div>
+
+                  {/* Last Death */}
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)', gridColumn: 'span 2' }}>
+                    <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Last Death Position</p>
+                    <p style={{ fontSize: '12px', fontWeight: '700', fontFamily: 'var(--font-mono)', margin: 0 }}>
+                      📍 {profilePlayer.deathX !== undefined && profilePlayer.deathX !== 0 
+                        ? `${profilePlayer.deathX.toFixed(0)}, ${profilePlayer.deathY.toFixed(0)}, ${profilePlayer.deathZ.toFixed(0)} (${profilePlayer.deathDim ? profilePlayer.deathDim.replace('minecraft:', '') : 'overworld'})` 
+                        : 'None'}
                     </p>
                   </div>
                 </div>
