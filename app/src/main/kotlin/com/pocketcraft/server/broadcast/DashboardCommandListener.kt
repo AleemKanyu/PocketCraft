@@ -119,7 +119,9 @@ class DashboardCommandListener(
                         throw IllegalStateException("Cannot switch worlds while the server is running. Stop the server first.")
                     }
                     AppPreferencesStore.setSelectedWorld(context, cleanWorld)
+                    ServerHostService.persistRuntimeState(context, ServerHostService.getPersistedActiveVersion(context), cleanWorld, ServerHostService.getPersistedRuntimeState(context, ServerHostService.getPersistedActiveVersion(context)))
                     updateCommandResult(uid, commandId, status = "done", result = "Switched active world to $cleanWorld.")
+                    onPropertyUpdated?.invoke()
                 }
                 "create_world" -> {
                     val worldName = payload["worldName"] as? String ?: throw IllegalArgumentException("Missing worldName parameter")
@@ -247,7 +249,9 @@ class DashboardCommandListener(
                     throw IllegalStateException("Cannot switch worlds while the server is running. Stop the server first.")
                 }
                 AppPreferencesStore.setSelectedWorld(context, cleanWorld)
+                ServerHostService.persistRuntimeState(context, ServerHostService.getPersistedActiveVersion(context), cleanWorld, ServerHostService.getPersistedRuntimeState(context, ServerHostService.getPersistedActiveVersion(context)))
                 updateCommandResult(uid, commandId, status = "done", result = "Switched active world to $cleanWorld.")
+                onPropertyUpdated?.invoke()
             }
             "create_world" -> {
                 val worldName = payload["worldName"] as? String ?: throw IllegalArgumentException("Missing worldName parameter")

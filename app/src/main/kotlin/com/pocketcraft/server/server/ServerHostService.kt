@@ -1656,10 +1656,18 @@ class ServerHostService : Service() {
     }
 
     private fun activeWorldNameOrDefault(): String {
-        return currentWorldName
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?: getPersistedActiveWorld(applicationContext).trim().ifBlank { "world" }
+        val serverRunning = serverReadyHandled.get()
+        if (serverRunning) {
+            return currentWorldName
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?: "world"
+        }
+        val world = kotlinx.coroutines.runBlocking {
+            AppPreferencesStore.getSelectedWorldFlow(applicationContext).first().trim().ifBlank { "world" }
+        }
+        currentWorldName = world
+        return world
     }
 
     private fun attachToExistingServer(
@@ -2530,7 +2538,14 @@ class ServerHostService : Service() {
         val worldsDir = java.io.File(filesDir, "servers/worlds")
         if (!worldsDir.exists() || !worldsDir.isDirectory) return listOf("world")
         val list = worldsDir.listFiles()
-            ?.filter { it.isDirectory }
+            ?.filter { dir ->
+                dir.isDirectory && (
+                    dir.name.equals("world", ignoreCase = true) ||
+                    java.io.File(dir, "level.dat").exists() ||
+                    java.io.File(dir, "region").isDirectory ||
+                    dir.listFiles()?.any { sub -> sub.name == "level.dat" || sub.name == "region" } == true
+                )
+            }
             ?.map { it.name }
             ?.sorted()
             .orEmpty()
@@ -2553,7 +2568,13 @@ class ServerHostService : Service() {
                     "simulationDistance" to props.getProperty("simulation-distance", "10"),
                     "allowNether" to props.getProperty("allow-nether", "true"),
                     "whiteList" to props.getProperty("white-list", "false"),
-                    "spawnProtection" to props.getProperty("spawn-protection", "16")
+                    "spawnProtection" to props.getProperty("spawn-protection", "16"),
+                    "levelSeed" to props.getProperty("level-seed", ""),
+                    "hardcore" to props.getProperty("hardcore", "false"),
+                    "spawnMonsters" to props.getProperty("spawn-monsters", "true"),
+                    "generateStructures" to props.getProperty("generate-structures", "true"),
+                    "worldDisplayName" to props.getProperty("pocketcraft-world-display.$worldName", worldName),
+                    "worldDescription" to props.getProperty("pocketcraft-world-description.$worldName", "Hosted on Pocketcraft")
                 )
             } else {
                 emptyMap()

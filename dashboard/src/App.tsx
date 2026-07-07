@@ -100,6 +100,12 @@ interface DashboardStatus {
     allowNether?: string;
     whiteList?: string;
     spawnProtection?: string;
+    levelSeed?: string;
+    hardcore?: string;
+    spawnMonsters?: string;
+    generateStructures?: string;
+    worldDisplayName?: string;
+    worldDescription?: string;
   };
 }
 
@@ -989,6 +995,159 @@ function DashboardPage({
                 disabled={!phoneOnline}
               />
             </div>
+
+            {/* Divider / Subheader */}
+            <div style={{ borderTop: '1px solid var(--panel-border)', paddingTop: '16px', marginTop: '8px' }}>
+              <h3 style={{ fontSize: '13px', fontWeight: '800', color: 'var(--accent-color)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>World & Generator Settings</h3>
+            </div>
+
+            {/* Server Display Name */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Server Display Name</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Custom display name for the server</p>
+              </div>
+              <input 
+                type="text"
+                className="form-control"
+                style={{ width: '180px', padding: '6px 8px', background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)', border: '1px solid var(--panel-border)', borderRadius: '8px' }}
+                defaultValue={status.properties?.worldDisplayName || status.currentWorld || 'world'}
+                onBlur={(e) => {
+                  const val = e.target.value.trim();
+                  const key = `pocketcraft-world-display.${status.currentWorld || 'world'}`;
+                  if (val) {
+                    handleAction('update_property', { key, value: val }, `Server display name set to ${val}`);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur();
+                  }
+                }}
+                disabled={!phoneOnline}
+              />
+            </div>
+
+            {/* Server Description */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Server Description</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Description shown in multiplayer server list</p>
+              </div>
+              <input 
+                type="text"
+                className="form-control"
+                style={{ width: '180px', padding: '6px 8px', background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)', border: '1px solid var(--panel-border)', borderRadius: '8px' }}
+                defaultValue={status.properties?.worldDescription || 'Hosted on Pocketcraft'}
+                onBlur={(e) => {
+                  const val = e.target.value.trim();
+                  const key = `pocketcraft-world-description.${status.currentWorld || 'world'}`;
+                  if (val) {
+                    handleAction('update_property', { key, value: val }, `Server description set to ${val}`);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur();
+                  }
+                }}
+                disabled={!phoneOnline}
+              />
+            </div>
+
+            {/* World Seed */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>World Seed</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Seed for generating new chunks</p>
+              </div>
+              <input 
+                type="text"
+                className="form-control"
+                style={{ width: '180px', padding: '6px 8px', background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)', border: '1px solid var(--panel-border)', borderRadius: '8px' }}
+                defaultValue={status.properties?.levelSeed || ''}
+                onBlur={(e) => {
+                  const val = e.target.value.trim();
+                  if (val !== status.properties?.levelSeed) {
+                    handleAction('update_property', { key: 'level-seed', value: val }, `World seed set to ${val}`);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur();
+                  }
+                }}
+                disabled={!phoneOnline}
+              />
+            </div>
+
+            {/* Allow Nether */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Allow Nether</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Enable nether dimension generation</p>
+              </div>
+              <label className="switch">
+                <input 
+                  type="checkbox"
+                  checked={status.properties?.allowNether !== 'false'}
+                  onChange={(e) => handleAction('update_property', { key: 'allow-nether', value: e.target.checked ? 'true' : 'false' }, `Allow Nether set to ${e.target.checked}`)}
+                  disabled={!phoneOnline}
+                />
+                <span className="slider"></span>
+              </label>
+            </div>
+
+            {/* Hardcore Mode */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Hardcore Mode</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Enforce hardcore rules (permanent death)</p>
+              </div>
+              <label className="switch">
+                <input 
+                  type="checkbox"
+                  checked={status.properties?.hardcore === 'true'}
+                  onChange={(e) => handleAction('update_property', { key: 'hardcore', value: e.target.checked ? 'true' : 'false' }, `Hardcore set to ${e.target.checked}`)}
+                  disabled={!phoneOnline}
+                />
+                <span className="slider"></span>
+              </label>
+            </div>
+
+            {/* Spawn Monsters */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Spawn Monsters</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Spawn hostile monsters automatically</p>
+              </div>
+              <label className="switch">
+                <input 
+                  type="checkbox"
+                  checked={status.properties?.spawnMonsters !== 'false'}
+                  onChange={(e) => handleAction('update_property', { key: 'spawn-monsters', value: e.target.checked ? 'true' : 'false' }, `Spawn monsters set to ${e.target.checked}`)}
+                  disabled={!phoneOnline}
+                />
+                <span className="slider"></span>
+              </label>
+            </div>
+
+            {/* Generate Structures */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Generate Structures</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Generate villages, dungeons, temples</p>
+              </div>
+              <label className="switch">
+                <input 
+                  type="checkbox"
+                  checked={status.properties?.generateStructures !== 'false'}
+                  onChange={(e) => handleAction('update_property', { key: 'generate-structures', value: e.target.checked ? 'true' : 'false' }, `Generate structures set to ${e.target.checked}`)}
+                  disabled={!phoneOnline}
+                />
+                <span className="slider"></span>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -1034,39 +1193,6 @@ function DashboardPage({
               )}
             </div>
 
-            <div style={{ borderTop: '1px solid var(--panel-border)', paddingTop: '12px' }}>
-              <p style={{ fontWeight: '700', fontSize: '14px', marginBottom: '8px', margin: 0 }}>Create New World</p>
-              <form 
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const form = e.currentTarget;
-                  const input = form.elements.namedItem('newWorldName') as HTMLInputElement;
-                  const name = input.value.trim();
-                  if (name) {
-                    handleAction('create_world', { worldName: name }, `World ${name} created and selected.`);
-                    input.value = '';
-                  }
-                }}
-                style={{ display: 'flex', gap: '8px' }}
-              >
-                <input
-                  name="newWorldName"
-                  type="text"
-                  className="form-control"
-                  placeholder="New world name..."
-                  style={{ flex: 1, padding: '8px 12px' }}
-                  disabled={!phoneOnline || status.serverRunning}
-                />
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  style={{ padding: '8px 12px' }}
-                  disabled={!phoneOnline || status.serverRunning}
-                >
-                  Create
-                </button>
-              </form>
-            </div>
           </div>
         </div>
       </div>
