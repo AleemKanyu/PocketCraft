@@ -39,46 +39,58 @@ class DashboardCommandListener(
         val uid = FirebaseAuth.getInstance().currentUser?.uid
             ?: prefs.firebaseUserUid
             ?: return
-        val secret = prefs.dashboardSecret ?: ""
-        Log.d("DashboardCommandListener", "Starting listener for user: $uid")
 
-        registration = db.collection("users").document(uid).collection("dashboard_commands")
-            .whereEqualTo("status", "pending")
-            .whereEqualTo("secret", secret)
-            .addSnapshotListener { snapshots, error ->
-                if (error != null) {
-                    Log.e("DashboardCommandListener", "Error listening to dashboard commands", error)
-                    return@addSnapshotListener
-                }
-                if (snapshots == null || snapshots.isEmpty) return@addSnapshotListener
+        scope.launch(Dispatchers.IO) {
+            try {
+                val snapshot = db.collection("users").document(uid).get().await()
+                val secret = snapshot.getString("dashboardSecret").orEmpty()
+                
+                withContext(Dispatchers.Main) {
+                    Log.d("DashboardCommandListener", "Starting listener for user: $uid with secret: $secret")
+                    
+                    registration?.remove()
+                    registration = db.collection("users").document(uid).collection("dashboard_commands")
+                        .whereEqualTo("status", "pending")
+                        .whereEqualTo("secret", secret)
+                        .addSnapshotListener { snapshots, error ->
+                            if (error != null) {
+                                Log.e("DashboardCommandListener", "Error listening to dashboard commands", error)
+                                return@addSnapshotListener
+                            }
+                            if (snapshots == null || snapshots.isEmpty) return@addSnapshotListener
 
-                val sortedDocs = snapshots.documents.sortedBy { doc ->
-                    doc.getTimestamp("createdAt")
-                }
-                for (doc in sortedDocs) {
-                    val commandId = doc.id
-                    val type = doc.getString("type") ?: continue
-                    val payload = doc.get("payload") as? Map<String, Any> ?: emptyMap()
+                            val sortedDocs = snapshots.documents.sortedBy { doc ->
+                                doc.getTimestamp("createdAt")
+                            }
+                            for (doc in sortedDocs) {
+                                val commandId = doc.id
+                                val type = doc.getString("type") ?: continue
+                                val payload = doc.get("payload") as? Map<String, Any> ?: emptyMap()
 
-                    if (!shouldHandleCommand(type)) {
-                        continue
-                    }
+                                if (!shouldHandleCommand(type)) {
+                                    continue
+                                }
 
-                    // Immediately mark as acked
-                    db.collection("users").document(uid).collection("dashboard_commands")
-                        .document(commandId)
-                        .update("status", "acked")
+                                // Immediately mark as acked
+                                db.collection("users").document(uid).collection("dashboard_commands")
+                                    .document(commandId)
+                                    .update("status", "acked")
 
-                    scope.launch(Dispatchers.IO) {
-                        try {
-                            handleCommand(type, payload, uid, commandId)
-                        } catch (e: Exception) {
-                            Log.e("DashboardCommandListener", "Error processing command $commandId", e)
-                            updateCommandResult(uid, commandId, status = "failed", errorMsg = e.message)
+                                scope.launch(Dispatchers.IO) {
+                                    try {
+                                        handleCommand(type, payload, uid, commandId)
+                                    } catch (e: Exception) {
+                                        Log.e("DashboardCommandListener", "Error processing command $commandId", e)
+                                        updateCommandResult(uid, commandId, status = "failed", errorMsg = e.message)
+                                    }
+                                }
+                            }
                         }
-                    }
                 }
+            } catch (e: Exception) {
+                Log.e("DashboardCommandListener", "Failed to fetch dashboardSecret: ${e.message}")
             }
+        }
     }
 
     fun stop() {
