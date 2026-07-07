@@ -387,6 +387,7 @@ function DashboardPage({
   const [sliderSpawnProtection, setSliderSpawnProtection] = useState<string | null>(null);
   const [sliderViewDistance, setSliderViewDistance] = useState<string | null>(null);
   const [sliderSimulationDistance, setSliderSimulationDistance] = useState<string | null>(null);
+  const [tpDestination, setTpDestination] = useState('');
 
   // Snapshot Listeners
   useEffect(() => {
@@ -1377,6 +1378,61 @@ function DashboardPage({
                       Kick
                     </button>
                   )}
+                </div>
+
+                {/* Additional Quick commands: Heal, Kill, Hunger */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: '12px' }}
+                    onClick={() => handleAction('rcon', { command: `effect give "${profilePlayer.name}" instant_health 1 255 true` }, `Healed ${profilePlayer.name}`)}
+                    disabled={!phoneOnline || !status.serverRunning || !profilePlayer.online}
+                  >
+                    Heal
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: '12px' }}
+                    onClick={() => handleAction('rcon', { command: `effect give "${profilePlayer.name}" saturation 1 255 true` }, `Filled hunger of ${profilePlayer.name}`)}
+                    disabled={!phoneOnline || !status.serverRunning || !profilePlayer.online}
+                  >
+                    Fill Hunger
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}
+                    onClick={() => handleAction('rcon', { command: `kill "${profilePlayer.name}"` }, `Killed ${profilePlayer.name}`)}
+                    disabled={!phoneOnline || !status.serverRunning || !profilePlayer.online}
+                  >
+                    Kill
+                  </button>
+                </div>
+
+                {/* Teleport Coordinates / Player Name */}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '12px', background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', border: '1px solid var(--panel-border)' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-secondary)', minWidth: '60px' }}>Teleport:</span>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Coords (X Y Z) or Player Name"
+                    value={tpDestination}
+                    onChange={(e) => setTpDestination(e.target.value)}
+                    style={{ flex: 1, padding: '4px 8px', fontSize: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--panel-border)', borderRadius: '6px', color: 'var(--text-primary)' }}
+                    disabled={!phoneOnline || !status.serverRunning || !profilePlayer.online}
+                  />
+                  <button
+                    className="btn btn-primary"
+                    style={{ padding: '4px 12px', fontSize: '12px' }}
+                    onClick={() => {
+                      if (tpDestination.trim()) {
+                        handleAction('rcon', { command: `tp "${profilePlayer.name}" ${tpDestination.trim()}` }, `Teleported ${profilePlayer.name} to ${tpDestination.trim()}`);
+                        setTpDestination('');
+                      }
+                    }}
+                    disabled={!phoneOnline || !status.serverRunning || !profilePlayer.online || !tpDestination.trim()}
+                  >
+                    Go
+                  </button>
                 </div>
               </div>
 

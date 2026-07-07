@@ -2948,9 +2948,17 @@ class ServerHostService : Service() {
                 action = ACTION_RESTART
             }
             try {
-                ContextCompat.startForegroundService(context, intent)
+                if (isServiceRunning(context)) {
+                    context.startService(intent)
+                } else {
+                    ContextCompat.startForegroundService(context, intent)
+                }
             } catch (e: Exception) {
-                android.util.Log.e("ServerHostService", "Failed to restart service: ${e.message}")
+                try {
+                    context.startService(intent)
+                } catch (e2: Exception) {
+                    android.util.Log.e("ServerHostService", "Failed to restart service: ${e2.message}")
+                }
             }
         }
 
