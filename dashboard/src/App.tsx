@@ -6,7 +6,7 @@ import {
   signInWithPopup, 
   signOut 
 } from './firebase';
-import { onAuthStateChanged, type User } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, type User } from 'firebase/auth';
 import { doc, collection, addDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 
 // --- Icons ---
@@ -166,6 +166,12 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
+  // Email auth states
+  const [emailMode, setEmailMode] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+
   // Toast Helper
   const showToast = (type: 'success' | 'error', text: string) => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -192,6 +198,25 @@ function App() {
     }
   };
 
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailInput.trim() || !passwordInput.trim()) {
+      showToast('error', 'Please fill in all fields.');
+      return;
+    }
+    try {
+      if (isRegisterMode) {
+        await createUserWithEmailAndPassword(auth, emailInput.trim(), passwordInput.trim());
+        showToast('success', 'Account registered successfully!');
+      } else {
+        await signInWithEmailAndPassword(auth, emailInput.trim(), passwordInput.trim());
+        showToast('success', 'Logged in successfully!');
+      }
+    } catch (e: any) {
+      showToast('error', e.message || 'Authentication failed.');
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -214,7 +239,18 @@ function App() {
       {user ? (
         <DashboardPage user={user} onLogout={handleLogout} showToast={showToast} />
       ) : (
-        <LoginPage onLogin={handleLogin} />
+        <LoginPage 
+          onLogin={handleLogin}
+          emailMode={emailMode}
+          setEmailMode={setEmailMode}
+          emailInput={emailInput}
+          setEmailInput={setEmailInput}
+          passwordInput={passwordInput}
+          setPasswordInput={setPasswordInput}
+          isRegisterMode={isRegisterMode}
+          setIsRegisterMode={setIsRegisterMode}
+          handleEmailAuth={handleEmailAuth}
+        />
       )}
 
       {/* Toast Render */}
@@ -231,18 +267,107 @@ function App() {
 }
 
 // --- Login Page Component ---
-function LoginPage({ onLogin }: { onLogin: () => void }) {
+function LoginPage({ 
+  onLogin,
+  emailMode,
+  setEmailMode,
+  emailInput,
+  setEmailInput,
+  passwordInput,
+  setPasswordInput,
+  isRegisterMode,
+  setIsRegisterMode,
+  handleEmailAuth
+}: { 
+  onLogin: () => void;
+  emailMode: boolean;
+  setEmailMode: (v: boolean) => void;
+  emailInput: string;
+  setEmailInput: (v: string) => void;
+  passwordInput: string;
+  setPasswordInput: (v: string) => void;
+  isRegisterMode: boolean;
+  setIsRegisterMode: (v: boolean) => void;
+  handleEmailAuth: (e: React.FormEvent) => void;
+}) {
   return (
     <div className="auth-container">
       <div className="auth-card">
         <h1 className="auth-title">PocketCraft</h1>
         <p className="auth-subtitle">Server Web Control Dashboard</p>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px', lineHeight: '1.5' }}>
-          Connect securely to control your Minecraft server, players, AFK bots, and domains directly from your browser.
-        </p>
-        <button className="btn btn-primary" onClick={onLogin} style={{ width: '100%', padding: '14px' }}>
-          Sign In with Google
-        </button>
+        
+        {emailMode ? (
+          <form onSubmit={handleEmailAuth} style={{ display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '700', marginBottom: '4px', textAlign: 'center' }}>
+              {isRegisterMode ? 'Create Account' : 'Sign In with Email'}
+            </h3>
+            
+            <div className="form-group">
+              <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Email Address</label>
+              <input 
+                type="email" 
+                className="form-control"
+                placeholder="your@email.com"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                required
+              />
+            </div>
+            
+            <div className="form-group">
+              <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Password</label>
+              <input 
+                type="password" 
+                className="form-control"
+                placeholder="••••••••"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                required
+              />
+            </div>
+
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', marginTop: '8px' }}>
+              {isRegisterMode ? 'Register & Sign In' : 'Sign In'}
+            </button>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginTop: '8px' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                style={{ padding: '4px 8px', fontSize: '11px' }}
+                onClick={() => setIsRegisterMode(!isRegisterMode)}
+              >
+                {isRegisterMode ? 'Switch to Sign In' : 'Switch to Register'}
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                style={{ padding: '4px 8px', fontSize: '11px' }}
+                onClick={() => setEmailMode(false)}
+              >
+                Use Google Login
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px', lineHeight: '1.5' }}>
+              Connect securely to control your Minecraft server, players, AFK bots, and domains directly from your browser.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <button className="btn btn-primary" onClick={onLogin} style={{ width: '100%', padding: '14px' }}>
+                Sign In with Google
+              </button>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => setEmailMode(true)} 
+                style={{ width: '100%', padding: '12px' }}
+              >
+                Sign In with Email
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -812,6 +937,58 @@ function DashboardPage({
                 disabled={!phoneOnline}
               />
             </div>
+
+            {/* View Distance */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>View Distance</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Render distance in chunks (3-32)</p>
+              </div>
+              <input 
+                type="number"
+                className="form-control"
+                style={{ width: '80px', textAlign: 'center', padding: '6px 8px', background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)', border: '1px solid var(--panel-border)', borderRadius: '8px' }}
+                defaultValue={status.properties?.viewDistance || '10'}
+                onBlur={(e) => {
+                  const val = Math.max(3, Math.min(32, parseInt(e.target.value) || 10)).toString();
+                  if (val !== status.properties?.viewDistance) {
+                    handleAction('update_property', { key: 'view-distance', value: val }, `View distance set to ${val}`);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur();
+                  }
+                }}
+                disabled={!phoneOnline}
+              />
+            </div>
+
+            {/* Simulation Distance */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Simulation Distance</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Simulation radius in chunks (3-32)</p>
+              </div>
+              <input 
+                type="number"
+                className="form-control"
+                style={{ width: '80px', textAlign: 'center', padding: '6px 8px', background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)', border: '1px solid var(--panel-border)', borderRadius: '8px' }}
+                defaultValue={status.properties?.simulationDistance || '10'}
+                onBlur={(e) => {
+                  const val = Math.max(3, Math.min(32, parseInt(e.target.value) || 10)).toString();
+                  if (val !== status.properties?.simulationDistance) {
+                    handleAction('update_property', { key: 'simulation-distance', value: val }, `Simulation distance set to ${val}`);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur();
+                  }
+                }}
+                disabled={!phoneOnline}
+              />
+            </div>
           </div>
         </div>
 
@@ -908,229 +1085,165 @@ function DashboardPage({
         </div>
       )}
 
-      {/* Player Profile Modal */}
       {profilePlayer && (
         <div className="modal-overlay" onClick={() => setProfilePlayer(null)}>
           <div 
             className="modal-content" 
-            style={{ maxWidth: '480px', width: '90%', padding: '24px', textAlign: 'left' }}
+            style={{ maxWidth: '760px', width: '95%', padding: '28px', textAlign: 'left', display: 'flex', flexDirection: 'row', gap: '24px', flexWrap: 'wrap' }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header / Basic Info */}
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', alignItems: 'center' }}>
+            {/* Left Column - Avatar & Platform */}
+            <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(0,0,0,0.15)', borderRadius: '16px', padding: '20px', border: '1px solid var(--panel-border)', minWidth: '180px' }}>
               <img 
                 src={profilePlayer.name.startsWith('.') 
-                  ? "https://minotar.net/helm/Steve/80.png" 
-                  : `https://crafatar.com/renders/body/${profilePlayer.uuid || profilePlayer.name}?size=80&overlay`}
+                  ? "https://minotar.net/helm/Steve/120.png" 
+                  : `https://crafatar.com/renders/body/${profilePlayer.uuid || profilePlayer.name}?size=120&overlay`}
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = `https://minotar.net/armor/body/${profilePlayer.name}/80.png`;
+                  (e.target as HTMLImageElement).src = `https://minotar.net/armor/body/${profilePlayer.name}/120.png`;
                 }}
                 alt="Avatar"
-                style={{ width: '80px', height: '110px', objectFit: 'contain', background: 'rgba(0,0,0,0.15)', borderRadius: '8px', padding: '4px' }}
+                style={{ width: '120px', height: '160px', objectFit: 'contain', marginBottom: '16px' }}
               />
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                  <h3 style={{ fontSize: '18px', fontWeight: '800', margin: 0 }}>{profilePlayer.name}</h3>
-                  <span className={`status-pill ${profilePlayer.online ? 'status-online' : 'status-offline'}`} style={{ padding: '2px 8px', fontSize: '10px' }}>
-                    {profilePlayer.online ? 'Online' : 'Offline'}
-                  </span>
-                </div>
-                
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all', marginBottom: '8px' }}>
-                  UUID: {profilePlayer.uuid || 'N/A'}
-                </p>
-
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  <span className={`player-badge ${profilePlayer.name.startsWith('.') ? 'badge-bedrock' : 'badge-java'}`}>
-                    {profilePlayer.name.startsWith('.') ? 'Bedrock' : 'Java'}
-                  </span>
-                  {profilePlayer.isOp && (
-                    <span className="player-badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}>OP</span>
-                  )}
-                  {profilePlayer.isWhitelisted && (
-                    <span className="player-badge" style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e' }}>Whitelisted</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Profile Statistics Wrapper to prevent overflow */}
-            <div style={{ maxHeight: '240px', overflowY: 'auto', paddingRight: '4px', marginBottom: '20px' }}>
-              {/* Location */}
-              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '10px', marginBottom: '12px', border: '1px solid var(--panel-border)' }}>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '700', marginBottom: '6px' }}>Last Known Position</p>
-                {profilePlayer.x !== undefined ? (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                    <span>Coords: <code style={{ color: 'var(--accent-color)' }}>{profilePlayer.x.toFixed(1)}, {profilePlayer.y.toFixed(1)}, {profilePlayer.z.toFixed(1)}</code></span>
-                    <span style={{ color: 'var(--text-secondary)' }}>Dim: <strong style={{ color: '#fff' }}>{profilePlayer.dimension || 'Overworld'}</strong></span>
-                  </div>
-                ) : (
-                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>No location data available.</p>
+              <h3 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '8px', textAlign: 'center' }}>{profilePlayer.name}</h3>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <span className={`player-badge ${profilePlayer.name.startsWith('.') ? 'badge-bedrock' : 'badge-java'}`}>
+                  {profilePlayer.name.startsWith('.') ? 'Bedrock' : 'Java'}
+                </span>
+                {profilePlayer.isOp && (
+                  <span className="player-badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}>OP</span>
+                )}
+                {profilePlayer.isWhitelisted && (
+                  <span className="player-badge" style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e' }}>Whitelisted</span>
                 )}
               </div>
-
-              {/* Stats Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
-                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
-                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Play Time</p>
-                  <p style={{ fontSize: '14px', fontWeight: '700', margin: 0 }}>
-                    {profilePlayer.playTimeHours !== undefined ? `${profilePlayer.playTimeHours.toFixed(1)} hrs` : 'N/A'}
-                  </p>
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
-                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Deaths</p>
-                  <p style={{ fontSize: '14px', fontWeight: '700', margin: 0 }}>
-                    {profilePlayer.deaths !== undefined ? profilePlayer.deaths : '0'}
-                  </p>
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
-                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Health / Hunger</p>
-                  <p style={{ fontSize: '13px', fontWeight: '700', margin: 0 }}>
-                    ❤️ {profilePlayer.health !== undefined ? `${profilePlayer.health.toFixed(0)}/20` : 'N/A'} | 🍖 {profilePlayer.foodLevel !== undefined ? `${profilePlayer.foodLevel}/20` : 'N/A'}
-                  </p>
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
-                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>XP Level</p>
-                  <p style={{ fontSize: '14px', fontWeight: '700', margin: 0 }}>
-                    ✨ {profilePlayer.xpLevel !== undefined ? profilePlayer.xpLevel : 'N/A'}
-                  </p>
-                </div>
-              </div>
             </div>
 
-            {/* Admin Management Buttons */}
-            <div style={{ borderTop: '1px solid var(--panel-border)', paddingTop: '16px' }}>
-              <p style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '700', marginBottom: '10px' }}>Admin Actions</p>
-              
-              {/* Commands Row */}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ padding: '6px 12px', fontSize: '12px' }}
-                  onClick={() => handleAction('rcon', { command: `op "${profilePlayer.name}"` }, `Made ${profilePlayer.name} OP`)}
-                  disabled={!phoneOnline || !status.serverRunning}
-                >
-                  OP
-                </button>
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ padding: '6px 12px', fontSize: '12px' }}
-                  onClick={() => handleAction('rcon', { command: `deop "${profilePlayer.name}"` }, `Removed OP from ${profilePlayer.name}`)}
-                  disabled={!phoneOnline || !status.serverRunning}
-                >
-                  De-OP
-                </button>
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ padding: '6px 12px', fontSize: '12px' }}
-                  onClick={() => handleAction('rcon', { command: `gamemode creative "${profilePlayer.name}"` }, `Creative mode set for ${profilePlayer.name}`)}
-                  disabled={!phoneOnline || !status.serverRunning || !profilePlayer.online}
-                >
-                  Creative
-                </button>
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ padding: '6px 12px', fontSize: '12px' }}
-                  onClick={() => handleAction('rcon', { command: `gamemode survival "${profilePlayer.name}"` }, `Survival mode set for ${profilePlayer.name}`)}
-                  disabled={!phoneOnline || !status.serverRunning || !profilePlayer.online}
-                >
-                  Survival
-                </button>
-              </div>
+            {/* Right Column - Server Details & Actions */}
+            <div style={{ flex: '2 1 400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <h4 style={{ fontSize: '14px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Player Status & Metrics</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+                  
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+                    <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Coordinates</p>
+                    <p style={{ fontSize: '13px', fontWeight: '700', fontFamily: 'var(--font-mono)', margin: 0 }}>
+                      {profilePlayer.x !== undefined ? `${profilePlayer.x.toFixed(0)}, ${profilePlayer.y.toFixed(0)}, ${profilePlayer.z.toFixed(0)}` : 'N/A'}
+                    </p>
+                  </div>
 
-              {/* Ban/Kick/Whitelist controls */}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ padding: '6px 12px', fontSize: '12px' }}
-                  onClick={() => handleAction(profilePlayer.isWhitelisted ? 'whitelist_remove' : 'whitelist_add', { playerName: profilePlayer.name }, `Whitelist toggled for ${profilePlayer.name}`)}
-                  disabled={!phoneOnline || !status.serverRunning}
-                >
-                  {profilePlayer.isWhitelisted ? 'Remove Whitelist' : 'Whitelist'}
-                </button>
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ padding: '6px 12px', fontSize: '12px' }}
-                  onClick={() => {
-                    setProfilePlayer(null);
-                    triggerConfirm(
-                      'Ban Player',
-                      `Are you sure you want to ban ${profilePlayer.name}?`,
-                      () => handleAction('ban', { playerName: profilePlayer.name }, `Banned ${profilePlayer.name}`)
-                    );
-                  }}
-                  disabled={!phoneOnline || !status.serverRunning}
-                >
-                  Ban
-                </button>
-                {profilePlayer.online && (
-                  <button 
-                    className="btn btn-danger" 
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+                    <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Dimension</p>
+                    <p style={{ fontSize: '13px', fontWeight: '700', margin: 0 }}>
+                      {profilePlayer.dimension || 'Overworld'}
+                    </p>
+                  </div>
+
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+                    <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Health</p>
+                    <p style={{ fontSize: '13px', fontWeight: '700', color: 'var(--danger-color)', margin: 0 }}>
+                      ❤️ {profilePlayer.health !== undefined ? `${(profilePlayer.health).toFixed(0)}/20` : '20/20'}
+                    </p>
+                  </div>
+
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+                    <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>XP Level</p>
+                    <p style={{ fontSize: '13px', fontWeight: '700', margin: 0 }}>
+                      ✨ {profilePlayer.xpLevel !== undefined ? profilePlayer.xpLevel : '0'}
+                    </p>
+                  </div>
+
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+                    <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Ping</p>
+                    <p style={{ fontSize: '13px', fontWeight: '700', color: 'var(--success-color)', margin: 0 }}>
+                      📶 {profilePlayer.pingText || (profilePlayer.online ? 'Online' : 'Offline')}
+                    </p>
+                  </div>
+
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+                    <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Game Mode</p>
+                    <p style={{ fontSize: '13px', fontWeight: '700', margin: 0 }}>
+                      {profilePlayer.gamemode || 'Survival'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div style={{ borderTop: '1px solid var(--panel-border)', paddingTop: '12px' }}>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '700', marginBottom: '8px', margin: 0 }}>Administrative Commands</p>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: '12px' }}
+                    onClick={() => handleAction('rcon', { command: `op "${profilePlayer.name}"` }, `Made ${profilePlayer.name} OP`)}
+                    disabled={!phoneOnline || !status.serverRunning}
+                  >
+                    OP
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: '12px' }}
+                    onClick={() => handleAction('rcon', { command: `deop "${profilePlayer.name}"` }, `Removed OP from ${profilePlayer.name}`)}
+                    disabled={!phoneOnline || !status.serverRunning}
+                  >
+                    De-OP
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: '12px' }}
+                    onClick={() => handleAction('rcon', { command: `gamemode creative "${profilePlayer.name}"` }, `Set Creative Mode`)}
+                    disabled={!phoneOnline || !status.serverRunning || !profilePlayer.online}
+                  >
+                    Creative
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: '12px' }}
+                    onClick={() => handleAction('rcon', { command: `gamemode survival "${profilePlayer.name}"` }, `Set Survival Mode`)}
+                    disabled={!phoneOnline || !status.serverRunning || !profilePlayer.online}
+                  >
+                    Survival
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: '12px' }}
+                    onClick={() => handleAction(profilePlayer.isWhitelisted ? 'whitelist_remove' : 'whitelist_add', { playerName: profilePlayer.name }, `Whitelist toggled`)}
+                    disabled={!phoneOnline || !status.serverRunning}
+                  >
+                    {profilePlayer.isWhitelisted ? 'Remove Whitelist' : 'Add Whitelist'}
+                  </button>
+                  <button
+                    className="btn btn-secondary"
                     style={{ padding: '6px 12px', fontSize: '12px' }}
                     onClick={() => {
                       setProfilePlayer(null);
-                      handleAction('kick', { playerName: profilePlayer.name }, `Kicked ${profilePlayer.name}`);
+                      triggerConfirm('Ban Player', `Ban ${profilePlayer.name}?`, () => handleAction('ban', { playerName: profilePlayer.name }, `Banned ${profilePlayer.name}`));
                     }}
                     disabled={!phoneOnline || !status.serverRunning}
                   >
-                    Kick
+                    Ban
                   </button>
-                )}
+                  {profilePlayer.online && (
+                    <button
+                      className="btn btn-danger"
+                      style={{ padding: '6px 12px', fontSize: '12px' }}
+                      onClick={() => {
+                        setProfilePlayer(null);
+                        handleAction('kick', { playerName: profilePlayer.name }, `Kicked ${profilePlayer.name}`);
+                      }}
+                      disabled={!phoneOnline || !status.serverRunning}
+                    >
+                      Kick
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* Teleportation Options */}
-              {status.serverRunning && (
-                <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
-                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '700', marginBottom: '10px' }}>Teleportation</p>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {profilePlayer.x !== undefined && (
-                      <button 
-                        className="btn btn-primary" 
-                        style={{ padding: '6px 12px', fontSize: '12px' }}
-                        onClick={() => {
-                          const dim = profilePlayer.dimension || 'Overworld';
-                          const command = dim !== 'Overworld'
-                            ? `execute in ${dim.toLowerCase().replace('overworld', 'overworld')} run tp @p ${profilePlayer.x.toFixed(1)} ${profilePlayer.y.toFixed(1)} ${profilePlayer.z.toFixed(1)}`
-                            : `tp @p ${profilePlayer.x.toFixed(1)} ${profilePlayer.y.toFixed(1)} ${profilePlayer.z.toFixed(1)}`;
-                          handleAction('rcon', { command }, `Teleporting @p to ${profilePlayer.name}'s location`);
-                        }}
-                        disabled={!phoneOnline}
-                      >
-                        Teleport Nearest Player (@p) here
-                      </button>
-                    )}
-                    {profilePlayer.deathX !== undefined && (
-                      <button 
-                        className="btn btn-secondary" 
-                        style={{ padding: '6px 12px', fontSize: '12px' }}
-                        onClick={() => {
-                          const dim = profilePlayer.deathDimension || 'Overworld';
-                          const command = `execute in ${dim.toLowerCase()} run tp @p ${profilePlayer.deathX.toFixed(1)} ${profilePlayer.deathY.toFixed(1)} ${profilePlayer.deathZ.toFixed(1)}`;
-                          handleAction('rcon', { command }, `Teleporting @p to ${profilePlayer.name}'s death location`);
-                        }}
-                        disabled={!phoneOnline}
-                      >
-                        Teleport @p to Death Location
-                      </button>
-                    )}
-                    {profilePlayer.online && (
-                      <button 
-                        className="btn btn-secondary" 
-                        style={{ padding: '6px 12px', fontSize: '12px' }}
-                        onClick={() => handleAction('rcon', { command: `tp "${profilePlayer.name}" 0 80 0` }, `Teleporting ${profilePlayer.name} to spawn`)}
-                        disabled={!phoneOnline}
-                      >
-                        Teleport Player to Spawn
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            {/* Close Button */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px', borderTop: '1px solid var(--panel-border)', paddingTop: '14px' }}>
-              <button className="btn btn-secondary" onClick={() => setProfilePlayer(null)}>Close</button>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'auto', borderTop: '1px solid var(--panel-border)', paddingTop: '10px' }}>
+                <button className="btn btn-secondary" onClick={() => setProfilePlayer(null)}>Close</button>
+              </div>
             </div>
           </div>
         </div>

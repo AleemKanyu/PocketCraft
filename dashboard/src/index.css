@@ -1,19 +1,19 @@
 /* Custom Design System for PocketCraft Web Dashboard */
 :root {
-  --bg-primary: #09090f;
-  --bg-secondary: #0f0f1b;
-  --panel-bg: rgba(18, 18, 30, 0.65);
-  --panel-border: rgba(255, 255, 255, 0.08);
-  --accent-color: #a855f7;
-  --accent-glow: rgba(168, 85, 247, 0.4);
+  --bg-primary: #050a06;
+  --bg-secondary: #0a120c;
+  --panel-bg: rgba(12, 22, 14, 0.70);
+  --panel-border: rgba(34, 197, 94, 0.12);
+  --accent-color: #22c55e;
+  --accent-glow: rgba(34, 197, 94, 0.4);
   --success-color: #22c55e;
   --success-glow: rgba(34, 197, 94, 0.4);
   --danger-color: #ef4444;
   --danger-glow: rgba(239, 68, 68, 0.4);
   --warning-color: #f59e0b;
   --text-primary: #f3f4f6;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
+  --text-secondary: #a7f3d0;
+  --text-muted: #6b8c73;
   --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 }
@@ -33,8 +33,8 @@ button {
 body {
   background-color: var(--bg-primary);
   background-image: 
-    radial-gradient(at 0% 0%, rgba(124, 58, 237, 0.12) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.08) 0px, transparent 50%);
+    radial-gradient(at 0% 0%, rgba(34, 197, 94, 0.12) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%);
   background-size: 100% 100%, 100% 100%;
   background-color: var(--bg-secondary);
   color: var(--text-primary);
@@ -70,7 +70,7 @@ body {
   font-weight: 800;
   margin-bottom: 8px;
   letter-spacing: -0.5px;
-  background: linear-gradient(135deg, #fff 0%, #a855f7 100%);
+  background: linear-gradient(135deg, #fff 0%, #22c55e 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -108,7 +108,7 @@ body {
   font-size: 24px;
   font-weight: 800;
   letter-spacing: -0.5px;
-  background: linear-gradient(135deg, #a855f7 0%, #d8b4fe 100%);
+  background: linear-gradient(135deg, #22c55e 0%, #a7f3d0 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   text-shadow: 0 2px 14px rgba(15, 23, 42, 0.18), 0 1px 0 rgba(255, 255, 255, 0.45);
@@ -134,8 +134,8 @@ body {
 }
 
 .panel-card:hover {
-  border-color: rgba(168, 85, 247, 0.25);
-  box-shadow: 0 12px 36px rgba(168, 85, 247, 0.08);
+  border-color: rgba(34, 197, 94, 0.25);
+  box-shadow: 0 12px 36px rgba(34, 197, 94, 0.08);
 }
 
 .card-title {
@@ -177,13 +177,13 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);
+  background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
   color: #fff;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
 }
 
 .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5), 0 0 0 2px rgba(168, 85, 247, 0.4);
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.5), 0 0 0 2px rgba(34, 197, 94, 0.4);
   transform: translateY(-1px);
 }
 
@@ -614,7 +614,7 @@ input:checked + .slider:before {
 
 .floating-mob {
   position: absolute;
-  opacity: 0.025; /* Very subtle */
+  opacity: 0.06; /* More visible creeper silhouettes */
   fill: currentColor;
   color: var(--text-primary);
   animation: float-around 45s linear infinite;
