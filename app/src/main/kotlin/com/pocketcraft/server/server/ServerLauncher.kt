@@ -666,12 +666,11 @@ class ServerLauncher(private val context: Context) {
             "-XX:+UseStringDeduplication",
             "-XX:+UseG1GC",
             "-XX:+ParallelRefProcEnabled",
-            "-XX:MaxGCPauseMillis=200",
+            "-XX:MaxGCPauseMillis=100",
             "-XX:+DisableExplicitGC",
         ).apply {
             addAll(gcFlags)
             addAll(listOf(
-                "-XX:+PerfDisableSharedMem",
                 "-XX:-UsePerfData",
                 "-XX:-UseContainerSupport",
                 "-XX:ErrorFile=$errorFilePattern",
@@ -959,11 +958,11 @@ class ServerLauncher(private val context: Context) {
     ): Int {
         val vd = viewDistance.coerceIn(4, 32)
         return if (!cellularRelay) {
-            // Wi-Fi: Favorable rate to prevent upload link saturation
-            if (flightModeEnabled) 45 else 30
+            // Wi-Fi: Fast chunk rendering
+            if (flightModeEnabled) 150 else 100
         } else {
-            // Cellular: Responsive chunk loading under 180ms ping
-            if (flightModeEnabled) 25 else 20
+            // Cellular: Moderate chunk rendering
+            if (flightModeEnabled) 80 else 50
         }
     }
 
@@ -976,9 +975,9 @@ class ServerLauncher(private val context: Context) {
         } else {
             // Wi-Fi: Favorable concurrency to prevent 100% CPU thread starvation on mobile cores
             if (flightModeEnabled) {
-                Triple(3, 4, 3)
+                Triple(4, 6, 4)
             } else {
-                Triple(2, 3, 2)
+                Triple(3, 4, 3)
             }
         }
     }
@@ -1169,7 +1168,7 @@ class ServerLauncher(private val context: Context) {
         // instead of RTT + up to 1000ms scheduling jitter.
         updated = ensureYamlSectionValue(updated, "misc", "keep-alive-timeout", "60")
         updated = ensureYamlSectionValue(updated, "misc", "keep-alive-interval", "1")
-        updated = ensureYamlSectionValue(updated, "misc", "compression-level", "9")
+        updated = ensureYamlSectionValue(updated, "misc", "compression-level", "6")
 
         // Disable updater and metrics submission checks to prevent slow network lookup stalls on startup
         updated = ensureYamlPathValue(updated, listOf("updater"), "updater-status", "none")

@@ -341,7 +341,7 @@ fun ConsoleScreen(
     LaunchedEffect(stateHolder.status == ServerStatus.ONLINE) {
         if (stateHolder.status == ServerStatus.ONLINE) {
             while (stateHolder.status == ServerStatus.ONLINE) {
-                usedRamMb = RamUtils.getProcessRamMb(context)
+                usedRamMb = RamUtils.getUsedRamMb(context)
                 delay(3000)
             }
         } else {
@@ -744,9 +744,8 @@ fun ConsoleScreen(
         if (stateHolder.status == ServerStatus.ONLINE) {
             item {
                 AnimatedEntranceContainer(index = 12) {
-                    // Show JVM heap used vs the user-configured server RAM cap.
-                    // manualRamMb is the -Xmx value given to the Minecraft server.
-                    RamUsageCard(usedMb = usedRamMb, maxMb = manualRamMb.coerceAtLeast(256))
+                    val totalPhoneRamMb = RamUtils.getTotalRamMb(context)
+                    RamUsageCard(usedMb = usedRamMb, maxMb = totalPhoneRamMb)
                 }
             }
         }
@@ -2225,9 +2224,8 @@ private fun AddressValueRow(
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
+                maxLines = 2,
+                softWrap = true,
                 fontFamily = FontFamily.Monospace,
                 letterSpacing = (-0.2).sp,
                 modifier = Modifier.weight(1f)

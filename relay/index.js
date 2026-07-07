@@ -1139,7 +1139,11 @@ app.get('/download/paper', async (req, res) => {
   }
 
   try {
-    const apiRes = await fetch(`https://api.papermc.io/v2/projects/paper/versions/${version}`);
+    const apiRes = await fetch(`https://fill.papermc.io/v3/projects/paper/versions/${version}`, {
+      headers: {
+        'User-Agent': 'PocketCraft/1.0.0 (admin@pocketcraft.online)'
+      }
+    });
     if (!apiRes.ok) {
       return res.status(apiRes.status).send(`Failed to fetch version metadata from PaperMC: ${apiRes.statusText}`);
     }
@@ -1148,12 +1152,26 @@ app.get('/download/paper', async (req, res) => {
       return res.status(404).send('No builds found for this version.');
     }
 
-    const latestBuild = data.builds[data.builds.length - 1];
-    const downloadUrl = `https://api.papermc.io/v2/projects/paper/versions/${version}/builds/${latestBuild}/downloads/paper-${version}-${latestBuild}.jar`;
+    const latestBuild = Math.max(...data.builds.map(Number).filter(n => !isNaN(n)));
+
+    const buildRes = await fetch(`https://fill.papermc.io/v3/projects/paper/versions/${version}/builds/${latestBuild}`, {
+      headers: {
+        'User-Agent': 'PocketCraft/1.0.0 (admin@pocketcraft.online)'
+      }
+    });
+    if (!buildRes.ok) {
+      return res.status(buildRes.status).send(`Failed to fetch build metadata from PaperMC: ${buildRes.statusText}`);
+    }
+    const buildData = await buildRes.json();
+    const downloadObj = buildData.downloads?.['server:default'] || buildData.downloads?.['application'];
+    if (!downloadObj || !downloadObj.url) {
+      return res.status(404).send('Download URL not found in PaperMC response.');
+    }
+    const downloadUrl = downloadObj.url;
 
     const jarRes = await fetch(downloadUrl, {
       headers: {
-        'User-Agent': 'PocketCraft/1.0.0'
+        'User-Agent': 'PocketCraft/1.0.0 (admin@pocketcraft.online)'
       }
     });
 
@@ -1162,7 +1180,7 @@ app.get('/download/paper', async (req, res) => {
     }
 
     res.setHeader('Content-Type', 'application/java-archive');
-    res.setHeader('Content-Disposition', `attachment; filename="paper-${version}-${latestBuild}.jar"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadObj.name || `paper-${version}-${latestBuild}.jar`}"`);
 
     const readableStream = jarRes.body;
     if (readableStream && typeof readableStream.pipeTo === 'function') {
@@ -1301,7 +1319,15 @@ setInterval(() => {
     const poolSize = t.phoneSocketPool.length;
     const hasBedrockSocket = !!(t.bedrockPhoneSocket && !t.bedrockPhoneSocket.destroyed);
     const hasUdp = userUdpSockets.has(userId);
-    const hasRecentReady = t.lastReadyAt && (Date.now() - t.lastReadyAt) < STALE_TUNNEL_TIMEOUT_MS;
+    const isStale = t.lastReadyAt > 0
+      ? (Date.now() - t.lastReadyAt) >= STALE_TUNNEL_TIMEOUT_MS
+      : (Date.now() - t.createdAt) >= STALE_TUNNEL_TIMEOUT_MS;
+
+    if (isStale) {
+      console.warn(`[cleanup] Closing stale tunnel for ${userId}: ready heartbeat timed out.`);
+      closeTunnel(userId, 'stale_heartbeat_timeout');
+      continue;
+    }
 
     if (
       poolSize === 0 &&

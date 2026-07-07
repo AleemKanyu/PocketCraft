@@ -170,6 +170,34 @@ public class PocketCraftCompanion extends JavaPlugin implements org.bukkit.event
         }, "PocketCraft-Shutdown-Thread").start();
     }
 
+    @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.HIGH)
+    public void onPlayerJoin(org.bukkit.event.player.PlayerJoinEvent event) {
+        final Player player = event.getPlayer();
+        if (player.getName().startsWith("AFK_")) return; // Skip dummy bots
+
+        final int serverViewDistance = Bukkit.getServer().getViewDistance();
+        // Set joining player's view distance to 3 (minimum) to load chunks slowly and keep ping low
+        player.setViewDistance(3);
+        getLogger().info("[PocketCraft] Temp set view distance of " + player.getName() + " to 3 for low join ping.");
+
+        // Step up to half view distance after 8 seconds (160 ticks)
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            if (player.isOnline()) {
+                int midDistance = Math.max(5, serverViewDistance / 2);
+                player.setViewDistance(midDistance);
+                getLogger().info("[PocketCraft] Stepped up view distance of " + player.getName() + " to " + midDistance);
+            }
+        }, 160L);
+
+        // Gradually restore it to full view distance after 20 seconds (400 ticks)
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            if (player.isOnline()) {
+                player.setViewDistance(serverViewDistance);
+                getLogger().info("[PocketCraft] Restored view distance of " + player.getName() + " to " + serverViewDistance);
+            }
+        }, 400L);
+    }
+
     @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.MONITOR)
     public void onPlayerDeath(org.bukkit.event.entity.PlayerDeathEvent event) {
         final Player player = event.getEntity();

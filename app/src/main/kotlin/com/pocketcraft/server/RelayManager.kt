@@ -51,12 +51,13 @@ class RelayManager(private val context: Context) {
         const val PHONE_TUNNEL_PORT = 9000
         // Bound kernel queues so chunks backpressure Paper before keepalives sit
         // behind seconds of unsent data on constrained mobile relay routes.
-        private const val SOCKET_BUFFER_SIZE = 128 * 1024
+        private const val SOCKET_BUFFER_SIZE = 16 * 1024
         private const val PLAYER_BRIDGE_BUFFER_SIZE = 8 * 1024
-        // Smaller upstream reads so chunk blobs do not monopolize one relay socket write.
+        // Upstream buffer — large enough to send chunk blobs in fewer writes without stalling
+        // latency-sensitive control packets (Keep Alive, movement) behind them.
         private const val PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE = 8 * 1024
         private const val BEDROCK_TX_BUFFER_SIZE = 8 * 1024
-        private const val BEDROCK_SMALL_FRAME_MAX_BYTES = 1024
+        private const val BEDROCK_SMALL_FRAME_MAX_BYTES = 3072
         private const val BEDROCK_LARGE_FRAME_BATCH_MAX = 4
         private const val BEDROCK_MAX_BYTES_PER_CYCLE = 16 * 1024
         private const val BEDROCK_PING_CHANNEL_CAPACITY = 512
@@ -343,7 +344,7 @@ class RelayManager(private val context: Context) {
         val channel = if (pingFrame) bedrockPingChannel else bedrockChunkChannel
         if (channel.trySend(frame).isSuccess) return
         if (pingFrame) {
-            bedrockChunkChannel.tryReceive()
+            bedrockPingChannel.tryReceive()
             if (channel.trySend(frame).isFailure) {
                 logDroppedBedrockFrame()
             }
@@ -400,10 +401,19 @@ class RelayManager(private val context: Context) {
         outStream: java.io.BufferedOutputStream,
         socket: Socket
     ) {
+        var drainedAny = false
         while (true) {
             val next = bedrockPingChannel.tryReceive()
             if (!next.isSuccess) break
-            if (!writeBedrockFrame(outStream, socket, next.getOrThrow())) break
+            if (!writeBedrockFrame(outStream, socket, next.getOrThrow(), flush = false)) break
+            drainedAny = true
+        }
+        if (drainedAny) {
+            synchronized(bedrockSocketWriteLock) {
+                if (activeBedrockSocket === socket && !socket.isClosed) {
+                    try { outStream.flush() } catch (_: Exception) {}
+                }
+            }
         }
     }
 
@@ -867,7 +877,7 @@ class RelayManager(private val context: Context) {
                 }
 
                 socket = Socket()
-                configureSocket(socket)
+                configureRelaySocket(socket)
                 socket.connect(java.net.InetSocketAddress(targetIp, PHONE_TUNNEL_PORT), 10_000)
 
                 socket.outputStream.write("$userId\n".toByteArray(Charsets.UTF_8))
@@ -958,7 +968,7 @@ class RelayManager(private val context: Context) {
     }
 
     private suspend fun bridgeBedrockConnection(relaySocket: Socket, firstByte: Int) {
-        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE)
         android.util.Log.i("RelayManager", "Bedrock UDP bridge ACTIVE via TCP tunnel.")
         android.util.Log.d(
             "RelayManager",
@@ -1085,7 +1095,7 @@ class RelayManager(private val context: Context) {
         val localSocket = try {
             withContext(Dispatchers.IO) {
                 Socket().apply {
-                    configureSocket(this)
+                    configureLocalSocket(this)
                     connect(java.net.InetSocketAddress("127.0.0.1", localPort), 5000)
                 }
             }
@@ -1107,8 +1117,7 @@ class RelayManager(private val context: Context) {
             var totalBytes = 0L
             try {
                 val output = localSocket.getOutputStream()
-                // A Bedrock-to-Java handoff must keep using the BufferedInputStream:
-                // it may already contain bytes read ahead from the Java handshake.
+                // A Bedrock-to-Java handoff must keep using the BufferedInputStream.
                 val relayInput = relayInputOverride ?: relaySocket.getInputStream()
 
                 // Manually push the first byte to the server
@@ -1193,13 +1202,26 @@ class RelayManager(private val context: Context) {
         }
     }
 
-    private fun configureSocket(socket: Socket) {
+    private fun configureLocalSocket(socket: Socket) {
         runCatching {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = SOCKET_BUFFER_SIZE
-            socket.receiveBufferSize = SOCKET_BUFFER_SIZE
+            socket.sendBufferSize = 128 * 1024
+            socket.receiveBufferSize = 128 * 1024
+            socket.trafficClass = 0x10 // IPTOS_LOWDELAY
+        }
+    }
+
+    private fun configureRelaySocket(socket: Socket) {
+        runCatching {
+            socket.tcpNoDelay = true
+            socket.keepAlive = true
+            socket.reuseAddress = true
+            // Medium send buffer to prevent upload bufferbloat while avoiding write-blocking
+            socket.sendBufferSize = 64 * 1024
+            // Large receive buffer to ensure download performance
+            socket.receiveBufferSize = 128 * 1024
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 1, 0)
         }

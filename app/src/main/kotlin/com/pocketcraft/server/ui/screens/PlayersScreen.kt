@@ -928,6 +928,12 @@ private fun AddAfkFarmDialog(
                         return@Button
                     }
 
+                    val isPremium = com.pocketcraft.server.billing.BillingManager.getInstance(context).isPremium.value
+                    if (!isPremium && stateHolder.afkFarms.size >= 1) {
+                        error = "Free plan is limited to 1 AFK bot. Upgrade to Pro to unlock unlimited AFK bots!"
+                        return@Button
+                    }
+
                     saving = true
                     scope.launch {
                         val message = stateHolder.addAfkFarm(

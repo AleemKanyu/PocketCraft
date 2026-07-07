@@ -72,6 +72,8 @@ private data class CelebConfetti(
 
 private val premiumPerks = listOf(
     "Custom IP for easy server joining" to "🌐",
+    "Web Dashboard (with Console & Logs)" to "💻",
+    "Unlimited AFK Bots" to "🤖",
     "Support for up to 50 players" to "👥",
     "More world slots to design & test" to "🗺️",
     "Full live operator chat access" to "💬",

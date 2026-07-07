@@ -112,6 +112,14 @@ class AfkHelperManager(
             return@withContext "Enter a farm name first."
         }
 
+        val isPremium = com.pocketcraft.server.billing.BillingManager.getInstance(appContext).isPremium.value
+        if (!isPremium) {
+            val existingCount = dao.getAll().filter { it.worldName.equals(worldName, ignoreCase = true) }.size
+            if (existingCount >= 1) {
+                return@withContext "Free plan is limited to 1 AFK bot. Upgrade to Pro to unlock unlimited AFK bots!"
+            }
+        }
+
         val defaultOwner = resolveDefaultOwner()
         val entity = AfkFarmLocationEntity(
             id = UUID.randomUUID().toString(),

@@ -1603,8 +1603,8 @@ class ServerStateHolder(
             if (portOpen) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
-            // If the port is closed, double check the process just in case
-            if (serviceActive) {
+            // If the port is closed, double check if service is running or process is active
+            if (ServerHostService.isServiceRunning(appContext) || serviceActive) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
             ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
@@ -1615,8 +1615,8 @@ class ServerStateHolder(
             if (portOpen) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
-            // If starting, just check if the service process is alive
-            if (serviceActive) {
+            // If starting, check if the service is running or process is active
+            if (ServerHostService.isServiceRunning(appContext) || serviceActive) {
                 return PersistedRuntimeState(isStarting = true, publicAddress = address)
             }
             // Dead state

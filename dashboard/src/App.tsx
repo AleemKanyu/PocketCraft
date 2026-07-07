@@ -71,10 +71,14 @@ const PowerIcon = () => (
 interface Player {
   name: string;
   uuid: string;
+  pingText?: string;
 }
 
 interface DashboardStatus {
   serverRunning: boolean;
+  serverState?: 'running' | 'starting' | 'stopped';
+  bootProgress?: string;
+  bootProgressPercent?: number;
   playersOnline: Player[];
   uptimeSeconds: number;
   tps: number | null;
@@ -82,6 +86,21 @@ interface DashboardStatus {
   subdomain: string | null;
   whitelist: string[];
   lastSeen: Timestamp;
+  relayAddress?: string | null;
+  allPlayers?: any[];
+  currentWorld?: string;
+  worlds?: string[];
+  properties?: {
+    difficulty?: string;
+    gamemode?: string;
+    pvp?: string;
+    maxPlayers?: string;
+    viewDistance?: string;
+    simulationDistance?: string;
+    allowNether?: string;
+    whiteList?: string;
+    spawnProtection?: string;
+  };
 }
 
 interface ToastMessage {
@@ -93,6 +112,53 @@ interface ToastMessage {
 interface ConsoleLine {
   type: 'input' | 'output' | 'error';
   text: string;
+}
+
+// --- Subtle Background Mobs Component ---
+function SubtleBackgroundMobs() {
+  const mobs = [
+    {
+      name: 'Creeper',
+      d: 'M2 2h20v20H2V2zm4 4v4h4V6H6zm10 0v4h4V6h-4zm-6 6h4v2h-4v-2zm-2 2h8v4H6v-4z',
+      color: '#22c55e'
+    }
+  ];
+
+  const [items] = useState(() => {
+    return Array.from({ length: 12 }).map((_, i) => {
+      const mob = mobs[i % mobs.length];
+      return {
+        id: i,
+        mob,
+        left: `${(i * 9) % 95}%`,
+        delay: `${i * 4}s`,
+        size: `${24 + (i * 7) % 24}px`,
+        duration: `${35 + (i * 8) % 30}s`
+      };
+    });
+  });
+
+  return (
+    <div className="subtle-bg-mobs">
+      {items.map(item => (
+        <svg
+          key={item.id}
+          className="floating-mob"
+          style={{
+            left: item.left,
+            width: item.size,
+            height: item.size,
+            animationDelay: item.delay,
+            animationDuration: item.duration,
+            color: item.mob.color
+          }}
+          viewBox="0 0 24 24"
+        >
+          <path d={item.mob.d} />
+        </svg>
+      ))}
+    </div>
+  );
 }
 
 function App() {
@@ -196,6 +262,7 @@ function DashboardPage({
   const [loading, setLoading] = useState(true);
   const [phoneOnline, setPhoneOnline] = useState(false);
   const [proUser, setProUser] = useState(false);
+  const [profilePlayer, setProfilePlayer] = useState<any | null>(null);
 
   // Command Pending States
   const [pendingActions, setPendingActions] = useState<Record<string, boolean>>({});
@@ -346,8 +413,57 @@ function DashboardPage({
     );
   }
 
+  const resolvedServerState = status.serverState || (status.serverRunning ? 'running' : 'stopped');
+  const rawBootProgress = status.bootProgress?.trim() || '';
+  const visibleBootProgress = resolvedServerState === 'starting'
+    ? (rawBootProgress.toLowerCase().includes('stopping') ? 'Launching Java VM runtime...' : rawBootProgress || 'Launching Java VM runtime...')
+    : '';
+  const bootProgressPercent = resolvedServerState === 'starting'
+    ? Math.max(0, Math.min(100, status.bootProgressPercent || 0))
+    : 0;
+  const serverStatusLabel = resolvedServerState === 'running'
+    ? 'Running'
+    : resolvedServerState === 'starting'
+      ? 'Starting...'
+      : 'Stopped';
+  const serverStatusColor = resolvedServerState === 'running'
+    ? 'var(--success-color)'
+    : resolvedServerState === 'starting'
+      ? 'var(--warning-color)'
+      : 'var(--text-secondary)';
+
+  // Combine online players and all offline players from allPlayers
+  const allJoinedPlayers = (() => {
+    const onlineMap = new Map(status.playersOnline.map(p => [p.name, p]));
+    const offlineList = (status.allPlayers || []).map(p => ({
+      name: p.name,
+      uuid: p.uuid,
+      online: onlineMap.has(p.name),
+      pingText: onlineMap.get(p.name)?.pingText || '',
+      ...p
+    }));
+
+    // Fallback to online players if allPlayers is empty
+    if (offlineList.length === 0) {
+      return status.playersOnline.map(p => ({
+        name: p.name,
+        uuid: p.uuid,
+        online: true,
+        pingText: p.pingText || ''
+      }));
+    }
+
+    // Sort by online status (true first), then name
+    return offlineList.sort((a, b) => {
+      if (a.online && !b.online) return -1;
+      if (!a.online && b.online) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  })();
+
   return (
     <div className="dashboard-container">
+      <SubtleBackgroundMobs />
       {/* Header */}
       <header className="dashboard-header">
         <div className="brand-section">
@@ -365,17 +481,38 @@ function DashboardPage({
 
       {/* Grid Layout */}
       <div className="dashboard-grid">
+        {!phoneOnline && (
+          <div className="panel-card" style={{ gridColumn: 'span 12', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.24)', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px 20px', animation: 'fadeIn 0.3s ease-out' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--danger-color)', fontWeight: '800', fontSize: '16px' }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              Troubleshooting Connection Notice (Phone is Offline)
+            </div>
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+              Your phone appears to be offline. To ensure the PocketCraft Web Dashboard can access your phone at any time without keeping the app open, please disable battery optimization for the app:
+            </p>
+            <ol style={{ fontSize: '13px', color: 'var(--text-secondary)', paddingLeft: '20px', lineHeight: '1.6', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <li>Open <strong>Settings</strong> on your phone.</li>
+              <li>Navigate to <strong>Apps</strong> → <strong>PocketCraft</strong> → <strong>Battery</strong>.</li>
+              <li>Set the battery usage to <strong>"Unrestricted"</strong> (disable optimization).</li>
+              <li>Enable <strong>"Always Alive in Background"</strong> inside the app settings tab.</li>
+            </ol>
+          </div>
+        )}
         {/* Server Control Card */}
         <div className="panel-card" style={{ gridColumn: 'span 7' }}>
           <h2 className="card-title"><ServerIcon /> Server Control</h2>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px', alignItems: 'center' }}>
             <div>
               <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Server Status</p>
-              <h3 style={{ fontSize: '24px', fontWeight: '800', color: status.serverRunning ? 'var(--success-color)' : 'var(--text-secondary)' }}>
-                {status.serverRunning ? 'Running' : 'Stopped'}
+              <h3 style={{ fontSize: '24px', fontWeight: '800', color: serverStatusColor }}>
+                {serverStatusLabel}
               </h3>
             </div>
-            {status.serverRunning && (
+            {resolvedServerState === 'running' && (
               <>
                 <div>
                   <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Uptime</p>
@@ -384,14 +521,37 @@ function DashboardPage({
                   </h3>
                 </div>
                 <div>
-                  <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '4px' }}>TPS</p>
-                  <h3 style={{ fontSize: '20px', fontWeight: '700', color: status.tps && status.tps < 18 ? 'var(--warning-color)' : 'var(--success-color)' }}>
-                    {status.tps ? status.tps.toFixed(1) : '20.0'}
+                  <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Relay IP Address</p>
+                  <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--accent-color)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
+                    {status.relayAddress || 'None'}
                   </h3>
                 </div>
               </>
             )}
           </div>
+
+          {resolvedServerState === 'starting' && (
+            <div style={{ marginBottom: '20px', background: 'rgba(245, 158, 11, 0.08)', padding: '12px 16px', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.24)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--warning-color)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Booting Sequence
+                </span>
+                <span style={{ width: '12px', height: '12px', border: '2px solid var(--warning-color)', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 1s linear infinite' }}></span>
+              </div>
+              <p style={{ fontSize: '13px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', margin: '0 0 12px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {visibleBootProgress}
+              </p>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  <span>Startup Progress</span>
+                  <span style={{ fontWeight: '700' }}>{bootProgressPercent}%</span>
+                </div>
+                <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px', overflow: 'hidden' }}>
+                  <div style={{ width: `${bootProgressPercent}%`, height: '100%', background: 'linear-gradient(90deg, var(--warning-color), #fbbf24)', borderRadius: '999px', transition: 'width 0.25s ease' }}></div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: '12px' }}>
             {status.serverRunning ? (
@@ -410,13 +570,73 @@ function DashboardPage({
               <button 
                 className="btn btn-primary" 
                 onClick={() => handleAction('start_server', {}, 'Server start initiated.')}
-                disabled={!phoneOnline || pendingActions['start_server_{}']}
+                disabled={!phoneOnline || resolvedServerState === 'starting' || pendingActions['start_server_{}']}
               >
-                <PowerIcon /> {pendingActions['start_server_{}'] ? 'Starting...' : 'Start Server'}
+                <PowerIcon /> {resolvedServerState === 'starting' || pendingActions['start_server_{}'] ? 'Starting...' : 'Start Server'}
               </button>
             )}
           </div>
         </div>
+
+        {/* Players Registry Card */}
+        <div className="panel-card" style={{ gridColumn: 'span 5' }}>
+          <h2 className="card-title"><UsersIcon /> Players Registry ({allJoinedPlayers.length})</h2>
+          <div className="player-list" style={{ maxHeight: '280px', overflowY: 'auto' }}>
+            {allJoinedPlayers.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '20px' }}>
+                No players registered.
+              </div>
+            ) : (
+              allJoinedPlayers.map(p => (
+                <div 
+                  key={p.uuid || p.name} 
+                  className="player-item" 
+                  style={{ cursor: 'pointer', padding: '10px 14px' }}
+                  onClick={() => setProfilePlayer(p)}
+                >
+                  <div className="player-name-wrapper">
+                    <span 
+                      style={{ 
+                        display: 'inline-block', 
+                        width: '8px', 
+                        height: '8px', 
+                        borderRadius: '50%', 
+                        background: p.online ? 'var(--success-color)' : '#4b5563',
+                        boxShadow: p.online ? '0 0 8px var(--success-color)' : 'none'
+                      }}
+                    />
+                    <span className="player-name">{p.name}</span>
+                    <span className={`player-badge ${p.name.startsWith('.') ? 'badge-bedrock' : 'badge-java'}`}>
+                      {p.name.startsWith('.') ? 'Bedrock' : 'Java'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {p.online && p.pingText && (
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{p.pingText}</span>
+                    )}
+                    <button 
+                      className="btn btn-secondary" 
+                      style={{ padding: '4px 10px', fontSize: '12px' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setProfilePlayer(p);
+                      }}
+                    >
+                      Details
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Console Command Card */}
+        <ConsoleCardComponent 
+          phoneOnline={phoneOnline} 
+          serverRunning={status.serverRunning}
+          onDispatch={dispatchCommand}
+        />
 
         {/* AFK Helper Card */}
         <div className="panel-card" style={{ gridColumn: 'span 5' }}>
@@ -441,61 +661,9 @@ function DashboardPage({
           </div>
         </div>
 
-        {/* Players Online Card */}
-        <div className="panel-card" style={{ gridColumn: 'span 6' }}>
-          <h2 className="card-title"><UsersIcon /> Players Online ({status.playersOnline.length})</h2>
-          <div className="player-list">
-            {status.playersOnline.length === 0 ? (
-              <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '20px' }}>
-                No players currently connected.
-              </div>
-            ) : (
-              status.playersOnline.map(p => (
-                <div key={p.uuid || p.name} className="player-item">
-                  <div className="player-name-wrapper">
-                    <span className="player-name">{p.name}</span>
-                    <span className={`player-badge ${p.name.startsWith('.') ? 'badge-bedrock' : 'badge-java'}`}>
-                      {p.name.startsWith('.') ? 'Bedrock' : 'Java'}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button 
-                      className="btn btn-secondary" 
-                      style={{ padding: '6px 12px', fontSize: '12px' }}
-                      onClick={() => handleAction('kick', { playerName: p.name }, `Kicked player ${p.name}`)}
-                      disabled={!phoneOnline || !status.serverRunning}
-                    >
-                      Kick
-                    </button>
-                    <button 
-                      className="btn btn-danger" 
-                      style={{ padding: '6px 12px', fontSize: '12px' }}
-                      onClick={() => triggerConfirm(
-                        'Ban Player',
-                        `Are you sure you want to permanently ban player ${p.name} from the server?`,
-                        () => handleAction('ban', { playerName: p.name }, `Banned player ${p.name}`)
-                      )}
-                      disabled={!phoneOnline || !status.serverRunning}
-                    >
-                      Ban
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
         {/* Whitelist Card */}
         <WhitelistCardComponent 
           whitelist={status.whitelist} 
-          phoneOnline={phoneOnline} 
-          serverRunning={status.serverRunning}
-          onDispatch={dispatchCommand}
-        />
-
-        {/* Console Command Card */}
-        <ConsoleCardComponent 
           phoneOnline={phoneOnline} 
           serverRunning={status.serverRunning}
           onDispatch={dispatchCommand}
@@ -509,6 +677,221 @@ function DashboardPage({
           onDispatch={dispatchCommand}
           showToast={showToast}
         />
+
+        {/* Server Properties Card */}
+        <div className="panel-card" style={{ gridColumn: 'span 7' }}>
+          <h2 className="card-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            Server Properties
+          </h2>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Difficulty */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Difficulty</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Set game difficulty level</p>
+              </div>
+              <select 
+                className="form-control"
+                style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)', border: '1px solid var(--panel-border)', borderRadius: '8px' }}
+                value={status.properties?.difficulty || 'normal'}
+                onChange={(e) => handleAction('update_property', { key: 'difficulty', value: e.target.value }, `Difficulty set to ${e.target.value}`)}
+                disabled={!phoneOnline}
+              >
+                <option value="peaceful">Peaceful</option>
+                <option value="easy">Easy</option>
+                <option value="normal">Normal</option>
+                <option value="hard">Hard</option>
+              </select>
+            </div>
+
+            {/* Gamemode */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Game Mode</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Default player game mode</p>
+              </div>
+              <select 
+                className="form-control"
+                style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)', border: '1px solid var(--panel-border)', borderRadius: '8px' }}
+                value={status.properties?.gamemode || 'survival'}
+                onChange={(e) => handleAction('update_property', { key: 'gamemode', value: e.target.value }, `Game Mode set to ${e.target.value}`)}
+                disabled={!phoneOnline}
+              >
+                <option value="survival">Survival</option>
+                <option value="creative">Creative</option>
+                <option value="adventure">Adventure</option>
+                <option value="spectator">Spectator</option>
+              </select>
+            </div>
+
+            {/* PVP Toggle */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>PVP (Player vs Player)</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Allow players to damage each other</p>
+              </div>
+              <label className="switch">
+                <input 
+                  type="checkbox"
+                  checked={status.properties?.pvp !== 'false'}
+                  onChange={(e) => handleAction('update_property', { key: 'pvp', value: e.target.checked ? 'true' : 'false' }, `PVP set to ${e.target.checked}`)}
+                  disabled={!phoneOnline}
+                />
+                <span className="slider"></span>
+              </label>
+            </div>
+
+            {/* Whitelist Toggle */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Whitelist</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Only allow whitelisted players to join</p>
+              </div>
+              <label className="switch">
+                <input 
+                  type="checkbox"
+                  checked={status.properties?.whiteList === 'true'}
+                  onChange={(e) => handleAction('update_property', { key: 'white-list', value: e.target.checked ? 'true' : 'false' }, `Whitelist set to ${e.target.checked}`)}
+                  disabled={!phoneOnline}
+                />
+                <span className="slider"></span>
+              </label>
+            </div>
+
+            {/* Max Players */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Max Players</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Maximum concurrent players (1-50)</p>
+              </div>
+              <input 
+                type="number"
+                className="form-control"
+                style={{ width: '80px', textAlign: 'center', padding: '6px 8px', background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)', border: '1px solid var(--panel-border)', borderRadius: '8px' }}
+                defaultValue={status.properties?.maxPlayers || '10'}
+                onBlur={(e) => {
+                  const val = Math.max(1, Math.min(50, parseInt(e.target.value) || 10)).toString();
+                  if (val !== status.properties?.maxPlayers) {
+                    handleAction('update_property', { key: 'max-players', value: val }, `Max players set to ${val}`);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur();
+                  }
+                }}
+                disabled={!phoneOnline}
+              />
+            </div>
+
+            {/* Spawn Protection */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>Spawn Protection</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Spawn area protection radius in blocks</p>
+              </div>
+              <input 
+                type="number"
+                className="form-control"
+                style={{ width: '80px', textAlign: 'center', padding: '6px 8px', background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)', border: '1px solid var(--panel-border)', borderRadius: '8px' }}
+                defaultValue={status.properties?.spawnProtection || '16'}
+                onBlur={(e) => {
+                  const val = Math.max(0, parseInt(e.target.value) || 0).toString();
+                  handleAction('update_property', { key: 'spawn-protection', value: val }, `Spawn protection set to ${val}`);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur();
+                  }
+                }}
+                disabled={!phoneOnline}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* World Manager Card */}
+        <div className="panel-card" style={{ gridColumn: 'span 5' }}>
+          <h2 className="card-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            World Manager
+          </h2>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <p style={{ fontWeight: '700', fontSize: '14px', marginBottom: '8px', margin: 0 }}>Active World</p>
+              <div style={{ background: 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.3)', borderRadius: '12px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: '800', color: 'var(--accent-color)' }}>{status.currentWorld || 'world'}</span>
+                <span style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '700', color: 'var(--accent-color)', background: 'rgba(168, 85, 247, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>Active</span>
+              </div>
+            </div>
+
+            <div>
+              <p style={{ fontWeight: '700', fontSize: '14px', marginBottom: '8px', margin: 0 }}>Available Worlds</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '140px', overflowY: 'auto' }}>
+                {(status.worlds || ['world']).map(world => (
+                  <div key={world} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', padding: '8px 12px' }}>
+                    <span style={{ fontSize: '13px' }}>{world}</span>
+                    {world !== status.currentWorld && (
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: '4px 8px', fontSize: '12px' }}
+                        onClick={() => handleAction('switch_world', { worldName: world }, `Active world switched to ${world}`)}
+                        disabled={!phoneOnline || status.serverRunning}
+                      >
+                        Switch
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {status.serverRunning && (
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', margin: 0 }}>Stop the server to switch worlds</p>
+              )}
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--panel-border)', paddingTop: '12px' }}>
+              <p style={{ fontWeight: '700', fontSize: '14px', marginBottom: '8px', margin: 0 }}>Create New World</p>
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const form = e.currentTarget;
+                  const input = form.elements.namedItem('newWorldName') as HTMLInputElement;
+                  const name = input.value.trim();
+                  if (name) {
+                    handleAction('create_world', { worldName: name }, `World ${name} created and selected.`);
+                    input.value = '';
+                  }
+                }}
+                style={{ display: 'flex', gap: '8px' }}
+              >
+                <input
+                  name="newWorldName"
+                  type="text"
+                  className="form-control"
+                  placeholder="New world name..."
+                  style={{ flex: 1, padding: '8px 12px' }}
+                  disabled={!phoneOnline || status.serverRunning}
+                />
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ padding: '8px 12px' }}
+                  disabled={!phoneOnline || status.serverRunning}
+                >
+                  Create
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Confirmation Modal */}
@@ -520,6 +903,234 @@ function DashboardPage({
             <div className="modal-actions">
               <button className="btn btn-secondary" onClick={() => setConfirmModal(null)}>Cancel</button>
               <button className="btn btn-danger" onClick={confirmModal.onConfirm}>Confirm Action</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Player Profile Modal */}
+      {profilePlayer && (
+        <div className="modal-overlay" onClick={() => setProfilePlayer(null)}>
+          <div 
+            className="modal-content" 
+            style={{ maxWidth: '480px', width: '90%', padding: '24px', textAlign: 'left' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header / Basic Info */}
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', alignItems: 'center' }}>
+              <img 
+                src={profilePlayer.name.startsWith('.') 
+                  ? "https://minotar.net/helm/Steve/80.png" 
+                  : `https://crafatar.com/renders/body/${profilePlayer.uuid || profilePlayer.name}?size=80&overlay`}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = `https://minotar.net/armor/body/${profilePlayer.name}/80.png`;
+                }}
+                alt="Avatar"
+                style={{ width: '80px', height: '110px', objectFit: 'contain', background: 'rgba(0,0,0,0.15)', borderRadius: '8px', padding: '4px' }}
+              />
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: '800', margin: 0 }}>{profilePlayer.name}</h3>
+                  <span className={`status-pill ${profilePlayer.online ? 'status-online' : 'status-offline'}`} style={{ padding: '2px 8px', fontSize: '10px' }}>
+                    {profilePlayer.online ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+                
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all', marginBottom: '8px' }}>
+                  UUID: {profilePlayer.uuid || 'N/A'}
+                </p>
+
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <span className={`player-badge ${profilePlayer.name.startsWith('.') ? 'badge-bedrock' : 'badge-java'}`}>
+                    {profilePlayer.name.startsWith('.') ? 'Bedrock' : 'Java'}
+                  </span>
+                  {profilePlayer.isOp && (
+                    <span className="player-badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}>OP</span>
+                  )}
+                  {profilePlayer.isWhitelisted && (
+                    <span className="player-badge" style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e' }}>Whitelisted</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Profile Statistics Wrapper to prevent overflow */}
+            <div style={{ maxHeight: '240px', overflowY: 'auto', paddingRight: '4px', marginBottom: '20px' }}>
+              {/* Location */}
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '10px', marginBottom: '12px', border: '1px solid var(--panel-border)' }}>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '700', marginBottom: '6px' }}>Last Known Position</p>
+                {profilePlayer.x !== undefined ? (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                    <span>Coords: <code style={{ color: 'var(--accent-color)' }}>{profilePlayer.x.toFixed(1)}, {profilePlayer.y.toFixed(1)}, {profilePlayer.z.toFixed(1)}</code></span>
+                    <span style={{ color: 'var(--text-secondary)' }}>Dim: <strong style={{ color: '#fff' }}>{profilePlayer.dimension || 'Overworld'}</strong></span>
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>No location data available.</p>
+                )}
+              </div>
+
+              {/* Stats Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Play Time</p>
+                  <p style={{ fontSize: '14px', fontWeight: '700', margin: 0 }}>
+                    {profilePlayer.playTimeHours !== undefined ? `${profilePlayer.playTimeHours.toFixed(1)} hrs` : 'N/A'}
+                  </p>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Deaths</p>
+                  <p style={{ fontSize: '14px', fontWeight: '700', margin: 0 }}>
+                    {profilePlayer.deaths !== undefined ? profilePlayer.deaths : '0'}
+                  </p>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>Health / Hunger</p>
+                  <p style={{ fontSize: '13px', fontWeight: '700', margin: 0 }}>
+                    ❤️ {profilePlayer.health !== undefined ? `${profilePlayer.health.toFixed(0)}/20` : 'N/A'} | 🍖 {profilePlayer.foodLevel !== undefined ? `${profilePlayer.foodLevel}/20` : 'N/A'}
+                  </p>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>XP Level</p>
+                  <p style={{ fontSize: '14px', fontWeight: '700', margin: 0 }}>
+                    ✨ {profilePlayer.xpLevel !== undefined ? profilePlayer.xpLevel : 'N/A'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Admin Management Buttons */}
+            <div style={{ borderTop: '1px solid var(--panel-border)', paddingTop: '16px' }}>
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '700', marginBottom: '10px' }}>Admin Actions</p>
+              
+              {/* Commands Row */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                  onClick={() => handleAction('rcon', { command: `op "${profilePlayer.name}"` }, `Made ${profilePlayer.name} OP`)}
+                  disabled={!phoneOnline || !status.serverRunning}
+                >
+                  OP
+                </button>
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                  onClick={() => handleAction('rcon', { command: `deop "${profilePlayer.name}"` }, `Removed OP from ${profilePlayer.name}`)}
+                  disabled={!phoneOnline || !status.serverRunning}
+                >
+                  De-OP
+                </button>
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                  onClick={() => handleAction('rcon', { command: `gamemode creative "${profilePlayer.name}"` }, `Creative mode set for ${profilePlayer.name}`)}
+                  disabled={!phoneOnline || !status.serverRunning || !profilePlayer.online}
+                >
+                  Creative
+                </button>
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                  onClick={() => handleAction('rcon', { command: `gamemode survival "${profilePlayer.name}"` }, `Survival mode set for ${profilePlayer.name}`)}
+                  disabled={!phoneOnline || !status.serverRunning || !profilePlayer.online}
+                >
+                  Survival
+                </button>
+              </div>
+
+              {/* Ban/Kick/Whitelist controls */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                  onClick={() => handleAction(profilePlayer.isWhitelisted ? 'whitelist_remove' : 'whitelist_add', { playerName: profilePlayer.name }, `Whitelist toggled for ${profilePlayer.name}`)}
+                  disabled={!phoneOnline || !status.serverRunning}
+                >
+                  {profilePlayer.isWhitelisted ? 'Remove Whitelist' : 'Whitelist'}
+                </button>
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                  onClick={() => {
+                    setProfilePlayer(null);
+                    triggerConfirm(
+                      'Ban Player',
+                      `Are you sure you want to ban ${profilePlayer.name}?`,
+                      () => handleAction('ban', { playerName: profilePlayer.name }, `Banned ${profilePlayer.name}`)
+                    );
+                  }}
+                  disabled={!phoneOnline || !status.serverRunning}
+                >
+                  Ban
+                </button>
+                {profilePlayer.online && (
+                  <button 
+                    className="btn btn-danger" 
+                    style={{ padding: '6px 12px', fontSize: '12px' }}
+                    onClick={() => {
+                      setProfilePlayer(null);
+                      handleAction('kick', { playerName: profilePlayer.name }, `Kicked ${profilePlayer.name}`);
+                    }}
+                    disabled={!phoneOnline || !status.serverRunning}
+                  >
+                    Kick
+                  </button>
+                )}
+              </div>
+
+              {/* Teleportation Options */}
+              {status.serverRunning && (
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '700', marginBottom: '10px' }}>Teleportation</p>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {profilePlayer.x !== undefined && (
+                      <button 
+                        className="btn btn-primary" 
+                        style={{ padding: '6px 12px', fontSize: '12px' }}
+                        onClick={() => {
+                          const dim = profilePlayer.dimension || 'Overworld';
+                          const command = dim !== 'Overworld'
+                            ? `execute in ${dim.toLowerCase().replace('overworld', 'overworld')} run tp @p ${profilePlayer.x.toFixed(1)} ${profilePlayer.y.toFixed(1)} ${profilePlayer.z.toFixed(1)}`
+                            : `tp @p ${profilePlayer.x.toFixed(1)} ${profilePlayer.y.toFixed(1)} ${profilePlayer.z.toFixed(1)}`;
+                          handleAction('rcon', { command }, `Teleporting @p to ${profilePlayer.name}'s location`);
+                        }}
+                        disabled={!phoneOnline}
+                      >
+                        Teleport Nearest Player (@p) here
+                      </button>
+                    )}
+                    {profilePlayer.deathX !== undefined && (
+                      <button 
+                        className="btn btn-secondary" 
+                        style={{ padding: '6px 12px', fontSize: '12px' }}
+                        onClick={() => {
+                          const dim = profilePlayer.deathDimension || 'Overworld';
+                          const command = `execute in ${dim.toLowerCase()} run tp @p ${profilePlayer.deathX.toFixed(1)} ${profilePlayer.deathY.toFixed(1)} ${profilePlayer.deathZ.toFixed(1)}`;
+                          handleAction('rcon', { command }, `Teleporting @p to ${profilePlayer.name}'s death location`);
+                        }}
+                        disabled={!phoneOnline}
+                      >
+                        Teleport @p to Death Location
+                      </button>
+                    )}
+                    {profilePlayer.online && (
+                      <button 
+                        className="btn btn-secondary" 
+                        style={{ padding: '6px 12px', fontSize: '12px' }}
+                        onClick={() => handleAction('rcon', { command: `tp "${profilePlayer.name}" 0 80 0` }, `Teleporting ${profilePlayer.name} to spawn`)}
+                        disabled={!phoneOnline}
+                      >
+                        Teleport Player to Spawn
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Close Button */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px', borderTop: '1px solid var(--panel-border)', paddingTop: '14px' }}>
+              <button className="btn btn-secondary" onClick={() => setProfilePlayer(null)}>Close</button>
             </div>
           </div>
         </div>

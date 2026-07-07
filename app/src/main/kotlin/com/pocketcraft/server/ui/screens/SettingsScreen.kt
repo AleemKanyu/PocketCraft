@@ -1017,6 +1017,38 @@ fun SettingsScreen(
                 }
                 item {
                     AnimatedEntranceContainer(index = 5) {
+                        val alwaysAliveBackgroundFlowState by AppPreferencesStore.isAlwaysAliveBackgroundFlow(context).collectAsState(initial = preferences.alwaysAliveBackground)
+                        SettingsToggleRow(
+                            icon = "♾️",
+                            label = "Always Alive in Background",
+                            description = "Keep the Web Dashboard accessible even when the Minecraft server is stopped",
+                            checked = alwaysAliveBackgroundFlowState,
+                            onToggle = { enabled ->
+                                preferences.alwaysAliveBackground = enabled
+                                scope.launch {
+                                    AppPreferencesStore.setAlwaysAliveBackground(context, enabled)
+                                    if (enabled) {
+                                        val listenerIntent = Intent(context, com.pocketcraft.server.server.ServerHostService::class.java).apply {
+                                            action = com.pocketcraft.server.server.ServerHostService.ACTION_START_LISTENER
+                                        }
+                                        try {
+                                            androidx.core.content.ContextCompat.startForegroundService(context, listenerIntent)
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("SettingsScreen", "Failed to start listener service: ${e.message}")
+                                        }
+                                    } else {
+                                        if (!com.pocketcraft.server.server.ServerHostService.serverReadyState.value) {
+                                            com.pocketcraft.server.server.ServerHostService.stop(context)
+                                        }
+                                    }
+                                }
+                                playHaptic()
+                            }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 5) {
                         var currentLanguage by remember { mutableStateOf(preferences.appLanguage) }
                         var pendingRecreate by remember { mutableStateOf(false) }
 

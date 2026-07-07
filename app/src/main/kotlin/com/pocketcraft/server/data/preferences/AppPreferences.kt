@@ -66,6 +66,7 @@ object AppPreferencesKeys {
     val WIDGET_CUSTOM_TEXT_ON_ACCENT = intPreferencesKey("widget_custom_text_on_accent")
     val WIDGET_CUSTOM_ICON_TINT = intPreferencesKey("widget_custom_icon_tint")
     val SERVER_STARTED_AT_MILLIS = longPreferencesKey("server_started_at_millis")
+    val ALWAYS_ALIVE_BACKGROUND = booleanPreferencesKey("always_alive_background")
 }
 
 data class WidgetThemeSettings(
@@ -527,6 +528,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean("has_completed_start_stop_cycle", false)
         set(value) = prefs.edit().putBoolean("has_completed_start_stop_cycle", value).apply()
 
+    var alwaysAliveBackground: Boolean
+        get() = prefs.getBoolean("always_alive_background", false)
+        set(value) = prefs.edit().putBoolean("always_alive_background", value).apply()
+
     /**
      * Set to true when the server stops after a real player has joined that session.
      * Cleared once the rating popup has been shown on the next app launch.
@@ -977,6 +982,17 @@ object AppPreferencesStore {
     suspend fun setFloatingChatFirstTimeShown(context: Context, shown: Boolean) {
         context.appPreferencesDataStore.edit { prefs ->
             prefs[AppPreferencesKeys.FLOATING_CHAT_FIRST_TIME_SHOWN] = shown
+        }
+    }
+
+    fun isAlwaysAliveBackgroundFlow(context: Context): Flow<Boolean> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.ALWAYS_ALIVE_BACKGROUND] ?: false
+        }
+
+    suspend fun setAlwaysAliveBackground(context: Context, enabled: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.ALWAYS_ALIVE_BACKGROUND] = enabled
         }
     }
 

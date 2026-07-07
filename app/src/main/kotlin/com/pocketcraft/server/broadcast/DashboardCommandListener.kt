@@ -1,6 +1,7 @@
 package com.pocketcraft.server.broadcast
 
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -27,7 +28,8 @@ class DashboardCommandListener(
     private val scope: CoroutineScope,
     private val isMainProcess: Boolean,
     private val sendRconCommand: (suspend (String) -> String)? = null,
-    private val toggleAfkBot: (suspend (Boolean) -> Unit)? = null
+    private val toggleAfkBot: (suspend (Boolean) -> Unit)? = null,
+    private val onPropertyUpdated: (suspend () -> Unit)? = null
 ) {
     private val db by lazy { FirebaseFirestore.getInstance() }
     private var registration: ListenerRegistration? = null
@@ -58,6 +60,10 @@ class DashboardCommandListener(
                     val type = doc.getString("type") ?: continue
                     val payload = doc.get("payload") as? Map<String, Any> ?: emptyMap()
 
+                    if (!shouldHandleCommand(type)) {
+                        continue
+                    }
+
                     // Immediately mark as acked
                     db.collection("users").document(uid).collection("dashboard_commands")
                         .document(commandId)
@@ -84,21 +90,50 @@ class DashboardCommandListener(
         if (isMainProcess) {
             when (type) {
                 "start_server" -> {
+                    updateCommandResult(uid, commandId, status = "done", result = "Server start initiated.")
                     val versionId = AppPreferencesStore.getSelectedVersionFlow(context).first().orEmpty()
                     val worldName = AppPreferencesStore.getSelectedWorldFlow(context).first()
                     withContext(Dispatchers.Main) {
                         ServerHostService.start(context, versionId, worldName)
                     }
-                    updateCommandResult(uid, commandId, status = "done", result = "Server start initiated.")
                 }
                 "restart_server" -> {
+                    updateCommandResult(uid, commandId, status = "done", result = "Server restart initiated.")
                     withContext(Dispatchers.Main) {
                         ServerHostService.restart(context)
                     }
-                    updateCommandResult(uid, commandId, status = "done", result = "Server restart initiated.")
+                }
+                "update_property" -> {
+                    // Allow offline property writes — forward to service process if running,
+                    // otherwise handle directly in main process.
+                    if (!ServerHostService.isServiceRunning(context)) {
+                        handleUpdateProperty(payload, uid, commandId)
+                    }
+                    // If service is running, let the service process handle it (fall-through skip)
+                }
+                "switch_world" -> {
+                    val worldName = payload["worldName"] as? String ?: throw IllegalArgumentException("Missing worldName parameter")
+                    val cleanWorld = worldName.trim()
+                    if (cleanWorld.isEmpty()) throw IllegalArgumentException("Invalid world name")
+                    if (ServerHostService.isServiceRunning(context)) {
+                        throw IllegalStateException("Cannot switch worlds while the server is running. Stop the server first.")
+                    }
+                    AppPreferencesStore.setSelectedWorld(context, cleanWorld)
+                    updateCommandResult(uid, commandId, status = "done", result = "Switched active world to $cleanWorld.")
+                }
+                "create_world" -> {
+                    val worldName = payload["worldName"] as? String ?: throw IllegalArgumentException("Missing worldName parameter")
+                    val cleanWorld = worldName.trim()
+                    if (cleanWorld.isEmpty()) throw IllegalArgumentException("Invalid world name")
+                    if (ServerHostService.isServiceRunning(context)) {
+                        throw IllegalStateException("Cannot create worlds while the server is running. Stop the server first.")
+                    }
+                    AppPreferencesStore.setSelectedWorld(context, cleanWorld)
+                    com.pocketcraft.server.service.ServerFileManager.getServerDir(context, cleanWorld)
+                    updateCommandResult(uid, commandId, status = "done", result = "World $cleanWorld created and selected.")
                 }
                 else -> {
-                    if (ServerHostService.isServiceRunning) {
+                    if (ServerHostService.isServiceRunning(context)) {
                         // Skip updating or marking so the service process can read and handle it!
                         return
                     } else {
@@ -112,24 +147,28 @@ class DashboardCommandListener(
         // Service Process Command Handling
         when (type) {
             "start_server" -> {
+                updateCommandResult(uid, commandId, status = "done", result = "Server start initiated.")
                 val versionId = AppPreferencesStore.getSelectedVersionFlow(context).first().orEmpty()
                 val worldName = AppPreferencesStore.getSelectedWorldFlow(context).first()
                 withContext(Dispatchers.Main) {
                     ServerHostService.start(context, versionId, worldName)
                 }
-                updateCommandResult(uid, commandId, status = "done", result = "Server start initiated.")
             }
             "stop_server" -> {
-                withContext(Dispatchers.Main) {
-                    ServerHostService.stop(context)
-                }
                 updateCommandResult(uid, commandId, status = "done", result = "Server stop initiated.")
+                withContext(Dispatchers.Main) {
+                    val intent = Intent(context, ServerHostService::class.java).apply {
+                        action = ServerHostService.ACTION_STOP
+                        putExtra("keep_listener_alive", true)
+                    }
+                    context.startService(intent)
+                }
             }
             "restart_server" -> {
+                updateCommandResult(uid, commandId, status = "done", result = "Server restart initiated.")
                 withContext(Dispatchers.Main) {
                     ServerHostService.restart(context)
                 }
-                updateCommandResult(uid, commandId, status = "done", result = "Server restart initiated.")
             }
             "rcon" -> {
                 val command = payload["command"] as? String ?: throw IllegalArgumentException("Missing command parameter")
@@ -197,10 +236,96 @@ class DashboardCommandListener(
                 prefs.customSubdomainRegion = detectedRegion
                 updateCommandResult(uid, commandId, status = "done", result = "Subdomain set to $normalized.")
             }
+            "update_property" -> {
+                handleUpdateProperty(payload, uid, commandId)
+            }
+            "switch_world" -> {
+                val worldName = payload["worldName"] as? String ?: throw IllegalArgumentException("Missing worldName parameter")
+                val cleanWorld = worldName.trim()
+                if (cleanWorld.isEmpty()) throw IllegalArgumentException("Invalid world name")
+                if (ServerHostService.isServiceRunning(context)) {
+                    throw IllegalStateException("Cannot switch worlds while the server is running. Stop the server first.")
+                }
+                AppPreferencesStore.setSelectedWorld(context, cleanWorld)
+                updateCommandResult(uid, commandId, status = "done", result = "Switched active world to $cleanWorld.")
+            }
+            "create_world" -> {
+                val worldName = payload["worldName"] as? String ?: throw IllegalArgumentException("Missing worldName parameter")
+                val cleanWorld = worldName.trim()
+                if (cleanWorld.isEmpty()) throw IllegalArgumentException("Invalid world name")
+                if (ServerHostService.isServiceRunning(context)) {
+                    throw IllegalStateException("Cannot create worlds while the server is running. Stop the server first.")
+                }
+                AppPreferencesStore.setSelectedWorld(context, cleanWorld)
+                com.pocketcraft.server.service.ServerFileManager.getServerDir(context, cleanWorld)
+                updateCommandResult(uid, commandId, status = "done", result = "World $cleanWorld created and selected.")
+            }
             else -> {
                 throw IllegalArgumentException("Unknown command type: $type")
             }
         }
+    }
+
+    /**
+     * Writes a key=value pair to the active world's server.properties file.
+     * This works even when the server is offline, allowing the dashboard to
+     * pre-configure settings before the next server start.
+     *
+     * If the server is running, we also send the equivalent RCON command so
+     * the change takes effect immediately without requiring a restart.
+     */
+    private suspend fun handleUpdateProperty(payload: Map<String, Any>, uid: String, commandId: String) {
+        val key = payload["key"] as? String ?: throw IllegalArgumentException("Missing key parameter")
+        val value = payload["value"] as? String ?: throw IllegalArgumentException("Missing value parameter")
+
+        val worldName = AppPreferencesStore.getSelectedWorldFlow(context).first()
+        val serverDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(context, worldName)
+        val propsFile = File(serverDir, "server.properties")
+
+        if (!propsFile.exists()) {
+            updateCommandResult(uid, commandId, status = "failed", errorMsg = "server.properties not found. Start the server at least once first.")
+            return
+        }
+
+        // Read existing properties preserving order
+        val lines = propsFile.readLines().toMutableList()
+        var found = false
+        for (i in lines.indices) {
+            val trimmed = lines[i].trim()
+            if (!trimmed.startsWith("#") && trimmed.startsWith("$key=")) {
+                lines[i] = "$key=$value"
+                found = true
+                break
+            }
+        }
+        if (!found) {
+            lines.add("$key=$value")
+        }
+        propsFile.writeText(lines.joinToString("\n"))
+
+        // If server is running, also push via RCON for live effect
+        val rconCall = sendRconCommand
+        val rconResult = if (rconCall != null && ServerHostService.isServiceRunning(context)) {
+            runCatching {
+                // Map property keys to their equivalent RCON commands
+                when (key) {
+                    "difficulty" -> rconCall.invoke("difficulty $value")
+                    "gamemode" -> rconCall.invoke("defaultgamemode $value")
+                    "view-distance" -> rconCall.invoke("view-distance $value")
+                    "simulation-distance" -> rconCall.invoke("simulation-distance $value")
+                    "white-list" -> rconCall.invoke(if (value == "true") "whitelist on" else "whitelist off")
+                    else -> null
+                }
+            }.getOrNull()
+        } else null
+
+        val msg = if (rconResult != null) {
+            "Property $key=$value saved and applied live via RCON."
+        } else {
+            "Property $key=$value saved to server.properties. Restart server to apply."
+        }
+        updateCommandResult(uid, commandId, status = "done", result = msg)
+        onPropertyUpdated?.invoke()
     }
 
     private fun updateCommandResult(uid: String, commandId: String, status: String, result: String? = null, errorMsg: String? = null) {
@@ -216,4 +341,18 @@ class DashboardCommandListener(
 
     private fun escapeSelectorName(name: String): String =
         name.replace("\\", "\\\\").replace("\"", "\\\"")
+
+    private fun shouldHandleCommand(type: String): Boolean {
+        if (isMainProcess) {
+            // If the background service is running, let the service process handle all commands.
+            if (ServerHostService.isServiceRunning(context)) {
+                return false
+            }
+            // If the server is stopped, the main process handles everything (start_server, update_property,
+            // or failing other commands since the server is offline).
+            return true
+        }
+        // The service process handles all commands when it is active.
+        return true
+    }
 }

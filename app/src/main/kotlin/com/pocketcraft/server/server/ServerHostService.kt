@@ -8,6 +8,7 @@
 // ============================================================================
 package com.pocketcraft.server.server
 
+import android.app.ActivityManager
 import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -83,7 +84,8 @@ class ServerHostService : Service() {
         CHECKING_PLUGINS("Checking Bedrock bridge..."),
         STARTING_SERVER("Starting server... (30-60s)"),
         RUNNING("Server is running"),
-        STOPPING("Stopping server...")
+        STOPPING("Stopping server..."),
+        DASHBOARD_LISTENER_ACTIVE("Web Dashboard listener is active")
     }
 
     private var currentVersionId: String? = null
@@ -101,6 +103,9 @@ class ServerHostService : Service() {
     private val tunnelStarted = AtomicBoolean(false)
     private val serverReadyHandled = AtomicBoolean(false)
     private val stopInProgress = AtomicBoolean(false)
+    private var keepListenerRunningManual = false
+    private val keepListenerRunning: Boolean
+        get() = com.pocketcraft.server.data.preferences.AppPreferences(applicationContext).alwaysAliveBackground || keepListenerRunningManual
     private val logBuffer = ArrayDeque<String>(1000)
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var relayJob: Job? = null
@@ -131,6 +136,7 @@ class ServerHostService : Service() {
     private var dashboardCommandListener: com.pocketcraft.server.broadcast.DashboardCommandListener? = null
     private var currentServerTps: Float = 20.0f
     private var serverReadyFallbackJob: Job? = null
+    private var bootStartedAt: Long = 0L
     /** Set to true when MIUI's socket permission check message is seen in the output. */
     private var miuiSocketCheckSeen = false
 
@@ -155,13 +161,43 @@ class ServerHostService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // ALWAYS call startForeground immediately to prevent ForegroundServiceDidNotStartInTimeException
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        val action = intent?.action
+        val initialText = if (action == ACTION_START_LISTENER) {
+            ServerStage.DASHBOARD_LISTENER_ACTIVE.notificationText
         } else {
-            startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText))
+            ServerStage.STARTING_SERVER.notificationText
         }
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, createForegroundNotification(initialText), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, createForegroundNotification(initialText))
+        }
+
+        if (action == ACTION_START_LISTENER) {
+            keepListenerRunningManual = false
+            val requestedVersionId = intent?.getStringExtra(EXTRA_VERSION_ID).orEmpty().trim()
+            val versionId = if (requestedVersionId.isBlank()) {
+                runBlocking { AppPreferencesStore.getSelectedVersionFlow(applicationContext).first().orEmpty() }
+            } else {
+                requestedVersionId
+            }
+            val worldName = intent?.getStringExtra(EXTRA_WORLD_NAME).orEmpty().trim().takeIf { it.isNotBlank() }
+                ?: runBlocking { AppPreferencesStore.getSelectedWorldFlow(applicationContext).first() }
+                ?: "world"
+            currentVersionId = versionId
+            currentWorldName = worldName
+            
+            if (!serverReadyHandled.get()) {
+                startDashboardStatusHeartbeat(versionId)
+            }
+            updateNotification(ServerStage.DASHBOARD_LISTENER_ACTIVE, force = true)
+            return START_STICKY
+        }
+
+        if (intent?.action == ACTION_START) {
+            keepListenerRunningManual = com.pocketcraft.server.data.preferences.AppPreferences(applicationContext).alwaysAliveBackground
+        }
         val requestedVersionId = intent?.getStringExtra(EXTRA_VERSION_ID).orEmpty().trim()
         val versionId = if (intent?.action == ACTION_START && requestedVersionId.isBlank()) {
             runBlocking { AppPreferencesStore.getSelectedVersionFlow(applicationContext).first().orEmpty() }
@@ -169,6 +205,7 @@ class ServerHostService : Service() {
             requestedVersionId
         }
         if (intent?.action == ACTION_STOP) {
+            keepListenerRunningManual = intent.getBooleanExtra("keep_listener_alive", false)
             stopReason = "user"
             autoRecoverAttempts = 0
             autoRecoverWindowStartMs = 0L
@@ -303,6 +340,7 @@ class ServerHostService : Service() {
         startWidgetUpdateHeartbeat()
         synchronized(currentPlayersList) { currentPlayersList.clear() }
         startDashboardStatusHeartbeat(versionId)
+        sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] Starting server...")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
@@ -538,6 +576,34 @@ class ServerHostService : Service() {
         super.onTaskRemoved(rootIntent)
         // Keep service lifecycle independent from recent-task UI removal.
         // This avoids races where user-initiated shutdown is misread as a crash/restart flow.
+        if (keepListenerRunning) {
+            val isServerActive = serverProcess?.isAlive == true || serverReadyHandled.get()
+            val restartAction = if (isServerActive) ACTION_START else ACTION_START_LISTENER
+            
+            val restartServiceIntent = Intent(applicationContext, ServerHostService::class.java).apply {
+                action = restartAction
+                putExtra(EXTRA_VERSION_ID, currentVersionId.orEmpty())
+                putExtra(EXTRA_WORLD_NAME, currentWorldName.orEmpty())
+            }
+            val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_ONE_SHOT
+            }
+            val pendingIntent = PendingIntent.getService(
+                applicationContext,
+                1002,
+                restartServiceIntent,
+                pendingIntentFlags
+            )
+            val alarmManager = applicationContext.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            alarmManager?.set(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                android.os.SystemClock.elapsedRealtime() + 1000L,
+                pendingIntent
+            )
+            android.util.Log.i("ServerHostService", "Scheduled alarm to auto-restart service after task removal.")
+        }
     }
 
     private fun stopServer() {
@@ -635,49 +701,55 @@ class ServerHostService : Service() {
                 }
 
                 sendBroadcast(Intent(EVENT_STOPPED).setPackage(packageName))
-                try {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                } catch (e: Exception) {
-                    android.util.Log.e("PocketCraft", "Error stopping foreground: ${e.message}")
-                }
-
-                val restartVersionId = pendingRestartVersionId
-                val restartWorldName = pendingRestartWorldName
-                pendingRestartVersionId = null
-                pendingRestartWorldName = null
-                if (!restartVersionId.isNullOrBlank() && !restartWorldName.isNullOrBlank()) {
-                    val restartIntent = Intent(applicationContext, ServerHostService::class.java).apply {
-                        action = ACTION_START
-                        putExtra(EXTRA_VERSION_ID, restartVersionId)
-                        putExtra(EXTRA_WORLD_NAME, restartWorldName)
-                    }
-                    val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
-                    } else {
-                        PendingIntent.FLAG_ONE_SHOT
-                    }
-                    val pendingIntent = PendingIntent.getService(
-                        applicationContext,
-                        1001,
-                        restartIntent,
-                        pendingIntentFlags
-                    )
-                    val alarmManager = applicationContext.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-                    alarmManager?.set(
-                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                        SystemClock.elapsedRealtime() + 1200L,
-                        pendingIntent
-                    )
-                }
-
-                if (inProcessRuntime) {
-                    android.util.Log.d("PocketCraft", "In-process runtime stopped. Killing :server process to ensure clean resource release.")
-                    stopSelf()
-                    // Allow the EVENT_STOPPED broadcast to propagate before we terminate our PID
-                    delay(500)
-                    android.os.Process.killProcess(android.os.Process.myPid())
+                if (keepListenerRunning) {
+                    val notification = createForegroundNotification(ServerStage.DASHBOARD_LISTENER_ACTIVE.notificationText)
+                    val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                    manager?.notify(NOTIFICATION_ID, notification)
                 } else {
-                    stopSelf()
+                    try {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                    } catch (e: Exception) {
+                        android.util.Log.e("PocketCraft", "Error stopping foreground: ${e.message}")
+                    }
+
+                    val restartVersionId = pendingRestartVersionId
+                    val restartWorldName = pendingRestartWorldName
+                    pendingRestartVersionId = null
+                    pendingRestartWorldName = null
+                    if (!restartVersionId.isNullOrBlank() && !restartWorldName.isNullOrBlank()) {
+                        val restartIntent = Intent(applicationContext, ServerHostService::class.java).apply {
+                            action = ACTION_START
+                            putExtra(EXTRA_VERSION_ID, restartVersionId)
+                            putExtra(EXTRA_WORLD_NAME, restartWorldName)
+                        }
+                        val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+                        } else {
+                            PendingIntent.FLAG_ONE_SHOT
+                        }
+                        val pendingIntent = PendingIntent.getService(
+                            applicationContext,
+                            1001,
+                            restartIntent,
+                            pendingIntentFlags
+                        )
+                        val alarmManager = applicationContext.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+                        alarmManager?.set(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            SystemClock.elapsedRealtime() + 1200L,
+                            pendingIntent
+                        )
+                    }
+
+                    if (inProcessRuntime) {
+                        android.util.Log.d("PocketCraft", "In-process runtime stopped. Killing :server process to ensure clean resource release.")
+                        stopSelf()
+                        // Allow the EVENT_STOPPED broadcast to propagate before we terminate our PID
+                        delay(500)
+                        android.os.Process.killProcess(android.os.Process.myPid())
+                    } else {
+                        stopSelf()
+                    }
                 }
 
                 stopInProgress.set(false)
@@ -1709,6 +1781,7 @@ class ServerHostService : Service() {
         startWidgetUpdateHeartbeat()
         synchronized(currentPlayersList) { currentPlayersList.clear() }
         startDashboardStatusHeartbeat(versionId)
+        sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] Starting server...")
         startLogcatBridge(versionId)
         val serverPort = resolveServerPort(worldName)
         currentServerPort = serverPort
@@ -2293,6 +2366,9 @@ class ServerHostService : Service() {
                         afkHelperManager.toggleFarm(farm.id)
                     }
                 }
+            },
+            onPropertyUpdated = {
+                triggerDashboardStatusUpdate()
             }
         )
         dashboardCommandListener?.start()
@@ -2325,8 +2401,36 @@ class ServerHostService : Service() {
             
         val serverState = when {
             serverRunning -> "running"
-            processAlive -> "starting"
+            isLaunching -> "starting"
             else -> "stopped"
+        }
+
+        if (serverState == "starting") {
+            if (bootStartedAt == 0L) {
+                bootStartedAt = System.currentTimeMillis()
+            }
+        } else {
+            bootStartedAt = 0L
+        }
+
+        val progressPercent = if (serverRunning) {
+            100
+        } else if (serverState == "starting") {
+            val elapsedMs = (System.currentTimeMillis() - bootStartedAt).coerceAtLeast(0L)
+            when {
+                elapsedMs < 8_000L -> ((elapsedMs / 8_000f) * 20f)
+                elapsedMs < 20_000L -> 20f + (((elapsedMs - 8_000L) / 12_000f) * 32f)
+                elapsedMs < 35_000L -> 52f + (((elapsedMs - 20_000L) / 15_000f) * 26f)
+                elapsedMs < 55_000L -> 78f + (((elapsedMs - 35_000L) / 20_000f) * 20f)
+                else -> 98f
+            }.toInt().coerceIn(0, 98)
+        } else {
+            0
+        }
+        val bootProgress = if (serverState == "starting") {
+            lastNotificationText.ifBlank { ServerStage.STARTING_SERVER.notificationText }
+        } else {
+            ""
         }
         
         val playersOnline = synchronized(currentPlayersList) {
@@ -2374,9 +2478,11 @@ class ServerHostService : Service() {
         }
             
         val subdomain = prefs.customSubdomain
+        val subdomainRegion = prefs.customSubdomainRegion
         val relayAddress = getPersistedPublicAddress(this, versionId) ?: ""
         
         val whitelist = readWhitelistNames(this, currentWorld)
+        val ops = readOpsNames(this, currentWorld)
         val consoleLines = synchronized(logBuffer) {
             logBuffer.toList().takeLast(50)
         }
@@ -2385,7 +2491,8 @@ class ServerHostService : Service() {
         val statusDoc = mapOf(
             "serverRunning" to serverRunning,
             "serverState" to serverState,
-            "bootProgress" to lastNotificationText,
+            "bootProgress" to bootProgress,
+            "bootProgressPercent" to progressPercent,
             "playersOnline" to playersOnline,
             "allPlayers" to allPlayers,
             "uptimeSeconds" to uptimeSeconds,
@@ -2393,14 +2500,21 @@ class ServerHostService : Service() {
             "afkBotEnabled" to afkBotEnabled,
             "afkBots" to afkBotsList,
             "subdomain" to subdomain,
+            "subdomainRegion" to subdomainRegion,
             "relayAddress" to relayAddress,
             "whitelist" to whitelist,
+            "ops" to ops,
             "consoleLines" to consoleLines,
             "lastSeen" to com.google.firebase.Timestamp.now(),
+            "usedRam" to com.pocketcraft.server.util.RamUtils.getUsedRamMb(this),
+            "totalRam" to com.pocketcraft.server.util.RamUtils.getTotalRamMb(this),
+            "currentWorld" to activeWorldNameOrDefault(),
+            "worlds" to listWorlds(),
+            "properties" to readServerProperties(currentWorld),
             "secret" to (prefs.dashboardSecret ?: ""),
             "localIp" to (com.pocketcraft.server.server.ServerAddressResolver.getLocalIpAddress() ?: ""),
             "serverPort" to currentServerPort,
-            "properties" to readServerProperties(currentWorld)
+            "isPremium" to (prefs.isPremiumUser || prefs.debugPremiumOverride)
         )
 
         try {
@@ -2410,6 +2524,17 @@ class ServerHostService : Service() {
         } catch (e: Exception) {
             android.util.Log.e("ServerHostService", "Failed to update dashboard status: ${e.message}")
         }
+    }
+
+    private fun listWorlds(): List<String> {
+        val worldsDir = java.io.File(filesDir, "servers/worlds")
+        if (!worldsDir.exists() || !worldsDir.isDirectory) return listOf("world")
+        val list = worldsDir.listFiles()
+            ?.filter { it.isDirectory }
+            ?.map { it.name }
+            ?.sorted()
+            .orEmpty()
+        return if (list.isEmpty()) listOf("world") else list
     }
 
     private fun readServerProperties(worldName: String): Map<String, String> {
@@ -2427,7 +2552,8 @@ class ServerHostService : Service() {
                     "viewDistance" to props.getProperty("view-distance", "10"),
                     "simulationDistance" to props.getProperty("simulation-distance", "10"),
                     "allowNether" to props.getProperty("allow-nether", "true"),
-                    "whiteList" to props.getProperty("white-list", "false")
+                    "whiteList" to props.getProperty("white-list", "false"),
+                    "spawnProtection" to props.getProperty("spawn-protection", "16")
                 )
             } else {
                 emptyMap()
@@ -2514,24 +2640,54 @@ class ServerHostService : Service() {
         }
     }
 
+    private fun readOpsNames(context: Context, worldName: String): List<String> {
+        val serverDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(context, worldName)
+        val file = File(serverDir, "ops.json")
+        if (!file.exists()) return emptyList()
+        return try {
+            val arr = org.json.JSONArray(file.readText())
+            val list = mutableListOf<String>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val name = obj.optString("name").trim()
+                if (name.isNotEmpty()) {
+                    list.add(name)
+                }
+            }
+            list
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     private fun stopDashboardStatusAndClear() {
-        dashboardStatusJob?.cancel()
-        dashboardStatusJob = null
-        dashboardCommandListener?.stop()
-        dashboardCommandListener = null
+        if (!keepListenerRunning) {
+            dashboardStatusJob?.cancel()
+            dashboardStatusJob = null
+            dashboardCommandListener?.stop()
+            dashboardCommandListener = null
+        }
         synchronized(currentPlayersList) { currentPlayersList.clear() }
 
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(this)
         val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
             ?: prefs.firebaseUserUid
         if (uid != null) {
+            val currentWorld = currentWorldName ?: "world"
+            val properties = readServerProperties(currentWorld)
             val statusDoc = mapOf(
                 "serverRunning" to false,
+                "serverState" to "stopped",
+                "bootProgress" to "",
+                "bootProgressPercent" to 0,
                 "playersOnline" to emptyList<Map<String, String>>(),
                 "uptimeSeconds" to 0L,
                 "tps" to null,
                 "lastSeen" to com.google.firebase.Timestamp.now(),
-                "secret" to (prefs.dashboardSecret ?: "")
+                "secret" to (prefs.dashboardSecret ?: ""),
+                "properties" to properties,
+                "relayAddress" to "",
+                "isPremium" to (prefs.isPremiumUser || prefs.debugPremiumOverride)
             )
             serviceScope.launch(Dispatchers.IO) {
                 try {
@@ -2594,6 +2750,29 @@ class ServerHostService : Service() {
             val isOnline = synchronized(currentPlayersList) {
                 currentPlayersList.any { it.name.equals(name, ignoreCase = true) }
             }
+
+            // Parse playtime and deaths from stats file if available
+            val statsFile = File(worldDir, "stats/$uuid.json")
+            var playtimeSeconds = 0L
+            var deaths = 0L
+            if (statsFile.exists()) {
+                runCatching {
+                    val json = org.json.JSONObject(statsFile.readText())
+                    val stats = json.optJSONObject("stats")
+                    val custom = stats?.optJSONObject("minecraft:custom")
+                    val playTicks = custom?.optLong("minecraft:play_time", 0L)
+                        ?: custom?.optLong("minecraft:play_one_minute", 0L)
+                        ?: stats?.optLong("playOneMinute", 0L)
+                        ?: stats?.optLong("playTime", 0L)
+                        ?: stats?.optLong("timePlayed", 0L)
+                        ?: 0L
+                    playtimeSeconds = playTicks / 20L
+                    
+                    deaths = custom?.optLong("minecraft:deaths", 0L)
+                        ?: stats?.optLong("deaths", 0L)
+                        ?: 0L
+                }
+            }
             
             mapOf(
                 "name" to name,
@@ -2608,7 +2787,9 @@ class ServerHostService : Service() {
                 "deathDim" to (snapshot?.lastDeathPos?.dimension ?: ""),
                 "health" to (snapshot?.health ?: 20.0f),
                 "hunger" to (snapshot?.hunger ?: 20),
-                "online" to isOnline
+                "online" to isOnline,
+                "playtime" to playtimeSeconds,
+                "deaths" to deaths
             )
         }
     }
@@ -2655,6 +2836,7 @@ class ServerHostService : Service() {
         private const val STOP_GRACE_PERIOD_MS = 15_000L
 
         const val ACTION_START = "com.pocketcraft.server.action.START"
+        const val ACTION_START_LISTENER = "com.pocketcraft.server.action.START_LISTENER"
         const val ACTION_STOP = "com.pocketcraft.server.action.STOP"
         const val ACTION_RESTART = "com.pocketcraft.server.action.RESTART"
         const val ACTION_RECONNECT_RELAY = "com.pocketcraft.server.action.RECONNECT_RELAY"
@@ -2693,6 +2875,24 @@ class ServerHostService : Service() {
         const val RUNTIME_STATE_RUNNING = "running"
         @Keep
         var isServiceRunning = false
+
+        @JvmStatic
+        fun isServiceRunning(context: Context): Boolean {
+            val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return false
+            @Suppress("DEPRECATION")
+            val runningServices = try {
+                manager.getRunningServices(Integer.MAX_VALUE)
+            } catch (e: Exception) {
+                null
+            } ?: return isServiceRunning
+            for (service in runningServices) {
+                if (ServerHostService::class.java.name == service.service.className) {
+                    return true
+                }
+            }
+            return false
+        }
+
         @Keep
         private val _serverReadyState = MutableStateFlow(false)
         @Keep
