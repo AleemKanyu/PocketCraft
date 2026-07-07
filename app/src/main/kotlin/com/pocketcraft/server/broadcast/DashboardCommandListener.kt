@@ -168,27 +168,54 @@ class DashboardCommandListener(
                 val versionId = AppPreferencesStore.getSelectedVersionFlow(context).first().orEmpty()
                 val worldName = AppPreferencesStore.getSelectedWorldFlow(context).first()
                 withContext(Dispatchers.Main) {
-                    ServerHostService.start(context, versionId, worldName)
+                    val hostService = context as? ServerHostService
+                    if (hostService != null) {
+                        val startIntent = Intent(context, ServerHostService::class.java).apply {
+                            action = ServerHostService.ACTION_START
+                            putExtra(ServerHostService.EXTRA_VERSION_ID, versionId)
+                            putExtra(ServerHostService.EXTRA_WORLD_NAME, worldName)
+                        }
+                        hostService.onStartCommand(startIntent, 0, 0)
+                    } else {
+                        ServerHostService.start(context, versionId, worldName)
+                    }
                 }
             }
             "stop_server" -> {
                 updateCommandResult(uid, commandId, status = "done", result = "Server stop initiated.")
                 withContext(Dispatchers.Main) {
-                    val stopIntent = Intent(context, ServerHostService::class.java).apply {
-                        action = ServerHostService.ACTION_STOP
-                        putExtra("keep_listener_alive", true)
-                    }
-                    try {
-                        context.startService(stopIntent)
-                    } catch (e: Exception) {
-                        Log.e("DashboardCommandListener", "Failed to stop service: ${e.message}")
+                    val hostService = context as? ServerHostService
+                    if (hostService != null) {
+                        val stopIntent = Intent(context, ServerHostService::class.java).apply {
+                            action = ServerHostService.ACTION_STOP
+                            putExtra("keep_listener_alive", true)
+                        }
+                        hostService.onStartCommand(stopIntent, 0, 0)
+                    } else {
+                        val stopIntent = Intent(context, ServerHostService::class.java).apply {
+                            action = ServerHostService.ACTION_STOP
+                            putExtra("keep_listener_alive", true)
+                        }
+                        try {
+                            context.startService(stopIntent)
+                        } catch (e: Exception) {
+                            Log.e("DashboardCommandListener", "Failed to stop service: ${e.message}")
+                        }
                     }
                 }
             }
             "restart_server" -> {
                 updateCommandResult(uid, commandId, status = "done", result = "Server restart initiated.")
                 withContext(Dispatchers.Main) {
-                    ServerHostService.restart(context)
+                    val hostService = context as? ServerHostService
+                    if (hostService != null) {
+                        val restartIntent = Intent(context, ServerHostService::class.java).apply {
+                            action = ServerHostService.ACTION_RESTART
+                        }
+                        hostService.onStartCommand(restartIntent, 0, 0)
+                    } else {
+                        ServerHostService.restart(context)
+                    }
                 }
             }
             "rcon" -> {

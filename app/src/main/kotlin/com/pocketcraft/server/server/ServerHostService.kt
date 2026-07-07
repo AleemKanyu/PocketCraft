@@ -65,6 +65,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -88,6 +89,7 @@ class ServerHostService : Service() {
         DASHBOARD_LISTENER_ACTIVE("Web Dashboard listener is active")
     }
 
+    private var isForegroundServiceStarted = false
     private var currentVersionId: String? = null
     private var currentWorldName: String? = null
     private var serverProcess: java.lang.Process? = null
@@ -168,10 +170,15 @@ class ServerHostService : Service() {
             ServerStage.STARTING_SERVER.notificationText
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, createForegroundNotification(initialText), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        if (!isForegroundServiceStarted) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, createForegroundNotification(initialText), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(NOTIFICATION_ID, createForegroundNotification(initialText))
+            }
+            isForegroundServiceStarted = true
         } else {
-            startForeground(NOTIFICATION_ID, createForegroundNotification(initialText))
+            updateNotification(initialText, force = true)
         }
 
         if (action == ACTION_START_LISTENER) {
@@ -341,10 +348,15 @@ class ServerHostService : Service() {
         synchronized(currentPlayersList) { currentPlayersList.clear() }
         startDashboardStatusHeartbeat(versionId)
         sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] Starting server...")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        if (!isForegroundServiceStarted) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText))
+            }
+            isForegroundServiceStarted = true
         } else {
-            startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText))
+            updateNotification(ServerStage.STARTING_SERVER.notificationText, force = true)
         }
         // On Android 12+ the JVM runs in-process via JNI (NativeLauncher).
         // launcher.c pipes JVM stdout/stderr into logcat at full native speed.
