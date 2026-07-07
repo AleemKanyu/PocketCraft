@@ -384,6 +384,7 @@ function DashboardPage({
   const [loading, setLoading] = useState(true);
   const [phoneOnline, setPhoneOnline] = useState(false);
   const [proUser, setProUser] = useState(false);
+  const [dashboardSecret, setDashboardSecret] = useState('');
   const [profilePlayer, setProfilePlayer] = useState<any | null>(null);
 
   // Command Pending States
@@ -434,10 +435,13 @@ function DashboardPage({
     const userDocRef = doc(db, 'users', user.uid);
     const unsubscribeUser = onSnapshot(userDocRef, (snapshot) => {
       if (snapshot.exists()) {
-        const tier = snapshot.data().premiumTier || 'none';
+        const data = snapshot.data();
+        const tier = data.premiumTier || 'none';
         setProUser(tier === 'premium' || tier === 'supportive');
+        setDashboardSecret(data.dashboardSecret || '');
       } else {
         setProUser(false);
+        setDashboardSecret('');
       }
     });
 
@@ -473,6 +477,7 @@ function DashboardPage({
       const cmdRef = await addDoc(collection(db, 'users', user.uid, 'dashboard_commands'), {
         type,
         payload,
+        secret: dashboardSecret,
         createdAt: Timestamp.now(),
         status: 'pending',
         result: null,
