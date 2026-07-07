@@ -2954,16 +2954,23 @@ class ServerHostService : Service() {
         @Keep
         val serverReadyState: StateFlow<Boolean> = _serverReadyState.asStateFlow()
 
-        fun start(context: Context, versionId: String, worldName: String) {
+        fun start(context: Context, versionId: String, worldName: String): Boolean {
             val intent = Intent(context, ServerHostService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_VERSION_ID, versionId)
                 putExtra(EXTRA_WORLD_NAME, worldName)
             }
-            try {
+            return try {
                 ContextCompat.startForegroundService(context, intent)
+                true
             } catch (e: Exception) {
-                android.util.Log.e("ServerHostService", "Failed to start service: ${e.message}")
+                try {
+                    context.startService(intent)
+                    true
+                } catch (e2: Exception) {
+                    android.util.Log.e("ServerHostService", "Failed to start service: ${e2.message}")
+                    false
+                }
             }
         }
 
@@ -2978,21 +2985,24 @@ class ServerHostService : Service() {
             }
         }
 
-        fun restart(context: Context) {
+        fun restart(context: Context): Boolean {
             val intent = Intent(context, ServerHostService::class.java).apply {
                 action = ACTION_RESTART
             }
-            try {
+            return try {
                 if (isServiceRunning(context)) {
                     context.startService(intent)
                 } else {
                     ContextCompat.startForegroundService(context, intent)
                 }
+                true
             } catch (e: Exception) {
                 try {
                     context.startService(intent)
+                    true
                 } catch (e2: Exception) {
                     android.util.Log.e("ServerHostService", "Failed to restart service: ${e2.message}")
+                    false
                 }
             }
         }

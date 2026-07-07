@@ -90,17 +90,25 @@ class DashboardCommandListener(
         if (isMainProcess) {
             when (type) {
                 "start_server" -> {
-                    updateCommandResult(uid, commandId, status = "done", result = "Server start initiated.")
                     val versionId = AppPreferencesStore.getSelectedVersionFlow(context).first().orEmpty()
                     val worldName = AppPreferencesStore.getSelectedWorldFlow(context).first()
                     withContext(Dispatchers.Main) {
-                        ServerHostService.start(context, versionId, worldName)
+                        val ok = ServerHostService.start(context, versionId, worldName)
+                        if (ok) {
+                            updateCommandResult(uid, commandId, status = "done", result = "Server start initiated.")
+                        } else {
+                            updateCommandResult(uid, commandId, status = "failed", errorMsg = "Android OS restriction: Cannot start server from background. Please enable 'Always Alive in Background' in app settings first.")
+                        }
                     }
                 }
                 "restart_server" -> {
-                    updateCommandResult(uid, commandId, status = "done", result = "Server restart initiated.")
                     withContext(Dispatchers.Main) {
-                        ServerHostService.restart(context)
+                        val ok = ServerHostService.restart(context)
+                        if (ok) {
+                            updateCommandResult(uid, commandId, status = "done", result = "Server restart initiated.")
+                        } else {
+                            updateCommandResult(uid, commandId, status = "failed", errorMsg = "Android OS restriction: Cannot restart server from background. Please enable 'Always Alive in Background' in app settings first.")
+                        }
                     }
                 }
                 "update_property" -> {
@@ -164,7 +172,6 @@ class DashboardCommandListener(
         // Service Process Command Handling
         when (type) {
             "start_server" -> {
-                updateCommandResult(uid, commandId, status = "done", result = "Server start initiated.")
                 val versionId = AppPreferencesStore.getSelectedVersionFlow(context).first().orEmpty()
                 val worldName = AppPreferencesStore.getSelectedWorldFlow(context).first()
                 withContext(Dispatchers.Main) {
@@ -176,8 +183,14 @@ class DashboardCommandListener(
                             putExtra(ServerHostService.EXTRA_WORLD_NAME, worldName)
                         }
                         hostService.onStartCommand(startIntent, 0, 0)
+                        updateCommandResult(uid, commandId, status = "done", result = "Server start initiated in-process.")
                     } else {
-                        ServerHostService.start(context, versionId, worldName)
+                        val ok = ServerHostService.start(context, versionId, worldName)
+                        if (ok) {
+                            updateCommandResult(uid, commandId, status = "done", result = "Server start initiated.")
+                        } else {
+                            updateCommandResult(uid, commandId, status = "failed", errorMsg = "Android OS restriction: Cannot start server from background. Please enable 'Always Alive in Background' in app settings first.")
+                        }
                     }
                 }
             }
@@ -205,7 +218,6 @@ class DashboardCommandListener(
                 }
             }
             "restart_server" -> {
-                updateCommandResult(uid, commandId, status = "done", result = "Server restart initiated.")
                 withContext(Dispatchers.Main) {
                     val hostService = context as? ServerHostService
                     if (hostService != null) {
@@ -213,8 +225,14 @@ class DashboardCommandListener(
                             action = ServerHostService.ACTION_RESTART
                         }
                         hostService.onStartCommand(restartIntent, 0, 0)
+                        updateCommandResult(uid, commandId, status = "done", result = "Server restart initiated in-process.")
                     } else {
-                        ServerHostService.restart(context)
+                        val ok = ServerHostService.restart(context)
+                        if (ok) {
+                            updateCommandResult(uid, commandId, status = "done", result = "Server restart initiated.")
+                        } else {
+                            updateCommandResult(uid, commandId, status = "failed", errorMsg = "Android OS restriction: Cannot restart server from background. Please enable 'Always Alive in Background' in app settings first.")
+                        }
                     }
                 }
             }

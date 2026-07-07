@@ -645,7 +645,7 @@ function DashboardPage({
           </div>
         )}
         {/* Server Control Card */}
-        <div className="panel-card" style={{ gridColumn: 'span 7' }}>
+        <div className="panel-card" style={{ gridColumn: 'span 8' }}>
           <h2 className="card-title"><ServerIcon /> Server Control</h2>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
             <div>
@@ -665,21 +665,30 @@ function DashboardPage({
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--panel-border)', minWidth: 0 }}>
               <p style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Relay IP Address</p>
-              <p style={{ fontSize: '13px', fontWeight: '700', color: 'var(--accent-color)', fontFamily: 'var(--font-mono)', margin: 0, wordBreak: 'break-all' }}>
+              <p 
+                style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent-color)', fontFamily: 'var(--font-mono)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                title={status.relayAddress || 'None'}
+              >
                 {status.relayAddress || 'None'}
               </p>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--panel-border)', minWidth: 0 }}>
               <p style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Local IP Address</p>
-              <p style={{ fontSize: '13px', fontWeight: '700', color: 'var(--accent-color)', fontFamily: 'var(--font-mono)', margin: 0, wordBreak: 'break-all' }}>
+              <p 
+                style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent-color)', fontFamily: 'var(--font-mono)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                title={status.localIp || 'None'}
+              >
                 {status.localIp || 'None'}
               </p>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--panel-border)', minWidth: 0 }}>
               <p style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Custom IP Subdomain</p>
-              <p style={{ fontSize: '13px', fontWeight: '700', color: 'var(--accent-color)', fontFamily: 'var(--font-mono)', margin: 0, wordBreak: 'break-all' }}>
+              <p 
+                style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent-color)', fontFamily: 'var(--font-mono)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                title={status.subdomain ? `${status.subdomain}.pocketcraft.online` : 'None'}
+              >
                 {status.subdomain ? `${status.subdomain}.pocketcraft.online` : 'None'}
               </p>
             </div>
@@ -734,7 +743,7 @@ function DashboardPage({
         </div>
 
         {/* Players Registry Card */}
-        <div className="panel-card" style={{ gridColumn: 'span 5' }}>
+        <div className="panel-card" style={{ gridColumn: 'span 4' }}>
           <h2 className="card-title"><UsersIcon /> Players Registry ({allJoinedPlayers.length})</h2>
           <div className="player-list" style={{ maxHeight: '280px', overflowY: 'auto' }}>
             {allJoinedPlayers.length === 0 ? (
