@@ -2269,7 +2269,7 @@ class ServerHostService : Service() {
         }
     }
 
-    private val afkHelperManager by lazy {
+    val afkHelperManager by lazy {
         com.pocketcraft.server.afk.AfkHelperManager(
             context = this,
             scope = serviceScope,
@@ -2695,26 +2695,49 @@ class ServerHostService : Service() {
             ?: prefs.firebaseUserUid
         if (uid != null) {
             val currentWorld = currentWorldName ?: "world"
-            val properties = readServerProperties(currentWorld)
-            val statusDoc = mapOf(
-                "serverRunning" to false,
-                "serverState" to "stopped",
-                "bootProgress" to "",
-                "bootProgressPercent" to 0,
-                "playersOnline" to emptyList<Map<String, String>>(),
-                "uptimeSeconds" to 0L,
-                "tps" to null,
-                "lastSeen" to com.google.firebase.Timestamp.now(),
-                "secret" to (prefs.dashboardSecret ?: ""),
-                "properties" to properties,
-                "relayAddress" to "",
-                "isPremium" to (prefs.isPremiumUser || prefs.debugPremiumOverride)
-            )
             serviceScope.launch(Dispatchers.IO) {
                 try {
+                    val properties = readServerProperties(currentWorld)
+                    val dbDao = com.pocketcraft.server.afk.AfkHelperDatabase.getInstance(this@ServerHostService).afkFarmLocationDao()
+                    val rawBots = dbDao.getAll().filter { it.worldName.equals(currentWorld, ignoreCase = true) }
+                    val afkBotEnabled = rawBots.any { it.isActive }
+                    val afkBotsList = rawBots.map { bot ->
+                        mapOf(
+                            "id" to bot.id,
+                            "name" to bot.name,
+                            "dummyName" to bot.dummyEntityName,
+                            "x" to bot.x,
+                            "y" to bot.y,
+                            "z" to bot.z,
+                            "world" to bot.worldName,
+                            "active" to bot.isActive,
+                            "owner" to bot.ownerPlayerName,
+                            "ownerUuid" to bot.ownerPlayerUuid
+                        )
+                    }
+                    val localIp = com.pocketcraft.server.server.ServerAddressResolver.getLocalIpAddress() ?: ""
+
+                    val statusDoc = mapOf(
+                        "serverRunning" to false,
+                        "serverState" to "stopped",
+                        "bootProgress" to "",
+                        "bootProgressPercent" to 0,
+                        "playersOnline" to emptyList<Map<String, String>>(),
+                        "uptimeSeconds" to 0L,
+                        "tps" to null,
+                        "lastSeen" to com.google.firebase.Timestamp.now(),
+                        "secret" to (prefs.dashboardSecret ?: ""),
+                        "properties" to properties,
+                        "relayAddress" to "",
+                        "afkBotEnabled" to afkBotEnabled,
+                        "afkBots" to afkBotsList,
+                        "localIp" to localIp,
+                        "isPremium" to (prefs.isPremiumUser || prefs.debugPremiumOverride)
+                    )
+
                     FirebaseFirestore.getInstance().collection("users").document(uid)
                         .collection("dashboard_status").document("status")
-                        .set(statusDoc, SetOptions.merge())
+                        .set(statusDoc, SetOptions.merge()).await()
                 } catch (e: Exception) {
                     android.util.Log.e("ServerHostService", "Failed to update offline status: ${e.message}")
                 }

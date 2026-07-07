@@ -74,6 +74,19 @@ interface Player {
   pingText?: string;
 }
 
+interface AfkBot {
+  id: string;
+  name: string;
+  dummyName: string;
+  x: number;
+  y: number;
+  z: number;
+  world: string;
+  active: boolean;
+  owner: string;
+  ownerUuid: string;
+}
+
 interface DashboardStatus {
   serverRunning: boolean;
   serverState?: 'running' | 'starting' | 'stopped';
@@ -87,6 +100,8 @@ interface DashboardStatus {
   whitelist: string[];
   lastSeen: Timestamp;
   relayAddress?: string | null;
+  localIp?: string;
+  afkBots?: AfkBot[];
   allPlayers?: any[];
   currentWorld?: string;
   worlds?: string[];
@@ -388,6 +403,10 @@ function DashboardPage({
   const [sliderViewDistance, setSliderViewDistance] = useState<string | null>(null);
   const [sliderSimulationDistance, setSliderSimulationDistance] = useState<string | null>(null);
   const [tpDestination, setTpDestination] = useState('');
+  const [newBotName, setNewBotName] = useState('');
+  const [newBotX, setNewBotX] = useState('');
+  const [newBotY, setNewBotY] = useState('');
+  const [newBotZ, setNewBotZ] = useState('');
 
   // Snapshot Listeners
   useEffect(() => {
@@ -628,7 +647,7 @@ function DashboardPage({
         {/* Server Control Card */}
         <div className="panel-card" style={{ gridColumn: 'span 7' }}>
           <h2 className="card-title"><ServerIcon /> Server Control</h2>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
             <div>
               <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Server Status</p>
               <h3 style={{ fontSize: '24px', fontWeight: '800', color: serverStatusColor }}>
@@ -636,21 +655,34 @@ function DashboardPage({
               </h3>
             </div>
             {resolvedServerState === 'running' && (
-              <>
-                <div>
-                  <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Uptime</p>
-                  <h3 style={{ fontSize: '20px', fontWeight: '700' }}>
-                    {formatUptime(status.uptimeSeconds)}
-                  </h3>
-                </div>
-                <div>
-                  <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Relay IP Address</p>
-                  <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--accent-color)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
-                    {status.relayAddress || 'None'}
-                  </h3>
-                </div>
-              </>
+              <div>
+                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Uptime</p>
+                <h3 style={{ fontSize: '20px', fontWeight: '700' }}>
+                  {formatUptime(status.uptimeSeconds)}
+                </h3>
+              </div>
             )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+              <p style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Relay IP Address</p>
+              <p style={{ fontSize: '13px', fontWeight: '700', color: 'var(--accent-color)', fontFamily: 'var(--font-mono)', margin: 0, wordBreak: 'break-all' }}>
+                {status.relayAddress || 'None'}
+              </p>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+              <p style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Local IP Address</p>
+              <p style={{ fontSize: '13px', fontWeight: '700', color: 'var(--accent-color)', fontFamily: 'var(--font-mono)', margin: 0, wordBreak: 'break-all' }}>
+                {status.localIp || 'None'}
+              </p>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--panel-border)' }}>
+              <p style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Custom IP Subdomain</p>
+              <p style={{ fontSize: '13px', fontWeight: '700', color: 'var(--accent-color)', fontFamily: 'var(--font-mono)', margin: 0, wordBreak: 'break-all' }}>
+                {status.subdomain ? `${status.subdomain}.pocketcraft.online` : 'None'}
+              </p>
+            </div>
           </div>
 
           {resolvedServerState === 'starting' && (
@@ -764,13 +796,14 @@ function DashboardPage({
         {/* AFK Helper Card */}
         <div className="panel-card" style={{ gridColumn: 'span 5' }}>
           <h2 className="card-title"><BotIcon /> AFK Helper Bots</h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: '1.5' }}>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '15px', lineHeight: '1.5' }}>
             Spawn dummy players in-game to keep chunks loaded and farm operations active.
           </p>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '14px 18px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.04)' }}>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '12px 16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.04)', marginBottom: '16px' }}>
             <div>
-              <p style={{ fontWeight: '700', fontSize: '14px' }}>All AFK Bots</p>
-              <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Status on active world</p>
+              <p style={{ fontWeight: '700', fontSize: '14px', margin: 0 }}>All AFK Bots</p>
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>Status on active world</p>
             </div>
             <label className="switch">
               <input 
@@ -781,6 +814,113 @@ function DashboardPage({
               />
               <span className="slider"></span>
             </label>
+          </div>
+
+          {/* Bot list */}
+          <div style={{ marginBottom: '20px' }}>
+            <p style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '700', marginBottom: '8px', margin: 0 }}>Bot List ({status.afkBots?.length || 0})</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }}>
+              {(!status.afkBots || status.afkBots.length === 0) ? (
+                <div style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px dashed var(--panel-border)', borderRadius: '8px', textAlign: 'center' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>No AFK bots configured.</p>
+                </div>
+              ) : (
+                status.afkBots.map((bot) => (
+                  <div key={bot.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--panel-border)' }}>
+                    <div>
+                      <p style={{ fontSize: '13px', fontWeight: '700', margin: 0 }}>{bot.name}</p>
+                      <p style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', margin: 0 }}>
+                        📍 {bot.x}, {bot.y}, {bot.z}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <button
+                        className={`btn ${bot.active ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ padding: '4px 8px', fontSize: '11px' }}
+                        onClick={() => handleAction('toggle_afk_bot_individual', { id: bot.id }, `Toggled active state for bot ${bot.name}`)}
+                        disabled={!phoneOnline || pendingActions[`toggle_afk_bot_individual_${JSON.stringify({ id: bot.id })}`]}
+                      >
+                        {bot.active ? 'Active' : 'Inactive'}
+                      </button>
+                      <button
+                        className="btn btn-danger"
+                        style={{ padding: '4px 8px', fontSize: '11px' }}
+                        onClick={() => handleAction('delete_afk_bot', { id: bot.id }, `Deleted bot ${bot.name}`)}
+                        disabled={!phoneOnline || pendingActions[`delete_afk_bot_${JSON.stringify({ id: bot.id })}`]}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Add Bot Form */}
+          <div style={{ borderTop: '1px solid var(--panel-border)', paddingTop: '16px' }}>
+            <p style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '700', marginBottom: '8px', margin: 0 }}>Create AFK Bot</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Bot Name (e.g. Steve)"
+                value={newBotName}
+                onChange={(e) => setNewBotName(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--panel-border)', borderRadius: '6px', color: 'var(--text-primary)' }}
+                disabled={!phoneOnline}
+              />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                <input
+                  type="number"
+                  className="form-control"
+                  placeholder="X"
+                  value={newBotX}
+                  onChange={(e) => setNewBotX(e.target.value)}
+                  style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--panel-border)', borderRadius: '6px', color: 'var(--text-primary)' }}
+                  disabled={!phoneOnline}
+                />
+                <input
+                  type="number"
+                  className="form-control"
+                  placeholder="Y"
+                  value={newBotY}
+                  onChange={(e) => setNewBotY(e.target.value)}
+                  style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--panel-border)', borderRadius: '6px', color: 'var(--text-primary)' }}
+                  disabled={!phoneOnline}
+                />
+                <input
+                  type="number"
+                  className="form-control"
+                  placeholder="Z"
+                  value={newBotZ}
+                  onChange={(e) => setNewBotZ(e.target.value)}
+                  style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--panel-border)', borderRadius: '6px', color: 'var(--text-primary)' }}
+                  disabled={!phoneOnline}
+                />
+              </div>
+              <button
+                className="btn btn-primary"
+                style={{ padding: '8px 16px', fontSize: '12px', marginTop: '4px' }}
+                onClick={() => {
+                  if (newBotName.trim()) {
+                    handleAction('create_afk_bot', {
+                      name: newBotName.trim(),
+                      x: Number(newBotX) || 0,
+                      y: Number(newBotY) || 64,
+                      z: Number(newBotZ) || 0
+                    }, `Added bot ${newBotName.trim()}`);
+                    setNewBotName('');
+                    setNewBotX('');
+                    setNewBotY('');
+                    setNewBotZ('');
+                  }
+                }}
+                disabled={!phoneOnline || !newBotName.trim() || pendingActions[`create_afk_bot_${JSON.stringify({ name: newBotName.trim(), x: Number(newBotX) || 0, y: Number(newBotY) || 64, z: Number(newBotZ) || 0 })}`]}
+              >
+                Add Bot
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1297,13 +1437,25 @@ function DashboardPage({
                   </div>
 
                   {/* Last Death */}
-                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)', gridColumn: 'span 2' }}>
-                    <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Last Death Position</p>
-                    <p style={{ fontSize: '12px', fontWeight: '700', fontFamily: 'var(--font-mono)', margin: 0 }}>
-                      📍 {profilePlayer.deathX !== undefined && profilePlayer.deathX !== 0 
-                        ? `${profilePlayer.deathX.toFixed(0)}, ${profilePlayer.deathY.toFixed(0)}, ${profilePlayer.deathZ.toFixed(0)} (${profilePlayer.deathDim ? profilePlayer.deathDim.replace('minecraft:', '') : 'overworld'})` 
-                        : 'None'}
-                    </p>
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '10px', border: '1px solid var(--panel-border)', gridColumn: 'span 2', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <p style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Last Death Position</p>
+                      <p style={{ fontSize: '12px', fontWeight: '700', fontFamily: 'var(--font-mono)', margin: 0 }}>
+                        📍 {profilePlayer.deathX !== undefined && profilePlayer.deathX !== 0 
+                          ? `${profilePlayer.deathX.toFixed(0)}, ${profilePlayer.deathY.toFixed(0)}, ${profilePlayer.deathZ.toFixed(0)} (${profilePlayer.deathDim ? profilePlayer.deathDim.replace('minecraft:', '') : 'overworld'})` 
+                          : 'None'}
+                      </p>
+                    </div>
+                    {profilePlayer.deathX !== undefined && profilePlayer.deathX !== 0 && (
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: '4px 8px', fontSize: '10px' }}
+                        onClick={() => handleAction('rcon', { command: `tp "${profilePlayer.name}" ${profilePlayer.deathX.toFixed(0)} ${profilePlayer.deathY.toFixed(0)} ${profilePlayer.deathZ.toFixed(0)}` }, `Teleported ${profilePlayer.name} to last death location`)}
+                        disabled={!phoneOnline || !status.serverRunning || !profilePlayer.online}
+                      >
+                        Teleport
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

@@ -134,6 +134,21 @@ class DashboardCommandListener(
                     com.pocketcraft.server.service.ServerFileManager.getServerDir(context, cleanWorld)
                     updateCommandResult(uid, commandId, status = "done", result = "World $cleanWorld created and selected.")
                 }
+                "create_afk_bot" -> {
+                    if (!ServerHostService.isServiceRunning(context)) {
+                        handleCreateAfkBot(payload, uid, commandId)
+                    }
+                }
+                "delete_afk_bot" -> {
+                    if (!ServerHostService.isServiceRunning(context)) {
+                        handleDeleteAfkBot(payload, uid, commandId)
+                    }
+                }
+                "toggle_afk_bot_individual" -> {
+                    if (!ServerHostService.isServiceRunning(context)) {
+                        handleToggleAfkBotIndividual(payload, uid, commandId)
+                    }
+                }
                 else -> {
                     if (ServerHostService.isServiceRunning(context)) {
                         // Skip updating or marking so the service process can read and handle it!
@@ -185,6 +200,15 @@ class DashboardCommandListener(
                 val enabled = payload["enabled"] as? Boolean ?: throw IllegalArgumentException("Missing enabled parameter")
                 toggleAfkBot?.invoke(enabled)
                 updateCommandResult(uid, commandId, status = "done", result = "AFK bot toggled to $enabled.")
+            }
+            "create_afk_bot" -> {
+                handleCreateAfkBot(payload, uid, commandId)
+            }
+            "delete_afk_bot" -> {
+                handleDeleteAfkBot(payload, uid, commandId)
+            }
+            "toggle_afk_bot_individual" -> {
+                handleToggleAfkBotIndividual(payload, uid, commandId)
             }
             "kick" -> {
                 val playerName = payload["playerName"] as? String ?: throw IllegalArgumentException("Missing playerName parameter")
@@ -333,7 +357,151 @@ class DashboardCommandListener(
             "Property $key=$value saved to server.properties. Restart server to apply."
         }
         updateCommandResult(uid, commandId, status = "done", result = msg)
+        pushOfflineStatusUpdate(uid)
         onPropertyUpdated?.invoke()
+    }
+
+    private suspend fun pushOfflineStatusUpdate(uid: String) = withContext(Dispatchers.IO) {
+        val prefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
+        val worldName = AppPreferencesStore.getSelectedWorldFlow(context).first()
+        
+        // 1. Read server properties
+        val serverDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(context, worldName)
+        val propsFile = File(serverDir, "server.properties")
+        val properties = mutableMapOf<String, String>()
+        if (propsFile.exists()) {
+            propsFile.readLines().forEach { line ->
+                val trimmed = line.trim()
+                if (!trimmed.startsWith("#") && trimmed.contains("=")) {
+                    val parts = trimmed.split("=", limit = 2)
+                    if (parts.size == 2) {
+                        val key = parts[0].trim()
+                        val value = parts[1].trim()
+                        properties[key] = value
+                    }
+                }
+            }
+        }
+        
+        // 2. Read AFK bots
+        val dbDao = com.pocketcraft.server.afk.AfkHelperDatabase.getInstance(context).afkFarmLocationDao()
+        val rawBots = dbDao.getAll().filter { it.worldName.equals(worldName, ignoreCase = true) }
+        val afkBotEnabled = rawBots.any { it.isActive }
+        val afkBotsList = rawBots.map { bot ->
+            mapOf(
+                "id" to bot.id,
+                "name" to bot.name,
+                "dummyName" to bot.dummyEntityName,
+                "x" to bot.x,
+                "y" to bot.y,
+                "z" to bot.z,
+                "world" to bot.worldName,
+                "active" to bot.isActive,
+                "owner" to bot.ownerPlayerName,
+                "ownerUuid" to bot.ownerPlayerUuid
+            )
+        }
+        
+        val localIp = com.pocketcraft.server.server.ServerAddressResolver.getLocalIpAddress() ?: ""
+        
+        val statusDoc = mapOf(
+            "properties" to properties,
+            "afkBotEnabled" to afkBotEnabled,
+            "afkBots" to afkBotsList,
+            "localIp" to localIp,
+            "currentWorld" to worldName,
+            "lastSeen" to Timestamp.now()
+        )
+        
+        try {
+            db.collection("users").document(uid).collection("dashboard_status").document("status")
+                .set(statusDoc, SetOptions.merge()).await()
+        } catch (e: Exception) {
+            Log.e("DashboardCommandListener", "Failed to push offline status update", e)
+        }
+    }
+
+    private suspend fun handleCreateAfkBot(payload: Map<String, Any>, uid: String, commandId: String) {
+        val name = payload["name"] as? String ?: throw IllegalArgumentException("Missing name parameter")
+        val x = (payload["x"] as? Number)?.toInt() ?: 0
+        val y = (payload["y"] as? Number)?.toInt() ?: 64
+        val z = (payload["z"] as? Number)?.toInt() ?: 0
+        
+        val hostService = context as? ServerHostService
+        if (hostService != null && ServerHostService.isServiceRunning(context)) {
+            val resultMsg = hostService.afkHelperManager.addFarm(name, x, y, z)
+            updateCommandResult(uid, commandId, status = "done", result = resultMsg)
+        } else {
+            withContext(Dispatchers.IO) {
+                val dbDao = com.pocketcraft.server.afk.AfkHelperDatabase.getInstance(context).afkFarmLocationDao()
+                val currentWorld = AppPreferencesStore.getSelectedWorldFlow(context).first()
+                val isPremium = com.pocketcraft.server.billing.BillingManager.getInstance(context.applicationContext).isPremium.value
+                val existingCount = dbDao.getAll().filter { it.worldName.equals(currentWorld, ignoreCase = true) }.size
+                if (!isPremium && existingCount >= 1) {
+                    updateCommandResult(uid, commandId, status = "failed", errorMsg = "Free plan is limited to 1 AFK bot. Upgrade to Pro to unlock unlimited AFK bots!")
+                } else {
+                    val entity = com.pocketcraft.server.afk.AfkFarmLocationEntity(
+                        id = java.util.UUID.randomUUID().toString(),
+                        worldName = currentWorld,
+                        name = name.trim(),
+                        x = x,
+                        y = y,
+                        z = z,
+                        isActive = false,
+                        dummyEntityName = name.trim().lowercase().replace(Regex("[^a-z0-9_]+"), "_").take(12),
+                        ownerPlayerName = "",
+                        ownerPlayerUuid = "",
+                        createdAt = System.currentTimeMillis()
+                    )
+                    dbDao.upsert(entity)
+                    updateCommandResult(uid, commandId, status = "done", result = "Saved $name to AFK Helpers (Offline).")
+                }
+            }
+        }
+        pushOfflineStatusUpdate(uid)
+    }
+
+    private suspend fun handleDeleteAfkBot(payload: Map<String, Any>, uid: String, commandId: String) {
+        val botId = payload["id"] as? String ?: throw IllegalArgumentException("Missing id parameter")
+        val hostService = context as? ServerHostService
+        if (hostService != null && ServerHostService.isServiceRunning(context)) {
+            val resultMsg = hostService.afkHelperManager.deleteFarm(botId)
+            updateCommandResult(uid, commandId, status = "done", result = resultMsg)
+        } else {
+            withContext(Dispatchers.IO) {
+                val dbDao = com.pocketcraft.server.afk.AfkHelperDatabase.getInstance(context).afkFarmLocationDao()
+                val entity = dbDao.getAll().firstOrNull { it.id == botId }
+                if (entity != null) {
+                    dbDao.delete(entity)
+                    updateCommandResult(uid, commandId, status = "done", result = "Deleted ${entity.name} (Offline).")
+                } else {
+                    updateCommandResult(uid, commandId, status = "failed", errorMsg = "Bot not found.")
+                }
+            }
+        }
+        pushOfflineStatusUpdate(uid)
+    }
+
+    private suspend fun handleToggleAfkBotIndividual(payload: Map<String, Any>, uid: String, commandId: String) {
+        val botId = payload["id"] as? String ?: throw IllegalArgumentException("Missing id parameter")
+        val hostService = context as? ServerHostService
+        if (hostService != null && ServerHostService.isServiceRunning(context)) {
+            val resultMsg = hostService.afkHelperManager.toggleFarm(botId)
+            updateCommandResult(uid, commandId, status = "done", result = resultMsg)
+        } else {
+            withContext(Dispatchers.IO) {
+                val dbDao = com.pocketcraft.server.afk.AfkHelperDatabase.getInstance(context).afkFarmLocationDao()
+                val entity = dbDao.getAll().firstOrNull { it.id == botId }
+                if (entity != null) {
+                    val updated = entity.copy(isActive = !entity.isActive)
+                    dbDao.upsert(updated)
+                    updateCommandResult(uid, commandId, status = "done", result = "Toggled ${entity.name} active state to ${updated.isActive} (Offline).")
+                } else {
+                    updateCommandResult(uid, commandId, status = "failed", errorMsg = "Bot not found.")
+                }
+            }
+        }
+        pushOfflineStatusUpdate(uid)
     }
 
     private fun updateCommandResult(uid: String, commandId: String, status: String, result: String? = null, errorMsg: String? = null) {
