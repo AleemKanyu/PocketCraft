@@ -2384,36 +2384,7 @@ class ServerHostService : Service() {
     }
 
     private fun startDashboardStatusHeartbeat(versionId: String) {
-        dashboardStatusJob?.cancel()
-        
-        dashboardCommandListener?.stop()
-        dashboardCommandListener = com.pocketcraft.server.broadcast.DashboardCommandListener(
-            context = this,
-            scope = serviceScope,
-            isMainProcess = false,
-            sendRconCommand = ::sendRconCommandSuspended,
-            toggleAfkBot = { enabled ->
-                val dbDao = com.pocketcraft.server.afk.AfkHelperDatabase.getInstance(this).afkFarmLocationDao()
-                val currentWorld = currentWorldName ?: "world"
-                val worldFarms = dbDao.getAll().filter { it.worldName.equals(currentWorld, ignoreCase = true) }
-                for (farm in worldFarms) {
-                    if (farm.isActive != enabled) {
-                        afkHelperManager.toggleFarm(farm.id)
-                    }
-                }
-            },
-            onPropertyUpdated = {
-                triggerDashboardStatusUpdate()
-            }
-        )
-        dashboardCommandListener?.start()
-
-        dashboardStatusJob = serviceScope.launch(Dispatchers.IO) {
-            while (isActive) {
-                updateDashboardStatus(versionId)
-                delay(15_000)
-            }
-        }
+        // Disabled: Web dashboard feature removed
     }
 
     private fun triggerDashboardStatusUpdate() {
@@ -2717,61 +2688,6 @@ class ServerHostService : Service() {
             dashboardCommandListener = null
         }
         synchronized(currentPlayersList) { currentPlayersList.clear() }
-
-        val prefs = com.pocketcraft.server.data.preferences.AppPreferences(this)
-        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-            ?: com.pocketcraft.server.util.MultiProcessAuthSync.readUid(this)
-            ?: prefs.firebaseUserUid
-        if (uid != null) {
-            val currentWorld = currentWorldName ?: "world"
-            serviceScope.launch(Dispatchers.IO) {
-                try {
-                    val properties = readServerProperties(currentWorld)
-                    val dbDao = com.pocketcraft.server.afk.AfkHelperDatabase.getInstance(this@ServerHostService).afkFarmLocationDao()
-                    val rawBots = dbDao.getAll().filter { it.worldName.equals(currentWorld, ignoreCase = true) }
-                    val afkBotEnabled = rawBots.any { it.isActive }
-                    val afkBotsList = rawBots.map { bot ->
-                        mapOf(
-                            "id" to bot.id,
-                            "name" to bot.name,
-                            "dummyName" to bot.dummyEntityName,
-                            "x" to bot.x,
-                            "y" to bot.y,
-                            "z" to bot.z,
-                            "world" to bot.worldName,
-                            "active" to bot.isActive,
-                            "owner" to bot.ownerPlayerName,
-                            "ownerUuid" to bot.ownerPlayerUuid
-                        )
-                    }
-                    val localIp = com.pocketcraft.server.server.ServerAddressResolver.getLocalIpAddress() ?: ""
-
-                    val statusDoc = mapOf(
-                        "serverRunning" to false,
-                        "serverState" to "stopped",
-                        "bootProgress" to "",
-                        "bootProgressPercent" to 0,
-                        "playersOnline" to emptyList<Map<String, String>>(),
-                        "uptimeSeconds" to 0L,
-                        "tps" to null,
-                        "lastSeen" to com.google.firebase.Timestamp.now(),
-                        "secret" to (com.pocketcraft.server.util.MultiProcessAuthSync.readSecret(this@ServerHostService) ?: prefs.dashboardSecret ?: ""),
-                        "properties" to properties,
-                        "relayAddress" to "",
-                        "afkBotEnabled" to afkBotEnabled,
-                        "afkBots" to afkBotsList,
-                        "localIp" to localIp,
-                        "isPremium" to (prefs.isPremiumUser || prefs.debugPremiumOverride)
-                    )
-
-                    FirebaseFirestore.getInstance().collection("users").document(uid)
-                        .collection("dashboard_status").document("status")
-                        .set(statusDoc, SetOptions.merge()).await()
-                } catch (e: Exception) {
-                    android.util.Log.e("ServerHostService", "Failed to update offline status: ${e.message}")
-                }
-            }
-        }
     }
 
     private fun getRegisteredPlayers(worldName: String): List<Map<String, Any>> {

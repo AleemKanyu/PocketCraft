@@ -89,119 +89,15 @@ class MainActivity : ComponentActivity() {
         isAppInForeground = true
         com.pocketcraft.server.broadcast.RemoteCommandListener.startListening(this)
 
-        if (uiCommandListener == null) {
-            val prefs = AppPreferences(this)
-            uiCommandListener = com.pocketcraft.server.broadcast.DashboardCommandListener(
-                context = this,
-                scope = lifecycleScope,
-                isMainProcess = true,
-                onPropertyUpdated = {
-                    val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-                        ?: prefs.firebaseUserUid
-                    if (uid != null) {
-                        lifecycleScope.launch(Dispatchers.IO) {
-                            try {
-                                val worldName = runBlocking {
-                                    AppPreferencesStore.getSelectedWorldFlow(applicationContext).first()
-                                }.ifBlank { "world" }
-                                
-                                val serverDir = ServerFileManager.getServerDir(applicationContext, worldName)
-                                val properties = try {
-                                    val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
-                                    mapOf(
-                                        "difficulty" to props.getProperty("difficulty", "normal"),
-                                        "gamemode" to props.getProperty("gamemode", "survival"),
-                                        "pvp" to props.getProperty("pvp", "true"),
-                                        "maxPlayers" to props.getProperty("max-players", "10"),
-                                        "viewDistance" to props.getProperty("view-distance", "10"),
-                                        "simulationDistance" to props.getProperty("simulation-distance", "10"),
-                                        "allowNether" to props.getProperty("allow-nether", "true"),
-                                        "whiteList" to props.getProperty("white-list", "false")
-                                    )
-                                } catch (e: Exception) {
-                                    emptyMap()
-                                }
 
-                                val statusDoc = mapOf(
-                                    "serverRunning" to false,
-                                    "serverState" to "stopped",
-                                    "bootProgress" to "",
-                                    "bootProgressPercent" to 0,
-                                    "lastSeen" to com.google.firebase.Timestamp.now(),
-                                    "secret" to (prefs.dashboardSecret ?: ""),
-                                    "properties" to properties
-                                )
-                                com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("users").document(uid)
-                                    .collection("dashboard_status").document("status")
-                                    .set(statusDoc, com.google.firebase.firestore.SetOptions.merge())
-                            } catch (e: Exception) {
-                                // Ignore
-                            }
-                        }
-                    }
-                }
-            )
-            uiCommandListener?.start()
-        }
 
-        val prefs = AppPreferences(this)
-        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-            ?: prefs.firebaseUserUid
-        if (uid != null) {
-            val secret = prefs.dashboardSecret ?: ""
-            com.pocketcraft.server.util.MultiProcessAuthSync.writeAuthData(applicationContext, uid, secret)
-            if (!com.pocketcraft.server.server.ServerHostService.isServiceRunning(applicationContext)) {
-                lifecycleScope.launch(Dispatchers.IO) {
-                    try {
-                        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                        val worldName = runBlocking {
-                            AppPreferencesStore.getSelectedWorldFlow(applicationContext).first()
-                        }.ifBlank { "world" }
-                        
-                        val serverDir = ServerFileManager.getServerDir(applicationContext, worldName)
-                        val properties = try {
-                            val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
-                            mapOf(
-                                "difficulty" to props.getProperty("difficulty", "normal"),
-                                "gamemode" to props.getProperty("gamemode", "survival"),
-                                "pvp" to props.getProperty("pvp", "true"),
-                                "maxPlayers" to props.getProperty("max-players", "10"),
-                                "viewDistance" to props.getProperty("view-distance", "10"),
-                                "simulationDistance" to props.getProperty("simulation-distance", "10"),
-                                "allowNether" to props.getProperty("allow-nether", "true"),
-                                "whiteList" to props.getProperty("white-list", "false")
-                            )
-                        } catch (e: Exception) {
-                            emptyMap()
-                        }
 
-                        val statusDoc = mapOf(
-                            "serverRunning" to false,
-                            "serverState" to "stopped",
-                            "bootProgress" to "",
-                            "bootProgressPercent" to 0,
-                            "lastSeen" to com.google.firebase.Timestamp.now(),
-                            "secret" to secret,
-                            "properties" to properties
-                        )
-                        db.collection("users").document(uid)
-                            .collection("dashboard_status").document("status")
-                            .set(statusDoc, com.google.firebase.firestore.SetOptions.merge())
-                    } catch (e: Exception) {
-                        // Ignore
-                    }
-                }
-            }
-        }
     }
 
     override fun onStop() {
         super.onStop()
         isAppInForeground = false
         com.pocketcraft.server.broadcast.RemoteCommandListener.stopListening()
-
-        uiCommandListener?.stop()
-        uiCommandListener = null
 
     }
 
@@ -228,22 +124,7 @@ class MainActivity : ComponentActivity() {
         // Sync Firebase auth state to preferences for multi-process safety
         val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
         preferences.firebaseUserUid = currentUser?.uid
-        if (currentUser != null) {
-            var secret = preferences.dashboardSecret
-            if (secret.isNullOrBlank()) {
-                secret = java.util.UUID.randomUUID().toString()
-                preferences.dashboardSecret = secret
-            }
-            com.pocketcraft.server.util.MultiProcessAuthSync.writeAuthData(applicationContext, currentUser.uid, secret)
-            try {
-                com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                    .collection("users")
-                    .document(currentUser.uid)
-                    .set(mapOf("dashboardSecret" to secret), com.google.firebase.firestore.SetOptions.merge())
-            } catch (e: Exception) {
-                android.util.Log.e("MainActivity", "Failed to upload dashboardSecret: ${e.message}")
-            }
-        }
+
 
         val onboardingCompleted = preferences.onboardingCompleted
         preferences.recordAppLaunch()
