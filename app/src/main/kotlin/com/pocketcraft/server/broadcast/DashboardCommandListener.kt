@@ -12,6 +12,7 @@ import com.google.firebase.Timestamp
 import com.pocketcraft.server.server.ServerHostService
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
+import com.pocketcraft.server.data.repository.ServerConfigRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -37,13 +38,16 @@ class DashboardCommandListener(
     fun start() {
         val prefs = AppPreferences(context)
         val uid = FirebaseAuth.getInstance().currentUser?.uid
+            ?: com.pocketcraft.server.util.MultiProcessAuthSync.readUid(context)
             ?: prefs.firebaseUserUid
             ?: return
 
         scope.launch(Dispatchers.IO) {
             try {
                 val snapshot = db.collection("users").document(uid).get().await()
-                val secret = snapshot.getString("dashboardSecret").orEmpty()
+                val secret = (snapshot.getString("dashboardSecret")
+                    ?: com.pocketcraft.server.util.MultiProcessAuthSync.readSecret(context)
+                    ?: prefs.dashboardSecret).orEmpty()
                 
                 withContext(Dispatchers.Main) {
                     Log.d("DashboardCommandListener", "Starting listener for user: $uid with secret: $secret")
@@ -51,7 +55,6 @@ class DashboardCommandListener(
                     registration?.remove()
                     registration = db.collection("users").document(uid).collection("dashboard_commands")
                         .whereEqualTo("status", "pending")
-                        .whereEqualTo("secret", secret)
                         .addSnapshotListener { snapshots, error ->
                             if (error != null) {
                                 Log.e("DashboardCommandListener", "Error listening to dashboard commands", error)
@@ -65,11 +68,23 @@ class DashboardCommandListener(
                             for (doc in sortedDocs) {
                                 val commandId = doc.id
                                 val type = doc.getString("type") ?: continue
+                                val docSecret = doc.getString("secret").orEmpty()
                                 val payload = doc.get("payload") as? Map<String, Any> ?: emptyMap()
+
+                                if (docSecret != secret) {
+                                    // Expire stale commands with wrong/empty secrets so they don't pile up
+                                    Log.w("DashboardCommandListener", "Expiring stale command $commandId (secret mismatch)")
+                                    db.collection("users").document(uid).collection("dashboard_commands")
+                                        .document(commandId)
+                                        .update("status", "expired")
+                                    continue
+                                }
 
                                 if (!shouldHandleCommand(type)) {
                                     continue
                                 }
+
+                                Log.d("DashboardCommandListener", "Handling command $commandId type=$type")
 
                                 // Immediately mark as acked
                                 db.collection("users").document(uid).collection("dashboard_commands")
@@ -391,6 +406,51 @@ class DashboardCommandListener(
             lines.add("$key=$value")
         }
         propsFile.writeText(lines.joinToString("\n"))
+
+        // Sync configuration change back to the ServerConfigRepository profile as well
+        runCatching {
+            val repository = ServerConfigRepository(context).apply {
+                setWorldNameOverride(worldName)
+            }
+            val currentConfig = repository.loadConfig()
+            val updatedConfig = when (key) {
+                "level-name" -> currentConfig.copy(worldName = value)
+                "level-seed" -> currentConfig.copy(worldSeed = value)
+                "max-players" -> currentConfig.copy(maxPlayers = value.toIntOrNull() ?: currentConfig.maxPlayers)
+                "difficulty" -> currentConfig.copy(difficulty = value)
+                "gamemode" -> currentConfig.copy(gameMode = value)
+                "online-mode" -> currentConfig.copy(onlineMode = value.toBoolean())
+                "motd" -> currentConfig.copy(motd = value)
+                "pvp" -> currentConfig.copy(pvp = value.toBoolean())
+                "view-distance", "pocketcraft-desired-view-distance" -> currentConfig.copy(viewDistance = value.toIntOrNull() ?: currentConfig.viewDistance)
+                "simulation-distance", "pocketcraft-desired-simulation-distance" -> currentConfig.copy(simulationDistance = value.toIntOrNull() ?: currentConfig.simulationDistance)
+                "spawn-protection" -> currentConfig.copy(spawnProtection = value.toIntOrNull() ?: currentConfig.spawnProtection)
+                "allow-flight" -> currentConfig.copy(allowFlight = value.toBoolean())
+                "white-list" -> currentConfig.copy(whiteList = value.toBoolean())
+                "enforce-whitelist" -> currentConfig.copy(enforceWhitelist = value.toBoolean())
+                "enable-command-block" -> currentConfig.copy(commandBlocks = value.toBoolean())
+                "allow-nether" -> currentConfig.copy(netherEnabled = value.toBoolean())
+                "spawn-monsters" -> currentConfig.copy(spawnMonsters = value.toBoolean())
+                "spawn-animals" -> currentConfig.copy(spawnAnimals = value.toBoolean())
+                "spawn-npcs" -> currentConfig.copy(spawnNpcs = value.toBoolean())
+                "hardcore" -> currentConfig.copy(hardcore = value.toBoolean())
+                "pocketcraft-max-ram-mb" -> currentConfig.copy(maxRamMb = value.toIntOrNull() ?: currentConfig.maxRamMb)
+                "pocketcraft-ram-mode" -> currentConfig.copy(ramMode = value)
+                "entity-broadcast-range-percentage" -> currentConfig.copy(entityBroadcastRangePercentage = value.toIntOrNull() ?: currentConfig.entityBroadcastRangePercentage)
+                "max-world-size" -> currentConfig.copy(maxWorldSize = value.toIntOrNull() ?: currentConfig.maxWorldSize)
+                "use-native-transport" -> currentConfig.copy(useNativeTransport = value.toBoolean())
+                "max-build-height" -> currentConfig.copy(maxBuildHeight = value.toIntOrNull() ?: currentConfig.maxBuildHeight)
+                "generate-structures" -> currentConfig.copy(generateStructures = value.toBoolean())
+                "level-type" -> currentConfig.copy(levelType = value)
+                "pocketcraft-server-type" -> currentConfig.copy(serverType = com.pocketcraft.server.data.model.ServerType.fromString(value))
+                "pocketcraft-game-version" -> currentConfig.copy(gameVersion = value)
+                "pocketcraft-custom-jar-path" -> currentConfig.copy(customJarPath = value.takeIf { it.isNotBlank() })
+                else -> currentConfig
+            }
+            repository.saveConfig(updatedConfig)
+        }.onFailure { e ->
+            Log.e("DashboardCommandListener", "Failed to sync config to repository: ${e.message}")
+        }
 
         // If server is running, also push via RCON for live effect
         val rconCall = sendRconCommand

@@ -45,6 +45,7 @@ import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.ArrayDeque
 import java.util.Properties
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -133,6 +134,7 @@ class ServerHostService : Service() {
     private val relayHealthFailures = AtomicInteger(0)
     private var relayStatusJob: Job? = null
     private var widgetUpdateJob: Job? = null
+    private val chunkResendJobs = ConcurrentHashMap<String, Job>()
     private val currentPlayersList = mutableListOf<PlayerInfo>()
     private var dashboardStatusJob: Job? = null
     private var dashboardCommandListener: com.pocketcraft.server.broadcast.DashboardCommandListener? = null
@@ -338,6 +340,7 @@ class ServerHostService : Service() {
         miuiSocketCheckSeen = false
         relayStatusPlayerCount.set(0)
         synchronized(relayOnlinePlayers) { relayOnlinePlayers.clear() }
+        cancelChunkResendJobs()
         persistRuntimeState(applicationContext, versionId, worldName, RUNTIME_STATE_STARTING)
         persistPlayerCount(applicationContext, 0)
         serviceScope.launch { AppPreferencesStore.setServerStartedAtMillis(applicationContext, 0L) }
@@ -706,6 +709,7 @@ class ServerHostService : Service() {
                 serverStartTimeMillis = 0L
                 relayStatusPlayerCount.set(0)
                 synchronized(relayOnlinePlayers) { relayOnlinePlayers.clear() }
+                cancelChunkResendJobs()
                 try {
                     com.pocketcraft.server.widget.ServerWidgetUpdater.push(applicationContext)
                 } catch (e: Exception) {
@@ -1795,6 +1799,7 @@ class ServerHostService : Service() {
         setServerReadyState(false)
         relayStatusPlayerCount.set(0)
         synchronized(relayOnlinePlayers) { relayOnlinePlayers.clear() }
+        cancelChunkResendJobs()
         persistRuntimeState(applicationContext, versionId, worldName, RUNTIME_STATE_STARTING)
         resetNotificationState(ServerStage.STARTING_SERVER.notificationText)
         pushWidgetUpdate()
@@ -2056,6 +2061,7 @@ class ServerHostService : Service() {
             }
         }
         ConsoleParser.parseLeave(line)?.let { name ->
+            chunkResendJobs.remove(name.lowercase())?.cancel()
             synchronized(currentPlayersList) {
                 currentPlayersList.removeAll { it.name.equals(name, ignoreCase = true) }
             }
@@ -2108,14 +2114,23 @@ class ServerHostService : Service() {
 
     private fun scheduleChunkResendBurst(name: String) {
         // Bedrock/Geyser clients sometimes finish login before all chunks have
-        // been fully acknowledged over the relay. A few staggered resend passes
-        // recover most partial/wireframe chunk cases without needing a rejoin.
-        serviceScope.launch {
-            listOf(3_000L, 8_000L, 15_000L).forEach { delayMs ->
-                delay(delayMs)
-                ServerLauncher.sendCommand("send-chunks $name")
-            }
+        // been fully acknowledged over the relay. Keep this to a single debounced
+        // resend so recovery does not flood the same uplink as keepalives.
+        val key = name.lowercase()
+        chunkResendJobs.remove(key)?.cancel()
+        val job = serviceScope.launch {
+            delay(7_000L)
+            ServerLauncher.sendCommand("send-chunks $name")
         }
+        chunkResendJobs[key] = job
+        job.invokeOnCompletion {
+            chunkResendJobs.remove(key, job)
+        }
+    }
+
+    private fun cancelChunkResendJobs() {
+        chunkResendJobs.values.forEach { it.cancel() }
+        chunkResendJobs.clear()
     }
 
     private fun startRelayStatusHeartbeat(versionId: String) {
@@ -2411,6 +2426,7 @@ class ServerHostService : Service() {
     private suspend fun updateDashboardStatus(versionId: String) {
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(this)
         val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+            ?: com.pocketcraft.server.util.MultiProcessAuthSync.readUid(this)
             ?: prefs.firebaseUserUid
             ?: return
         
@@ -2531,7 +2547,7 @@ class ServerHostService : Service() {
             "currentWorld" to activeWorldNameOrDefault(),
             "worlds" to listWorlds(),
             "properties" to readServerProperties(currentWorld),
-            "secret" to (prefs.dashboardSecret ?: ""),
+            "secret" to (com.pocketcraft.server.util.MultiProcessAuthSync.readSecret(this) ?: prefs.dashboardSecret ?: ""),
             "localIp" to (com.pocketcraft.server.server.ServerAddressResolver.getLocalIpAddress() ?: ""),
             "serverPort" to currentServerPort,
             "isPremium" to (prefs.isPremiumUser || prefs.debugPremiumOverride)
@@ -2704,6 +2720,7 @@ class ServerHostService : Service() {
 
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(this)
         val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+            ?: com.pocketcraft.server.util.MultiProcessAuthSync.readUid(this)
             ?: prefs.firebaseUserUid
         if (uid != null) {
             val currentWorld = currentWorldName ?: "world"
@@ -2738,7 +2755,7 @@ class ServerHostService : Service() {
                         "uptimeSeconds" to 0L,
                         "tps" to null,
                         "lastSeen" to com.google.firebase.Timestamp.now(),
-                        "secret" to (prefs.dashboardSecret ?: ""),
+                        "secret" to (com.pocketcraft.server.util.MultiProcessAuthSync.readSecret(this@ServerHostService) ?: prefs.dashboardSecret ?: ""),
                         "properties" to properties,
                         "relayAddress" to "",
                         "afkBotEnabled" to afkBotEnabled,

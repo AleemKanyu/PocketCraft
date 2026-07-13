@@ -36,6 +36,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
@@ -49,7 +50,7 @@ class RelayManager(private val context: Context) {
     companion object {
         const val CONTROL_PORT = 8080
         const val PHONE_TUNNEL_PORT = 9000
-        // Bound kernel queues so chunks backpressure Paper before keepalives sit
+                // Bound kernel queues so chunks backpressure Paper before keepalives sit
         // behind seconds of unsent data on constrained mobile relay routes.
         private const val SOCKET_BUFFER_SIZE = 16 * 1024
         private const val PLAYER_BRIDGE_BUFFER_SIZE = 8 * 1024
@@ -155,12 +156,29 @@ class RelayManager(private val context: Context) {
     @Volatile
     private var activeGeyserUdpHost: String = "127.0.0.1"
     private val inboundBedrockFrameCount = AtomicInteger(0)
+    private val logThrottleMap = ConcurrentHashMap<String, Long>()
 
     private data class PooledSocket(
         val socket: Socket,
         var isBridging: Boolean = false,
         val createdAt: Long = System.currentTimeMillis()
     )
+
+    private inline fun logThrottled(
+        key: String,
+        intervalMs: Long,
+        crossinline logAction: () -> Unit
+    ) {
+        val now = System.currentTimeMillis()
+        val previous = logThrottleMap.putIfAbsent(key, now)
+        if (previous == null) {
+            logAction()
+            return
+        }
+        if (now - previous >= intervalMs && logThrottleMap.replace(key, previous, now)) {
+            logAction()
+        }
+    }
 
     data class RelayAddress(val host: String, val port: Int, val isFallback: Boolean = false) {
         override fun toString() = "$host:$port"
@@ -1057,7 +1075,7 @@ class RelayManager(private val context: Context) {
                 if (npOff < len) break
 
                 val frameNo = inboundBedrockFrameCount.incrementAndGet()
-                if (frameNo <= 20 || frameNo % 25 == 0) {
+                if (frameNo <= 20 || frameNo % 250 == 0) {
                     android.util.Log.d(
                         "RelayManager",
                         "Inbound Bedrock relay frame #$frameNo type=0x02 bytes=${frame.size} payload=$len client=${frame[3].toInt() and 0xFF}.${frame[4].toInt() and 0xFF}.${frame[5].toInt() and 0xFF}.${frame[6].toInt() and 0xFF}:${((frame[7].toInt() and 0xFF) shl 8) or (frame[8].toInt() and 0xFF)}"
@@ -1106,11 +1124,13 @@ class RelayManager(private val context: Context) {
         }
 
         android.util.Log.i("RelayManager", "Bridge ACTIVE: Relay <-> Local:$localPort")
-        android.util.Log.i(
-            "RelayManager",
-            "Bridge queues: relaySend=${relaySocket.sendBufferSize}, relayReceive=${relaySocket.receiveBufferSize}, " +
-                "localSend=${localSocket.sendBufferSize}, localReceive=${localSocket.receiveBufferSize}"
-        )
+        logThrottled("bridge-queues", intervalMs = 30_000L) {
+            android.util.Log.i(
+                "RelayManager",
+                "Bridge queues: relaySend=${relaySocket.sendBufferSize}, relayReceive=${relaySocket.receiveBufferSize}, " +
+                    "localSend=${localSocket.sendBufferSize}, localReceive=${localSocket.receiveBufferSize}"
+            )
+        }
 
         val relayToLocalThread = Thread {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE)
@@ -1207,8 +1227,8 @@ class RelayManager(private val context: Context) {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = 128 * 1024
-            socket.receiveBufferSize = 128 * 1024
+            socket.sendBufferSize = 64 * 1024
+            socket.receiveBufferSize = 64 * 1024
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
         }
     }
@@ -1218,10 +1238,9 @@ class RelayManager(private val context: Context) {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            // Medium send buffer to prevent upload bufferbloat while avoiding write-blocking
+            // Small send/receive buffers to prevent upload/download bufferbloat on mobile relays
             socket.sendBufferSize = 64 * 1024
-            // Large receive buffer to ensure download performance
-            socket.receiveBufferSize = 128 * 1024
+            socket.receiveBufferSize = 64 * 1024
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 1, 0)
         }

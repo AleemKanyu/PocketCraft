@@ -149,6 +149,8 @@ class MainActivity : ComponentActivity() {
         val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
             ?: prefs.firebaseUserUid
         if (uid != null) {
+            val secret = prefs.dashboardSecret ?: ""
+            com.pocketcraft.server.util.MultiProcessAuthSync.writeAuthData(applicationContext, uid, secret)
             uiHeartbeatJob = lifecycleScope.launch(Dispatchers.IO) {
                 while (isActive) {
                     val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
@@ -239,6 +241,7 @@ class MainActivity : ComponentActivity() {
                 secret = java.util.UUID.randomUUID().toString()
                 preferences.dashboardSecret = secret
             }
+            com.pocketcraft.server.util.MultiProcessAuthSync.writeAuthData(applicationContext, currentUser.uid, secret)
             try {
                 com.google.firebase.firestore.FirebaseFirestore.getInstance()
                     .collection("users")
