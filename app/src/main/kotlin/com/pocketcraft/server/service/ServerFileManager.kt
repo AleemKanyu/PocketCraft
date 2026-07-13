@@ -139,14 +139,31 @@ object ServerFileManager {
         if (explicit.endsWith("_nether")) explicit = explicit.removeSuffix("_nether")
         if (explicit.endsWith("_the_end")) explicit = explicit.removeSuffix("_the_end")
         
-        // Only trust the existing level-name if its folder actually contains world data
         if (explicit.isNotBlank()) {
             val candidateDir = File(serverDir, explicit)
-            val hasWorldData = File(candidateDir, "level.dat").exists() ||
-                File(candidateDir, "region").isDirectory ||
-                File(serverDir, "level.dat").exists() ||   // flat layout
-                File(serverDir, "region").isDirectory       // flat layout
-            if (hasWorldData) return explicit
+            val candidateHasData = File(candidateDir, "level.dat").exists() ||
+                File(candidateDir, "region").isDirectory
+            val flatHasData = File(serverDir, "level.dat").exists() ||
+                File(serverDir, "region").isDirectory
+
+            // Flat layout data exists — only migrate if the nested dir doesn't already have good data.
+            // Running migration when nested already has data would overwrite valid restored content.
+            if (flatHasData) {
+                val nestedAlreadyHasData = File(candidateDir, "level.dat").exists() ||
+                    File(candidateDir, "region").isDirectory
+                if (!nestedAlreadyHasData) {
+                    android.util.Log.w("ServerFileManager", "Migrating flat world layout to nested for '$explicit'")
+                    candidateDir.mkdirs()
+                    migrateFlatLayoutToNested(serverDir, candidateDir)
+                } else {
+                    // Both flat and nested have data — nested is authoritative; clean up stale flat files
+                    android.util.Log.w("ServerFileManager", "Stale flat files found alongside good nested world for '$explicit' — cleaning up")
+                    cleanUpStaleRootLevelWorldFiles(serverDir, candidateDir)
+                }
+                return explicit
+            }
+
+            if (candidateHasData) return explicit
             android.util.Log.w("ServerFileManager", "level-name='$explicit' but no world data found there — falling back to discovery")
         }
 
@@ -166,6 +183,50 @@ object ServerFileManager {
             }
             ?.name
         return discoveredWorld ?: "world"
+    }
+
+    /**
+     * Removes stale world files from the server root that have already been migrated
+     * into the proper nested world directory. Only removes known world-data files;
+     * never touches dimension folders, plugins, config, etc.
+     */
+    private fun cleanUpStaleRootLevelWorldFiles(serverDir: File, nestedDir: File) {
+        val staleWorldFiles = setOf(
+            "level.dat", "level.dat_old", "level.dat_mcr",
+            "uid.dat", "session.lock", "icon.png"
+        )
+        val staleWorldDirs = setOf("region", "entities", "poi", "data", "playerdata",
+            "stats", "advancements", "datapacks")
+        serverDir.listFiles()?.forEach { file ->
+            val nameLower = file.name.lowercase()
+            if (file.isFile && nameLower in staleWorldFiles) {
+                android.util.Log.d("ServerFileManager", "Removing stale root file: ${file.name}")
+                file.delete()
+            } else if (file.isDirectory && nameLower in staleWorldDirs &&
+                       file.absolutePath != nestedDir.absolutePath) {
+                android.util.Log.d("ServerFileManager", "Removing stale root dir: ${file.name}")
+                file.deleteRecursively()
+            }
+        }
+    }
+
+    private fun migrateFlatLayoutToNested(serverDir: File, nestedDir: File) {
+        val skip = setOf("server.properties", "eula.txt", "usercache.json",
+            "ops.json", "whitelist.json", "banned-players.json", "banned-ips.json")
+        val systemDirs = setOf("plugins", "logs", "cache", "jre", "jre-21", "jre-runtime",
+            "config", "libraries", "binaries", "backups", "crash-reports", "bundler", "versions")
+        serverDir.listFiles()?.forEach { file ->
+            val name = file.name
+            if (name.startsWith("pocketcraft-") || name in skip || name in systemDirs || name == nestedDir.name) return@forEach
+            val target = File(nestedDir, name)
+            if (file.isDirectory) {
+                file.copyRecursively(target, overwrite = true)
+                file.deleteRecursively()
+            } else {
+                file.copyTo(target, overwrite = true)
+                file.delete()
+            }
+        }
     }
 
     fun prepareRuntimeArtifacts(context: Context, worldName: String) {
