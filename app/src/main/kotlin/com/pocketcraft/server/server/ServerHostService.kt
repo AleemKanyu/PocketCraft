@@ -2411,7 +2411,7 @@ class ServerHostService : Service() {
         dashboardStatusJob = serviceScope.launch(Dispatchers.IO) {
             while (isActive) {
                 updateDashboardStatus(versionId)
-                delay(5_000)
+                delay(15_000)
             }
         }
     }

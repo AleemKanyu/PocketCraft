@@ -384,7 +384,7 @@ function DashboardPage({
   const [loading, setLoading] = useState(true);
   const [phoneOnline, setPhoneOnline] = useState(false);
   const [proUser, setProUser] = useState(false);
-  const [dashboardSecret, setDashboardSecret] = useState('');
+  const dashboardSecretRef = useRef('');
   const [profilePlayer, setProfilePlayer] = useState<any | null>(null);
 
   // Command Pending States
@@ -438,10 +438,11 @@ function DashboardPage({
         const data = snapshot.data();
         const tier = data.premiumTier || 'none';
         setProUser(tier === 'premium' || tier === 'supportive');
-        setDashboardSecret(data.dashboardSecret || '');
+        const secret = data.dashboardSecret || '';
+        dashboardSecretRef.current = secret;
       } else {
         setProUser(false);
-        setDashboardSecret('');
+        dashboardSecretRef.current = '';
       }
     });
 
@@ -451,7 +452,7 @@ function DashboardPage({
     };
   }, [user.uid]);
 
-  // Heartbeat loop check (Phone offline if now - lastSeen > 30s)
+  // Heartbeat loop check (Phone offline if now - lastSeen > 45s)
   useEffect(() => {
     if (!status) {
       setPhoneOnline(false);
@@ -460,7 +461,7 @@ function DashboardPage({
     const checkOnline = () => {
       const lastSeenMillis = status.lastSeen?.toMillis() || 0;
       const diff = Date.now() - lastSeenMillis;
-      setPhoneOnline(diff <= 30000);
+      setPhoneOnline(diff <= 45000);
     };
 
     checkOnline();
@@ -477,7 +478,7 @@ function DashboardPage({
       const cmdRef = await addDoc(collection(db, 'users', user.uid, 'dashboard_commands'), {
         type,
         payload,
-        secret: dashboardSecret,
+        secret: dashboardSecretRef.current,
         createdAt: Timestamp.now(),
         status: 'pending',
         result: null,

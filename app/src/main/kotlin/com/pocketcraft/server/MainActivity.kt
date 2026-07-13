@@ -194,7 +194,7 @@ class MainActivity : ComponentActivity() {
                             // Ignore
                         }
                     }
-                    delay(10000L)
+                    delay(20000L)
                 }
             }
         }
