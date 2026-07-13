@@ -83,7 +83,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private var uiCommandListener: com.pocketcraft.server.broadcast.DashboardCommandListener? = null
-    private var uiHeartbeatJob: kotlinx.coroutines.Job? = null
 
     override fun onStart() {
         super.onStart()
@@ -151,50 +150,46 @@ class MainActivity : ComponentActivity() {
         if (uid != null) {
             val secret = prefs.dashboardSecret ?: ""
             com.pocketcraft.server.util.MultiProcessAuthSync.writeAuthData(applicationContext, uid, secret)
-            uiHeartbeatJob = lifecycleScope.launch(Dispatchers.IO) {
-                while (isActive) {
-                    val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                    val secret = prefs.dashboardSecret ?: ""
-                    if (!com.pocketcraft.server.server.ServerHostService.isServiceRunning(applicationContext)) {
-                        try {
-                            val worldName = runBlocking {
-                                AppPreferencesStore.getSelectedWorldFlow(applicationContext).first()
-                            }.ifBlank { "world" }
-                            
-                            val serverDir = ServerFileManager.getServerDir(applicationContext, worldName)
-                            val properties = try {
-                                val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
-                                mapOf(
-                                    "difficulty" to props.getProperty("difficulty", "normal"),
-                                    "gamemode" to props.getProperty("gamemode", "survival"),
-                                    "pvp" to props.getProperty("pvp", "true"),
-                                    "maxPlayers" to props.getProperty("max-players", "10"),
-                                    "viewDistance" to props.getProperty("view-distance", "10"),
-                                    "simulationDistance" to props.getProperty("simulation-distance", "10"),
-                                    "allowNether" to props.getProperty("allow-nether", "true"),
-                                    "whiteList" to props.getProperty("white-list", "false")
-                                )
-                            } catch (e: Exception) {
-                                emptyMap()
-                            }
-
-                            val statusDoc = mapOf(
-                                "serverRunning" to false,
-                                "serverState" to "stopped",
-                                "bootProgress" to "",
-                                "bootProgressPercent" to 0,
-                                "lastSeen" to com.google.firebase.Timestamp.now(),
-                                "secret" to secret,
-                                "properties" to properties
+            if (!com.pocketcraft.server.server.ServerHostService.isServiceRunning(applicationContext)) {
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                        val worldName = runBlocking {
+                            AppPreferencesStore.getSelectedWorldFlow(applicationContext).first()
+                        }.ifBlank { "world" }
+                        
+                        val serverDir = ServerFileManager.getServerDir(applicationContext, worldName)
+                        val properties = try {
+                            val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
+                            mapOf(
+                                "difficulty" to props.getProperty("difficulty", "normal"),
+                                "gamemode" to props.getProperty("gamemode", "survival"),
+                                "pvp" to props.getProperty("pvp", "true"),
+                                "maxPlayers" to props.getProperty("max-players", "10"),
+                                "viewDistance" to props.getProperty("view-distance", "10"),
+                                "simulationDistance" to props.getProperty("simulation-distance", "10"),
+                                "allowNether" to props.getProperty("allow-nether", "true"),
+                                "whiteList" to props.getProperty("white-list", "false")
                             )
-                            db.collection("users").document(uid)
-                                .collection("dashboard_status").document("status")
-                                .set(statusDoc, com.google.firebase.firestore.SetOptions.merge())
                         } catch (e: Exception) {
-                            // Ignore
+                            emptyMap()
                         }
+
+                        val statusDoc = mapOf(
+                            "serverRunning" to false,
+                            "serverState" to "stopped",
+                            "bootProgress" to "",
+                            "bootProgressPercent" to 0,
+                            "lastSeen" to com.google.firebase.Timestamp.now(),
+                            "secret" to secret,
+                            "properties" to properties
+                        )
+                        db.collection("users").document(uid)
+                            .collection("dashboard_status").document("status")
+                            .set(statusDoc, com.google.firebase.firestore.SetOptions.merge())
+                    } catch (e: Exception) {
+                        // Ignore
                     }
-                    delay(20000L)
                 }
             }
         }
@@ -208,8 +203,6 @@ class MainActivity : ComponentActivity() {
         uiCommandListener?.stop()
         uiCommandListener = null
 
-        uiHeartbeatJob?.cancel()
-        uiHeartbeatJob = null
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
