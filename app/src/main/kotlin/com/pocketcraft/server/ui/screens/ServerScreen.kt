@@ -446,6 +446,10 @@ fun ServerScreen(
                                             } else {
                                                 onChangeVersion()
                                             }
+                                        },
+                                        onNavigateToSettings = { initialActiveTab ->
+                                            settingsInitialActiveTab = initialActiveTab
+                                            navigateToTab(PocketTab.SETTINGS)
                                         }
                                     )
 
@@ -821,7 +825,8 @@ fun ServerScreen(
             reason = stateHolder.crashReason,
             details = stateHolder.crashDetails,
             duringStartup = stateHolder.crashWasDuringStartup,
-            onDismiss = { stateHolder.dismissCrashDialog() }
+            onDismiss = { stateHolder.dismissCrashDialog() },
+            onRetryWithInProcess = { stateHolder.startServer() }
         )
     }
 
@@ -976,9 +981,11 @@ fun ServerFailureDialog(
     reason: String,
     details: String,
     duringStartup: Boolean,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onRetryWithInProcess: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var isSending by remember { androidx.compose.runtime.mutableStateOf(false) }
     var ticketNumber by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     var submitError by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
@@ -1120,6 +1127,59 @@ fun ServerFailureDialog(
                     )
                 }
 
+                val prefs = remember { AppPreferences(context) }
+                val deviceProfile = remember {
+                    val totalRam = com.pocketcraft.server.util.RamUtils.getTotalRamMb(context)
+                    val availRam = com.pocketcraft.server.util.RamUtils.getAvailableRamMb(context)
+                    com.pocketcraft.server.util.RamUtils.buildDeviceStabilityProfile(totalRam, availRam)
+                }
+                val showInProcessFallbackOption = duringStartup && prefs.forceExternalJvm && !deviceProfile.forceExternalJvm && onRetryWithInProcess != null
+
+                if (showInProcessFallbackOption) {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.12f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "STARTUP FAILURE DETECTED",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.error,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = "Try disabling the external JVM. Some devices run more reliably using the built-in, in-process execution mode.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                                textAlign = TextAlign.Center,
+                                lineHeight = 18.sp
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            androidx.compose.material3.Button(
+                                onClick = {
+                                    prefs.forceExternalJvm = false
+                                    onDismiss()
+                                    onRetryWithInProcess?.invoke()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Disable External JVM & Retry", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1176,18 +1236,31 @@ fun ServerFailureDialog(
                                     "device" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (Android ${android.os.Build.VERSION.RELEASE})",
                                     "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
                                 )
+                                val timeoutJob = scope.launch {
+                                    kotlinx.coroutines.delay(8000)
+                                    if (isSending && ticketNumber == null) {
+                                        submitError = "Upload timed out. Check your connection or try again."
+                                        isSending = false
+                                    }
+                                }
                                 db.collection("tickets").document(ticket).set(data)
                                     .addOnSuccessListener {
-                                        ticketNumber = ticket
-                                        isSending = false
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                        val clip = android.content.ClipData.newPlainText("PocketCraft Ticket", ticket)
-                                        clipboard.setPrimaryClip(clip)
-                                        Toast.makeText(context, "Ticket created & copied to clipboard!", Toast.LENGTH_LONG).show()
+                                        timeoutJob.cancel()
+                                        if (ticketNumber == null) {
+                                            ticketNumber = ticket
+                                            isSending = false
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                            val clip = android.content.ClipData.newPlainText("PocketCraft Ticket", ticket)
+                                            clipboard.setPrimaryClip(clip)
+                                            Toast.makeText(context, "Ticket created & copied to clipboard!", Toast.LENGTH_LONG).show()
+                                        }
                                     }
                                     .addOnFailureListener { e ->
-                                        submitError = e.message ?: "Failed to upload logs"
-                                        isSending = false
+                                        timeoutJob.cancel()
+                                        if (isSending) {
+                                            submitError = e.message ?: "Failed to upload logs"
+                                            isSending = false
+                                        }
                                     }
                             },
                             enabled = !isSending,
@@ -1297,6 +1370,8 @@ private fun serverFailureSummary(
 ): ServerFailureSummary {
     val rawReason = reason.trim()
     val combined = "$rawReason\n$details".lowercase()
+    val mentionsModpack = "modpack" in combined
+    val mentionsLaunchTarget = "launch target" in combined
     val commandLineOnly = rawReason.startsWith("Command Line", ignoreCase = true) ||
         rawReason.contains("-Xmx", ignoreCase = true) ||
         rawReason.contains("-Djava.home", ignoreCase = true)
@@ -1310,9 +1385,13 @@ private fun serverFailureSummary(
             reason = "The selected world is configured for a modpack, but the modpack has not been installed yet.",
             fix = "Tap Install Modpack on the Home screen, wait for it to finish, then start the server again."
         )
-        "modpack files are missing" in combined || "launch target" in combined -> ServerFailureSummary(
+        "modpack files are missing" in combined || (mentionsModpack && mentionsLaunchTarget) -> ServerFailureSummary(
             reason = "PocketCraft could not find the modpack files needed to launch this world.",
             fix = "Re-install the modpack from the Home screen so the missing launch files are restored."
+        )
+        "launch target not found" in combined || "server jar could not be resolved" in combined || mentionsLaunchTarget -> ServerFailureSummary(
+            reason = "PocketCraft could not find the server launch files needed for this world.",
+            fix = "Re-select or re-install the server version from the version card, then start the server again."
         )
         "outofmemory" in combined || "heap" in combined || "cannot allocate" in combined -> ServerFailureSummary(
             reason = "The server ran out of available memory while starting or loading the world.",

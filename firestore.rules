@@ -52,6 +52,10 @@ service cloud.firestore {
       allow create: if true;
       allow read, update, delete: if false;
     }
+    match /tickets/{ticketId} {
+      allow create: if true;
+      allow read, update, delete: if false;
+    }
     match /social_prompts/{userId} {
       allow read, write: if true;
     }

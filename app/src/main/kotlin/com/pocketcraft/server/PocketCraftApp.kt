@@ -44,10 +44,7 @@ open class PocketCraftApp : Application(), Configuration.Provider {
             return
         }
 
-        // Initialize FirebaseApp in both the main process AND the :server process.
-        // The :server process needs it for Crashlytics (logJvmCrash). We intentionally
-        // skip Firestore and other disk-caching Firebase clients in :server to avoid
-        // single-process cache corruption, but Crashlytics is safe to use everywhere.
+        // Initialize FirebaseApp once for all valid processes.
         runCatching {
             FirebaseApp.initializeApp(this)
         }
@@ -61,14 +58,24 @@ open class PocketCraftApp : Application(), Configuration.Provider {
                     .build()
                 db.firestoreSettings = settings
             }
+            // Enable Crashlytics in the background process for release builds to capture JNI/Hotspot crashes
+            runCatching {
+                com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().apply {
+                    setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG)
+                    setCustomKey("app_process", processName)
+                    setCustomKey("app_version", BuildConfig.VERSION_NAME)
+                }
+            }
             return
         }
 
         runCatching {
-            FirebaseApp.initializeApp(this)
-            Firebase.crashlytics.setCrashlyticsCollectionEnabled(false)
-            Firebase.crashlytics.setCustomKey("app_process", currentProcessName())
-            Firebase.crashlytics.setCustomKey("app_version", BuildConfig.VERSION_NAME)
+            // Configure and enable Crashlytics for the main process in release builds
+            com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().apply {
+                setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG)
+                setCustomKey("app_process", processName)
+                setCustomKey("app_version", BuildConfig.VERSION_NAME)
+            }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -90,11 +97,13 @@ open class PocketCraftApp : Application(), Configuration.Provider {
     }
 
     private fun currentProcessName(): String {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            Application.getProcessName()
-        } else {
-            packageName
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return Application.getProcessName()
         }
+        // Fallback for API < 28
+        return runCatching {
+            File("/proc/self/cmdline").readText().trim('\u0000')
+        }.getOrNull()?.trim() ?: packageName
     }
 
     private fun reinstallBundledPluginsAfterAppUpdate() {

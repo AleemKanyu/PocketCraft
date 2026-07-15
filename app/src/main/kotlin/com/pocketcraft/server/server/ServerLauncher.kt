@@ -47,9 +47,15 @@ class ServerLauncher(private val context: Context) {
 
     private fun buildDeviceStabilityProfile(totalRamMb: Int, availableRamMb: Int): DeviceStabilityProfile {
         val manufacturer = Build.MANUFACTURER.orEmpty().lowercase(Locale.US)
+        val brand = Build.BRAND.orEmpty().lowercase(Locale.US)
         val model = Build.MODEL.orEmpty().lowercase(Locale.US)
         val device = Build.DEVICE.orEmpty().lowercase(Locale.US)
         val product = Build.PRODUCT.orEmpty().lowercase(Locale.US)
+        val fingerprint = Build.FINGERPRINT.orEmpty().lowercase(Locale.US)
+        val xiaomiMarkers = listOf(manufacturer, brand, model, device, product, fingerprint)
+        val isXiaomiFamily = xiaomiMarkers.any { value ->
+            value.contains("xiaomi") || value.contains("redmi") || value.contains("poco")
+        }
         val isGalaxyA12Family = manufacturer.contains("samsung") && listOf(model, device, product).any { value ->
             value.contains("a12") || value.contains("sm-a125") || value.contains("sm-a127")
         }
@@ -59,6 +65,10 @@ class ServerLauncher(private val context: Context) {
             value.contains("m13") || value.contains("sm-m135") ||
             value.contains("sm-m136") || value.contains("sm-m137")
         }
+        // Xiaomi/Redmi/POCO devices on Android 14+ have shown silent stalls at
+        // "Preparing spawn area" while using the in-process JNI launcher.
+        // Force the external JVM path on this family until the root cause is isolated.
+        val isXiaomiAndroid14PlusFamily = isXiaomiFamily && Build.VERSION.SDK_INT >= 34
         val constrainedHeap = isGalaxyA12Family || totalRamMb <= 4096
         val targetHeapCap = when {
             isGalaxyA12Family -> minOf((availableRamMb * 0.52f).toInt(), 896)
@@ -68,13 +78,14 @@ class ServerLauncher(private val context: Context) {
         }
         val minHeapFloor = if (isGalaxyA12Family || totalRamMb <= 3072) 384 else 512
         val reason = when {
+            isXiaomiAndroid14PlusFamily -> "Xiaomi/Redmi/POCO Android 14+ device detected. Using external JVM to avoid in-process startup stalls during world preparation."
             isGalaxyM13Family -> "Samsung Galaxy M13 detected. Using external JVM to prevent startup stall on Android 14."
             isGalaxyA12Family -> "Samsung Galaxy A12 low-memory profile active. Using safer heap limits to reduce short crash loops."
             constrainedHeap -> "Low-memory device profile active. Heap is capped to reduce background crash risk."
             else -> null
         }
         return DeviceStabilityProfile(
-            forceExternalJvm = isGalaxyM13Family,
+            forceExternalJvm = isGalaxyM13Family || isXiaomiAndroid14PlusFamily,
             constrainedHeap = constrainedHeap,
             maxHeapCapMb = targetHeapCap.coerceAtLeast(minHeapFloor),
             minHeapFloorMb = minHeapFloor,
@@ -263,8 +274,8 @@ class ServerLauncher(private val context: Context) {
                 totalRam >= 4000 -> 768
                 else -> 512
             }
-            "full" -> maxAllowedRam
-            "manual" -> maxRamMbFromProps.coerceIn(deviceProfile.minHeapFloorMb, maxAllowedRam)
+            // For full and manual modes, default to a conservative initial heap size (512MB)
+            // to avoid immediate startup OOM kills by the OS when launching.
             else -> 512
         }
         val maxRamMb = requestedMaxRamMb.coerceIn(deviceProfile.minHeapFloorMb, maxAllowedRam)
@@ -662,7 +673,7 @@ class ServerLauncher(private val context: Context) {
             "-Xshare:off",
             "-XX:+UnlockExperimentalVMOptions",
             "-XX:+UnlockDiagnosticVMOptions",
-            if (totalRam >= 4500) "-XX:+AlwaysPreTouch" else "-XX:-AlwaysPreTouch",
+            "-XX:-AlwaysPreTouch",
             "-XX:+UseStringDeduplication",
             "-XX:+UseG1GC",
             "-XX:+ParallelRefProcEnabled",
@@ -957,28 +968,27 @@ class ServerLauncher(private val context: Context) {
         flightModeEnabled: Boolean
     ): Int {
         val vd = viewDistance.coerceIn(4, 32)
-        return if (!cellularRelay) {
-            // Wi-Fi: Fast chunk rendering
-            if (flightModeEnabled) 150 else 100
-        } else {
-            // Cellular: Moderate chunk rendering
-            if (flightModeEnabled) 80 else 50
+        if (flightModeEnabled) {
+            // Elytra travel discovers chunks far faster than normal movement. Favor a
+            // steadier stream over burst throughput so keepalives and movement packets
+            // do not queue behind large chunk floods on the phone uplink.
+            val base = if (cellularRelay) 20 else 24
+            val viewScale = (7.0 / vd).pow(0.7).coerceIn(0.45, 1.0)
+            return (base * viewScale + 2).toInt().coerceIn(16, 26)
         }
+        val base = if (cellularRelay) 17 else 22
+        val viewScale = (7.0 / vd).pow(0.65).coerceIn(0.55, 1.0)
+        return (base * viewScale).toInt().coerceIn(13, 20)
     }
 
     private fun computeRelayChunkConcurrency(
         cellularRelay: Boolean,
         flightModeEnabled: Boolean
     ): Triple<Int, Int, Int> {
-        return if (cellularRelay) {
-            Triple(2, 3, 2)
+        return if (flightModeEnabled) {
+            if (cellularRelay) Triple(3, 4, 1) else Triple(4, 5, 1)
         } else {
-            // Wi-Fi: Favorable concurrency to prevent 100% CPU thread starvation on mobile cores
-            if (flightModeEnabled) {
-                Triple(4, 6, 4)
-            } else {
-                Triple(3, 4, 3)
-            }
+            if (cellularRelay) Triple(3, 4, 1) else Triple(3, 5, 1)
         }
     }
 
@@ -988,13 +998,13 @@ class ServerLauncher(private val context: Context) {
     ): Pair<Int, Int> {
         return if (flightModeEnabled) {
             Pair(
-                (chunkSendRate * 1.5).toInt().coerceIn(24, 300),
-                (chunkSendRate * 2.0).toInt().coerceIn(36, 400)
+                (chunkSendRate * 4).coerceIn(40, 78),
+                (chunkSendRate * 5).coerceIn(52, 96)
             )
         } else {
             Pair(
-                (chunkSendRate * 1.2).toInt().coerceIn(16, 200),
-                (chunkSendRate * 1.5).toInt().coerceIn(24, 300)
+                (chunkSendRate * 4).coerceIn(42, 72),
+                (chunkSendRate * 6).coerceIn(56, 90)
             )
         }
     }
@@ -1027,7 +1037,7 @@ class ServerLauncher(private val context: Context) {
         }
 
         val tunedCompression = ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD
-        val tunedEntityBroadcast = currentEntityBroadcast?.coerceIn(70, 100) ?: 70
+        val tunedEntityBroadcast = currentEntityBroadcast?.coerceIn(70, 100) ?: ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
 
         var changed = false
         if (tunedCompression != currentCompression) {
@@ -1063,8 +1073,8 @@ class ServerLauncher(private val context: Context) {
             ?: props.getProperty("simulation-distance")?.toIntOrNull()
             ?: ServerPropertiesHelper.DEFAULT_SIMULATION_DISTANCE
 
-        val isCellular = com.pocketcraft.server.util.NetworkUtils.isCellular(context)
-        // Keep user's settings rigid and permanent as requested
+        // Preserve gameplay settings exactly as the user configured them. Ping optimization
+        // must come from pacing and transport, not from silently shrinking distances.
         val tunedView = desiredView
         val tunedSimulation = desiredSimulation
 
@@ -1095,7 +1105,7 @@ class ServerLauncher(private val context: Context) {
         val viewDistance = props.getProperty("view-distance")?.toIntOrNull()
             ?: ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE
         val chunkBudget = computeRelayChunkSendBudget(
-            cellularRelay = isCellular,
+            cellularRelay = com.pocketcraft.server.util.NetworkUtils.isCellular(context),
             viewDistance = viewDistance,
             flightModeEnabled = flightModeEnabled
         )
@@ -1163,11 +1173,12 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlPathValue(updated, listOf("timings"), "really-enabled", "false")
         updated = ensureYamlPathValue(updated, listOf("timings"), "server-name-privacy", "true")
 
-        // Keep-alive: extend timeout so high-latency relay players aren't kicked,
-        // and send keepalives every tick (50ms) so the client tab ping reflects true RTT
-        // instead of RTT + up to 1000ms scheduling jitter.
+        // Keep-alive: extend timeout so high-latency relay players aren't kicked.
+        // Use a moderate 10-tick interval (500ms): lower than the Paper default so idle
+        // ping reporting has less scheduling jitter, but not so low that keepalives flood
+        // the uplink during chunk bursts like the old 1-tick setting did.
         updated = ensureYamlSectionValue(updated, "misc", "keep-alive-timeout", "60")
-        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-interval", "1")
+        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-interval", "10")
         updated = ensureYamlSectionValue(updated, "misc", "compression-level", "6")
 
         // Disable updater and metrics submission checks to prevent slow network lookup stalls on startup
@@ -1187,21 +1198,19 @@ class ServerLauncher(private val context: Context) {
         val spigotFile = File(serverDir, "spigot.yml")
         val original = runCatching { spigotFile.readText() }.getOrDefault("")
         val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
-        val desiredView = props.getProperty(ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull()
-            ?: props.getProperty("view-distance")?.toIntOrNull()
+        val activeView = props.getProperty("view-distance")?.toIntOrNull()
             ?: ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE
-        val desiredSimulation = props.getProperty(ServerPropertiesHelper.DESIRED_SIMULATION_DISTANCE_KEY)?.toIntOrNull()
-            ?: props.getProperty("simulation-distance")?.toIntOrNull()
+        val activeSimulation = props.getProperty("simulation-distance")?.toIntOrNull()
             ?: ServerPropertiesHelper.DEFAULT_SIMULATION_DISTANCE
-        val viewTrackingBlocks = desiredView.coerceIn(3, 32) * 16
-        val simulationTrackingBlocks = desiredSimulation.coerceIn(3, 32) * 16
+        val viewTrackingBlocks = activeView.coerceIn(3, 32) * 16
+        val simulationTrackingBlocks = activeSimulation.coerceIn(3, 32) * 16
 
         var updated = original
         // Spigot can override both distances; keep them on "default" so the current
         // server.properties value is always the one Paper actually uses.
         updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "view-distance", "default")
         updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "simulation-distance", "default")
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "mob-spawn-range", desiredSimulation.coerceIn(3, 32).toString())
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "mob-spawn-range", activeSimulation.coerceIn(3, 32).toString())
         updated = ensureYamlPathValue(updated, listOf("settings"), "moved-too-quickly-multiplier", "1000.0")
         updated = ensureYamlPathValue(updated, listOf("settings"), "moved-wrongly-threshold", "1000.0")
         updated = ensureYamlPathValue(updated, listOf("settings"), "user-suggest-updater", "false")
@@ -1224,7 +1233,7 @@ class ServerLauncher(private val context: Context) {
 
         if (updated != original) {
             spigotFile.writeText(updated)
-            onOutput("[PocketCraft] Spigot entity ranges synced to view=$desiredView and simulation=$desiredSimulation.")
+            onOutput("[PocketCraft] Spigot entity ranges synced to active view=$activeView and simulation=$activeSimulation.")
         }
     }
 
