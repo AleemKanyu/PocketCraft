@@ -50,17 +50,17 @@ class RelayManager(private val context: Context) {
     companion object {
         const val CONTROL_PORT = 8080
         const val PHONE_TUNNEL_PORT = 9000
-                // Bound kernel queues so chunks backpressure Paper before keepalives sit
-        // behind seconds of unsent data on constrained mobile relay routes.
-        private const val SOCKET_BUFFER_SIZE = 16 * 1024
-        private const val PLAYER_BRIDGE_BUFFER_SIZE = 8 * 1024
-        // Upstream buffer — large enough to send chunk blobs in fewer writes without stalling
-        // latency-sensitive control packets (Keep Alive, movement) behind them.
-        private const val PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE = 8 * 1024
+        // 32KB bridge buffers reduce hot-loop syscall churn during movement/chunk bursts
+        // without reintroducing the large queueing delays seen with much bigger buffers.
+        private const val PLAYER_BRIDGE_BUFFER_SIZE = 32 * 1024
+        private const val PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE = 32 * 1024
+        // Keep relay TCP buffers modest instead of tiny: the previous 8-32KB path was
+        // stalling under active movement, while full 256KB buffers previously caused bloat.
+        private const val SOCKET_BUFFER_SIZE = 128 * 1024
         private const val BEDROCK_TX_BUFFER_SIZE = 8 * 1024
-        private const val BEDROCK_SMALL_FRAME_MAX_BYTES = 3072
-        private const val BEDROCK_LARGE_FRAME_BATCH_MAX = 4
-        private const val BEDROCK_MAX_BYTES_PER_CYCLE = 16 * 1024
+        private const val BEDROCK_SMALL_FRAME_MAX_BYTES = 256
+        private const val BEDROCK_LARGE_FRAME_BATCH_MAX = 32
+        private const val BEDROCK_MAX_BYTES_PER_CYCLE = 128 * 1024
         private const val BEDROCK_PING_CHANNEL_CAPACITY = 512
         private const val BEDROCK_CHUNK_CHANNEL_CAPACITY = 1024
         private const val UPSTREAM_YIELD_EVERY_FULL_READS = 2
@@ -69,9 +69,10 @@ class RelayManager(private val context: Context) {
         private const val INITIAL_POOL_SIZE = 5
         private const val TARGET_POOL_SIZE = 5
         private const val POOL_REFRESH_FLOOR = 2
-        private const val IDLE_REPLENISH_DELAY_MS = 1_500L
-        private const val SOCKET_OPEN_STAGGER_MS = 100L
-        private const val TUNNEL_HEARTBEAT_INTERVAL_MS = 25_000L
+        private const val IDLE_REPLENISH_DELAY_MS = 500L
+        private const val SOCKET_OPEN_STAGGER_MS = 50L
+        // Heartbeat every 10s instead of 25s — pool is replenished faster after socket drops.
+        private const val TUNNEL_HEARTBEAT_INTERVAL_MS = 10_000L
         private const val IDLE_SOCKET_REFRESH_INTERVAL_MS = 5 * 60_000L
         private const val SOCKET_IDLE_TIMEOUT_MS = 8 * 60_000L
         private const val SOCKET_IDLE_TIMEOUT_JITTER_MS = 90_000L
@@ -1224,25 +1225,26 @@ class RelayManager(private val context: Context) {
 
     private fun configureLocalSocket(socket: Socket) {
         runCatching {
-            socket.tcpNoDelay = true
+            socket.tcpNoDelay = true           // Disable Nagle — every write() is sent immediately
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = 64 * 1024
-            socket.receiveBufferSize = 64 * 1024
-            socket.trafficClass = 0x10 // IPTOS_LOWDELAY
+            socket.trafficClass = 0x10          // IPTOS_LOWDELAY — request low-latency routing
+            socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
+            // Do NOT set sendBufferSize/receiveBufferSize — let Linux TCP auto-tune.
+            // Artificial limits throttle chunk bursts and inflate ping under load.
         }
     }
 
     private fun configureRelaySocket(socket: Socket) {
         runCatching {
-            socket.tcpNoDelay = true
+            socket.tcpNoDelay = true           // Disable Nagle — every write() is sent immediately
             socket.keepAlive = true
             socket.reuseAddress = true
-            // Small send/receive buffers to prevent upload/download bufferbloat on mobile relays
-            socket.sendBufferSize = 64 * 1024
-            socket.receiveBufferSize = 64 * 1024
-            socket.trafficClass = 0x10 // IPTOS_LOWDELAY
-            socket.setPerformancePreferences(0, 1, 0)
+            socket.trafficClass = 0x10          // IPTOS_LOWDELAY — request low-latency routing
+            socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
+            // Limit socket buffers to prevent bufferbloat over the internet connection
+            socket.sendBufferSize = SOCKET_BUFFER_SIZE
+            socket.receiveBufferSize = SOCKET_BUFFER_SIZE
         }
     }
 
