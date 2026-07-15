@@ -133,6 +133,34 @@ function createJavaSLPResponse(port) {
   return wrapPacket(0x00, Buffer.concat([jsonLen, jsonBuf]));
 }
 
+function createJavaSLPResponseDirect(status) {
+  const versionName = normalizeJavaVersion(status?.version);
+  const motd = status?.motd || 'A Minecraft Server';
+  const players = Number.isFinite(Number(status?.players)) ? Math.max(0, Number(status.players) | 0) : 0;
+  const maxPlayers = Number.isFinite(Number(status?.maxPlayers)) ? Math.max(1, Number(status.maxPlayers) | 0) : 20;
+
+  const responseObj = {
+    version: {
+      name: versionName,
+      protocol: protocolForJavaVersion(versionName)
+    },
+    players: {
+      max: maxPlayers,
+      online: players,
+      sample: []
+    },
+    description: {
+      text: motd
+    }
+  };
+
+  const jsonStr = JSON.stringify(responseObj);
+  const jsonBuf = Buffer.from(jsonStr, 'utf8');
+  const jsonLen = varIntBuffer(jsonBuf.length);
+
+  return wrapPacket(0x00, Buffer.concat([jsonLen, jsonBuf]));
+}
+
 function createJavaPongResponse(payload) {
   return wrapPacket(0x01, payload);
 }
@@ -255,4 +283,11 @@ function handleJavaPing(socket, chunk, port) {
   return false;
 }
 
-module.exports = { handleJavaPing, createJavaSLPResponse, createJavaPongResponse };
+module.exports = {
+  handleJavaPing,
+  createJavaSLPResponse,
+  createJavaSLPResponseDirect,
+  createJavaPongResponse,
+  readPacket,
+  readVarInt
+};

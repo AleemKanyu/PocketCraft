@@ -1242,9 +1242,8 @@ class RelayManager(private val context: Context) {
             socket.reuseAddress = true
             socket.trafficClass = 0x10          // IPTOS_LOWDELAY — request low-latency routing
             socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
-            // Limit socket buffers to prevent bufferbloat over the internet connection
-            socket.sendBufferSize = SOCKET_BUFFER_SIZE
-            socket.receiveBufferSize = SOCKET_BUFFER_SIZE
+            // Do NOT set sendBufferSize/receiveBufferSize — let Linux TCP auto-tune.
+            // Artificial limits throttle chunk bursts and inflate ping under load.
         }
     }
 
