@@ -335,7 +335,6 @@ private fun benefitsForTier(tier: PremiumTier): List<String> {
     return when (tier) {
         PremiumTier.PREMIUM -> listOf(
             "Custom IP",
-            "Web Dashboard (Console & Logs)",
             "Unlimited AFK Bots",
             "Custom Theme Maker",
             "Operator Chat from App",

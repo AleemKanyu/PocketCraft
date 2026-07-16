@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">服务器运行</string>
+    <string name="server_stopped">服务器已停止</string>
+    <string name="server_starting">服务器正在启动...</string>
+    <string name="start_server">启动服务器</string>
+    <string name="stop_server">停止服务器</string>
+    <string name="notification_channel_name">服务器状态</string>
+    <string name="notification_channel_desc">显示服务器运行状态和控制</string>
+    <string name="tap_to_copy">点击复制IP</string>
+    <string name="copied">IP复制到剪贴板</string>
+    <string name="how_to_connect">如何连接</string>
+    <string name="send_command">发送命令</string>
+    <string name="clear_log">清除日志</string>
+    <string name="apply_restart">应用并重新启动</string>
+    <string name="delete_world">删除世界数据</string>
+    <string name="delete_world_confirm">这将永久删除世界。你确定吗？</string>
+    <string name="thermal_warning">警告：设备过热 — 考虑停止服务器</string>
+    <string name="ram_warning">警告：检测到 RAM 不足 — 性能可能会下降</string>
+    <string name="players_online">%1$d/%2$d 球员</string>
+    <string name="tps_label">TPS：%1$.1f</string>
+    <string name="uptime_label">正常运行时间：%1$s</string>
+    <string name="announcement_title">来自 PocketCraft 的注释</string>
+    <string name="announcement_body">PocketCraft将对所有人永久免费，但专业版中的某些功能只是为了让您能够支持我们的服务器成本和应用程序运行成本。它们很便宜，这就是它们存在的原因，包括为了获得更多价值。 
+ 
+ 如果您想帮助我们，或者只是想与团队聊天，请加入我们的 Discord — 我们很乐意加入您。</string>
+    <string name="announcement_join_discord">加入不和谐</string>
+    <string name="announcement_got_it">明白了</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NOME_APP_PC</string>
+    <string name="server_running">Server in esecuzione</string>
+    <string name="server_stopped">Server arrestato</string>
+    <string name="server_starting">Avvio del server…</string>
+    <string name="start_server">Avvia il server</string>
+    <string name="stop_server">Arresta server</string>
+    <string name="notification_channel_name">Stato del server</string>
+    <string name="notification_channel_desc">Mostra lo stato e i controlli di esecuzione del server</string>
+    <string name="tap_to_copy">Toccare per copiare l\'IP</string>
+    <string name="copied">IP copiato negli appunti</string>
+    <string name="how_to_connect">Come connettersi</string>
+    <string name="send_command">Invia comando</string>
+    <string name="clear_log">Cancella registro</string>
+    <string name="apply_restart">Applica e riavvia</string>
+    <string name="delete_world">Elimina dati mondiali</string>
+    <string name="delete_world_confirm">Questo eliminerà permanentemente il mondo. Sei sicuro?</string>
+    <string name="thermal_warning">Avviso: il dispositivo si sta surriscaldando: prendere in considerazione l\'arresto del server</string>
+    <string name="ram_warning">Avviso: rilevata RAM insufficiente: le prestazioni potrebbero risultare ridotte</string>
+    <string name="players_online">giocatori %1$d/%2$d</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Tempo di attività: %1$s</string>
+    <string name="announcement_title">Una nota da PocketCraft</string>
+    <string name="announcement_body">PocketCraft sarà gratuito per sempre per tutti, ma alcune funzionalità sono presenti in Pro solo per consentirti di sostenere i costi del nostro server e i costi di gestione delle app. Costano poco, ed è per questo che sono lì, compreso quello per un maggiore valore. 
+ 
+ Se desideri aiutarci o vuoi semplicemente chattare con il team, unisciti al nostro Discord: ci piacerebbe averti.</string>
+    <string name="announcement_join_discord">Unisciti a Discord</string>
+    <string name="announcement_got_it">Capito</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

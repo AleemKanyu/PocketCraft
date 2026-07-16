@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">سرور در حال اجرا</string>
+    <string name="server_stopped">سرور متوقف شد</string>
+    <string name="server_starting">شروع سرور…</string>
+    <string name="start_server">سرور را راه اندازی کنید</string>
+    <string name="stop_server">توقف سرور</string>
+    <string name="notification_channel_name">وضعیت سرور</string>
+    <string name="notification_channel_desc">وضعیت و کنترل های در حال اجرا سرور را نشان می دهد</string>
+    <string name="tap_to_copy">برای کپی IP ضربه بزنید</string>
+    <string name="copied">IP در کلیپ بورد کپی شد</string>
+    <string name="how_to_connect">نحوه اتصال</string>
+    <string name="send_command">ارسال فرمان</string>
+    <string name="clear_log">پاک کردن گزارش</string>
+    <string name="apply_restart">اعمال و راه اندازی مجدد</string>
+    <string name="delete_world">داده های جهانی را حذف کنید</string>
+    <string name="delete_world_confirm">این کار جهان را برای همیشه حذف می کند. مطمئنی؟</string>
+    <string name="thermal_warning">هشدار: دستگاه در حال داغ شدن بیش از حد است - به توقف سرور فکر کنید</string>
+    <string name="ram_warning">هشدار: RAM پایین شناسایی شده است - ممکن است عملکرد کاهش یابد</string>
+    <string name="players_online">%1$d/%2$d بازیکنان</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">زمان به کار: %1$s</string>
+    <string name="announcement_title">یادداشتی از PocketCraft</string>
+    <string name="announcement_body">PocketCraft برای همیشه برای همه رایگان خواهد بود، اما برخی از ویژگی‌ها در Pro وجود دارند تا بتوانید هزینه‌های سرور و هزینه‌های اجرای برنامه را پشتیبانی کنید. آنها ارزان هستند، و به همین دلیل در آنجا هستند، از جمله برای ارزش بیشتر. 
+ 
+ اگر می‌خواهید به ما کمک کنید، یا فقط می‌خواهید با تیم چت کنید، به Discord ما بپیوندید — ما دوست داریم شما را داشته باشیم.</string>
+    <string name="announcement_join_discord">به Discord بپیوندید</string>
+    <string name="announcement_got_it">متوجه شدم</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server radi</string>
+    <string name="server_stopped">Server zaustavljen</string>
+    <string name="server_starting">Pokretanje servera…</string>
+    <string name="start_server">Pokreni server</string>
+    <string name="stop_server">Zaustavi server</string>
+    <string name="notification_channel_name">Status servera</string>
+    <string name="notification_channel_desc">Prikazuje status rada servera i kontrole</string>
+    <string name="tap_to_copy">Dodirnite da kopirate IP</string>
+    <string name="copied">IP je kopiran u međuspremnik</string>
+    <string name="how_to_connect">Kako se povezati</string>
+    <string name="send_command">Pošalji komandu</string>
+    <string name="clear_log">Obriši zapisnik</string>
+    <string name="apply_restart">Primijeni i ponovno pokreni</string>
+    <string name="delete_world">Brisanje svjetskih podataka</string>
+    <string name="delete_world_confirm">Ovo će trajno izbrisati svijet. Jeste li sigurni?</string>
+    <string name="thermal_warning">Upozorenje: Uređaj se pregreva — razmislite o zaustavljanju servera</string>
+    <string name="ram_warning">Upozorenje: Otkriveno je malo RAM-a — performanse mogu biti smanjene</string>
+    <string name="players_online">%1$d/%2$d igrača</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Vrijeme rada: %1$s</string>
+    <string name="announcement_title">Bilješka iz PocketCraft</string>
+    <string name="announcement_body">PocketCraft će biti zauvijek besplatna za sve, ali neke funkcije su u Pro samo zato da možete podržati troškove našeg servera i troškove rada aplikacije. Jeftini su i zato su tu, uključujući i one za veću vrijednost. 
+ 
+ Ako nam želite pomoći, ili samo želite razgovarati s timom, pridružite se našem Discordu — voljeli bismo vas imati.</string>
+    <string name="announcement_join_discord">Pridružite se Discordu</string>
+    <string name="announcement_got_it">Shvatio sam</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

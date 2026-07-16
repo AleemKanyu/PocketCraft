@@ -48,6 +48,8 @@ import com.pocketcraft.server.ui.components.DuoButtonVariant
 import com.pocketcraft.server.ui.components.PocketCraftCard
 import com.pocketcraft.server.ui.components.duoTextFieldShape
 import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -71,16 +73,17 @@ fun RelayRegionScreen(
     }
 
     LaunchedEffect(relayRegions) {
-        val measuredPings = mutableMapOf<String, Long>()
-        withContext(Dispatchers.IO) {
-            relayRegions.forEach { region ->
-                val ping = RelayLatencySelector.measureRelayLatency(region.host)
-                if (ping != Long.MAX_VALUE) {
-                    measuredPings[region.host] = ping
+        pings = withContext(Dispatchers.IO) {
+            relayRegions
+                .map { region ->
+                    async {
+                        region.host to RelayLatencySelector.measureRelayLatency(region.host)
+                    }
                 }
-            }
+                .awaitAll()
+                .filter { (_, ping) -> ping != Long.MAX_VALUE }
+                .toMap()
         }
-        pings = measuredPings
     }
 
     Column(

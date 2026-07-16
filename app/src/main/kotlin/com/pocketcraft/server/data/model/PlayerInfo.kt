@@ -13,20 +13,26 @@ data class PlayerInfo(
     val isBedrock: Boolean get() = name.startsWith(".")
     val isRelayBridge: Boolean get() = !isBedrock && isLoopbackIp(ip)
     val isBedrockBridge: Boolean get() = isBedrock && isLoopbackIp(ip)
+    val isWifiPlayer: Boolean get() = ip.isNotBlank() && !isLoopbackIp(ip)
 
     fun pingText(unavailable: String = "Ping unavailable"): String {
         val rawPing = pingMs.takeIf { it >= 0 } ?: return unavailable
+        if (isWifiPlayer && rawPing > MAX_REALISTIC_WIFI_PING_MS) {
+            return "Wi-Fi ping unavailable"
+        }
 
         val label = when {
-            isRelayBridge -> "Relay ping"
-            isBedrockBridge -> "Bedrock bridge ping"
-            ip.isNotBlank() -> "Wi-Fi ping"
+            isRelayBridge -> "Local relay bridge ping"
+            isBedrockBridge -> "Local Bedrock bridge ping"
+            isWifiPlayer -> "Wi-Fi ping"
             else -> "Ping"
         }
         return "$label: ${rawPing}ms"
     }
 
     companion object {
+        private const val MAX_REALISTIC_WIFI_PING_MS = 5_000
+
         private fun isLoopbackIp(value: String): Boolean {
             val host = value.trim().lowercase()
             return host == "localhost" ||

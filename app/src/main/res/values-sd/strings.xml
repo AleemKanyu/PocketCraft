@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">هلندڙ سرور</string>
+    <string name="server_stopped">سرور بند ٿي ويو</string>
+    <string name="server_starting">سرور شروع ٿي رهيو آهي…</string>
+    <string name="start_server">سرور شروع ڪريو</string>
+    <string name="stop_server">اسٽاپ سرور</string>
+    <string name="notification_channel_name">سرور جي حالت</string>
+    <string name="notification_channel_desc">ڏيکاري ٿو سرور هلائڻ واري صورتحال ۽ ڪنٽرول</string>
+    <string name="tap_to_copy">IP ڪاپي ڪرڻ لاءِ ٽيپ ڪريو</string>
+    <string name="copied">IP ڪاپي ڪلپ بورڊ تي</string>
+    <string name="how_to_connect">ڪيئن ڳنڍجي</string>
+    <string name="send_command">حڪم موڪليو</string>
+    <string name="clear_log">صاف لاگ</string>
+    <string name="apply_restart">لاڳو ڪريو ۽ ٻيهر شروع ڪريو</string>
+    <string name="delete_world">ورلڊ ڊيٽا کي ختم ڪريو</string>
+    <string name="delete_world_confirm">اهو دنيا کي مستقل طور تي ختم ڪري ڇڏيندو. ڇا توهان کي پڪ آهي؟</string>
+    <string name="thermal_warning">خبردار: ڊيوائس وڌيڪ گرم ٿي رهي آهي - سرور کي روڪڻ تي غور ڪريو</string>
+    <string name="ram_warning">ڊيڄاريندڙ: گھٽ ريم معلوم ٿيو - ڪارڪردگي خراب ٿي سگھي ٿي</string>
+    <string name="players_online">%1$d/%2$d رانديگر</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">اپ ٽائم: %1$s</string>
+    <string name="announcement_title">PocketCraft کان هڪ نوٽ</string>
+    <string name="announcement_body">PocketCraft هر ڪنهن لاءِ هميشه لاءِ مفت هوندو، پر ڪجهه خاصيتون پرو ۾ آهن صرف انهي ڪري ته توهان اسان جي سرور جي قيمتن ۽ ايپ جي هلائڻ جي خرچن کي سپورٽ ڪري سگهو ٿا. اهي سستا آهن، ۽ اهو ئي سبب آهي ته اهي اتي آهن، جنهن ۾ وڌيڪ قيمت لاء شامل آهن. 
+ 
+ جيڪڏھن توھان اسان جي مدد ڪرڻ چاھيو ٿا، يا صرف ٽيم سان چيٽ ڪرڻ چاھيو ٿا، اسان جي Discord ۾ شامل ٿيو - اسان کي توھان سان ملڻ پسند آھي.</string>
+    <string name="announcement_join_discord">ڊسڪارڊ ۾ شامل ٿيو</string>
+    <string name="announcement_got_it">حاصل ڪيو</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

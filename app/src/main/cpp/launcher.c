@@ -488,7 +488,6 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   "-XX:+DisableExplicitGC",
                   "-XX:G1NewSizePercent=30",
                   "-XX:G1MaxNewSizePercent=40",
-                  "-XX:G1HeapRegionSize=8m",
                   "-XX:G1ReservePercent=20",
                   "-XX:G1HeapWastePercent=5",
                   "-XX:G1MixedGCCountTarget=4",

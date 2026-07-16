@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">ဆာဗာ လုပ်ဆောင်ခြင်း။</string>
+    <string name="server_stopped">ဆာဗာ ရပ်သွားသည်။</string>
+    <string name="server_starting">ဆာဗာ စတင်နေသည်...</string>
+    <string name="start_server">ဆာဗာကို စတင်ပါ။</string>
+    <string name="stop_server">ဆာဗာရပ်ပါ။</string>
+    <string name="notification_channel_name">ဆာဗာအခြေအနေ</string>
+    <string name="notification_channel_desc">ဆာဗာလည်ပတ်နေသည့် အခြေအနေနှင့် ထိန်းချုပ်မှုများကို ပြသသည်။</string>
+    <string name="tap_to_copy">IP ကို ကူးယူရန် တို့ပါ။</string>
+    <string name="copied">IP ကို ကလစ်ဘုတ်သို့ ကူးယူထားသည်။</string>
+    <string name="how_to_connect">ချိတ်ဆက်နည်း</string>
+    <string name="send_command">Command ပေးပို့ပါ။</string>
+    <string name="clear_log">Clear Log</string>
+    <string name="apply_restart">အသုံးချပြီး ပြန်လည်စတင်ပါ။</string>
+    <string name="delete_world">ကမ္ဘာ့ဒေတာကို ဖျက်ပါ။</string>
+    <string name="delete_world_confirm">ဤအရာသည် ကမ္ဘာကို အပြီးတိုင် ဖျက်လိုက်ပါမည်။ သေချာလား?</string>
+    <string name="thermal_warning">သတိပေးချက်- စက်ပစ္စည်းသည် အပူလွန်ကဲနေသည် — ဆာဗာကို ရပ်တန့်ရန် စဉ်းစားပါ။</string>
+    <string name="ram_warning">သတိပေးချက်- RAM နည်းသည်ကို တွေ့ရှိသည် — စွမ်းဆောင်ရည် ကျဆင်းသွားနိုင်သည်။</string>
+    <string name="players_online">%1$d/%2$d ကစားသမားများ</string>
+    <string name="tps_label">TPS- %1$.1f</string>
+    <string name="uptime_label">အလုပ်ချိန်- %1$s</string>
+    <string name="announcement_title">PocketCraft မှ မှတ်စု</string>
+    <string name="announcement_body">PocketCraft သည် လူတိုင်းအတွက် ထာဝရအခမဲ့ဖြစ်လိမ့်မည်၊ သို့သော် အချို့သောအင်္ဂါရပ်များသည် ကျွန်ုပ်တို့၏ဆာဗာကုန်ကျစရိတ်နှင့် အက်ပ်လည်ပတ်မှုကုန်ကျစရိတ်များကို သင်ထောက်ပံ့ပေးနိုင်စေရန်အတွက် အချို့သောအင်္ဂါရပ်များသည် Pro တွင်ရှိသည်။ သူတို့ကစျေးပေါတယ်၊ ဒါကြောင့်သူတို့ကအဲဒီမှာရှိတယ်၊ အဲဒါကိုပိုပြီးတန်ဖိုးရှိစေတယ်။ 
+ 
+ အကယ်၍ သင်သည် ကျွန်ုပ်တို့ကို ကူညီလိုပါက သို့မဟုတ် အဖွဲ့နှင့် ချတ်လုပ်လိုပါက ကျွန်ုပ်တို့၏ Discord တွင် ပါဝင်ပါ — သင့်အား ကျွန်ုပ်တို့ အလိုရှိသည်။</string>
+    <string name="announcement_join_discord">Discord နှင့် ပူးပေါင်းပါ။</string>
+    <string name="announcement_got_it">ရပြီ။</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

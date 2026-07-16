@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ПЦ_АПП_НАМЕ</string>
+    <string name="server_running">Сервер ради</string>
+    <string name="server_stopped">Сервер заустављен</string>
+    <string name="server_starting">Покретање сервера…</string>
+    <string name="start_server">Покрени сервер</string>
+    <string name="stop_server">Стоп сервер</string>
+    <string name="notification_channel_name">Статус сервера</string>
+    <string name="notification_channel_desc">Приказује статус покретања сервера и контроле</string>
+    <string name="tap_to_copy">Додирните да бисте копирали ИП</string>
+    <string name="copied">ИП је копиран у међуспремник</string>
+    <string name="how_to_connect">Како се повезати</string>
+    <string name="send_command">Пошаљи команду</string>
+    <string name="clear_log">Обриши дневник</string>
+    <string name="apply_restart">Примени и поново покрени</string>
+    <string name="delete_world">Избриши светске податке</string>
+    <string name="delete_world_confirm">Ово ће трајно избрисати свет. Јесте ли сигурни?</string>
+    <string name="thermal_warning">Упозорење: Уређај се прегрева — размислите о заустављању сервера</string>
+    <string name="ram_warning">Упозорење: Откривено је мало РАМ меморије — перформансе могу бити смањене</string>
+    <string name="players_online">__ВАРА__ / __ВАРБ__ играча</string>
+    <string name="tps_label">ТПС: __ВАРЦ__</string>
+    <string name="uptime_label">Време рада: __ВАРД__</string>
+    <string name="announcement_title">Белешка из ПЦ_АПП_НАМЕ</string>
+    <string name="announcement_body">ПЦ_АПП_НАМЕ ће заувек бити бесплатна за све, али неке функције су у Про само да бисте могли да подржите трошкове нашег сервера и трошкове рада апликације. Они су јефтини, и зато су ту, укључујући и то за већу вредност. __НЕВЛИНЕ__ __НЕВЛИНЕ__ Ако желите да нам помогнете или само желите да ћаскате са тимом, придружите се нашем Дисцорд-у — волели бисмо да вас имамо.</string>
+    <string name="announcement_join_discord">Придружите се Дисцорд-у</string>
+    <string name="announcement_got_it">Схватио сам</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

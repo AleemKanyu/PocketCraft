@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server běží</string>
+    <string name="server_stopped">Server zastaven</string>
+    <string name="server_starting">Server se spouští…</string>
+    <string name="start_server">Spusťte server</string>
+    <string name="stop_server">Zastavit server</string>
+    <string name="notification_channel_name">Stav serveru</string>
+    <string name="notification_channel_desc">Zobrazuje stav provozu serveru a ovládací prvky</string>
+    <string name="tap_to_copy">Klepnutím zkopírujete IP</string>
+    <string name="copied">IP zkopírována do schránky</string>
+    <string name="how_to_connect">Jak se připojit</string>
+    <string name="send_command">Odeslat příkaz</string>
+    <string name="clear_log">Vymazat protokol</string>
+    <string name="apply_restart">Použít a restartovat</string>
+    <string name="delete_world">Smazat data světa</string>
+    <string name="delete_world_confirm">Tímto bude trvale smazán svět. jsi si jistý?</string>
+    <string name="thermal_warning">Upozornění: Zařízení se přehřívá — zvažte zastavení serveru</string>
+    <string name="ram_warning">Varování: Zjištěna nízká RAM — výkon může být snížen</string>
+    <string name="players_online">%1$d/%2$d hráčů</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Doba provozu: %1$s</string>
+    <string name="announcement_title">Poznámka z PocketCraft</string>
+    <string name="announcement_body">PocketCraft bude navždy zdarma pro každého, ale některé funkce jsou ve verzi Pro jen proto, abyste mohli podporovat naše náklady na server a náklady na provoz aplikací. Jsou levné, a to je důvod, proč jsou tam, včetně toho pro vyšší hodnotu. 
+ 
+ Pokud nám chcete pomoci nebo si jen chcete popovídat s týmem, připojte se k našemu Discordu – rádi vás uvítáme.</string>
+    <string name="announcement_join_discord">Připojte se k Discordu</string>
+    <string name="announcement_got_it">Rozumím</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

@@ -7,18 +7,25 @@
     <string name="start_server">Server starten</string>
     <string name="stop_server">Server stoppen</string>
     <string name="notification_channel_name">Serverstatus</string>
-    <string name="notification_channel_desc">Zeigt den Serverlaufzeitstatus und Steuerelemente</string>
-    <string name="tap_to_copy">Tippen zum Kopieren der IP</string>
-    <string name="copied">IP in Zwischenablage kopiert</string>
-    <string name="how_to_connect">Verbindung herstellen</string>
+    <string name="notification_channel_desc">Zeigt den Betriebsstatus und die Steuerelemente des Servers an</string>
+    <string name="tap_to_copy">Tippen Sie hier, um die IP zu kopieren</string>
+    <string name="copied">IP in die Zwischenablage kopiert</string>
+    <string name="how_to_connect">So stellen Sie eine Verbindung her</string>
     <string name="send_command">Befehl senden</string>
     <string name="clear_log">Protokoll löschen</string>
-    <string name="apply_restart">Anwenden &amp; Neustarten</string>
+    <string name="apply_restart">Anwenden und neu starten</string>
     <string name="delete_world">Weltdaten löschen</string>
-    <string name="delete_world_confirm">Dies wird die Welt dauerhaft löschen. Sind Sie sicher?</string>
-    <string name="thermal_warning">Warnung: Gerät überhitzt — überlegen Sie, den Server zu stoppen</string>
-    <string name="ram_warning">Warnung: Wenig RAM erkannt — Leistung kann beeinträchtigt sein</string>
+    <string name="delete_world_confirm">Dadurch wird die Welt dauerhaft gelöscht. Bist du sicher?</string>
+    <string name="thermal_warning">Warnung: Gerät überhitzt – erwägen Sie, den Server anzuhalten</string>
+    <string name="ram_warning">Warnung: Wenig RAM erkannt – die Leistung kann beeinträchtigt sein</string>
     <string name="players_online">%1$d/%2$d Spieler</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Betriebszeit: %1$s</string>
+    <string name="announcement_title">Eine Notiz von PocketCraft</string>
+    <string name="announcement_body">PocketCraft wird für immer für alle kostenlos sein, aber einige Funktionen sind in Pro verfügbar, nur damit Sie unsere Serverkosten und App-Betriebskosten decken können. Sie sind billig und deshalb sind sie dort, auch für mehr Wert. 
+ 
+ Wenn Sie uns helfen möchten oder einfach nur mit dem Team chatten möchten, treten Sie unserem Discord bei – wir freuen uns über Sie.</string>
+    <string name="announcement_join_discord">Treten Sie Discord bei</string>
+    <string name="announcement_got_it">Verstanden</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
 </resources>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Сервер кор мекунад</string>
+    <string name="server_stopped">Сервер қатъ шуд</string>
+    <string name="server_starting">Сервер оғоз мешавад…</string>
+    <string name="start_server">Серверро оғоз кунед</string>
+    <string name="stop_server">Қатъи сервер</string>
+    <string name="notification_channel_name">Ҳолати сервер</string>
+    <string name="notification_channel_desc">Ҳолати иҷрокунандаи сервер ва назоратро нишон медиҳад</string>
+    <string name="tap_to_copy">Барои нусхабардории IP клик кунед</string>
+    <string name="copied">IP ба буфер нусхабардорӣ карда шуд</string>
+    <string name="how_to_connect">Чӣ тавр пайваст шудан</string>
+    <string name="send_command">Фармонро ирсол кунед</string>
+    <string name="clear_log">Сабти тоза</string>
+    <string name="apply_restart">Муроҷиат кунед ва аз нав оғоз кунед</string>
+    <string name="delete_world">Маълумоти ҷаҳониро нест кунед</string>
+    <string name="delete_world_confirm">Ин ҷаҳонро ба таври доимӣ нест мекунад. Шумо мутмаъин ҳастед?</string>
+    <string name="thermal_warning">Огоҳӣ: Дастгоҳ аз ҳад зиёд гарм мешавад — қатъ кардани серверро баррасӣ кунед</string>
+    <string name="ram_warning">Огоҳӣ: RAM-и кам муайян карда шуд - иҷроиш метавонад паст шавад</string>
+    <string name="players_online">%1$d/%2$d бозигарон</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Вақти корӣ: %1$s</string>
+    <string name="announcement_title">Қайд аз PocketCraft</string>
+    <string name="announcement_body">PocketCraft барои ҳама абадӣ ройгон хоҳад буд, аммо баъзе хусусиятҳо дар Pro ҳастанд, то шумо тавонед хароҷоти сервер ва хароҷоти кори барномаро дастгирӣ кунед. Онҳо арзон ҳастанд ва аз ин рӯ онҳо дар он ҷо ҳастанд, аз ҷумла барои арзиши бештар. 
+ 
+ Агар шумо хоҳед, ки ба мо кӯмак расонед ё танҳо бо даста сӯҳбат кардан хоҳед, ба Discord-и мо ҳамроҳ шавед - мо мехоҳем, ки шумо бошем.</string>
+    <string name="announcement_join_discord">Ба Discord ҳамроҳ шавед</string>
+    <string name="announcement_got_it">Фаҳмидам</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

@@ -146,6 +146,9 @@ import com.pocketcraft.server.ui.theme.card3d
 import com.pocketcraft.server.ui.theme.pocketIsDarkTheme
 import com.pocketcraft.server.ui.util.playAppHaptic
 import com.pocketcraft.server.ui.util.ThemePreferenceStore
+import com.pocketcraft.server.util.AppStrings
+import com.pocketcraft.server.util.LocalAppStrings
+import com.pocketcraft.server.util.appStringsFor
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -340,7 +343,8 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
     val hapticFeedback = LocalHapticFeedback.current
     val appFeedbackEnabled by AppPreferencesStore.isSoundEnabledFlow(context).collectAsState(initial = true)
     var currentStep by rememberSaveable { mutableIntStateOf(0) }
-    val steps = remember { onboardingSteps() }
+    val s = LocalAppStrings.current
+    val steps = remember(s) { onboardingSteps(s) }
     var privacyAccepted by rememberSaveable { mutableStateOf(false) }
     var setupServerName by rememberSaveable { mutableStateOf("PocketCraft Server") }
     var setupWorldDescription by rememberSaveable { mutableStateOf("") }
@@ -504,6 +508,7 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                                 }
                             )
                             6 -> PermissionsScreen(
+                                    s = s,
                                 notificationsPermissionGranted = notificationsPermissionGranted,
                                 onAllowNotifications = {
                                     playHaptic()
@@ -572,7 +577,7 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                 ) {
                     if (currentStep > 0) {
                         OutlineButton(
-                            text = "Back",
+                            text = s.onboardingButtonBack,
                             modifier = Modifier.weight(1f),
                             onClick = {
                                 playHaptic()
@@ -585,11 +590,11 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
 
                     PrimaryButton(
                         modifier = Modifier.weight(1.25f),
-                        text = if (currentStep == steps.lastIndex) "Finish setup" else if (currentStep == 7) "Skip" else "Next",
+                        text = if (currentStep == steps.lastIndex) s.onboardingButtonFinish else if (currentStep == 7) s.onboardingButtonSkip else s.onboardingButtonNext,
                         enabled = if (currentStep == 0) privacyAccepted else true,
                         onClick = {
                             if (missingPermissionStep) {
-                                permissionStepError = "Allow notification permission to continue."
+                                permissionStepError = s.onboardingPermissionsError
                                 permissionWarningTick++
                                 playHaptic(doublePulse = true)
                                 return@PrimaryButton
@@ -728,17 +733,17 @@ private data class OnboardingStep(
     val footer: String
 )
 
-private fun onboardingSteps(): List<OnboardingStep> {
+private fun onboardingSteps(s: AppStrings): List<OnboardingStep> {
     return listOf(
-        OnboardingStep("WELCOME"),
-        OnboardingStep("HOW IT WORKS"),
-        OnboardingStep("BRING YOUR WORLD"),
-        OnboardingStep("FULL CONTROL"),
-        OnboardingStep("CROSS-PLAY READY"),
-        OnboardingStep("PICK REGION"),
-        OnboardingStep("PERMISSIONS"),
-        OnboardingStep("GOOGLE SIGN-IN"),
-        OnboardingStep("SETUP")
+        OnboardingStep(s.onboardingStepWelcome),
+        OnboardingStep(s.onboardingStepHowItWorks),
+        OnboardingStep(s.onboardingStepBringYourWorld),
+        OnboardingStep(s.onboardingStepFullControl),
+        OnboardingStep(s.onboardingStepCrossPlay),
+        OnboardingStep(s.onboardingStepPickRegion),
+        OnboardingStep(s.onboardingStepPermissions),
+        OnboardingStep(s.onboardingStepGoogleSignIn),
+        OnboardingStep(s.onboardingStepSetup)
     )
 }
 
@@ -811,6 +816,7 @@ private fun OnboardingGoogleSignInScreen(
     signedInAccountEmail: String,
     onSignInClick: () -> Unit
 ) {
+    val s = LocalAppStrings.current
     val scale = onboardingCompactScale()
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -823,7 +829,7 @@ private fun OnboardingGoogleSignInScreen(
         )
 
         Text(
-            text = "Optional Google sign-in",
+            text = s.onboardingGoogleTitle,
             fontSize = 21.sp.scaledSp(scale),
             color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
@@ -832,7 +838,7 @@ private fun OnboardingGoogleSignInScreen(
         )
 
         Text(
-            text = "Sign in now to enable private Google Drive backups. You can skip this and finish setup first.",
+            text = s.onboardingGoogleSubtitle,
             fontSize = 13.sp.scaledSp(scale),
             lineHeight = 19.sp.scaledSp(scale),
             color = onboardingTextSecondary(),
@@ -883,13 +889,13 @@ private fun OnboardingGoogleSignInScreen(
                     }
                     Column {
                         Text(
-                            text = if (signedInAccountEmail.isBlank()) "Cloud Sync Status" else "Backup Account Connected",
+                            text = if (signedInAccountEmail.isBlank()) s.onboardingGoogleStatusTitle else s.onboardingGoogleConnectedTitle,
                             fontSize = 13.sp.scaledSp(scale),
                             fontWeight = FontWeight.Bold,
                             color = onboardingTextPrimary()
                         )
                         Text(
-                            text = if (signedInAccountEmail.isBlank()) "Inactive (Local Only)" else "Active & Secured",
+                            text = if (signedInAccountEmail.isBlank()) s.onboardingGoogleStatusInactive else s.onboardingGoogleStatusActive,
                             fontSize = 11.sp.scaledSp(scale),
                             color = if (signedInAccountEmail.isBlank()) onboardingTextSecondary() else onboardingAccentGreen(),
                             fontWeight = FontWeight.SemiBold
@@ -898,9 +904,9 @@ private fun OnboardingGoogleSignInScreen(
                 }
                 Text(
                     text = if (signedInAccountEmail.isBlank()) {
-                        "Backups are stored inside your private Google Drive app folder. PocketCraft cannot see or access your other Drive files."
+                        s.onboardingGoogleStatusDesc
                     } else {
-                        "Your server worlds, plugins, and settings will automatically backup to: $signedInAccountEmail"
+                        s.onboardingGoogleConnectedDesc.format(signedInAccountEmail)
                     },
                     fontSize = 11.sp.scaledSp(scale),
                     lineHeight = 16.sp.scaledSp(scale),
@@ -910,7 +916,7 @@ private fun OnboardingGoogleSignInScreen(
         }
 
         DuoButton(
-            text = if (signedInAccountEmail.isBlank()) "Sign in with Google" else "Signed in",
+            text = if (signedInAccountEmail.isBlank()) s.onboardingGoogleSignInButton else s.onboardingGoogleSignedInButton,
             onClick = onSignInClick,
             enabled = signedInAccountEmail.isBlank(),
             iconContent = if (signedInAccountEmail.isBlank()) {
@@ -924,7 +930,7 @@ private fun OnboardingGoogleSignInScreen(
         )
 
         Text(
-            text = "You can press Next without signing in.",
+            text = s.onboardingGoogleSkipNotice,
             fontSize = 11.sp.scaledSp(scale),
             color = onboardingTextMuted(),
             textAlign = TextAlign.Center
@@ -940,34 +946,35 @@ private fun RelayRegionOnboardingScreen(
     recommendation: String?,
     onSelectHost: (String) -> Unit
 ) {
+    val s = LocalAppStrings.current
     val scale = onboardingCompactScale()
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp.scaled(scale))
     ) {
         Text(
-            text = "Choose your relay region",
+            text = s.onboardingRegionTitle,
             fontSize = 24.sp.scaledSp(scale),
             fontWeight = FontWeight.ExtraBold,
             color = onboardingTextPrimary(),
             fontFamily = Monocraft
         )
         Text(
-            text = "Pick the relay server closest to your players. You can change this later from the dashboard too.",
+            text = s.onboardingRegionSubtitle,
             fontSize = 13.sp.scaledSp(scale),
             color = onboardingTextSecondary(),
             lineHeight = 18.sp.scaledSp(scale)
         )
         if (isFindingBestRelay) {
             Text(
-                text = "Finding best server...",
+                text = s.onboardingRegionFinding,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = onboardingAccentPurpleDark()
             )
         } else if (!recommendation.isNullOrBlank()) {
             Text(
-                text = "Recommended: $recommendation. You can still change it below.",
+                text = s.onboardingRegionRecommended.format(recommendation),
                 fontSize = 12.sp,
                 color = onboardingTextSecondary()
             )
@@ -1155,6 +1162,7 @@ private fun WelcomeScreen(
     onOpenPrivacy: () -> Unit,
     onOpenTerms: () -> Unit
 ) {
+    val s = LocalAppStrings.current
     val scale = onboardingCompactScale()
     val accentGreen  = onboardingAccentGreen()
     val accentGold   = onboardingAccentGold()
@@ -1237,9 +1245,9 @@ private fun WelcomeScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             listOf(
-                Triple(Icons.Filled.Star,        "Free to host", accentGold),
-                Triple(Icons.Filled.PhoneAndroid, "No PC needed", accentGreen),
-                Triple(Icons.Filled.Group,        "Invite anyone", accentPurple)
+                Triple(Icons.Filled.Star,        s.onboardingFreeToHost, accentGold),
+                Triple(Icons.Filled.PhoneAndroid, s.onboardingNoPcNeeded, accentGreen),
+                Triple(Icons.Filled.Group,        s.onboardingInviteAnyone, accentPurple)
             ).forEach { (icon, label, accent) ->
                 Surface(
                     color = onboardingSurfaceSoftColor(),
@@ -1308,7 +1316,7 @@ private fun WelcomeScreen(
                 Spacer(modifier = Modifier.width(10.dp.scaled(scale)))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "I agree to the terms & policy",
+                        text = s.onboardingAgreeTermsPolicy,
                         fontSize = 12.sp.scaledSp(scale),
                         color = onboardingTextPrimary(),
                         fontWeight = FontWeight.Bold
@@ -1318,7 +1326,7 @@ private fun WelcomeScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Privacy Policy",
+                            text = s.onboardingPrivacyPolicy,
                             color = accentPurple,
                             fontSize = 11.sp.scaledSp(scale),
                             fontWeight = FontWeight.Bold,
@@ -1326,7 +1334,7 @@ private fun WelcomeScreen(
                         )
                         Text(text = "•", color = onboardingTextMuted(), fontSize = 10.sp.scaledSp(scale))
                         Text(
-                            text = "Terms of Use",
+                            text = s.onboardingTermsOfUse,
                             color = accentPurple,
                             fontSize = 11.sp.scaledSp(scale),
                             fontWeight = FontWeight.Bold,
@@ -1341,6 +1349,7 @@ private fun WelcomeScreen(
 
 @Composable
 private fun HowItWorksScreen() {
+    val s = LocalAppStrings.current
     val scale = onboardingCompactScale()
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -1348,7 +1357,7 @@ private fun HowItWorksScreen() {
         verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
     ) {
         Text(
-            text = "How it works",
+            text = s.onboardingHowItWorksTitle,
             fontSize = 21.sp.scaledSp(scale),
             color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
@@ -1360,26 +1369,27 @@ private fun HowItWorksScreen() {
         DetailCard(
             accent = onboardingAccentPurple(),
             icon = Icons.Filled.Dns,
-            title = "1. Start your server",
-            body = "Paper runs locally on your phone and uses the memory you already have."
+            title = s.onboardingStep1Title,
+            body = s.onboardingStep1Body
         )
         DetailCard(
             accent = onboardingAccentGold(),
             icon = Icons.Filled.Public,
-            title = "2. Share your address",
-            body = "PocketCraft gives you a unique relay address that friends can connect to."
+            title = s.onboardingStep2Title,
+            body = s.onboardingStep2Body
         )
         DetailCard(
             accent = onboardingAccentGreen(),
             icon = Icons.Filled.Group,
-            title = "3. Friends join instantly",
-            body = "Java Edition players connect straight through the relay with minimal friction."
+            title = s.onboardingStep3Title,
+            body = s.onboardingStep3Body
         )
     }
 }
 
 @Composable
 private fun ImportScreen() {
+    val s = LocalAppStrings.current
     val scale = onboardingCompactScale()
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -1392,7 +1402,7 @@ private fun ImportScreen() {
         )
 
         Text(
-            text = "Moving from Aternos or Minehut?",
+            text = s.onboardingImportTitle,
             fontSize = 20.sp.scaledSp(scale),
             color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
@@ -1401,7 +1411,7 @@ private fun ImportScreen() {
         )
 
         Text(
-            text = "Bring your world, plugins, and config with you. No starting over.",
+            text = s.onboardingImportSubtitle,
             fontSize = 13.sp.scaledSp(scale),
             lineHeight = 19.sp.scaledSp(scale),
             color = onboardingTextSecondary(),
@@ -1412,9 +1422,9 @@ private fun ImportScreen() {
         FeatureListCard(
             accent = onboardingAccentGold(),
             entries = listOf(
-                "Upload world zip" to "Export from Aternos, drop the archive in PocketCraft, and keep going.",
-                "Keep your plugins" to "Reuse the same .jar files. Your plugin stack moves with you.",
-                "Config & ops carry over" to "server.properties, whitelist, and operator access remain intact."
+                s.onboardingImportWorldTitle to s.onboardingImportWorldBody,
+                s.onboardingImportPluginsTitle to s.onboardingImportPluginsBody,
+                s.onboardingImportConfigTitle to s.onboardingImportConfigBody
             )
         )
     }
@@ -1422,6 +1432,7 @@ private fun ImportScreen() {
 
 @Composable
 private fun FeaturesScreen() {
+    val s = LocalAppStrings.current
     val scale = onboardingCompactScale()
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -1434,7 +1445,7 @@ private fun FeaturesScreen() {
         )
 
         Text(
-            text = "Full control, right in your pocket",
+            text = s.onboardingFeaturesTitle,
             fontSize = 20.sp.scaledSp(scale),
             color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
@@ -1443,7 +1454,7 @@ private fun FeaturesScreen() {
         )
 
         Text(
-            text = "Not a stripped-down app. This is the real server toolkit.",
+            text = s.onboardingFeaturesSubtitle,
             fontSize = 13.sp.scaledSp(scale),
             lineHeight = 18.sp.scaledSp(scale),
             color = onboardingTextSecondary(),
@@ -1456,7 +1467,7 @@ private fun FeaturesScreen() {
             shape = RoundedCornerShape(999.dp)
         ) {
             Text(
-                text = "Everything you need in one place",
+                text = s.onboardingFeaturesBanner,
                 modifier = Modifier.padding(horizontal = 12.dp.scaled(scale), vertical = 6.dp.scaled(scale)),
                 color = onboardingAccentPurpleDark(),
                 fontSize = 10.sp.scaledSp(scale),
@@ -1467,10 +1478,10 @@ private fun FeaturesScreen() {
 
         FeatureGrid(
             items = listOf(
-                FeatureItem("Plugins", "Install compatible plugins", Icons.Filled.Extension),
-                FeatureItem("Live console", "Run commands and watch logs", Icons.Filled.Dns),
-                FeatureItem("Players", "Manage players", Icons.Filled.Group),
-                FeatureItem("properties", "Edit settings directly", Icons.Filled.Settings)
+                FeatureItem(s.hubTabPlugins, s.onboardingFeaturesPluginsBody, Icons.Filled.Extension),
+                FeatureItem(s.onboardingFeaturesConsoleTitle, s.onboardingFeaturesConsoleBody, Icons.Filled.Dns),
+                FeatureItem(s.players, s.onboardingFeaturesPlayersBody, Icons.Filled.Group),
+                FeatureItem(s.onboardingFeaturesConfigTitle, s.onboardingFeaturesConfigBody, Icons.Filled.Settings)
             )
         )
     }
@@ -1478,6 +1489,7 @@ private fun FeaturesScreen() {
 
 @Composable
 private fun CrossPlayScreen() {
+    val s = LocalAppStrings.current
     val scale = onboardingCompactScale()
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -1490,7 +1502,7 @@ private fun CrossPlayScreen() {
         )
 
         Text(
-            text = "Cross-play is supported",
+            text = s.onboardingCrossPlayTitle,
             fontSize = 20.sp.scaledSp(scale),
             color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
@@ -1499,7 +1511,7 @@ private fun CrossPlayScreen() {
         )
 
         Text(
-            text = "PocketCraft supports Java and Bedrock cross-play when the bridge is enabled in your server setup.",
+            text = s.onboardingCrossPlaySubtitle,
             fontSize = 13.sp.scaledSp(scale),
             lineHeight = 18.sp.scaledSp(scale),
             color = onboardingTextSecondary(),
@@ -1510,15 +1522,15 @@ private fun CrossPlayScreen() {
         DetailCard(
             accent = onboardingAccentGreen(),
             icon = Icons.Filled.PhoneAndroid,
-            title = "Java + Bedrock",
-            body = "Friends on PC and mobile can join the same world together through the relay."
+            title = s.onboardingCrossPlayJavaBedrock,
+            body = s.onboardingCrossPlayJavaBedrockBody
         )
 
         DetailCard(
             accent = onboardingAccentPurple(),
             icon = Icons.Filled.Extension,
-            title = "No extra app for players",
-            body = "Share your server address and players can connect from their own edition right away."
+            title = s.onboardingCrossPlayNoExtraApp,
+            body = s.onboardingCrossPlayNoExtraAppBody
         )
 
         Surface(
@@ -1527,7 +1539,7 @@ private fun CrossPlayScreen() {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                text = "⚠️ Experimental Feature - Play at Your Own Discretion\n\nCross-play is still in active development. Bugs and stability issues may occur as this feature is not yet officially supported. Use at your own risk.",
+                text = s.onboardingCrossPlayExperimental,
                 modifier = Modifier.padding(horizontal = 14.dp.scaled(scale), vertical = 12.dp.scaled(scale)),
                 color = onboardingTextPrimary(),
                 fontSize = 11.sp.scaledSp(scale),
@@ -1547,6 +1559,7 @@ private data class FeatureItem(
 
 @Composable
 private fun PermissionsScreen(
+    s: AppStrings = LocalAppStrings.current,
     notificationsPermissionGranted: Boolean,
     onAllowNotifications: () -> Unit,
     errorText: String,
@@ -1578,7 +1591,7 @@ private fun PermissionsScreen(
             shape = RoundedCornerShape(999.dp)
         ) {
             Text(
-                text = if (notificationsPermissionGranted) "Permission complete" else "Required before continuing",
+                text = if (notificationsPermissionGranted) s.onboardingPermissionsComplete else s.onboardingPermissionsRequired,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 color = if (notificationsPermissionGranted) onboardingAccentGreen() else onboardingAccentPurpleDark(),
                 fontSize = 10.sp,
@@ -1588,7 +1601,7 @@ private fun PermissionsScreen(
         }
 
         Text(
-            text = "Allow notifications",
+            text = s.onboardingPermissionsTitle,
             fontSize = 21.sp,
             color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
@@ -1597,7 +1610,7 @@ private fun PermissionsScreen(
         )
 
         Text(
-            text = "This is used for server status, player count, and important background updates while your server is running.",
+            text = s.onboardingPermissionsSubtitle,
             fontSize = 13.sp,
             lineHeight = 19.sp,
             color = onboardingTextSecondary(),
@@ -1608,8 +1621,8 @@ private fun PermissionsScreen(
         PermissionCard(
             accent = onboardingAccentPurple(),
             icon = Icons.Filled.Notifications,
-            title = "Notifications",
-            body = "Shows server status and player count while the server is running."
+            title = s.onboardingPermissionsCardTitle,
+            body = s.onboardingPermissionsCardBody
         )
         Box(
             modifier = Modifier
@@ -1617,7 +1630,7 @@ private fun PermissionsScreen(
                 .offset(x = notificationsShakeOffset.value.dp)
         ) {
             DuoButton(
-                text = if (notificationsPermissionGranted) "NOTIFICATIONS ENABLED" else "ALLOW NOTIFICATIONS",
+                text = if (notificationsPermissionGranted) s.onboardingPermissionsButtonEnabled else s.onboardingPermissionsButtonAllow,
                 onClick = onAllowNotifications,
                 enabled = !notificationsPermissionGranted,
                 variant = if (notificationsPermissionGranted) DuoButtonVariant.Secondary else DuoButtonVariant.Primary,
@@ -1645,9 +1658,9 @@ private fun PermissionsScreen(
         ) {
             Text(
                 text = when {
-                    notificationsPermissionGranted -> "You're all set. Tap Next to keep going."
-                    shouldWarnNotifications() -> "Notification access is required on this step. Tap the button above, then allow it in Android."
-                    else -> "Tap the button above, then accept the Android permission prompt to unlock Next."
+                    notificationsPermissionGranted -> s.onboardingPermissionsStatusSet
+                    shouldWarnNotifications() -> s.onboardingPermissionsStatusWarn
+                    else -> s.onboardingPermissionsStatusTap
                 },
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                 color = if (shouldWarnNotifications()) Color(0xFF9F2D2D) else onboardingTextPrimary(),
@@ -1691,6 +1704,7 @@ private fun OnboardingSetupScreen(
     showVersionError: Boolean,
     versionShakeTick: Int
 ) {
+    val s = LocalAppStrings.current
     val versionShakeOffset = remember { Animatable(0f) }
     LaunchedEffect(versionShakeTick) {
         if (versionShakeTick == 0) return@LaunchedEffect
@@ -1705,7 +1719,7 @@ private fun OnboardingSetupScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(
-            text = "Final setup",
+            text = s.onboardingSetupTitle,
             fontSize = 20.sp,
             color = onboardingTextPrimary(),
             fontWeight = FontWeight.ExtraBold,
@@ -1716,7 +1730,7 @@ private fun OnboardingSetupScreen(
             value = serverName,
             onValueChange = onServerNameChange,
             singleLine = true,
-            label = { Text("Server name (required)") },
+            label = { Text(s.onboardingSetupServerLabel) },
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Filled.Dns,
@@ -1732,7 +1746,7 @@ private fun OnboardingSetupScreen(
         OutlinedTextField(
             value = worldDescription,
             onValueChange = onWorldDescriptionChange,
-            label = { Text("World description (optional)") },
+            label = { Text(s.onboardingSetupWorldDescLabel) },
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Filled.Storage,
@@ -1754,15 +1768,15 @@ private fun OnboardingSetupScreen(
             val hasSelectedVersion = selectedVersion.isNotBlank()
             OutlinedTextField(
                 value = if (selectedServerType.supportsVersionSelect) {
-                    if (hasSelectedVersion) "${selectedServerType.displayName} $selectedVersion" else "Select server type + version"
+                    if (hasSelectedVersion) "${selectedServerType.displayName} $selectedVersion" else s.onboardingSetupVersionPlaceholder
                 } else {
-                    "${selectedServerType.displayName} (Custom JAR)"
+                    s.onboardingSetupCustomJar.format(selectedServerType.displayName)
                 },
                 onValueChange = {},
                 singleLine = true,
                 readOnly = true,
                 enabled = false,
-                label = { Text("Game version (required)") },
+                label = { Text(s.onboardingSetupVersionLabel) },
                 trailingIcon = {
                     Icon(
                         imageVector = Icons.Filled.Dns,
@@ -1793,7 +1807,7 @@ private fun OnboardingSetupScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Please select a game version",
+                    text = s.onboardingSetupVersionError,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     color = Color(0xFF9F2D2D),
                     fontSize = 11.sp,
@@ -1806,7 +1820,7 @@ private fun OnboardingSetupScreen(
             value = worldSeed,
             onValueChange = onWorldSeedChange,
             singleLine = true,
-            label = { Text("World seed (optional)") },
+            label = { Text(s.onboardingSetupSeedLabel) },
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Filled.Forest,
@@ -1836,7 +1850,7 @@ private fun OnboardingSetupScreen(
                     modifier = Modifier.size(18.dp)
                 )
                 Text(
-                    text = "You can restore world backups later in Settings whenever you are ready.",
+                    text = s.onboardingSetupBackupNotice,
                     color = onboardingTextPrimary(),
                     fontSize = 12.sp,
                     lineHeight = 17.sp,

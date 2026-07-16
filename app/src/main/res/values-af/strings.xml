@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Bediener loop</string>
+    <string name="server_stopped">Bediener gestop</string>
+    <string name="server_starting">Bediener begin …</string>
+    <string name="start_server">Begin Bediener</string>
+    <string name="stop_server">Stop Bediener</string>
+    <string name="notification_channel_name">Bedienerstatus</string>
+    <string name="notification_channel_desc">Wys bediener loop status en kontroles</string>
+    <string name="tap_to_copy">Tik om IP te kopieer</string>
+    <string name="copied">IP na knipbord gekopieer</string>
+    <string name="how_to_connect">Hoe om aan te sluit</string>
+    <string name="send_command">Stuur bevel</string>
+    <string name="clear_log">Maak logboek skoon</string>
+    <string name="apply_restart">Pas toe en herbegin</string>
+    <string name="delete_world">Vee Wêrelddata uit</string>
+    <string name="delete_world_confirm">Dit sal die wêreld permanent uitvee. Is jy seker?</string>
+    <string name="thermal_warning">Waarskuwing: Toestel oorverhit — oorweeg dit om die bediener te stop</string>
+    <string name="ram_warning">Waarskuwing: Lae RAM bespeur — werkverrigting kan verswak word</string>
+    <string name="players_online">%1$d/%2$d spelers</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Optyd: %1$s</string>
+    <string name="announcement_title">\'n Nota van PocketCraft</string>
+    <string name="announcement_body">PocketCraft sal vir ewig gratis wees vir almal, maar sommige kenmerke is in Pro net sodat jy ons bedienerkoste en programbedryfskoste kan ondersteun. Hulle is goedkoop, en dit is hoekom hulle daar is, insluitend dit vir meer waarde. 
+ 
+ As jy ons wil help, of net met die span wil gesels, sluit aan by ons Discord — ons sal jou graag wil hê.</string>
+    <string name="announcement_join_discord">Sluit aan by Discord</string>
+    <string name="announcement_got_it">Het dit</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

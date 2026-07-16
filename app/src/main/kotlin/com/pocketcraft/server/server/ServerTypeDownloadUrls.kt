@@ -24,7 +24,33 @@ object ServerTypeDownloadUrls {
     ): String = withContext(Dispatchers.IO) {
         try {
             when (serverType) {
-                ServerType.PAPER   -> "http://$relayHost:8080/download/paper?version=$version"
+                ServerType.PAPER   -> {
+                    // 1. Fetch version metadata to find the latest build
+                    val versionUrl = java.net.URL("https://fill.papermc.io/v3/projects/paper/versions/$version")
+                    val conn = versionUrl.openConnection() as java.net.HttpURLConnection
+                    conn.setRequestProperty("User-Agent", "PocketCraft/1.0")
+                    val responseJson = conn.inputStream.bufferedReader().use { it.readText() }
+                    val json = org.json.JSONObject(responseJson)
+                    val builds = json.getJSONArray("builds")
+                    var latestBuild = -1
+                    for (i in 0 until builds.length()) {
+                        val b = builds.getInt(i)
+                        if (b > latestBuild) {
+                            latestBuild = b
+                        }
+                    }
+                    if (latestBuild == -1) throw Exception("No builds found")
+
+                    // 2. Fetch build metadata to get the direct download URL
+                    val buildUrl = java.net.URL("https://fill.papermc.io/v3/projects/paper/versions/$version/builds/$latestBuild")
+                    val buildConn = buildUrl.openConnection() as java.net.HttpURLConnection
+                    buildConn.setRequestProperty("User-Agent", "PocketCraft/1.0")
+                    val buildJson = buildConn.inputStream.bufferedReader().use { it.readText() }
+                    val buildObj = org.json.JSONObject(buildJson)
+                    val downloads = buildObj.getJSONObject("downloads")
+                    val serverDefault = downloads.optJSONObject("server:default") ?: downloads.getJSONObject("application")
+                    serverDefault.getString("url")
+                }
                 ServerType.PURPUR  -> "https://api.purpurmc.org/v2/purpur/$version/latest/download"
                 ServerType.MODPACK -> "https://modrinth.com/modpacks"
 

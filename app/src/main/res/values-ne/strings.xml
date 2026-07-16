@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">सर्भर चलिरहेको छ</string>
+    <string name="server_stopped">सर्भर रोकियो</string>
+    <string name="server_starting">सर्भर सुरु हुँदै...</string>
+    <string name="start_server">सर्भर सुरु गर्नुहोस्</string>
+    <string name="stop_server">सर्भर रोक्नुहोस्</string>
+    <string name="notification_channel_name">सर्भर स्थिति</string>
+    <string name="notification_channel_desc">सर्भर चलिरहेको स्थिति र नियन्त्रणहरू देखाउँछ</string>
+    <string name="tap_to_copy">IP प्रतिलिपि गर्न ट्याप गर्नुहोस्</string>
+    <string name="copied">IP क्लिपबोर्डमा प्रतिलिपि गरियो</string>
+    <string name="how_to_connect">कसरी जडान गर्ने</string>
+    <string name="send_command">आदेश पठाउनुहोस्</string>
+    <string name="clear_log">लग खाली गर्नुहोस्</string>
+    <string name="apply_restart">लागू गर्नुहोस् र पुन: सुरु गर्नुहोस्</string>
+    <string name="delete_world">विश्व डाटा मेटाउनुहोस्</string>
+    <string name="delete_world_confirm">यसले संसारलाई स्थायी रूपमा मेटाउनेछ। तपाईं पक्का हुनुहुन्छ?</string>
+    <string name="thermal_warning">चेतावनी: यन्त्र अत्यधिक ततिरहेको छ - सर्भर रोक्न विचार गर्नुहोस्</string>
+    <string name="ram_warning">चेतावनी: कम र्याम पत्ता लाग्यो — कार्यसम्पादनमा ह्रास आउन सक्छ</string>
+    <string name="players_online">%1$d/%2$d खेलाडीहरू</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">अपटाइम: %1$s</string>
+    <string name="announcement_title">PocketCraft बाट एउटा टिपोट</string>
+    <string name="announcement_body">PocketCraft सधैंको लागि सबैका लागि निःशुल्क हुनेछ, तर केही सुविधाहरू प्रो मा छन् ताकि तपाईंले हाम्रो सर्भर लागत र एप चल्ने लागतहरूलाई समर्थन गर्न सक्नुहुन्छ। तिनीहरू सस्तो छन्, र यसैले तिनीहरू त्यहाँ छन्, थप मूल्यको लागि। 
+ 
+ यदि तपाइँ हामीलाई मद्दत गर्न चाहनुहुन्छ, वा टोलीसँग कुराकानी गर्न चाहनुहुन्छ भने, हाम्रो Discord मा सामेल हुनुहोस् — हामी तपाइँलाई पाउन चाहन्छौं।</string>
+    <string name="announcement_join_discord">विवादमा सामेल हुनुहोस्</string>
+    <string name="announcement_got_it">बुझियो</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

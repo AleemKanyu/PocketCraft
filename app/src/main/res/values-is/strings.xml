@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server í gangi</string>
+    <string name="server_stopped">Server stöðvaður</string>
+    <string name="server_starting">Miðlari að byrja...</string>
+    <string name="start_server">Ræstu netþjón</string>
+    <string name="stop_server">Stöðva netþjón</string>
+    <string name="notification_channel_name">Staða netþjóns</string>
+    <string name="notification_channel_desc">Sýnir stöðu netþjónsins og stýringar</string>
+    <string name="tap_to_copy">Bankaðu til að afrita IP</string>
+    <string name="copied">IP afritað á klemmuspjald</string>
+    <string name="how_to_connect">Hvernig á að tengjast</string>
+    <string name="send_command">Senda skipun</string>
+    <string name="clear_log">Hreinsa skrá</string>
+    <string name="apply_restart">Notaðu og endurræstu</string>
+    <string name="delete_world">Eyða Heimsgögnum</string>
+    <string name="delete_world_confirm">Þetta mun eyða heiminum varanlega. Ertu viss?</string>
+    <string name="thermal_warning">Viðvörun: Tækið er að ofhitna — íhugaðu að stöðva netþjóninn</string>
+    <string name="ram_warning">Viðvörun: Lítið vinnsluminni fannst — frammistaða gæti versnað</string>
+    <string name="players_online">%1$d/%2$d leikmenn</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Spenntur: %1$s</string>
+    <string name="announcement_title">Athugasemd frá PocketCraft</string>
+    <string name="announcement_body">PocketCraft verður ókeypis fyrir alla að eilífu, en sumir eiginleikar eru í Pro bara svo þú getir stutt netþjónskostnað okkar og rekstrarkostnað forrita. Þeir eru ódýrir og þess vegna eru þeir þarna inni, þar á meðal fyrir meira verðmæti. 
+ 
+ Ef þú vilt hjálpa okkur, eða vilt bara spjalla við liðið, vertu með í Discord okkar — við viljum gjarnan hafa þig.</string>
+    <string name="announcement_join_discord">Vertu með í Discord</string>
+    <string name="announcement_got_it">Skil</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

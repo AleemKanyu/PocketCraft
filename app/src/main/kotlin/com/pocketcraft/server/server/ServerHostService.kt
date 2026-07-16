@@ -87,7 +87,7 @@ class ServerHostService : Service() {
         STARTING_SERVER("Starting server... (30-60s)"),
         RUNNING("Server is running"),
         STOPPING("Stopping server..."),
-        DASHBOARD_LISTENER_ACTIVE("Web Dashboard listener is active")
+        DASHBOARD_LISTENER_ACTIVE("PocketCraft service is active")
     }
 
     private var isForegroundServiceStarted = false
@@ -576,7 +576,8 @@ class ServerHostService : Service() {
         }
 
         persistPublicAddress(applicationContext, "")
-        currentVersionId?.let { persistRuntimeState(applicationContext, it, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE) }
+        val activeVer = currentVersionId?.takeIf { it.isNotBlank() } ?: getPersistedActiveVersion(applicationContext)
+        persistRuntimeState(applicationContext, activeVer, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE)
         serverReadyFallbackJob?.cancel()
         serverReadyFallbackJob = null
         setServerReadyState(false)
@@ -711,7 +712,7 @@ class ServerHostService : Service() {
                 synchronized(relayOnlinePlayers) { relayOnlinePlayers.clear() }
                 cancelChunkResendJobs()
                 try {
-                    com.pocketcraft.server.widget.ServerWidgetUpdater.push(applicationContext)
+                    ServerHostService.pushWidgetUpdate(applicationContext)
                 } catch (e: Exception) {
                     android.util.Log.e("ServerHostService", "Widget update failed on stop: ${e.message}")
                 }
@@ -811,14 +812,32 @@ class ServerHostService : Service() {
         targetFile: File,
         serverDir: File
     ): File = coroutineScope {
+        val diskProps = com.pocketcraft.server.service.ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
+        val diskLaunchTarget = com.pocketcraft.server.service.ServerFileManager.readLaunchTarget(serverDir)
+        val effectiveServerType = if (
+            com.pocketcraft.server.data.model.ServerType.fromString(diskProps.getProperty("pocketcraft-server-type")) ==
+            com.pocketcraft.server.data.model.ServerType.MODPACK &&
+            diskLaunchTarget != null
+        ) {
+            com.pocketcraft.server.data.model.ServerType.MODPACK
+        } else {
+            config.serverType
+        }
+        val effectiveCustomJarPath = diskProps.getProperty("pocketcraft-custom-jar-path")
+            ?: diskProps.getProperty("pocketcraft-modpack-id")
+            ?: config.customJarPath
+        val effectiveGameVersion = diskProps.getProperty("pocketcraft-game-version")
+            ?.takeIf { it.isNotBlank() }
+            ?: resolvedGameVersion
+
         updateNotification(ServerStage.EXTRACTING_JRE, force = true)
         val runtimeJob = async { ensureRuntimeExtracted(versionId, runtime) }
         val jarJob = async {
             var resolvedJar: File? = null
             com.pocketcraft.server.server.ServerJarManager.resolveJar(
-                serverType = config.serverType,
-                gameVersion = resolvedGameVersion,
-                customJarPath = config.customJarPath,
+                serverType = effectiveServerType,
+                gameVersion = effectiveGameVersion,
+                customJarPath = effectiveCustomJarPath,
                 targetFile = targetFile,
                 serverDir = serverDir,
                 onProgress = { pct ->
@@ -2384,7 +2403,7 @@ class ServerHostService : Service() {
     }
 
     private fun startDashboardStatusHeartbeat(versionId: String) {
-        // Disabled: Web dashboard feature removed
+        // Disabled: Web dashboard feature removed/manual logs only
     }
 
     private fun triggerDashboardStatusUpdate() {
@@ -2525,9 +2544,10 @@ class ServerHostService : Service() {
         )
 
         try {
-            FirebaseFirestore.getInstance().collection("users").document(uid)
-                .collection("dashboard_status").document("status")
-                .set(statusDoc, SetOptions.merge())
+            // Disabled: Web dashboard status is disabled/removed. Avoid hitting Firestore write quota limits.
+            // FirebaseFirestore.getInstance().collection("users").document(uid)
+            //     .collection("dashboard_status").document("status")
+            //     .set(statusDoc, SetOptions.merge())
         } catch (e: Exception) {
             android.util.Log.e("ServerHostService", "Failed to update dashboard status: ${e.message}")
         }
@@ -2867,19 +2887,22 @@ class ServerHostService : Service() {
 
         @JvmStatic
         fun isServiceRunning(context: Context): Boolean {
-            val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return false
-            @Suppress("DEPRECATION")
-            val runningServices = try {
-                manager.getRunningServices(Integer.MAX_VALUE)
+            val file = getStateFile(context)
+            if (!file.exists()) return false
+            val pid = runCatching {
+                org.json.JSONObject(file.readText()).optInt("server_pid", -1)
+            }.getOrDefault(-1)
+            
+            if (pid <= 0) return false
+            
+            return try {
+                android.system.Os.kill(pid, 0)
+                true
+            } catch (e: android.system.ErrnoException) {
+                false
             } catch (e: Exception) {
-                null
-            } ?: return isServiceRunning
-            for (service in runningServices) {
-                if (ServerHostService::class.java.name == service.service.className) {
-                    return true
-                }
+                false
             }
-            return false
         }
 
         @Keep
@@ -2996,8 +3019,10 @@ class ServerHostService : Service() {
             obj.put(KEY_RUNTIME_STATE, state)
             if (state == RUNTIME_STATE_OFFLINE) {
                 obj.put(KEY_PLAYER_COUNT, 0)
+                obj.put("server_pid", -1)
+            } else {
+                obj.put("server_pid", android.os.Process.myPid())
             }
-            obj.put("server_pid", android.os.Process.myPid())
             writeStateFile(context, obj)
         }
 
@@ -3043,11 +3068,13 @@ class ServerHostService : Service() {
         }
 
         fun pushWidgetUpdate(context: Context, statusOverride: String? = null) {
-            val intent = Intent(context, com.pocketcraft.server.widget.ServerWidgetReceiver::class.java).apply {
-                action = com.pocketcraft.server.widget.ServerWidgetReceiver.ACTION_TRIGGER_WIDGET_UPDATE
-                statusOverride?.let { putExtra("status_override", it) }
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                try {
+                    com.pocketcraft.server.widget.ServerWidgetUpdater.push(context.applicationContext, statusOverride)
+                } catch (e: Exception) {
+                    android.util.Log.e("ServerHostService", "Widget update failed: ${e.message}", e)
+                }
             }
-            context.sendBroadcast(intent)
         }
 
         fun isWhitelistEnabled(context: Context, worldName: String): Boolean {

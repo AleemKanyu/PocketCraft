@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Serveris darbojas</string>
+    <string name="server_stopped">Serveris apturēts</string>
+    <string name="server_starting">Servera palaišana…</string>
+    <string name="start_server">Sākt serveri</string>
+    <string name="stop_server">Apturēt serveri</string>
+    <string name="notification_channel_name">Servera statuss</string>
+    <string name="notification_channel_desc">Parāda servera darbības statusu un vadīklas</string>
+    <string name="tap_to_copy">Pieskarieties, lai kopētu IP</string>
+    <string name="copied">IP kopēts starpliktuvē</string>
+    <string name="how_to_connect">Kā izveidot savienojumu</string>
+    <string name="send_command">Sūtīt komandu</string>
+    <string name="clear_log">Notīrīt žurnālu</string>
+    <string name="apply_restart">Lietot un restartēt</string>
+    <string name="delete_world">Dzēst pasaules datus</string>
+    <string name="delete_world_confirm">Tas neatgriezeniski dzēsīs pasauli. Vai esat pārliecināts?</string>
+    <string name="thermal_warning">Brīdinājums: ierīce pārkarst — apsveriet servera apturēšanu</string>
+    <string name="ram_warning">Brīdinājums: konstatēts zems RAM — veiktspēja var būt pasliktināta</string>
+    <string name="players_online">%1$d/%2$d spēlētāji</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Darbības laiks: %1$s</string>
+    <string name="announcement_title">Piezīme no PocketCraft</string>
+    <string name="announcement_body">PocketCraft būs visiem bez maksas, taču dažas Pro funkcijas ir pieejamas tikai tāpēc, lai jūs varētu atbalstīt mūsu servera izmaksas un lietotņu darbības izmaksas. Tie ir lēti, un tāpēc tie ir tur, tostarp par lielāku vērtību. 
+ 
+ Ja vēlaties mums palīdzēt vai vienkārši tērzēt ar komandu, pievienojieties mūsu Discord — mēs priecāsimies par jums.</string>
+    <string name="announcement_join_discord">Pievienojieties Discord</string>
+    <string name="announcement_got_it">Sapratu</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

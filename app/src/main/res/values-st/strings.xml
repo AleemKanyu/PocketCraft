@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server Running</string>
+    <string name="server_stopped">Seva e Emisitsoe</string>
+    <string name="server_starting">Seva e Qala…</string>
+    <string name="start_server">Start Server</string>
+    <string name="stop_server">Emisa Seva</string>
+    <string name="notification_channel_name">Boemo ba seva</string>
+    <string name="notification_channel_desc">E bonts\'a boemo bo sebetsang ba seva le litsamaiso</string>
+    <string name="tap_to_copy">Tlanya ho kopitsa IP</string>
+    <string name="copied">IP e qopisitsoe ho clipboard</string>
+    <string name="how_to_connect">Mokhoa oa ho hokela</string>
+    <string name="send_command">Romela Taelo</string>
+    <string name="clear_log">Hlakileng Log</string>
+    <string name="apply_restart">Sebelisa \'me u qale hape</string>
+    <string name="delete_world">Hlakola Boitsebiso ba Lefatše</string>
+    <string name="delete_world_confirm">Sena se tla hlakola lefatše ka ho sa feleng. U na le bonnete?</string>
+    <string name="thermal_warning">Tlhokomeliso: Sesebelisoa se chesa haholo - nahana ka ho emisa seva</string>
+    <string name="ram_warning">Tlhokomeliso: RAM e tlase e fumanoe - ts\'ebetso e kanna ea senyeha</string>
+    <string name="players_online">%1$d/%2$d libapali</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Nako ea ho qetela: %1$s</string>
+    <string name="announcement_title">Molaetsa ho tsoa ho PocketCraft</string>
+    <string name="announcement_body">PocketCraft e tla lokoloha ka ho sa feleng bakeng sa motho e mong le e mong, empa likarolo tse ling li ho Pro e le hore u tsebe ho tšehetsa litjeho tsa seva sa rona le litšenyehelo tsa ho tsamaisa lisebelisoa. Li theko e tlase, \'me ke ka lebaka leo li leng teng, ho kenyelletsa le bakeng sa boleng bo eketsehileng. 
+ 
+ Haeba o batla ho re thusa, kapa o batla feela ho qoqa le sehlopha, ikopanye le Discord ya rona — re ka thabela ho ba le wena.</string>
+    <string name="announcement_join_discord">Kena le Discord</string>
+    <string name="announcement_got_it">Ke e fumane</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

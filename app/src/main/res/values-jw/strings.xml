@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server Mlaku</string>
+    <string name="server_stopped">Server mandheg</string>
+    <string name="server_starting">Server Miwiti…</string>
+    <string name="start_server">Miwiti Server</string>
+    <string name="stop_server">Stop Server</string>
+    <string name="notification_channel_name">Status Server</string>
+    <string name="notification_channel_desc">Nuduhake server mlaku status lan kontrol</string>
+    <string name="tap_to_copy">Tutul kanggo nyalin IP</string>
+    <string name="copied">IP disalin menyang clipboard</string>
+    <string name="how_to_connect">Carane Sambungake</string>
+    <string name="send_command">Kirimi Command</string>
+    <string name="clear_log">Mbusak Log</string>
+    <string name="apply_restart">Aplikasi &amp; Wiwiti maneh</string>
+    <string name="delete_world">Mbusak Data Donya</string>
+    <string name="delete_world_confirm">Iki bakal mbusak donya permanen. Apa sampeyan yakin?</string>
+    <string name="thermal_warning">Warning: Device is overheating — consider stopping the server</string>
+    <string name="ram_warning">Warning: Low RAM detected — performance may be degraded</string>
+    <string name="players_online">%1$d/%2$d pemain</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Wektu aktif: %1$s</string>
+    <string name="announcement_title">Cathetan saka PocketCraft</string>
+    <string name="announcement_body">PocketCraft bakal gratis kanggo kabeh wong, nanging sawetara fitur ana ing Pro supaya sampeyan bisa ndhukung biaya server lan biaya aplikasi. They are cheap, and that\'s why they are in there, including that for more value. 
+  
+ If you\'d like to help us, or just want to chat with the team, join our Discord — we\'d love to have you.</string>
+    <string name="announcement_join_discord">Gabung Discord</string>
+    <string name="announcement_got_it">Ngerti</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

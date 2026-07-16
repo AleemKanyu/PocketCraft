@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft |</string>
+    <string name="server_running">ସର୍ଭର ଚାଲୁଛି |</string>
+    <string name="server_stopped">ସର୍ଭର ବନ୍ଦ ହୋଇଗଲା |</string>
+    <string name="server_starting">ସର୍ଭର ଆରମ୍ଭ…</string>
+    <string name="start_server">ସର୍ଭର ଆରମ୍ଭ କରନ୍ତୁ |</string>
+    <string name="stop_server">ସର୍ଭର ବନ୍ଦ କରନ୍ତୁ |</string>
+    <string name="notification_channel_name">ସର୍ଭର ସ୍ଥିତି |</string>
+    <string name="notification_channel_desc">ସର୍ଭର ଚାଲୁଥିବା ସ୍ଥିତି ଏବଂ ନିୟନ୍ତ୍ରଣ ଦେଖାଏ |</string>
+    <string name="tap_to_copy">IP କପି କରିବାକୁ ଟ୍ୟାପ୍ କରନ୍ତୁ |</string>
+    <string name="copied">ଆଇପି କ୍ଲିପବୋର୍ଡରେ କପି ହୋଇଛି |</string>
+    <string name="how_to_connect">କିପରି ସଂଯୋଗ କରିବେ |</string>
+    <string name="send_command">ନିର୍ଦ୍ଦେଶ ପଠାନ୍ତୁ |</string>
+    <string name="clear_log">ଲଗ୍ ସଫା କରନ୍ତୁ |</string>
+    <string name="apply_restart">ପ୍ରୟୋଗ ଏବଂ ପୁନ art ଆରମ୍ଭ କରନ୍ତୁ |</string>
+    <string name="delete_world">ବିଶ୍ୱ ତଥ୍ୟ ବିଲୋପ କରନ୍ତୁ |</string>
+    <string name="delete_world_confirm">ଏହା ଜଗତକୁ ସବୁଦିନ ପାଇଁ ବିଲୋପ କରିବ | ଆପଣ ନିଶ୍ଚିତ କି?</string>
+    <string name="thermal_warning">ଚେତାବନୀ: ଉପକରଣ ଅତ୍ୟଧିକ ଗରମ ହେଉଛି - ସର୍ଭରକୁ ବନ୍ଦ କରିବାକୁ ଚିନ୍ତା କରନ୍ତୁ |</string>
+    <string name="ram_warning">ଚେତାବନୀ: କମ୍ RAM ଚିହ୍ନଟ ହୋଇଛି - କାର୍ଯ୍ୟଦକ୍ଷତା ଖରାପ ହୋଇପାରେ |</string>
+    <string name="players_online">%1$d/%2$d ଖେଳାଳି |</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">ଅପଟାଇମ୍: %1$s</string>
+    <string name="announcement_title">PocketCraft ରୁ ଏକ ଟିପ୍ପଣୀ |</string>
+    <string name="announcement_body">PocketCraft ସମସ୍ତଙ୍କ ପାଇଁ ସବୁଦିନ ପାଇଁ ମାଗଣା ରହିବ, କିନ୍ତୁ କିଛି ବ features ଶିଷ୍ଟ୍ୟ ପ୍ରୋରେ ଅଛି ଯାହା ଦ୍ you ାରା ଆପଣ ଆମର ସର୍ଭର ଖର୍ଚ୍ଚ ଏବଂ ଆପ୍ ଚାଲିବା ଖର୍ଚ୍ଚକୁ ସମର୍ଥନ କରିପାରିବେ | ସେମାନେ ଶସ୍ତା, ଏବଂ ସେଥିପାଇଁ ସେମାନେ ସେଠାରେ ଅଛନ୍ତି, ଅଧିକ ମୂଲ୍ୟ ପାଇଁ ତାହା ଅନ୍ତର୍ଭୁକ୍ତ କରି | 
+ 
+ ଯଦି ଆପଣ ଆମକୁ ସାହାଯ୍ୟ କରିବାକୁ ଚାହାଁନ୍ତି, କିମ୍ବା କେବଳ ଦଳ ସହିତ ଚାଟ୍ କରିବାକୁ ଚାହାଁନ୍ତି, ଆମର Discord ରେ ଯୋଗ ଦିଅନ୍ତୁ - ଆମେ ଆପଣଙ୍କୁ ପାଇବାକୁ ପସନ୍ଦ କରିବୁ |</string>
+    <string name="announcement_join_discord">ଅସନ୍ତୋଷରେ ଯୋଗ ଦିଅନ୍ତୁ |</string>
+    <string name="announcement_got_it">ପାଇଛି |</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

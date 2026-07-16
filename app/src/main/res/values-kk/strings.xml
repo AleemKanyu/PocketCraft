@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Сервер жұмыс істейді</string>
+    <string name="server_stopped">Сервер тоқтатылды</string>
+    <string name="server_starting">Сервер іске қосылуда…</string>
+    <string name="start_server">Серверді іске қосыңыз</string>
+    <string name="stop_server">Серверді тоқтату</string>
+    <string name="notification_channel_name">Сервер күйі</string>
+    <string name="notification_channel_desc">Сервердің жұмыс күйін және басқару элементтерін көрсетеді</string>
+    <string name="tap_to_copy">IP көшіру үшін түртіңіз</string>
+    <string name="copied">IP алмасу буферіне көшірілді</string>
+    <string name="how_to_connect">Қосылу жолы</string>
+    <string name="send_command">Пәрменді жіберу</string>
+    <string name="clear_log">Журналды өшіру</string>
+    <string name="apply_restart">Қолдану және қайта іске қосу</string>
+    <string name="delete_world">Әлемдік деректерді жою</string>
+    <string name="delete_world_confirm">Бұл әлемді біржола жояды. Сіз сенімдісіз бе?</string>
+    <string name="thermal_warning">Ескерту: құрылғы қызып кетті — серверді тоқтатуды қарастырыңыз</string>
+    <string name="ram_warning">Ескерту: Төмен ЖЖҚ анықталды — өнімділік төмендеуі мүмкін</string>
+    <string name="players_online">%1$d/%2$d ойыншылар</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Жұмыс уақыты: %1$s</string>
+    <string name="announcement_title">PocketCraft жазбасынан</string>
+    <string name="announcement_body">PocketCraft барлық адамдар үшін мәңгі тегін болады, бірақ кейбір мүмкіндіктер Pro жүйесінде бар, осылайша сіз біздің сервер шығындарын және қолданбаны іске қосу шығындарын қамтамасыз ете аласыз. Олар арзан, сондықтан олар сонда, соның ішінде құндылығы жоғары. 
+ 
+ Бізге көмектескіңіз келсе немесе жай ғана командамен сөйлескіңіз келсе, біздің Discord-қа қосылыңыз — біз сізді жақсы көреміз.</string>
+    <string name="announcement_join_discord">Discord-қа қосылыңыз</string>
+    <string name="announcement_got_it">Түсіндім</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

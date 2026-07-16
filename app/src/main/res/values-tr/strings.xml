@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Sunucu Çalışıyor</string>
+    <string name="server_stopped">Sunucu Durduruldu</string>
+    <string name="server_starting">Sunucu Başlatılıyor…</string>
+    <string name="start_server">Sunucuyu Başlat</string>
+    <string name="stop_server">Sunucuyu Durdur</string>
+    <string name="notification_channel_name">Sunucu Durumu</string>
+    <string name="notification_channel_desc">Sunucunun çalışma durumunu ve kontrollerini gösterir</string>
+    <string name="tap_to_copy">IP\'yi kopyalamak için dokunun</string>
+    <string name="copied">IP panoya kopyalandı</string>
+    <string name="how_to_connect">Nasıl Bağlanılır</string>
+    <string name="send_command">Komut Gönder</string>
+    <string name="clear_log">Günlüğü Temizle</string>
+    <string name="apply_restart">Uygula ve Yeniden Başlat</string>
+    <string name="delete_world">Dünya Verilerini Sil</string>
+    <string name="delete_world_confirm">Bu, dünyayı kalıcı olarak silecektir. Emin misin?</string>
+    <string name="thermal_warning">Uyarı: Cihaz aşırı ısınıyor — sunucuyu durdurmayı düşünün</string>
+    <string name="ram_warning">Uyarı: Düşük RAM algılandı — performans düşebilir</string>
+    <string name="players_online">%1$d/%2$d oyuncuları</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Çalışma süresi: %1$s</string>
+    <string name="announcement_title">PocketCraft\'den bir not</string>
+    <string name="announcement_body">PocketCraft herkes için sonsuza kadar ücretsiz olacak, ancak sunucu maliyetlerimizi ve uygulama çalıştırma maliyetlerimizi destekleyebilmeniz için bazı özellikler Pro\'da yer alıyor. Ucuzlar ve bu yüzden oradalar, buna daha fazla değer de dahil. 
+ 
+ Bize yardım etmek veya sadece ekiple sohbet etmek istiyorsanız Discord\'umuza katılın; sizi aramızda görmekten mutluluk duyarız.</string>
+    <string name="announcement_join_discord">Discord\'a Katılın</string>
+    <string name="announcement_got_it">Anladım</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">አገልጋይ እየሮጠ</string>
+    <string name="server_stopped">አገልጋይ ቆሟል</string>
+    <string name="server_starting">አገልጋይ በመጀመር ላይ…</string>
+    <string name="start_server">ጀምር አገልጋይ</string>
+    <string name="stop_server">አቁም አገልጋይ</string>
+    <string name="notification_channel_name">የአገልጋይ ሁኔታ</string>
+    <string name="notification_channel_desc">የአገልጋይ አሂድ ሁኔታን እና መቆጣጠሪያዎችን ያሳያል</string>
+    <string name="tap_to_copy">አይፒን ለመቅዳት ይንኩ።</string>
+    <string name="copied">አይፒ ወደ ቅንጥብ ሰሌዳ ተቀድቷል።</string>
+    <string name="how_to_connect">እንዴት እንደሚገናኙ</string>
+    <string name="send_command">ትዕዛዝ ላክ</string>
+    <string name="clear_log">ምዝግብ ማስታወሻን አጽዳ</string>
+    <string name="apply_restart">ያመልክቱ እና እንደገና ያስጀምሩ</string>
+    <string name="delete_world">የአለም ውሂብን ሰርዝ</string>
+    <string name="delete_world_confirm">ይህ ዓለምን እስከመጨረሻው ይሰርዛል። ኧረ</string>
+    <string name="thermal_warning">ማስጠንቀቂያ፡ መሳሪያው ከመጠን በላይ እየሞቀ ነው - አገልጋዩን ለማቆም ያስቡበት</string>
+    <string name="ram_warning">ማስጠንቀቂያ፡ ዝቅተኛ ራም ተገኝቷል - አፈፃፀሙ ሊቀንስ ይችላል።</string>
+    <string name="players_online">%1$d/%2$d ተጫዋቾች</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">የዕረፍት ጊዜ፡ %1$s</string>
+    <string name="announcement_title">ማስታወሻ ከ PocketCraft</string>
+    <string name="announcement_body">PocketCraft ለሁሉም ሰው ለዘላለም ነፃ ይሆናል፣ ነገር ግን የአገልጋያችንን ወጪዎች እና የመተግበሪያ ማስኬጃ ወጪዎችን እንድትደግፉ አንዳንድ ባህሪያት በፕሮ ውስጥ አሉ። እነሱ ርካሽ ናቸው፣ እና ለዚያም ነው ለበለጠ ዋጋ ያንን ጨምሮ እዚያ ውስጥ ያሉት። __አዲስ መስመር__ __አዲስ መስመር__እኛን ለመርዳት ከፈለጋችሁ ወይም ከቡድኑ ጋር መወያየት ብቻ የምትፈልጉ ከሆነ የእኛን Discord ተቀላቀሉ - እርስዎን እንዲኖረን እንወዳለን።</string>
+    <string name="announcement_join_discord">Discord ይቀላቀሉ</string>
+    <string name="announcement_got_it">ገባኝ።</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

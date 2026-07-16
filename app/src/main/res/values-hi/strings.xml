@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">सर्वर चल रहा है</string>
+    <string name="server_stopped">सर्वर बंद हो गया</string>
+    <string name="server_starting">सर्वर प्रारंभ हो रहा है...</string>
+    <string name="start_server">सर्वर प्रारंभ करें</string>
+    <string name="stop_server">सर्वर बंद करो</string>
+    <string name="notification_channel_name">सर्वर स्थिति</string>
+    <string name="notification_channel_desc">सर्वर की चालू स्थिति और नियंत्रण दिखाता है</string>
+    <string name="tap_to_copy">आईपी कॉपी करने के लिए टैप करें</string>
+    <string name="copied">आईपी को क्लिपबोर्ड पर कॉपी किया गया</string>
+    <string name="how_to_connect">कैसे कनेक्ट करें</string>
+    <string name="send_command">कमांड भेजें</string>
+    <string name="clear_log">लॉग साफ़ करें</string>
+    <string name="apply_restart">लागू करें और पुनः आरंभ करें</string>
+    <string name="delete_world">विश्व डेटा हटाएं</string>
+    <string name="delete_world_confirm">यह दुनिया को स्थायी रूप से हटा देगा। क्या आपको यकीन है?</string>
+    <string name="thermal_warning">चेतावनी: डिवाइस ज़्यादा गर्म हो रहा है - सर्वर को रोकने पर विचार करें</string>
+    <string name="ram_warning">चेतावनी: कम रैम का पता चला - प्रदर्शन ख़राब हो सकता है</string>
+    <string name="players_online">%1$d/%2$d खिलाड़ी</string>
+    <string name="tps_label">टीपीएस: %1$.1f</string>
+    <string name="uptime_label">अपटाइम: %1$s</string>
+    <string name="announcement_title">PocketCraft से एक नोट</string>
+    <string name="announcement_body">PocketCraft सभी के लिए हमेशा के लिए मुफ़्त होगा, लेकिन कुछ सुविधाएं प्रो में हैं ताकि आप हमारे सर्वर लागत और ऐप चलाने की लागत का समर्थन कर सकें। वे सस्ते हैं, और इसीलिए वे वहाँ हैं, जिसमें अधिक मूल्य भी शामिल है। 
+ 
+ यदि आप हमारी मदद करना चाहते हैं, या सिर्फ टीम के साथ चैट करना चाहते हैं, तो हमारे डिस्कोर्ड में शामिल हों - हमें आपका स्वागत करना अच्छा लगेगा।</string>
+    <string name="announcement_join_discord">कलह में शामिल हों</string>
+    <string name="announcement_got_it">समझ गया</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

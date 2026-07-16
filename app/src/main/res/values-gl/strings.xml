@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Servidor en execución</string>
+    <string name="server_stopped">Servidor detido</string>
+    <string name="server_starting">Servidor iniciando...</string>
+    <string name="start_server">Iniciar o servidor</string>
+    <string name="stop_server">Deter o servidor</string>
+    <string name="notification_channel_name">Estado do servidor</string>
+    <string name="notification_channel_desc">Mostra o estado de execución do servidor e os controis</string>
+    <string name="tap_to_copy">Toca para copiar a IP</string>
+    <string name="copied">IP copiouse no portapapeis</string>
+    <string name="how_to_connect">Como conectarse</string>
+    <string name="send_command">Enviar comando</string>
+    <string name="clear_log">Borrar rexistro</string>
+    <string name="apply_restart">Aplicar e reiniciar</string>
+    <string name="delete_world">Eliminar datos mundiais</string>
+    <string name="delete_world_confirm">Isto eliminará permanentemente o mundo. Estás seguro?</string>
+    <string name="thermal_warning">Aviso: o dispositivo está a sobreenriquecerse; considere deter o servidor</string>
+    <string name="ram_warning">Aviso: RAM baixa detectada: o rendemento pode estar degradado</string>
+    <string name="players_online">Xogadores %1$d/%2$d</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Tempo de actividade: %1$s</string>
+    <string name="announcement_title">Unha nota de PocketCraft</string>
+    <string name="announcement_body">PocketCraft será gratuíto para todos para sempre, pero algunhas funcións están en Pro só para que poidas soportar os custos do noso servidor e os custos de funcionamento da aplicación. Son baratos, e por iso están aí, incluso por máis valor. 
+ 
+ Se queres axudarnos ou só queres falar co equipo, únete ao noso Discord. Encantaríanos contar contigo.</string>
+    <string name="announcement_join_discord">Únete a Discord</string>
+    <string name="announcement_got_it">Entendido</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

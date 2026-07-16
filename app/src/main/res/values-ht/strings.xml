@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Sèvè Kouri</string>
+    <string name="server_stopped">Sèvè sispann</string>
+    <string name="server_starting">Sèvè ap kòmanse...</string>
+    <string name="start_server">Kòmanse sèvè</string>
+    <string name="stop_server">One Stop sèvè</string>
+    <string name="notification_channel_name">Estati sèvè</string>
+    <string name="notification_channel_desc">Montre estati sèvè kouri ak kontwòl yo</string>
+    <string name="tap_to_copy">Tape pou kopye IP</string>
+    <string name="copied">IP kopye nan clipboard</string>
+    <string name="how_to_connect">Ki jan yo konekte</string>
+    <string name="send_command">Voye Kòmandman</string>
+    <string name="clear_log">Klè Log</string>
+    <string name="apply_restart">Aplike &amp; Rekòmanse</string>
+    <string name="delete_world">Efase World Data</string>
+    <string name="delete_world_confirm">Sa a pral pèmanan efase mond lan. Èske w sèten?</string>
+    <string name="thermal_warning">Avètisman: Aparèy la surchof — konsidere kanpe sèvè a</string>
+    <string name="ram_warning">Avètisman: Ba RAM detekte — pèfòmans yo ka degrade</string>
+    <string name="players_online">%1$d/%2$d jwè yo</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Aktivite: %1$s</string>
+    <string name="announcement_title">Yon nòt ki soti nan PocketCraft</string>
+    <string name="announcement_body">PocketCraft pral gratis pou tout tan pou tout moun, men gen kèk karakteristik ki nan Pro jis pou ou ka sipòte depans sèvè nou yo ak depans pou fonksyone aplikasyon an. Yo bon mache, e se poutèt sa yo nan la, ki gen ladan sa pou plis valè. 
+ 
+ Si ou ta renmen ede nou, oswa jis vle pale ak ekip la, rantre nan Discord nou an — nou ta renmen genyen ou.</string>
+    <string name="announcement_join_discord">Antre nan Diskòd</string>
+    <string name="announcement_got_it">Te gen li</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

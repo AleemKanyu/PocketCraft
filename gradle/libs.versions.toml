@@ -1,5 +1,5 @@
 [versions]
-agp = "8.8.0"
+agp = "8.8.1"
 kotlin = "2.0.10"
 ksp = "2.0.10-1.0.24"
 composePlugin = "2.0.10"

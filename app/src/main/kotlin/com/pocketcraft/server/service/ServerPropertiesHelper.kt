@@ -53,6 +53,10 @@ object ServerPropertiesHelper {
             props["spawn-npcs"] = "true"
             props["allow-nether"] = "true"
             props["enable-command-block"] = "true"
+            // Explicitly set spawn-protection so it survives all config re-writes.
+            // Without this, Minecraft's implicit default (16) is used but the key is
+            // never present in server.properties, so the config editor shows it blank.
+            props["spawn-protection"] = "16"
             props["pocketcraft-max-ram-mb"] = "1024"
             props["view-distance"] = DEFAULT_VIEW_DISTANCE.toString()
             props["simulation-distance"] = DEFAULT_SIMULATION_DISTANCE.toString()

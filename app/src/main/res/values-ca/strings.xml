@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Servidor en execució</string>
+    <string name="server_stopped">Servidor aturat</string>
+    <string name="server_starting">S\'està iniciant el servidor...</string>
+    <string name="start_server">Inicieu el servidor</string>
+    <string name="stop_server">Atura el servidor</string>
+    <string name="notification_channel_name">Estat del servidor</string>
+    <string name="notification_channel_desc">Mostra l\'estat d\'execució del servidor i els controls</string>
+    <string name="tap_to_copy">Toqueu per copiar la IP</string>
+    <string name="copied">IP copiada al porta-retalls</string>
+    <string name="how_to_connect">Com connectar-se</string>
+    <string name="send_command">Enviar comanda</string>
+    <string name="clear_log">Esborra el registre</string>
+    <string name="apply_restart">Aplicar i reiniciar</string>
+    <string name="delete_world">Suprimeix les dades mundials</string>
+    <string name="delete_world_confirm">Això esborrarà permanentment el món. N\'estàs segur?</string>
+    <string name="thermal_warning">Avís: el dispositiu s\'està sobreescalfant; considereu aturar el servidor</string>
+    <string name="ram_warning">Avís: S\'ha detectat poca memòria RAM: el rendiment es pot degradar</string>
+    <string name="players_online">Jugadors %1$d/%2$d</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Temps de funcionament: %1$s</string>
+    <string name="announcement_title">Una nota de PocketCraft</string>
+    <string name="announcement_body">PocketCraft serà gratuïta per sempre per a tothom, però algunes funcions estan a Pro només perquè pugueu suportar els costos del nostre servidor i els costos d\'execució de l\'aplicació. Són barats, i per això hi són, inclòs això per més valor. 
+ 
+ Si vols ajudar-nos o només vols xatejar amb l\'equip, uneix-te al nostre Discord; ens agradaria molt tenir-te.</string>
+    <string name="announcement_join_discord">Uneix-te a Discord</string>
+    <string name="announcement_got_it">Entenc</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

@@ -2,6 +2,7 @@ package com.pocketcraft.server.ui.screens
 
 import android.app.Activity
 import android.content.Intent
+import android.content.Context
 import android.net.Uri
 import com.pocketcraft.server.billing.BillingManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -258,6 +259,10 @@ fun SettingsScreen(
     var selectedForDeletion by remember { mutableStateOf<Set<String>>(emptySet()) }
     var isDeletingVersions by remember { mutableStateOf(false) }
     var showThemeMaker by remember { mutableStateOf(false) }
+    var showClearStorageManager by remember { mutableStateOf(false) }
+    var deletableItems by remember { mutableStateOf<List<DeletableItem>>(emptyList()) }
+    var selectedItemsForDeletion by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var isClearingStorage by remember { mutableStateOf(false) }
     var showWidgetThemePicker by remember { mutableStateOf(false) }
     var showPremiumBottomSheet by remember { mutableStateOf(false) }
     var checkingForUpdate by remember { mutableStateOf(false) }
@@ -1060,19 +1065,31 @@ fun SettingsScreen(
                             }
                         }
 
+                        val languageMap = remember {
+                            try {
+                                val jsonStr = context.assets.open("locales/languages.json").bufferedReader().use { it.readText() }
+                                com.google.gson.Gson().fromJson<Map<String, String>>(
+                                    jsonStr,
+                                    object : com.google.gson.reflect.TypeToken<Map<String, String>>() {}.type
+                                ) ?: emptyMap()
+                            } catch (e: Exception) {
+                                mapOf(
+                                    "system" to "System Default",
+                                    "en" to "English (US)",
+                                    "de" to "Deutsch (German)",
+                                    "es" to "Español (Spanish)",
+                                    "ru" to "Русский (Russian)",
+                                    "zh" to "简体中文 (Chinese)"
+                                )
+                            }
+                        }
+
                         SettingsDropdownRow(
                             icon = Icons.Default.Translate,
                             label = activeS.appLanguage,
                             description = activeS.chooseLanguage,
-                            options = listOf("system", "en", "de", "es", "ru", "zh"),
-                            optionLabels = mapOf(
-                                "system" to "System Default",
-                                "en" to "English (US)",
-                                "de" to "Deutsch (German)",
-                                "es" to "Español (Spanish)",
-                                "ru" to "Русский (Russian)",
-                                "zh" to "简体中文 (Chinese)"
-                            ),
+                            options = languageMap.keys.toList(),
+                            optionLabels = languageMap,
                             selected = currentLanguage,
                             onSelected = { selectedLang ->
                                 currentLanguage = selectedLang
@@ -1117,6 +1134,25 @@ fun SettingsScreen(
                                         installedVersions = scanInstalledVersions(context)
                                         selectedForDeletion = emptySet()
                                         showStorageManager = true
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        GameCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Clear App Storage", fontWeight = FontWeight.Bold)
+                                Text("Delete temporary cache, server logs, and inactive temporary files.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                DuoButton(
+                                    text = "CLEAR STORAGE",
+                                    onClick = {
+                                        deletableItems = scanDeletableItems(context)
+                                        selectedItemsForDeletion = emptySet()
+                                        showClearStorageManager = true
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -2181,8 +2217,118 @@ fun SettingsScreen(
             }
         }
     }
-        if (showSignOutConfirm) {
-            android.util.Log.d("POCKETCRAFT_TEST", "Sign Out Dialog block is composed!")
+
+    if (showClearStorageManager) {
+        @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { showClearStorageManager = false },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text("Clear App Storage", fontWeight = FontWeight.ExtraBold, fontFamily = Monocraft, fontSize = 20.sp)
+                
+                if (deletableItems.isEmpty()) {
+                    Text("No clearable storage files found.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Text("Select items to clear:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(deletableItems) { item ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        if (item.id in selectedItemsForDeletion) Color(0xFFFF4757).copy(alpha = 0.1f)
+                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                    )
+                                    .clickable {
+                                        selectedItemsForDeletion = if (item.id in selectedItemsForDeletion)
+                                            selectedItemsForDeletion - item.id
+                                        else
+                                            selectedItemsForDeletion + item.id
+                                    }
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = item.name,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                    Text(
+                                        text = item.description,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = item.sizeLabel,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PocketColors.Primary
+                                    )
+                                }
+                                Checkbox(
+                                    checked = item.id in selectedItemsForDeletion,
+                                    onCheckedChange = { checked ->
+                                        selectedItemsForDeletion = if (checked)
+                                            selectedItemsForDeletion + item.id
+                                        else
+                                            selectedItemsForDeletion - item.id
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = { showClearStorageManager = false }) {
+                        Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (deletableItems.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        DuoButton(
+                            text = if (isClearingStorage) "CLEARING..." else "CLEAR SELECTED",
+                            enabled = selectedItemsForDeletion.isNotEmpty() && !isClearingStorage,
+                            onClick = {
+                                isClearingStorage = true
+                                scope.launch {
+                                    var freedBytes = 0L
+                                    deletableItems.filter { it.id in selectedItemsForDeletion }.forEach { item ->
+                                        freedBytes += item.sizeBytes
+                                        deleteDeletableItem(item)
+                                    }
+                                    deletableItems = scanDeletableItems(context)
+                                    selectedItemsForDeletion = emptySet()
+                                    isClearingStorage = false
+                                    showClearStorageManager = false
+                                    onMessage("Cleared storage, freed ${formatSize(freedBytes)}.")
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showSignOutConfirm) {
+        android.util.Log.d("POCKETCRAFT_TEST", "Sign Out Dialog block is composed!")
             androidx.compose.ui.window.Dialog(
                 onDismissRequest = { 
                     android.util.Log.d("POCKETCRAFT_TEST", "Sign Out Dialog onDismissRequest called")
@@ -3216,4 +3362,147 @@ private fun GoogleGLogo(modifier: Modifier = Modifier) {
             strokeWidth = strokeWidth
         )
     }
+}
+
+data class DeletableItem(
+    val id: String,
+    val name: String,
+    val description: String,
+    val sizeBytes: Long,
+    val sizeLabel: String,
+    val files: List<File>
+)
+
+private fun scanDeletableItems(context: Context): List<DeletableItem> {
+    val items = mutableListOf<DeletableItem>()
+    
+    // 1. App Cache
+    val cacheDir = context.cacheDir
+    val cacheSize = getDirectorySize(cacheDir)
+    if (cacheSize > 0) {
+        items.add(DeletableItem(
+            id = "cache",
+            name = "App Cache",
+            description = "Temporary cache files created during app use",
+            sizeBytes = cacheSize,
+            sizeLabel = formatSize(cacheSize),
+            files = listOf(cacheDir)
+        ))
+    }
+    
+    // 2. Server Temporary Runtime Files
+    val runtimeTmpDir = File(context.filesDir, "runtime-tmp")
+    val runtimeTmpSize = getDirectorySize(runtimeTmpDir)
+    if (runtimeTmpSize > 0) {
+        items.add(DeletableItem(
+            id = "runtime-tmp",
+            name = "JVM Temporary Files",
+            description = "Temporary JVM launch and runtime cache files",
+            sizeBytes = runtimeTmpSize,
+            sizeLabel = formatSize(runtimeTmpSize),
+            files = listOf(runtimeTmpDir)
+        ))
+    }
+
+    // 3. Server Logs
+    val logFiles = mutableListOf<File>()
+    val filesDir = context.filesDir
+    findLogFiles(filesDir, logFiles)
+    val logsSize = logFiles.sumOf { it.length() }
+    if (logsSize > 0) {
+        items.add(DeletableItem(
+            id = "logs",
+            name = "Server Log Files",
+            description = "Server console log history files",
+            sizeBytes = logsSize,
+            sizeLabel = formatSize(logsSize),
+            files = logFiles
+        ))
+    }
+
+    // 4. Crash Reports
+    val crashFiles = mutableListOf<File>()
+    findCrashFiles(filesDir, crashFiles)
+    val crashSize = crashFiles.sumOf { it.length() }
+    if (crashSize > 0) {
+        items.add(DeletableItem(
+            id = "crashes",
+            name = "JVM Crash Reports",
+            description = "Hotspot JVM error reports from previous crashes",
+            sizeBytes = crashSize,
+            sizeLabel = formatSize(crashSize),
+            files = crashFiles
+        ))
+    }
+
+    return items
+}
+
+private fun deleteDeletableItem(item: DeletableItem) {
+    if (item.id == "cache" || item.id == "runtime-tmp") {
+        item.files.forEach { parentDir ->
+            parentDir.listFiles()?.forEach { file ->
+                file.deleteRecursively()
+            }
+        }
+    } else {
+        item.files.forEach { file ->
+            file.delete()
+        }
+    }
+}
+
+private fun getDirectorySize(dir: File): Long {
+    if (!dir.exists()) return 0L
+    if (dir.isFile) return dir.length()
+    var size = 0L
+    val files = dir.listFiles() ?: return 0L
+    for (file in files) {
+        size += if (file.isDirectory) getDirectorySize(file) else file.length()
+    }
+    return size
+}
+
+private fun findLogFiles(dir: File, result: MutableList<File>) {
+    val files = dir.listFiles() ?: return
+    for (file in files) {
+        if (file.isDirectory) {
+            if (file.name == "logs") {
+                addAllFiles(file, result)
+            } else {
+                findLogFiles(file, result)
+            }
+        } else if (file.name.endsWith(".log") && !file.name.startsWith("hs_err_pid")) {
+            result.add(file)
+        }
+    }
+}
+
+private fun findCrashFiles(dir: File, result: MutableList<File>) {
+    val files = dir.listFiles() ?: return
+    for (file in files) {
+        if (file.isDirectory) {
+            findCrashFiles(file, result)
+        } else if (file.name.startsWith("hs_err_pid") && file.name.endsWith(".log")) {
+            result.add(file)
+        }
+    }
+}
+
+private fun addAllFiles(dir: File, result: MutableList<File>) {
+    val files = dir.listFiles() ?: return
+    for (file in files) {
+        if (file.isDirectory) {
+            addAllFiles(file, result)
+        } else {
+            result.add(file)
+        }
+    }
+}
+
+private fun formatSize(bytes: Long): String {
+    if (bytes <= 0) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB")
+    val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt()
+    return String.format("%.2f %s", bytes / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
 }

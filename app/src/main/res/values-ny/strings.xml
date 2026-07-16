@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Kuthamanga kwa Seva</string>
+    <string name="server_stopped">Seva Yayimitsidwa</string>
+    <string name="server_starting">Seva Yoyambira…</string>
+    <string name="start_server">Yambani Seva</string>
+    <string name="stop_server">Imani Seva</string>
+    <string name="notification_channel_name">Mkhalidwe wa Seva</string>
+    <string name="notification_channel_desc">Imawonetsa mawonekedwe a seva ndikuwongolera</string>
+    <string name="tap_to_copy">Dinani kuti mukopere IP</string>
+    <string name="copied">IP idakopera pa bolodi lojambula</string>
+    <string name="how_to_connect">Momwe mungalumikizire</string>
+    <string name="send_command">Tumizani Lamulo</string>
+    <string name="clear_log">Chotsani Chipika</string>
+    <string name="apply_restart">Ikani &amp; Yambitsaninso</string>
+    <string name="delete_world">Chotsani World Data</string>
+    <string name="delete_world_confirm">Izi zichotsa dziko lapansi kwamuyaya. Mukutsimikiza?</string>
+    <string name="thermal_warning">Chenjezo: Chipangizo chikutentha kwambiri - lingalirani kuyimitsa seva</string>
+    <string name="ram_warning">Chenjezo: RAM yotsika yazindikirika - magwiridwe antchito atha kuchepetsedwa</string>
+    <string name="players_online">%1$d/%2$d osewera</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Nthawi yomaliza: %1$s</string>
+    <string name="announcement_title">Ndemanga yochokera ku PocketCraft</string>
+    <string name="announcement_body">PocketCraft ikhala yaulere kwa aliyense kwamuyaya, koma zina zili mu Pro kuti muthe kuthandizira mtengo wa seva yathu komanso mtengo wogwiritsa ntchito pulogalamu. Iwo ndi otchipa, ndi chifukwa chake iwo ali mmenemo, kuphatikizapo kuti mtengo kwambiri. 
+ 
+ Ngati mukufuna kutithandiza, kapena kungofuna kucheza ndi gululi, lowani ku Discord yathu — tikufuna kukhala nanu.</string>
+    <string name="announcement_join_discord">Lowani nawo Discord</string>
+    <string name="announcement_got_it">Mwamva</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

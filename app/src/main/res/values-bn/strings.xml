@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">সার্ভার চলছে</string>
+    <string name="server_stopped">সার্ভার বন্ধ</string>
+    <string name="server_starting">সার্ভার শুরু হচ্ছে...</string>
+    <string name="start_server">স্টার্ট সার্ভার</string>
+    <string name="stop_server">স্টপ সার্ভার</string>
+    <string name="notification_channel_name">সার্ভারের অবস্থা</string>
+    <string name="notification_channel_desc">সার্ভার চলমান অবস্থা এবং নিয়ন্ত্রণ দেখায়</string>
+    <string name="tap_to_copy">আইপি কপি করতে আলতো চাপুন</string>
+    <string name="copied">আইপি ক্লিপবোর্ডে কপি করা হয়েছে</string>
+    <string name="how_to_connect">কিভাবে সংযোগ করবেন</string>
+    <string name="send_command">কমান্ড পাঠান</string>
+    <string name="clear_log">সাফ লগ</string>
+    <string name="apply_restart">আবেদন করুন এবং পুনরায় চালু করুন</string>
+    <string name="delete_world">বিশ্ব ডেটা মুছুন</string>
+    <string name="delete_world_confirm">এটি স্থায়ীভাবে বিশ্বকে মুছে ফেলবে। আপনি কি নিশ্চিত?</string>
+    <string name="thermal_warning">সতর্কতা: ডিভাইস অতিরিক্ত গরম হচ্ছে — সার্ভার বন্ধ করার কথা বিবেচনা করুন</string>
+    <string name="ram_warning">সতর্কতা: কম RAM শনাক্ত হয়েছে — কর্মক্ষমতা অবনমিত হতে পারে</string>
+    <string name="players_online">%1$d/%2$d খেলোয়াড়</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">আপটাইম: %1$s</string>
+    <string name="announcement_title">PocketCraft থেকে একটি নোট</string>
+    <string name="announcement_body">PocketCraft সবার জন্য চিরতরে বিনামূল্যে থাকবে, তবে কিছু বৈশিষ্ট্য প্রো-তে রয়েছে যাতে আপনি আমাদের সার্ভারের খরচ এবং অ্যাপ চালানোর খরচ সমর্থন করতে পারেন। তারা সস্তা, এবং যে কেন তারা সেখানে আছে, আরো মূল্যের জন্য যে সহ. 
+ 
+ আপনি যদি আমাদের সাহায্য করতে চান, বা শুধুমাত্র দলের সাথে চ্যাট করতে চান, আমাদের ডিসকর্ডে যোগ দিন — আমরা আপনাকে পেয়ে খুশি হব।</string>
+    <string name="announcement_join_discord">ডিসকর্ডে যোগ দিন</string>
+    <string name="announcement_got_it">বুঝেছি</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

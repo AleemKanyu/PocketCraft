@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Gukoresha Seriveri</string>
+    <string name="server_stopped">Seriveri Yahagaritswe</string>
+    <string name="server_starting">Seriveri Itangira…</string>
+    <string name="start_server">Tangira Seriveri</string>
+    <string name="stop_server">Hagarika Seriveri</string>
+    <string name="notification_channel_name">Imiterere ya Seriveri</string>
+    <string name="notification_channel_desc">Yerekana seriveri ikora imiterere nubugenzuzi</string>
+    <string name="tap_to_copy">Kanda kuri kopi IP</string>
+    <string name="copied">IP yimuwe kuri clip clip</string>
+    <string name="how_to_connect">Uburyo bwo Guhuza</string>
+    <string name="send_command">Kohereza itegeko</string>
+    <string name="clear_log">Sobanura neza</string>
+    <string name="apply_restart">Saba &amp; Ongera utangire</string>
+    <string name="delete_world">Siba amakuru yisi</string>
+    <string name="delete_world_confirm">Ibi bizasiba burundu isi. Urabyizeye?</string>
+    <string name="thermal_warning">Iburira: Igikoresho kirashyuha - tekereza guhagarika seriveri</string>
+    <string name="ram_warning">Iburira: RAM yagaragaye - imikorere irashobora guteshwa agaciro</string>
+    <string name="players_online">%1$d / __ Abakinnyi ba VARB__</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Igihe gikwiye: %1$s</string>
+    <string name="announcement_title">Inyandiko ya PocketCraft</string>
+    <string name="announcement_body">PocketCraft izaba yubuntu iteka kubantu bose, ariko ibintu bimwe na bimwe biri muri Pro kugirango ubashe gushyigikira ibiciro bya seriveri hamwe nigiciro cyo gukoresha porogaramu. Birahendutse, niyo mpamvu bahari, harimo nibyo kubiciro byinshi. 
+ 
+ Niba wifuza kudufasha, cyangwa ushaka gusa kuganira nikipe, injira muri Discord yacu - twifuza kukugira.</string>
+    <string name="announcement_join_discord">Iyunge</string>
+    <string name="announcement_got_it">Yabonye</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

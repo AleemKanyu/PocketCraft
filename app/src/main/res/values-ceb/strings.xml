@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Nagdagan ang Server</string>
+    <string name="server_stopped">Server Mihunong</string>
+    <string name="server_starting">Nagsugod ang Server…</string>
+    <string name="start_server">Pagsugod sa Server</string>
+    <string name="stop_server">Hunong ang Server</string>
+    <string name="notification_channel_name">Kahimtang sa Server</string>
+    <string name="notification_channel_desc">Nagpakita sa server nga nagdagan nga kahimtang ug mga kontrol</string>
+    <string name="tap_to_copy">I-tap para kopyahon ang IP</string>
+    <string name="copied">IP gikopya sa clipboard</string>
+    <string name="how_to_connect">Giunsa ang Pagkonektar</string>
+    <string name="send_command">Ipadala ang Sugo</string>
+    <string name="clear_log">Tin-aw nga Log</string>
+    <string name="apply_restart">Ibutang ug I-restart</string>
+    <string name="delete_world">Pagtangtang sa Data sa Kalibutan</string>
+    <string name="delete_world_confirm">Kini permanente nga magwagtang sa kalibutan. Sigurado ka?</string>
+    <string name="thermal_warning">Pasidaan: Nag-overheat ang device — ikonsiderar ang pagpahunong sa server</string>
+    <string name="ram_warning">Pasidaan: Ubos nga RAM ang nakita — ang pasundayag mahimong madaot</string>
+    <string name="players_online">%1$d/%2$d magdudula</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Uptime: %1$s</string>
+    <string name="announcement_title">Usa ka nota gikan sa PocketCraft</string>
+    <string name="announcement_body">Ang PocketCraft mahimong libre hangtod sa hangtod alang sa tanan, apan ang pipila nga mga bahin naa sa Pro aron lang masuportahan nimo ang among mga gasto sa server ug gasto sa pagpadagan sa app. Barato sila, ug mao nga naa sila didto, lakip kana alang sa dugang nga kantidad. 
+ 
+ Kung gusto nimo nga tabangan kami, o gusto lang makig-chat sa team, apil sa among Discord — gusto ka namon.</string>
+    <string name="announcement_join_discord">Apil sa Discord</string>
+    <string name="announcement_got_it">Nakuha na</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

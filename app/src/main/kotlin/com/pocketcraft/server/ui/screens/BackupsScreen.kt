@@ -52,6 +52,7 @@ import com.pocketcraft.server.ui.theme.PocketColors
 import kotlinx.coroutines.launch
 
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Layers
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun BackupsScreen(
@@ -61,6 +62,7 @@ fun BackupsScreen(
     val scope = rememberCoroutineScope()
     var restoreTarget by remember { mutableStateOf<BackupEntry?>(null) }
     var deleteTarget by remember { mutableStateOf<BackupEntry?>(null) }
+    var dimensionRestoreTarget by remember { mutableStateOf<BackupEntry?>(null) }
     val animatedBackupProgress by animateFloatAsState(
         targetValue = (stateHolder.backupProgressPercent / 100f).coerceIn(0f, 1f),
         animationSpec = tween(durationMillis = 500),
@@ -80,10 +82,7 @@ fun BackupsScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val result = stateHolder.importBackup(uri)
-            onMessage(result)
-        }
+        stateHolder.startImportBackup(uri) { onMessage(it) }
     }
 
     LazyColumn(
@@ -205,10 +204,7 @@ fun BackupsScreen(
                 text = if (!stateHolder.isBackingUp) "CREATE BACKUP NOW" else "BACKUP IN PROGRESS...",
                 icon = Icons.Filled.CloudUpload,
                 onClick = {
-                    scope.launch {
-                        val result = stateHolder.createBackup()
-                        onMessage(result)
-                    }
+                    stateHolder.startCreateBackup { onMessage(it) }
                 },
                 enabled = !stateHolder.isBackingUp && !stateHolder.isRestoringBackup,
                 modifier = Modifier.fillMaxWidth()
@@ -323,9 +319,7 @@ fun BackupsScreen(
                             }
                             IconButton(
                                 onClick = {
-                                    scope.launch {
-                                        onMessage(stateHolder.downloadBackup(backup))
-                                    }
+                                    stateHolder.startDownloadBackup(backup) { onMessage(it) }
                                 },
                                 enabled = !stateHolder.isBackingUp && !stateHolder.isRestoringBackup && !stateHolder.isDownloadingBackup
                             ) {
@@ -375,17 +369,44 @@ fun BackupsScreen(
                     text = "This will restore the full server snapshot from ${target.name}. Current worlds, plugins, mods, packs, and configs will be replaced.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                // Full restore
                 TextButton(
                     onClick = {
                         scope.launch {
-                            onMessage(stateHolder.restoreBackup(target))
                             restoreSheetState.hide()
                             restoreTarget = null
+                            stateHolder.startRestoreBackup(target) { onMessage(it) }
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Restore")
+                    Text("Restore Everything")
+                }
+                // Dimensions-only restore
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            restoreSheetState.hide()
+                            restoreTarget = null
+                            stateHolder.startRestoreDimensionsOnly(target) { onMessage(it) }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    androidx.compose.foundation.layout.Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Layers,
+                            contentDescription = null,
+                            tint = PocketColors.PrimaryDark
+                        )
+                        Text(
+                            text = "Restore Nether & End Only",
+                            color = PocketColors.PrimaryDark
+                        )
+                    }
                 }
                 TextButton(
                     onClick = {

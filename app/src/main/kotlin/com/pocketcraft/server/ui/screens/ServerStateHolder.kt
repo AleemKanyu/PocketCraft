@@ -119,6 +119,21 @@ class ServerStateHolder(
             "hosted on Pocketcraft"
         private const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/7xw3Rd2vs2"
         private const val MAX_REALISTIC_WIFI_PING_MS = 5_000
+
+        val applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        
+        val isBackingUpState = mutableStateOf(false)
+        val backupProgressPercentState = mutableStateOf(0)
+        val backupStatusMessageState = mutableStateOf("")
+        val backupSaveLocationState = mutableStateOf("")
+
+        val isRestoringBackupState = mutableStateOf(false)
+        val restoreProgressPercentState = mutableStateOf(0)
+        val restoreStatusMessageState = mutableStateOf("")
+
+        val isDownloadingBackupState = mutableStateOf(false)
+        val downloadBackupProgressPercentState = mutableStateOf(0)
+        val downloadBackupStatusMessageState = mutableStateOf("")
     }
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -306,28 +321,98 @@ class ServerStateHolder(
             _isStopping.value = value
             notifyStateChanged()
         }
-    var isBackingUp by mutableStateOf(false)
-        private set
-    var backupProgressPercent by mutableStateOf(0)
-        private set
-    var backupStatusMessage by mutableStateOf("")
-        private set
-    var backupSaveLocation by mutableStateOf("")
-        private set
+    var isBackingUp: Boolean
+        get() = isBackingUpState.value
+        private set(value) { isBackingUpState.value = value }
+    var backupProgressPercent: Int
+        get() = backupProgressPercentState.value
+        private set(value) { backupProgressPercentState.value = value }
+    var backupStatusMessage: String
+        get() = backupStatusMessageState.value
+        private set(value) { backupStatusMessageState.value = value }
+    var backupSaveLocation: String
+        get() = backupSaveLocationState.value
+        private set(value) { backupSaveLocationState.value = value }
     var activeWorldNeedsSetup by mutableStateOf(false)
         private set
-    var isRestoringBackup by mutableStateOf(false)
-        private set
-    var restoreProgressPercent by mutableStateOf(0)
-        private set
-    var restoreStatusMessage by mutableStateOf("")
-        private set
-    var isDownloadingBackup by mutableStateOf(false)
-        private set
-    var downloadBackupProgressPercent by mutableStateOf(0)
-        private set
-    var downloadBackupStatusMessage by mutableStateOf("")
-        private set
+    var isRestoringBackup: Boolean
+        get() = isRestoringBackupState.value
+        private set(value) { isRestoringBackupState.value = value }
+    var restoreProgressPercent: Int
+        get() = restoreProgressPercentState.value
+        private set(value) { restoreProgressPercentState.value = value }
+    var restoreStatusMessage: String
+        get() = restoreStatusMessageState.value
+        private set(value) { restoreStatusMessageState.value = value }
+    var isDownloadingBackup: Boolean
+        get() = isDownloadingBackupState.value
+        private set(value) { isDownloadingBackupState.value = value }
+    var downloadBackupProgressPercent: Int
+        get() = downloadBackupProgressPercentState.value
+        private set(value) { downloadBackupProgressPercentState.value = value }
+    var downloadBackupStatusMessage: String
+        get() = downloadBackupStatusMessageState.value
+        private set(value) { downloadBackupStatusMessageState.value = value }
+
+    fun startCreateBackup(onResult: (String) -> Unit = {}) {
+        applicationScope.launch {
+            val result = createBackup()
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(appContext, result, android.widget.Toast.LENGTH_LONG).show()
+                onResult(result)
+            }
+        }
+    }
+
+    fun startImportBackup(uri: android.net.Uri, onResult: (String) -> Unit = {}) {
+        applicationScope.launch {
+            val result = importBackup(uri)
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(appContext, result, android.widget.Toast.LENGTH_LONG).show()
+                onResult(result)
+            }
+        }
+    }
+
+    fun startRestoreBackup(backup: BackupEntry, onResult: (String) -> Unit = {}) {
+        applicationScope.launch {
+            val result = restoreBackup(backup)
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(appContext, result, android.widget.Toast.LENGTH_LONG).show()
+                onResult(result)
+            }
+        }
+    }
+
+    fun startRestoreOverworldOnly(backup: BackupEntry, onResult: (String) -> Unit = {}) {
+        applicationScope.launch {
+            val result = restoreOverworldOnly(backup)
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(appContext, result, android.widget.Toast.LENGTH_LONG).show()
+                onResult(result)
+            }
+        }
+    }
+
+    fun startRestoreDimensionsOnly(backup: BackupEntry, onResult: (String) -> Unit = {}) {
+        applicationScope.launch {
+            val result = restoreDimensionsOnly(backup)
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(appContext, result, android.widget.Toast.LENGTH_LONG).show()
+                onResult(result)
+            }
+        }
+    }
+
+    fun startDownloadBackup(backup: BackupEntry, onResult: (String) -> Unit = {}) {
+        applicationScope.launch {
+            val result = downloadBackup(backup)
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(appContext, result, android.widget.Toast.LENGTH_LONG).show()
+                onResult(result)
+            }
+        }
+    }
     var startupProgressPercent by mutableStateOf(0)
         private set
     var startupStatusMessage by mutableStateOf("")
@@ -568,7 +653,7 @@ class ServerStateHolder(
 
                         val appPrefs = com.pocketcraft.server.data.preferences.AppPreferences(appContext)
                         if (appPrefs.autoBackupOnStop && !shouldRestart) {
-                            scope.launch(Dispatchers.IO) {
+                            applicationScope.launch {
                                 appendLog("[PocketCraft] Triggering automated backup on stop...")
                                 val msg = createBackup()
                                 appendLog("[PocketCraft] Auto Backup: $msg")
@@ -818,6 +903,12 @@ class ServerStateHolder(
     }
 
     fun startServer(isRestart: Boolean = false) {
+        if (isBackingUp || isRestoringBackup || isDownloadingBackup) {
+            val msg = "Cannot start server while a backup, restore, or download is in progress."
+            appendLog("[ERROR] $msg")
+            recordServerFailure(msg, duringStartup = true)
+            return
+        }
         if (versionId.isBlank()) {
             val reason = "No server version is selected."
             appendLog("[ERROR] $reason")
@@ -2191,8 +2282,8 @@ class ServerStateHolder(
     }
 
     suspend fun setActiveWorld(worldName: String, syncPluginProfiles: Boolean = true): String = withContext(Dispatchers.IO) {
-        if (isRunning || isStarting || isStopping) {
-            return@withContext "Stop the server before switching worlds."
+        if (isRunning || isStarting || isStopping || isBackingUp || isRestoringBackup || isDownloadingBackup) {
+            return@withContext "Stop active server or backup operations before switching worlds."
         }
 
         val normalized = sanitizeWorldName(worldName)
@@ -2266,8 +2357,8 @@ class ServerStateHolder(
     }
 
     suspend fun createWorld(worldName: String): String = withContext(Dispatchers.IO) {
-        if (isRunning || isStarting || isStopping) {
-            return@withContext "Stop the server before creating a world."
+        if (isRunning || isStarting || isStopping || isBackingUp || isRestoringBackup || isDownloadingBackup) {
+            return@withContext "Stop active server or backup operations before creating a world."
         }
 
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(appContext)
@@ -2338,8 +2429,8 @@ class ServerStateHolder(
             ?: return@withContext "$worldName was not found."
 
         val currentActive = activeWorld.ifBlank { "world" }
-        if ((isRunning || isStarting || isStopping) && currentActive.equals(match, ignoreCase = true)) {
-            return@withContext "Stop the server before deleting the active world."
+        if ((isRunning || isStarting || isStopping || isBackingUp || isRestoringBackup || isDownloadingBackup) && currentActive.equals(match, ignoreCase = true)) {
+            return@withContext "Stop active server or backup operations before deleting the active world."
         }
         val remainingWorlds = knownWorlds.filterNot { it.equals(match, ignoreCase = true) }
         val nextActive = if (currentActive.equals(match, ignoreCase = true)) {
@@ -2417,6 +2508,11 @@ class ServerStateHolder(
             val entries = collectBackupEntries()
             val fileEntries = entries.filterNot { it.isDirectory }
             if (fileEntries.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    isBackingUp = false
+                    backupProgressPercent = 0
+                    backupStatusMessage = ""
+                }
                 return@withContext "No server files found to back up."
             }
 
@@ -2649,6 +2745,11 @@ class ServerStateHolder(
             java.util.zip.ZipFile(entry.file).use { zip ->
                 val totalEntries = zip.size()
                 if (totalEntries == 0) {
+                    withContext(Dispatchers.Main) {
+                        isRestoringBackup = false
+                        restoreProgressPercent = 0
+                        restoreStatusMessage = ""
+                    }
                     return@withContext "Backup is empty."
                 }
                 clearServerDirectoryForRestore()
@@ -3272,8 +3373,8 @@ class ServerStateHolder(
         deleteDatapacks: Boolean,
         deleteLogs: Boolean
     ): String = withContext(Dispatchers.IO) {
-        if (isRunning || isStarting) {
-            return@withContext "Stop the server before resetting the world."
+        if (isRunning || isStarting || isStopping || isBackingUp || isRestoringBackup || isDownloadingBackup) {
+            return@withContext "Stop the server or finish active backup operations before resetting the world."
         }
         val activeWorldCopy = sanitizeWorldName(activeWorld.ifBlank { "world" })
         val targetServerDir = ServerFileManager.getServerDirNoCreate(appContext, activeWorldCopy)
@@ -4679,7 +4780,7 @@ class ServerStateHolder(
         scanDir(privateFiles, 0)
         
         return filesList
-            .distinctBy { it.absolutePath }
+            .distinctBy { runCatching { it.canonicalPath }.getOrDefault(it.absolutePath) }
             .sortedByDescending { it.lastModified() }
             .map { file ->
                 BackupEntry(

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Servidor em execução</string>
+    <string name="server_stopped">Servidor parado</string>
+    <string name="server_starting">Servidor iniciando…</string>
+    <string name="start_server">Iniciar servidor</string>
+    <string name="stop_server">Parar servidor</string>
+    <string name="notification_channel_name">Status do servidor</string>
+    <string name="notification_channel_desc">Mostra o status e controles de execução do servidor</string>
+    <string name="tap_to_copy">Toque para copiar IP</string>
+    <string name="copied">IP copiado para a área de transferência</string>
+    <string name="how_to_connect">Como conectar</string>
+    <string name="send_command">Enviar comando</string>
+    <string name="clear_log">Limpar registro</string>
+    <string name="apply_restart">Aplicar e reiniciar</string>
+    <string name="delete_world">Excluir dados mundiais</string>
+    <string name="delete_world_confirm">Isso excluirá permanentemente o mundo. Tem certeza?</string>
+    <string name="thermal_warning">Aviso: o dispositivo está superaquecendo - considere parar o servidor</string>
+    <string name="ram_warning">Aviso: RAM baixa detectada - o desempenho pode ser degradado</string>
+    <string name="players_online">Jogadores %1$d/%2$d</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Tempo de atividade: %1$s</string>
+    <string name="announcement_title">Uma nota de PocketCraft</string>
+    <string name="announcement_body">PocketCraft será gratuito para sempre para todos, mas alguns recursos estão no Pro apenas para que você possa suportar nossos custos de servidor e de execução de aplicativos. Eles são baratos e é por isso que estão lá, inclusive por mais valor. 
+ 
+ Se você quiser nos ajudar ou apenas quiser bater um papo com a equipe, junte-se ao nosso Discord - adoraríamos receber você.</string>
+    <string name="announcement_join_discord">Junte-se ao Discord</string>
+    <string name="announcement_got_it">Entendi</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

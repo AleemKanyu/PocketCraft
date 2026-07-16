@@ -564,6 +564,37 @@ object DriveBackupManager {
         }.getOrDefault(false)
     }
 
+    suspend fun listAllCloudBackups(
+        context: Context,
+        account: GoogleSignInAccount
+    ): List<RemoteDriveBackup> = withContext(Dispatchers.IO) {
+        val token = accessToken(context, account)
+        val query = "trashed = false and name contains '.zip'"
+        val url = buildString {
+            append("https://www.googleapis.com/drive/v3/files")
+            append("?spaces=")
+            append(URLEncoder.encode("appDataFolder", "UTF-8"))
+            append("&q=")
+            append(URLEncoder.encode(query, "UTF-8"))
+            append("&orderBy=")
+            append(URLEncoder.encode("modifiedTime desc", "UTF-8"))
+            append("&fields=")
+            append(URLEncoder.encode("files(id,name,modifiedTime)", "UTF-8"))
+        }
+        val connection = openConnection(url = url, method = "GET", token = token)
+        val body = readResponseBody(connection)
+        ensureSuccess(connection, body, "list all cloud backups")
+        val files = org.json.JSONObject(body).optJSONArray("files") ?: org.json.JSONArray()
+        return@withContext List(files.length()) { index ->
+            val item = files.getJSONObject(index)
+            RemoteDriveBackup(
+                id = item.optString("id"),
+                name = item.optString("name"),
+                modifiedTime = item.optString("modifiedTime").ifBlank { null }
+            )
+        }
+    }
+
     private suspend fun <T> com.google.android.gms.tasks.Task<T>.awaitTask(): T = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
         addOnSuccessListener { result ->
             if (continuation.isActive) continuation.resume(result)

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">סערווירער פליסנדיק</string>
+    <string name="server_stopped">סערווירער סטאַפּט</string>
+    <string name="server_starting">סערווירער סטאַרטינג ...</string>
+    <string name="start_server">אָנהייב סערווירער</string>
+    <string name="stop_server">האַלטן סערווירער</string>
+    <string name="notification_channel_name">סערווירער סטאַטוס</string>
+    <string name="notification_channel_desc">שאָוז סערווירער פליסנדיק סטאַטוס און קאָנטראָלס</string>
+    <string name="tap_to_copy">צאַפּן צו נאָכמאַכן IP</string>
+    <string name="copied">IP קאַפּיד צו קליפּבאָרד</string>
+    <string name="how_to_connect">ווי צו פאַרבינדן</string>
+    <string name="send_command">שיקן באַפֿעל</string>
+    <string name="clear_log">קלאָר קלאָץ</string>
+    <string name="apply_restart">צולייגן &amp; ריסטאַרט</string>
+    <string name="delete_world">ויסמעקן וועלט דאַטן</string>
+    <string name="delete_world_confirm">דאָס וועט שטענדיק ויסמעקן די וועלט. ביסטו זיכער?</string>
+    <string name="thermal_warning">ווארענונג: די מיטל איז אָוווערכיטינג - באַטראַכטן סטאָפּפּינג די סערווער</string>
+    <string name="ram_warning">ווארענונג: נידעריק באַראַן דיטעקטאַד - פאָרשטעלונג קען זיין דיגריידיד</string>
+    <string name="players_online">%1$d/%2$d פּלייַערס</string>
+    <string name="tps_label">טפּס: %1$.1f</string>
+    <string name="uptime_label">ופּטימע: %1$s</string>
+    <string name="announcement_title">א צעטל פון PocketCraft</string>
+    <string name="announcement_body">PocketCraft וועט זיין פריי אויף אייביק פֿאַר אַלעמען, אָבער עטלעכע פֿעיִקייטן זענען אין פּראָ נאָר אַזוי איר קענען שטיצן אונדזער סערווער קאָס און אַפּ פליסנדיק קאָס. זיי זענען ביליק, און אַז ס וואָס זיי זענען דאָרט, אַרייַנגערעכנט אַז פֿאַר מער ווערט. 
+ 
+ אויב איר ווילט העלפֿן אונדז, אָדער נאָר ווילן צו שמועסן מיט די מאַנשאַפֿט, פאַרבינדן אונדזער דיסקאָרד - מיר וואָלט ווי צו האָבן איר.</string>
+    <string name="announcement_join_discord">פאַרבינדן דיסקאָרד</string>
+    <string name="announcement_got_it">פארשטאנען</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

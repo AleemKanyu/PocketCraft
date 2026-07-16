@@ -302,6 +302,27 @@ object WorldImporter {
             it.deleteRecursively()
         }
 
+        // Post-import dimension folder structure normalization for Spigot/Paper style
+        if (!isVanillaStyle) {
+            val netherDir = File(serverDir, "${targetWorld}_nether")
+            val endDir = File(serverDir, "${targetWorld}_the_end")
+
+            val nestedNetherInRoot = File(targetRoot, "DIM-1")
+            if (nestedNetherInRoot.exists() && nestedNetherInRoot.isDirectory) {
+                if (!netherDir.exists()) netherDir.mkdirs()
+                val targetNested = File(netherDir, "DIM-1")
+                nestedNetherInRoot.renameTo(targetNested)
+            }
+
+            val nestedEndInRoot = File(targetRoot, "DIM1")
+            if (nestedEndInRoot.exists() && nestedEndInRoot.isDirectory) {
+                if (!endDir.exists()) endDir.mkdirs()
+                val targetNested = File(endDir, "DIM1")
+                nestedEndInRoot.renameTo(targetNested)
+            }
+
+        }
+
         ensureRestoredServerProperties(serverDir, targetWorld)
     }
 
@@ -321,6 +342,7 @@ object WorldImporter {
             lowerSource == "dim-1" ||
             lowerSource == "nether" ||
             lowerSource == "world_nether" ||
+            lowerSource.endsWith("_nether") ||
             lowerSource == "${importedBaseWorldName.lowercase()}_nether"
         ) {
             return if (isVanillaStyle) "DIM-1" else "${targetBaseWorldName}_nether"
@@ -332,6 +354,8 @@ object WorldImporter {
             lowerSource == "the_end" ||
             lowerSource == "end" ||
             lowerSource == "world_the_end" ||
+            lowerSource.endsWith("_the_end") ||
+            lowerSource.endsWith("_end") ||
             lowerSource == "${importedBaseWorldName.lowercase()}_the_end"
         ) {
             return if (isVanillaStyle) "DIM1" else "${targetBaseWorldName}_the_end"

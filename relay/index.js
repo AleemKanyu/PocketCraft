@@ -30,12 +30,12 @@ function getPublicHost(req) {
 
 const PORT_POOL_START = 25500;
 const PORT_POOL_END = 35500;
-const PLAYER_WAIT_TIMEOUT_MS = 30_000;
-const SOCKET_KEEPALIVE_MS = 10_000;
+const PLAYER_WAIT_TIMEOUT_MS = 10_000;
+const SOCKET_KEEPALIVE_MS = 5_000;
 const PHONE_POOL_IDLE_TIMEOUT_MS = 8 * 60_000;
 const CLEANUP_INTERVAL_MS = 30_000;
 const BEDROCK_CLIENT_TTL_MS = 60_000;
-const MAX_PHONE_POOL_SIZE = 20;
+const MAX_PHONE_POOL_SIZE = 30;
 const MAX_PENDING_PLAYERS = 50;
 const MAX_UDP_PAYLOAD = 65535;
 const PHONE_POOL_IDLE_JITTER_MS = 60_000;
@@ -44,10 +44,13 @@ const REGISTER_RATE_LIMIT = 10;
 const STALE_TUNNEL_TIMEOUT_MS = 2 * 60_000;
 const MAX_USER_ID_LENGTH = 128;
 const VALID_USER_ID_RE = /^[a-zA-Z0-9_-]+$/;
-const STREAM_HIGH_WATER_MARK = 128 * 1024;
+// Reduced from 128KB: smaller HWM means Node.js fires data events sooner,
+// reducing buffer-induced latency for small packets (keepalives, pings).
+const STREAM_HIGH_WATER_MARK = 16 * 1024;
 const RELAY_SECRET = process.env.RELAY_SECRET || '';
 const APP_RELAY_SECRET = 'e7f5fbdda85c265419e519454f8d54643930116b89a1b58dcb2b86f91889d3d3';
 const PUBLIC_IP_ENV = process.env.PUBLIC_IP || '';
+const DEBUG_NETWORK = process.env.POCKETCRAFT_DEBUG_NETWORK === '1';
 
 let RESOLVED_PUBLIC_IPV4 = null;
 
@@ -56,6 +59,25 @@ let RESOLVED_PUBLIC_IPV4 = null;
 const activeTunnels = new Map();
 const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
 eventLoopDelay.enable();
+const logThrottleState = new Map();
+
+function logWithThrottle(key, intervalMs, messageFactory) {
+  const now = Date.now();
+  const last = logThrottleState.get(key) || 0;
+  if ((now - last) < intervalMs) return;
+  logThrottleState.set(key, now);
+  console.log(messageFactory());
+}
+
+function debugLog(messageFactory) {
+  if (!DEBUG_NETWORK) return;
+  console.log(messageFactory());
+}
+
+function markTunnelActivity(tunnel) {
+  if (!tunnel) return;
+  tunnel.lastActivityAt = Date.now();
+}
 
 // Bedrock per-user state
 
@@ -66,7 +88,7 @@ const bedrockClientMap = new Map();
 // Socket helpers
 
 function configureSocket(socket) {
-  socket.setNoDelay(true);
+  socket.setNoDelay(true);           // Disable Nagle — send each packet immediately
   socket.setKeepAlive(true, SOCKET_KEEPALIVE_MS);
   socket.allowHalfOpen = false;
   socket.setTimeout(0);
@@ -146,7 +168,7 @@ function refreshPublicIpv4() {
   });
 }
 
-function writeRakNetAddress(buf, offset, ip, port) {
+function writeRakNetAddress(buf, offset, ip, port, invert = false) {
   if (!Buffer.isBuffer(buf)) return false;
   if (!isValidIPv4(ip)) return false;
   if (!isValidUdpPort(port)) return false;
@@ -154,10 +176,10 @@ function writeRakNetAddress(buf, offset, ip, port) {
 
   const parts = ip.split('.').map((x) => Number(x));
   buf[offset] = 0x04;
-  buf[offset + 1] = 0xFF - parts[0];
-  buf[offset + 2] = 0xFF - parts[1];
-  buf[offset + 3] = 0xFF - parts[2];
-  buf[offset + 4] = 0xFF - parts[3];
+  buf[offset + 1] = invert ? (0xFF - parts[0]) : parts[0];
+  buf[offset + 2] = invert ? (0xFF - parts[1]) : parts[1];
+  buf[offset + 3] = invert ? (0xFF - parts[2]) : parts[2];
+  buf[offset + 4] = invert ? (0xFF - parts[3]) : parts[3];
   buf.writeUInt16BE(port, offset + 5);
   return true;
 }
@@ -223,14 +245,18 @@ function encapsulatedHeaderLength(flags, buf, offset) {
 function rewriteOpenConnectionReply1Packet(packet) {
   if (!Buffer.isBuffer(packet) || packet.length < 20) return packet;
   if (packet.readUInt8(0) !== 0x06) return packet;
-  console.log(`[bedrock] OpenConnectionReply1 hex: ${packet.toString('hex')} len=${packet.length}`);
+  logWithThrottle('bedrock:open-conn-reply1', 60_000, () =>
+    `[bedrock] OpenConnectionReply1 len=${packet.length}`
+  );
   const out = Buffer.from(packet);
 
   // MTU is always the last 2 bytes of OpenConnectionReply1 (at packet.length - 2)
   const mtuOffset = out.length - 2;
   if (mtuOffset >= 0) {
     const negotiatedMtu = out.readUInt16BE(mtuOffset);
-    console.log(`[bedrock] Found OpenConnectionReply1 MTU at offset ${mtuOffset}: ${negotiatedMtu}`);
+    logWithThrottle('bedrock:open-conn-reply1-mtu', 60_000, () =>
+      `[bedrock] OpenConnectionReply1 MTU offset=${mtuOffset} value=${negotiatedMtu}`
+    );
     if (negotiatedMtu > 1200) {
       console.log(`[bedrock] Rewriting OpenConnectionReply1 MTU from ${negotiatedMtu} to 1200`);
       out.writeUInt16BE(1200, mtuOffset);
@@ -244,12 +270,14 @@ function rewriteOpenConnectionReply2Packet(packet, clientIp, clientPort) {
   if (!Buffer.isBuffer(packet) || packet.length < 28) return packet;
   if (packet.readUInt8(0) !== 0x08) return packet;
 
-  console.log(`[bedrock] OpenConnectionReply2 hex: ${packet.toString('hex')} len=${packet.length}`);
+  logWithThrottle('bedrock:open-conn-reply2', 60_000, () =>
+    `[bedrock] OpenConnectionReply2 len=${packet.length}`
+  );
   const out = Buffer.from(packet);
 
   // Rewrite client address if found
   const addressOffset = 1 + 16 + 8; // 25
-  if (out[addressOffset] === 0x04 && writeRakNetAddress(out, addressOffset, clientIp, clientPort)) {
+  if (out[addressOffset] === 0x04 && writeRakNetAddress(out, addressOffset, clientIp, clientPort, false)) {
     console.log(`[bedrock] Rewrote OpenConnectionReply2 client address to ${clientIp}:${clientPort}`);
   }
 
@@ -257,7 +285,9 @@ function rewriteOpenConnectionReply2Packet(packet, clientIp, clientPort) {
   const mtuOffset = out.length - 3;
   if (mtuOffset >= 0) {
     const currentMtu = out.readUInt16BE(mtuOffset);
-    console.log(`[bedrock] Found OpenConnectionReply2 MTU at offset ${mtuOffset}: ${currentMtu}`);
+    logWithThrottle('bedrock:open-conn-reply2-mtu', 60_000, () =>
+      `[bedrock] OpenConnectionReply2 MTU offset=${mtuOffset} value=${currentMtu}`
+    );
     if (currentMtu > 1200) {
       console.log(`[bedrock] Rewriting OpenConnectionReply2 MTU from ${currentMtu} to 1200`);
       out.writeUInt16BE(1200, mtuOffset);
@@ -275,7 +305,7 @@ function rewriteNewIncomingConnectionPacket(packet, publicIp, relayPort, clientI
   // Geyser sees the Android bridge as 127.0.0.1, so rewrite clientAddress
   // to the real remote Bedrock client endpoint and internal slots to the relay.
   const clientAddrFamily = out[1];
-  const rewroteClient = clientAddrFamily === 0x04 && writeRakNetAddress(out, 1, clientIp, clientPort);
+  const rewroteClient = clientAddrFamily === 0x04 && writeRakNetAddress(out, 1, clientIp, clientPort, false);
   let rewriteCount = 0;
   let offset = 1 + rakNetAddressByteLength(clientAddrFamily) + 2;
 
@@ -283,7 +313,7 @@ function rewriteNewIncomingConnectionPacket(packet, publicIp, relayPort, clientI
     const family = out[offset];
     const addrLen = rakNetAddressByteLength(family);
     if (!addrLen || (offset + addrLen) > out.length) break;
-    if (family === 0x04 && writeRakNetAddress(out, offset, publicIp, relayPort)) {
+    if (family === 0x04 && writeRakNetAddress(out, offset, publicIp, relayPort, false)) {
       rewriteCount++;
     }
     offset += addrLen;
@@ -356,7 +386,7 @@ function rewriteClientNewIncomingConnection(payload, localGeyserIp = '127.0.0.1'
 
     if (byteLength > 0 && out[payloadOffset] === 0x13) {
       if (payloadOffset + 8 <= out.length && out[payloadOffset + 1] === 0x04) {
-        if (writeRakNetAddress(out, payloadOffset + 1, localGeyserIp, localGeyserPort)) {
+        if (writeRakNetAddress(out, payloadOffset + 1, localGeyserIp, localGeyserPort, true)) {
           rewrote = true;
         }
       } else if (payloadOffset + 30 <= out.length && out[payloadOffset + 1] === 0x06) {
@@ -456,6 +486,7 @@ function parseBedrockResponseFrame(data) {
 
 function handlePhoneFrameData(userId, data) {
   if (!data || data.length < 1) return false;
+  markTunnelActivity(activeTunnels.get(userId));
 
   let buffer = data;
   let handledAny = false;
@@ -516,7 +547,7 @@ function handlePhoneFrameData(userId, data) {
     // Only log the first few packets to avoid console.log blocking the event loop and causing high ping
     if (!global.udpSendCount) global.udpSendCount = 0;
     global.udpSendCount++;
-    if (global.udpSendCount <= 20 || global.udpSendCount % 500 === 0) {
+    if (DEBUG_NETWORK && (global.udpSendCount <= 20 || global.udpSendCount % 500 === 0)) {
       console.log(`[bedrock] Sending UDP to client ${parsed.ip}:${parsed.port} len=${rewrittenPayload.length} (#${global.udpSendCount})`);
     }
 
@@ -786,6 +817,8 @@ function startUserUdpSocket(userId, assignedPort, getPhoneSocket) {
   const { buildPong, getMotd, isRakNetPing } = require('./bedrock-ping');
 
   udpSock.on('message', (msg, rinfo) => {
+    markTunnelActivity(activeTunnels.get(userId));
+
     if (isRakNetPing(msg)) {
       try {
         const motd = getMotd(assignedPort);
@@ -808,18 +841,16 @@ function startUserUdpSocket(userId, assignedPort, getPhoneSocket) {
     // to negotiate a safe 1200 byte MTU, avoiding IP fragmentation later.
     let payload = msg;
     if (msg[0] === 0x05 && msg.length > 1200) {
-      console.log(`[bedrock] Clamping inbound OpenConnectionRequest1 MTU padding from ${msg.length} to 1200 for ${userId}`);
+      debugLog(() => `[bedrock] Clamping inbound OpenConnectionRequest1 MTU padding from ${msg.length} to 1200 for ${userId}`);
       payload = msg.subarray(0, 1200);
     } else if (msg[0] === 0x07 && msg.length >= 34) {
-      console.log(`[bedrock] OpenConnectionRequest2 hex: ${msg.toString('hex')} len=${msg.length}`);
-
       // MTU is always the 2 bytes right before the final 8-byte client GUID (at msg.length - 10)
       const mtuOffset = msg.length - 10;
       if (mtuOffset >= 0) {
         const clientMtu = msg.readUInt16BE(mtuOffset);
-        console.log(`[bedrock] Found OpenConnectionRequest2 MTU at offset ${mtuOffset}: ${clientMtu}`);
+        debugLog(() => `[bedrock] Found OpenConnectionRequest2 MTU at offset ${mtuOffset}: ${clientMtu}`);
         if (clientMtu > 1200) {
-          console.log(`[bedrock] Rewriting inbound OpenConnectionRequest2 MTU from ${clientMtu} to 1200 for ${userId}`);
+          debugLog(() => `[bedrock] Rewriting inbound OpenConnectionRequest2 MTU from ${clientMtu} to 1200 for ${userId}`);
           msg.writeUInt16BE(1200, mtuOffset);
         }
       }
@@ -962,6 +993,7 @@ app.post('/register', (req, res) => {
     bedrockBuffer: Buffer.alloc(0),
     staleCycles: 0,
     lastReadyAt: 0,
+    lastActivityAt: Date.now(),
     createdAt: Date.now(),
   };
 
@@ -970,6 +1002,7 @@ app.post('/register', (req, res) => {
     highWaterMark: STREAM_HIGH_WATER_MARK,
   }, (playerSocket) => {
     configureSocket(playerSocket);
+    markTunnelActivity(tunnel);
 
     playerSocket.once('data', (chunk) => {
       if (handleJavaPing(playerSocket, chunk, tunnel.port)) return;
@@ -1021,6 +1054,7 @@ app.post(['/phone-ready', '/phone_ready', '/ready', '/phoneReady'], (req, res) =
       bedrockBuffer: Buffer.alloc(0),
       staleCycles: 0,
       lastReadyAt: 0,
+      lastActivityAt: Date.now(),
       createdAt: Date.now(),
     };
 
@@ -1029,6 +1063,7 @@ app.post(['/phone-ready', '/phone_ready', '/ready', '/phoneReady'], (req, res) =
       highWaterMark: STREAM_HIGH_WATER_MARK,
     }, (playerSocket) => {
       configureSocket(playerSocket);
+      markTunnelActivity(tunnel);
 
       playerSocket.once('data', (chunk) => {
         if (handleJavaPing(playerSocket, chunk, tunnel.port)) return;
@@ -1063,6 +1098,7 @@ app.post(['/phone-ready', '/phone_ready', '/ready', '/phoneReady'], (req, res) =
   }
 
   tunnel.lastReadyAt = Date.now();
+  markTunnelActivity(tunnel);
   return res.json({ ok: true, tunnelExists: true, ip: getPublicHost(req), port: tunnel.port });
 });
 
@@ -1266,6 +1302,7 @@ const phoneServer = net.createServer({
 
     const poolEntry = { socket: phoneSocket };
     tunnel.phoneSocketPool.push(poolEntry);
+    markTunnelActivity(tunnel);
     console.log(`[relay] Phone socket registered for ${userId}, pool=${tunnel.phoneSocketPool.length}`);
 
     const removeFromPool = (src) => {
@@ -1320,13 +1357,19 @@ setInterval(() => {
     const hasBedrockSocket = !!(t.bedrockPhoneSocket && !t.bedrockPhoneSocket.destroyed);
     const hasUdp = userUdpSockets.has(userId);
     const isStale = t.lastReadyAt > 0
-      ? (Date.now() - t.lastReadyAt) >= STALE_TUNNEL_TIMEOUT_MS
-      : (Date.now() - t.createdAt) >= STALE_TUNNEL_TIMEOUT_MS;
+      ? (Date.now() - Math.max(t.lastReadyAt, t.lastActivityAt || 0)) >= STALE_TUNNEL_TIMEOUT_MS
+      : (Date.now() - Math.max(t.createdAt, t.lastActivityAt || 0)) >= STALE_TUNNEL_TIMEOUT_MS;
 
     if (isStale) {
-      console.warn(`[cleanup] Closing stale tunnel for ${userId}: ready heartbeat timed out.`);
-      closeTunnel(userId, 'stale_heartbeat_timeout');
-      continue;
+      if (poolSize === 0 && !hasBedrockSocket && t.pendingPlayers.length === 0) {
+        console.warn(`[cleanup] Closing stale tunnel for ${userId}: ready/activity heartbeat timed out with no active sockets.`);
+        closeTunnel(userId, 'stale_heartbeat_timeout');
+        continue;
+      }
+      logWithThrottle(`stale-active:${userId}`, 120_000, () =>
+        `[cleanup] ${userId} stale heartbeat observed but tunnel still active ` +
+        `(pool=${poolSize}, pending=${t.pendingPlayers.length}, bedrockSocket=${hasBedrockSocket}); keeping alive.`
+      );
     }
 
     if (
@@ -1340,13 +1383,27 @@ setInterval(() => {
       continue;
     }
 
+    const clientMap = bedrockClientMap.get(userId);
+    const hasRecentBedrockClient = !!clientMap && [...clientMap.values()].some((entry) =>
+      (Date.now() - (entry.lastSeen || 0)) < BEDROCK_CLIENT_TTL_MS
+    );
+    const recentTunnelActivityMs = Date.now() - Math.max(t.lastActivityAt || 0, t.lastReadyAt || 0);
+
     if (hasUdp && poolSize === 0 && !hasBedrockSocket) {
+      if (hasRecentBedrockClient || recentTunnelActivityMs < 90_000) {
+        t.staleCycles = 0;
+        logWithThrottle(`bedrock-gap:${userId}`, 30_000, () =>
+          `[cleanup] ${userId} bedrock socket gap observed but recent activity is still present ` +
+          `(recentMs=${recentTunnelActivityMs}, clients=${clientMap ? clientMap.size : 0}); keeping UDP alive.`
+        );
+        continue;
+      }
       t.staleCycles = (t.staleCycles || 0) + 1;
       console.warn(
-        `[cleanup] ${userId} - STALE bedrock tunnel (cycle ${t.staleCycles}/3): ` +
+        `[cleanup] ${userId} - STALE bedrock tunnel (cycle ${t.staleCycles}/6): ` +
         `pool=0, no bedrockSocket. Bedrock frames are being silently dropped.`
       );
-      if (t.staleCycles >= 3) {
+      if (t.staleCycles >= 6) {
         console.warn(`[cleanup] ${userId} - Evicting stale UDP socket after ${t.staleCycles} cycles to force client reconnect.`);
         const udpSock = userUdpSockets.get(userId);
         if (udpSock) {
@@ -1364,7 +1421,7 @@ setInterval(() => {
       }
     }
 
-    console.log(
+    logWithThrottle(`cleanup:${userId}`, 120_000, () =>
       `[cleanup] ${userId} - pool: ${poolSize}, ` +
       `pending: ${t.pendingPlayers.length}, udp: ${hasUdp || userUdpSockets.has(userId)}, ` +
       `bedrockSocket: ${hasBedrockSocket}, staleCycles: ${t.staleCycles}`

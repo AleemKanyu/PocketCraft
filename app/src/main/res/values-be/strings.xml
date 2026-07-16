@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Сервер працуе</string>
+    <string name="server_stopped">Сервер спынены</string>
+    <string name="server_starting">Сервер запускаецца...</string>
+    <string name="start_server">Запусціць сервер</string>
+    <string name="stop_server">Спыніць сервер</string>
+    <string name="notification_channel_name">Статус сервера</string>
+    <string name="notification_channel_desc">Паказвае стан працы сервера і элементы кіравання</string>
+    <string name="tap_to_copy">Націсніце, каб скапіяваць IP</string>
+    <string name="copied">IP скапіраваны ў буфер абмену</string>
+    <string name="how_to_connect">Як падключыцца</string>
+    <string name="send_command">Адправіць каманду</string>
+    <string name="clear_log">Ачысціць журнал</string>
+    <string name="apply_restart">Ужыць і перазапусціць</string>
+    <string name="delete_world">Выдаліць сусветныя дадзеныя</string>
+    <string name="delete_world_confirm">Гэта назаўсёды выдаліць свет. Вы ўпэўнены?</string>
+    <string name="thermal_warning">Папярэджанне: прылада пераграваецца — падумайце аб спыненні сервера</string>
+    <string name="ram_warning">Папярэджанне: выяўлена мала аператыўнай памяці — прадукцыйнасць можа пагоршыцца</string>
+    <string name="players_online">%1$d/%2$d гульцоў</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Час бесперабойнай працы: %1$s</string>
+    <string name="announcement_title">Заўвага ад PocketCraft</string>
+    <string name="announcement_body">PocketCraft будзе назаўсёды бясплатным для ўсіх, але некаторыя функцыі ёсць у Pro толькі для таго, каб вы маглі пакрыць выдаткі на наш сервер і эксплуатацыйныя выдаткі праграмы. Яны танныя, і таму яны там, у тым ліку дзеля большай каштоўнасці. 
+ 
+ Калі вы хочаце дапамагчы нам або проста хочаце пагутарыць з камандай, далучайцеся да нашага Discord — мы будзем рады вам.</string>
+    <string name="announcement_join_discord">Далучайцеся да Discord</string>
+    <string name="announcement_got_it">Зразумеў</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

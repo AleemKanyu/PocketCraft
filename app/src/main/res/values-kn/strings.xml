@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">ಸರ್ವರ್ ಚಾಲನೆಯಲ್ಲಿದೆ</string>
+    <string name="server_stopped">ಸರ್ವರ್ ನಿಲ್ಲಿಸಲಾಗಿದೆ</string>
+    <string name="server_starting">ಸರ್ವರ್ ಪ್ರಾರಂಭವಾಗುತ್ತಿದೆ...</string>
+    <string name="start_server">ಸರ್ವರ್ ಅನ್ನು ಪ್ರಾರಂಭಿಸಿ</string>
+    <string name="stop_server">ಸ್ಟಾಪ್ ಸರ್ವರ್</string>
+    <string name="notification_channel_name">ಸರ್ವರ್ ಸ್ಥಿತಿ</string>
+    <string name="notification_channel_desc">ಸರ್ವರ್ ಚಾಲನೆಯಲ್ಲಿರುವ ಸ್ಥಿತಿ ಮತ್ತು ನಿಯಂತ್ರಣಗಳನ್ನು ತೋರಿಸುತ್ತದೆ</string>
+    <string name="tap_to_copy">IP ನಕಲಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ</string>
+    <string name="copied">IP ಅನ್ನು ಕ್ಲಿಪ್‌ಬೋರ್ಡ್‌ಗೆ ನಕಲಿಸಲಾಗಿದೆ</string>
+    <string name="how_to_connect">ಹೇಗೆ ಸಂಪರ್ಕಿಸುವುದು</string>
+    <string name="send_command">ಆಜ್ಞೆಯನ್ನು ಕಳುಹಿಸಿ</string>
+    <string name="clear_log">ಲಾಗ್ ತೆರವುಗೊಳಿಸಿ</string>
+    <string name="apply_restart">ಅನ್ವಯಿಸಿ ಮತ್ತು ಮರುಪ್ರಾರಂಭಿಸಿ</string>
+    <string name="delete_world">ವಿಶ್ವ ಡೇಟಾವನ್ನು ಅಳಿಸಿ</string>
+    <string name="delete_world_confirm">ಇದು ಜಗತ್ತನ್ನು ಶಾಶ್ವತವಾಗಿ ಅಳಿಸುತ್ತದೆ. ನೀವು ಖಚಿತವಾಗಿರುವಿರಾ?</string>
+    <string name="thermal_warning">ಎಚ್ಚರಿಕೆ: ಸಾಧನವು ಹೆಚ್ಚು ಬಿಸಿಯಾಗುತ್ತಿದೆ — ಸರ್ವರ್ ಅನ್ನು ನಿಲ್ಲಿಸುವುದನ್ನು ಪರಿಗಣಿಸಿ</string>
+    <string name="ram_warning">ಎಚ್ಚರಿಕೆ: ಕಡಿಮೆ RAM ಪತ್ತೆಯಾಗಿದೆ - ಕಾರ್ಯಕ್ಷಮತೆಯು ಕ್ಷೀಣಿಸಬಹುದು</string>
+    <string name="players_online">%1$d/%2$d ಆಟಗಾರರು</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">ಅಪ್‌ಟೈಮ್: %1$s</string>
+    <string name="announcement_title">PocketCraft ನಿಂದ ಒಂದು ಟಿಪ್ಪಣಿ</string>
+    <string name="announcement_body">PocketCraft ಎಲ್ಲರಿಗೂ ಶಾಶ್ವತವಾಗಿ ಉಚಿತವಾಗಿರುತ್ತದೆ, ಆದರೆ ಕೆಲವು ವೈಶಿಷ್ಟ್ಯಗಳು ಪ್ರೊನಲ್ಲಿವೆ ಆದ್ದರಿಂದ ನೀವು ನಮ್ಮ ಸರ್ವರ್ ವೆಚ್ಚಗಳು ಮತ್ತು ಅಪ್ಲಿಕೇಶನ್ ಚಾಲನೆಯಲ್ಲಿರುವ ವೆಚ್ಚಗಳನ್ನು ಬೆಂಬಲಿಸಬಹುದು. ಅವು ಅಗ್ಗವಾಗಿವೆ ಮತ್ತು ಅದಕ್ಕಾಗಿಯೇ ಹೆಚ್ಚಿನ ಮೌಲ್ಯವನ್ನು ಒಳಗೊಂಡಂತೆ ಅವು ಅಲ್ಲಿರುತ್ತವೆ. 
+ 
+ ನೀವು ನಮಗೆ ಸಹಾಯ ಮಾಡಲು ಬಯಸಿದರೆ ಅಥವಾ ತಂಡದೊಂದಿಗೆ ಚಾಟ್ ಮಾಡಲು ಬಯಸಿದರೆ, ನಮ್ಮ ಡಿಸ್ಕಾರ್ಡ್‌ಗೆ ಸೇರಿಕೊಳ್ಳಿ — ನಿಮ್ಮನ್ನು ಹೊಂದಲು ನಾವು ಇಷ್ಟಪಡುತ್ತೇವೆ.</string>
+    <string name="announcement_join_discord">ಡಿಸ್ಕಾರ್ಡ್ ಸೇರಿಕೊಳ್ಳಿ</string>
+    <string name="announcement_got_it">ಅರ್ಥವಾಯಿತು</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

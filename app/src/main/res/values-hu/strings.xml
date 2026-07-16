@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Szerver fut</string>
+    <string name="server_stopped">A szerver leállt</string>
+    <string name="server_starting">Szerver indul…</string>
+    <string name="start_server">Szerver indítása</string>
+    <string name="stop_server">Szerver leállítása</string>
+    <string name="notification_channel_name">Szerver állapota</string>
+    <string name="notification_channel_desc">A szerver működési állapotát és vezérlőit mutatja</string>
+    <string name="tap_to_copy">Érintse meg az IP másolásához</string>
+    <string name="copied">Az IP a vágólapra másolva</string>
+    <string name="how_to_connect">Csatlakozás</string>
+    <string name="send_command">Parancs küldése</string>
+    <string name="clear_log">Napló törlése</string>
+    <string name="apply_restart">Alkalmazás és újraindítás</string>
+    <string name="delete_world">Világadatok törlése</string>
+    <string name="delete_world_confirm">Ezzel végleg törli a világot. Biztos vagy benne?</string>
+    <string name="thermal_warning">Figyelmeztetés: Az eszköz túlmelegszik – fontolja meg a szerver leállítását</string>
+    <string name="ram_warning">Figyelmeztetés: Alacsony RAM észlelhető – a teljesítmény romolhat</string>
+    <string name="players_online">%1$d/%2$d játékos</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Üzemidő: %1$s</string>
+    <string name="announcement_title">Megjegyzés a PocketCraft alkalmazástól</string>
+    <string name="announcement_body">A PocketCraft örökre ingyenes lesz mindenki számára, de néhány funkció a Proban csak azért van, hogy támogatni tudja a szerverköltségeket és az alkalmazások üzemeltetési költségeit. Olcsóak, és ezért vannak benne, beleértve azt is, hogy több értéket kapjanak. 
+ 
+ Ha segíteni szeretnél nekünk, vagy csak beszélgetni szeretnél a csapattal, csatlakozz a Discord-hoz – szívesen látunk.</string>
+    <string name="announcement_join_discord">Csatlakozz a Discordhoz</string>
+    <string name="announcement_got_it">Értem</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

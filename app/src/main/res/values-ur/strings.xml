@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">سرور چل رہا ہے۔</string>
+    <string name="server_stopped">سرور بند ہو گیا۔</string>
+    <string name="server_starting">سرور شروع ہو رہا ہے…</string>
+    <string name="start_server">سرور شروع کریں۔</string>
+    <string name="stop_server">سٹاپ سرور</string>
+    <string name="notification_channel_name">سرور کی حیثیت</string>
+    <string name="notification_channel_desc">سرور چلانے کی حیثیت اور کنٹرول دکھاتا ہے۔</string>
+    <string name="tap_to_copy">آئی پی کاپی کرنے کے لیے تھپتھپائیں۔</string>
+    <string name="copied">IP کلپ بورڈ پر کاپی کیا گیا۔</string>
+    <string name="how_to_connect">جڑنے کا طریقہ</string>
+    <string name="send_command">کمانڈ بھیجیں۔</string>
+    <string name="clear_log">صاف لاگ</string>
+    <string name="apply_restart">لاگو کریں اور دوبارہ شروع کریں۔</string>
+    <string name="delete_world">عالمی ڈیٹا کو حذف کریں۔</string>
+    <string name="delete_world_confirm">اس سے دنیا مستقل طور پر مٹ جائے گی۔ کیا آپ کو یقین ہے؟</string>
+    <string name="thermal_warning">وارننگ: ڈیوائس زیادہ گرم ہو رہی ہے - سرور کو روکنے پر غور کریں۔</string>
+    <string name="ram_warning">انتباہ: کم RAM کا پتہ چلا - کارکردگی خراب ہوسکتی ہے۔</string>
+    <string name="players_online">%1$d/%2$d کھلاڑی</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">اپ ٹائم: %1$s</string>
+    <string name="announcement_title">PocketCraft کی طرف سے ایک نوٹ</string>
+    <string name="announcement_body">PocketCraft ہر کسی کے لیے ہمیشہ کے لیے مفت رہے گا، لیکن کچھ خصوصیات صرف پرو میں ہیں تاکہ آپ ہمارے سرور کے اخراجات اور ایپ چلانے کے اخراجات کو سپورٹ کر سکیں۔ وہ سستے ہیں، اور یہی وجہ ہے کہ وہ وہاں موجود ہیں، بشمول زیادہ قیمت کے لیے۔ 
+ 
+ اگر آپ ہماری مدد کرنا چاہتے ہیں، یا صرف ٹیم کے ساتھ بات چیت کرنا چاہتے ہیں، تو ہمارے Discord میں شامل ہوں — ہمیں آپ کا ساتھ دینا پسند ہے۔</string>
+    <string name="announcement_join_discord">ڈسکارڈ میں شامل ہوں۔</string>
+    <string name="announcement_got_it">سمجھ گیا۔</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

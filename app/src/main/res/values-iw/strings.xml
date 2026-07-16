@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">שרת פועל</string>
+    <string name="server_stopped">השרת נעצר</string>
+    <string name="server_starting">השרת מתחיל...</string>
+    <string name="start_server">התחל שרת</string>
+    <string name="stop_server">עצור שרת</string>
+    <string name="notification_channel_name">מצב שרת</string>
+    <string name="notification_channel_desc">מציג את מצב הפעלת השרת ובקרות</string>
+    <string name="tap_to_copy">הקש כדי להעתיק IP</string>
+    <string name="copied">ה-IP הועתק ללוח</string>
+    <string name="how_to_connect">כיצד להתחבר</string>
+    <string name="send_command">שלח פקודה</string>
+    <string name="clear_log">נקה יומן</string>
+    <string name="apply_restart">החל והפעל מחדש</string>
+    <string name="delete_world">מחק נתוני עולם</string>
+    <string name="delete_world_confirm">זה ימחק לצמיתות את העולם. אתה בטוח?</string>
+    <string name="thermal_warning">אזהרה: ההתקן מתחמם יתר על המידה - שקול לעצור את השרת</string>
+    <string name="ram_warning">אזהרה: זוהה זיכרון RAM נמוך - הביצועים עלולים להיפגע</string>
+    <string name="players_online">שחקני %1$d/%2$d</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">זמן פעילות: %1$s</string>
+    <string name="announcement_title">הערה מ-PocketCraft</string>
+    <string name="announcement_body">PocketCraft יהיה בחינם לנצח לכולם, אבל חלק מהתכונות נמצאות ב-Pro רק כדי שתוכל לתמוך בעלויות השרת שלנו ובעלויות התפעול של האפליקציה. הם זולים, וזו הסיבה שהם נמצאים שם, כולל זה תמורת יותר תמורה. 
+ 
+ אם תרצה לעזור לנו, או סתם רוצה לשוחח עם הצוות, הצטרף לדיסקורד שלנו - נשמח לקבל אותך.</string>
+    <string name="announcement_join_discord">הצטרף לדיסקורד</string>
+    <string name="announcement_got_it">הבנתי</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

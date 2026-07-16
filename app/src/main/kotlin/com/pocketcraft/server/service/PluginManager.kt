@@ -328,7 +328,9 @@ object PluginManager {
         updated = ensureYamlSectionValue(updated, "bedrock", "enable-proxy-protocol", "false")
         updated = ensureYamlSectionValue(updated, "bedrock", "motd1", "PocketCraft Server")
         updated = ensureYamlSectionValue(updated, "bedrock", "motd2", "Tap to join")
-        updated = ensureTopLevelYamlValue(updated, "ping-passthrough-interval", "1")
+        // Geyser status passthrough every second is unnecessary for relay hosting and adds
+        // extra background status queries while the phone is already bandwidth-constrained.
+        updated = ensureTopLevelYamlValue(updated, "ping-passthrough-interval", "3")
         updated = ensureTopLevelYamlValue(updated, "async-motd", "false")
         updated = ensureTopLevelYamlValue(updated, "cache-chunks", "true")
         updated = ensureTopLevelYamlValue(updated, "use-native-transport", "false")
@@ -340,10 +342,12 @@ object PluginManager {
         updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "validate-bedrock-login", "false")
         updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "mtu", "1200")
         updated = ensureYamlSectionValue(updated, "advanced", "floodgate-key-file", floodgateKeyPath)
+        updated = ensureYamlSectionValue(updated, "java", "address", "auto")
+        updated = ensureYamlSectionValue(updated, "java", "port", "25565")
         updated = ensureYamlSectionValue(updated, "java", "auth-type", "floodgate")
+        updated = ensureYamlSectionValue(updated, "java", "forward-hostname", "false")
 
-        // Older Geyser configs use a dedicated remote section. Only patch it when
-        // it already exists so we don't append an obsolete block to newer configs.
+        // Older Geyser configs use a dedicated remote section.
         if (updated.lines().any { it.trim() == "remote:" }) {
             // Let Geyser resolve the active Paper bind target instead of forcing loopback.
             updated = ensureYamlSectionValue(updated, "remote", "address", "auto")

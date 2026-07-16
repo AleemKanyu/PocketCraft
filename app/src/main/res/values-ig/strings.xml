@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Sava na-agba ọsọ</string>
+    <string name="server_stopped">Akwụsịla ihe nkesa</string>
+    <string name="server_starting">Ihe nkesa na-amalite…</string>
+    <string name="start_server">Malite nkesa</string>
+    <string name="stop_server">Kwụsị ihe nkesa</string>
+    <string name="notification_channel_name">Ọnọdụ nkesa</string>
+    <string name="notification_channel_desc">Na-egosi ọkwa na njikwa ihe nkesa na-agba ọsọ</string>
+    <string name="tap_to_copy">Kpatụ ka idetuo IP</string>
+    <string name="copied">IP depụtaghachiri na klipbọọdụ</string>
+    <string name="how_to_connect">Otu esi ejikọta</string>
+    <string name="send_command">Zipụ Iwu</string>
+    <string name="clear_log">Kpochapụ ihe ndekọ</string>
+    <string name="apply_restart">Tinye &amp; Malitegharịa</string>
+    <string name="delete_world">Hichapụ data ụwa</string>
+    <string name="delete_world_confirm">Nke a ga-ehichapụ ụwa kpamkpam. O doro gị anya?</string>
+    <string name="thermal_warning">Ịdọ aka ná ntị: Ngwaọrụ na-ekpo oke ọkụ - tụlee ịkwụsị ihe nkesa</string>
+    <string name="ram_warning">ịdọ aka ná ntị: Achọpụtara RAM dị ala - arụmọrụ nwere ike weda ya</string>
+    <string name="players_online">Ndị egwuregwu %1$d/%2$d</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Oge njedebe: %1$s</string>
+    <string name="announcement_title">Ederede si PocketCraft</string>
+    <string name="announcement_body">PocketCraft ga-enwere onwe ya ruo mgbe ebighị ebi maka onye ọ bụla, mana ụfọdụ atụmatụ dị na Pro naanị ka ị nwee ike ịkwado ụgwọ ihe nkesa anyị yana ọnụ ahịa ngwa. Ha dị ọnụ ala, ya mere ha ji nọrọ ebe ahụ, gụnyere nke ahụ maka uru karịa. __OGE ọhụrụ____ Ọhụrụ__ Ọ bụrụ na ị ga-achọ inyere anyị aka, ma ọ bụ chọọ ka gị na ndị otu kparịta ụka, sonye na Discord anyị - ọ ga-amasị anyị ịnweta gị.</string>
+    <string name="announcement_join_discord">Soro Discord</string>
+    <string name="announcement_got_it">Enwere ya</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

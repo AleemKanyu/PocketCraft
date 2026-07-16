@@ -90,7 +90,8 @@ fun StorageScreen(
     stateHolder: ServerStateHolder,
     onOpenWorldSetup: (Boolean) -> Unit = {},
     onChangeVersion: () -> Unit = {},
-    onMessage: (String) -> Unit = {}
+    onMessage: (String) -> Unit = {},
+    onNavigateToSettings: (Int?) -> Unit = {}
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
@@ -139,7 +140,8 @@ fun StorageScreen(
                         stateHolder = stateHolder,
                         onOpenWorldSetup = onOpenWorldSetup,
                         onChangeVersion = onChangeVersion,
-                        onMessage = onMessage
+                        onMessage = onMessage,
+                        onNavigateToSettings = onNavigateToSettings
                     )
                     else -> ServerFilesBrowser(stateHolder = stateHolder)
                 }

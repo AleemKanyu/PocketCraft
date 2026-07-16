@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Strežnik teče</string>
+    <string name="server_stopped">Strežnik je ustavljen</string>
+    <string name="server_starting">Strežnik se zaganja ...</string>
+    <string name="start_server">Zaženi strežnik</string>
+    <string name="stop_server">Ustavi strežnik</string>
+    <string name="notification_channel_name">Stanje strežnika</string>
+    <string name="notification_channel_desc">Prikazuje stanje delovanja strežnika in kontrole</string>
+    <string name="tap_to_copy">Tapnite za kopiranje IP-ja</string>
+    <string name="copied">IP kopiran v odložišče</string>
+    <string name="how_to_connect">Kako se povezati</string>
+    <string name="send_command">Pošlji ukaz</string>
+    <string name="clear_log">Počisti dnevnik</string>
+    <string name="apply_restart">Uporabi in znova zaženi</string>
+    <string name="delete_world">Izbriši svetovne podatke</string>
+    <string name="delete_world_confirm">To bo trajno izbrisalo svet. Ste prepričani?</string>
+    <string name="thermal_warning">Opozorilo: Naprava se pregreva — razmislite o zaustavitvi strežnika</string>
+    <string name="ram_warning">Opozorilo: Zaznano je malo RAM-a — zmogljivost se lahko poslabša</string>
+    <string name="players_online">%1$d/%2$d igralcev</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Čas delovanja: %1$s</string>
+    <string name="announcement_title">Opomba iz PocketCraft</string>
+    <string name="announcement_body">PocketCraft bo za vedno brezplačna za vse, vendar so nekatere funkcije v različici Pro samo zato, da lahko pokrijete stroške našega strežnika in tekoče stroške aplikacije. So poceni in zato so tam notri, tudi zaradi večje vrednosti. 
+ 
+ Če nam želite pomagati ali želite samo poklepetati z ekipo, se pridružite našemu Discordu — veseli vas bomo.</string>
+    <string name="announcement_join_discord">Pridružite se Discordu</string>
+    <string name="announcement_got_it">Razumem</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

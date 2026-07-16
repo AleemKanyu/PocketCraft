@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">I-PocketCraft</string>
+    <string name="server_running">Ukugijima Kweseva</string>
+    <string name="server_stopped">Iseva Imisiwe</string>
+    <string name="server_starting">Iseva Iyaqala...</string>
+    <string name="start_server">Qala Iseva</string>
+    <string name="stop_server">Misa iseva</string>
+    <string name="notification_channel_name">Isimo Seseva</string>
+    <string name="notification_channel_desc">Ibonisa isimo esisebenzayo seseva nezilawuli</string>
+    <string name="tap_to_copy">Thepha ukuze ukopishe i-IP</string>
+    <string name="copied">IP ikopishelwe ebhodini lokunamathisela</string>
+    <string name="how_to_connect">Ungaxhuma kanjani</string>
+    <string name="send_command">Thumela Umyalo</string>
+    <string name="clear_log">Sula Ilogi</string>
+    <string name="apply_restart">Faka futhi Qala kabusha</string>
+    <string name="delete_world">Susa Idatha Yomhlaba</string>
+    <string name="delete_world_confirm">Lokhu kuzowususa unomphela umhlaba. Uqinisekile?</string>
+    <string name="thermal_warning">Isexwayiso: Idivayisi ishisa ngokweqile — cabanga ukumisa iseva</string>
+    <string name="ram_warning">Isexwayiso: I-RAM ephansi itholiwe — ukusebenza kungase kwehliswe</string>
+    <string name="players_online">%1$d/%2$d abadlali</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Isikhathi esiphezulu: %1$s</string>
+    <string name="announcement_title">Inothi elivela ku-PocketCraft</string>
+    <string name="announcement_body">I-PocketCraft izoba mahhala kuze kube phakade kuwo wonke umuntu, kodwa ezinye izici ziku-Pro ukuze ukwazi ukusekela izindleko zeseva yethu nezindleko zokusebenzisa uhlelo lokusebenza. Ashibhile, yingakho ephakathi lapho, okuhlanganisa nalokho ngenani elithe xaxa. 
+ 
+ Uma ungathanda ukusisiza, noma ufuna nje ukuxoxa nethimba, joyina i-Discord yethu — singathanda ukuba nawe.</string>
+    <string name="announcement_join_discord">Joyina i-Discord</string>
+    <string name="announcement_got_it">Ngiyezwa</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

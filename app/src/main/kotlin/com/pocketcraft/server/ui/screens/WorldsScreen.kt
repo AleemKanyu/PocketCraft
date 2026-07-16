@@ -38,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Delete
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Checkbox
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -67,8 +69,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -87,8 +92,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.pocketcraft.server.WorldImporter
+import com.pocketcraft.server.data.preferences.AppPreferences
+import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import com.pocketcraft.server.ui.components.GameCard
+import com.pocketcraft.server.ui.components.IosDragHandle
 import com.pocketcraft.server.ui.components.PocketWorldIcon
 import com.pocketcraft.server.ui.components.AnimatedEntranceContainer
 import com.pocketcraft.server.ui.theme.PocketColors
@@ -104,6 +112,16 @@ import androidx.compose.material.icons.filled.Cloud
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.pocketcraft.server.ui.theme.Monocraft
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -111,7 +129,8 @@ fun WorldsScreen(
     stateHolder: ServerStateHolder,
     onOpenWorldSetup: (Boolean) -> Unit = {},
     onChangeVersion: () -> Unit = {},
-    onMessage: (String) -> Unit = {}
+    onMessage: (String) -> Unit = {},
+    onNavigateToSettings: (Int?) -> Unit = {}
 ) {
     val s = LocalAppStrings.current
     val context = LocalContext.current
@@ -254,7 +273,8 @@ fun WorldsScreen(
                 BackupsManagementCard(
                     stateHolder = stateHolder,
                     restoringBackupName = restoringBackupName,
-                    onRestoringBackupNameChange = { restoringBackupName = it }
+                    onRestoringBackupNameChange = { restoringBackupName = it },
+                    onNavigateToSettings = onNavigateToSettings
                 )
             }
         }
@@ -404,15 +424,29 @@ fun WorldsScreen(
                 }
             },
             sheetState = resetSheetState,
-            dragHandle = null,
+            dragHandle = { IosDragHandle() },
             containerColor = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+            shape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp)
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Text(s.worldsResetTitle, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(PocketColors.Offline.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = PocketColors.Offline,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                Text(s.worldsResetTitle, fontWeight = FontWeight.ExtraBold, fontSize = 24.sp)
                 Text(
                     s.worldsResetDesc,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -448,7 +482,8 @@ fun WorldsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
-                TextButton(
+                DuoButton(
+                    text = s.worldsResetDeleteSelected.uppercase(),
                     onClick = {
                         scope.launch {
                             if (stateHolder.status != ServerStatus.OFFLINE) {
@@ -465,18 +500,19 @@ fun WorldsScreen(
                             }
                         }
                     },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(s.worldsResetDeleteSelected, color = PocketColors.Offline, fontWeight = FontWeight.Bold)
-                }
-                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = DuoButtonVariant.Danger,
+                    minHeight = 46.dp
+                )
+                OutlinedButton(
                     onClick = {
                         scope.launch {
                             resetSheetState.hide()
                             showResetDialog = false
                         }
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Text(s.worldsCancel)
                 }
@@ -632,25 +668,90 @@ private fun ResetDeleteRow(
     enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Row(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled) {
-                onCheckedChange(!checked)
-            },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(enabled = enabled) { onCheckedChange(!checked) },
+        shape = RoundedCornerShape(16.dp),
+        color = if (enabled) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f)
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
     ) {
-        Checkbox(
-            checked = checked,
-            onCheckedChange = if (enabled) onCheckedChange else null,
-            enabled = enabled
-        )
-        Text(
-            text = label,
-            fontSize = 13.sp,
-            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Checkbox(
+                checked = checked,
+                onCheckedChange = if (enabled) onCheckedChange else null,
+                enabled = enabled
+            )
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun BackupAutomationToggleCard(
+    title: String,
+    description: String,
+    accent: Color,
+    checked: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.26f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggle(!checked) }
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(accent.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (checked) Icons.Default.CheckCircle else Icons.Default.History,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = description,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = onToggle,
+                colors = SwitchDefaults.colors(checkedThumbColor = accent)
+            )
+        }
     }
 }
 
@@ -781,7 +882,8 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 private fun BackupsManagementCard(
     stateHolder: ServerStateHolder,
     restoringBackupName: String?,
-    onRestoringBackupNameChange: (String?) -> Unit
+    onRestoringBackupNameChange: (String?) -> Unit,
+    onNavigateToSettings: (Int?) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -801,12 +903,18 @@ private fun BackupsManagementCard(
     var cloudUploadHint by remember { mutableStateOf("") }
     var pendingDeleteBackup by remember { mutableStateOf<UnifiedBackup?>(null) }
     var removingBackupKeys by remember { mutableStateOf(setOf<String>()) }
+    var pendingRestoreBackup by remember { mutableStateOf<UnifiedBackup?>(null) }
 
-    fun backupKey(backup: UnifiedBackup): String = if (backup.isCloud) {
-        "cloud:${backup.remoteBackup?.id ?: backup.fullFileName}"
-    } else {
-        "local:${backup.fullFileName}"
-    }
+    val prefs = remember { AppPreferences(context) }
+    val alwaysAliveBackground by AppPreferencesStore.isAlwaysAliveBackgroundFlow(context)
+        .collectAsState(initial = prefs.alwaysAliveBackground)
+    var autoBackupOnStop by remember { mutableStateOf(prefs.autoBackupOnStop) }
+    var autoBackupTimeEnabled by remember { mutableStateOf(prefs.autoBackupTimeEnabled) }
+    var autoBackupTimeHour by remember { mutableIntStateOf(prefs.autoBackupTimeHour) }
+    var autoBackupTimeMinute by remember { mutableIntStateOf(prefs.autoBackupTimeMinute) }
+    var showTimePickerDialog by remember { mutableStateOf(false) }
+
+    fun backupKey(backup: UnifiedBackup): String = backup.fullFileName
 
     // Fetch cloud backups
     fun refreshCloudBackups() {
@@ -815,7 +923,7 @@ private fun BackupsManagementCard(
             loadingCloudBackups = true
             scope.launch(Dispatchers.IO) {
                 runCatching {
-                    DriveBackupManager.listWorldBackups(context, signedInAccount, stateHolder.activeWorld.ifBlank { "world" })
+                    DriveBackupManager.listAllCloudBackups(context, signedInAccount)
                 }.onSuccess { list ->
                     withContext(Dispatchers.Main) {
                         cloudBackups = list
@@ -874,6 +982,63 @@ private fun BackupsManagementCard(
         }
     }
 
+    fun performRestore(backup: UnifiedBackup, restoreMode: RestoreMode) {
+        if (backup.isLocal) {
+            ServerStateHolder.applicationScope.launch(Dispatchers.Main) {
+                onRestoringBackupNameChange(backup.fullFileName)
+                localActionBusy = true
+                actionStatusMessage = "Restoring backup..."
+                try {
+                    val msg = when (restoreMode) {
+                        RestoreMode.FULL -> stateHolder.restoreBackup(backup.localBackup!!)
+                        RestoreMode.OVERWORLD_ONLY -> stateHolder.restoreOverworldOnly(backup.localBackup!!)
+                        RestoreMode.DIMENSIONS_ONLY -> stateHolder.restoreDimensionsOnly(backup.localBackup!!)
+                    }
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                } finally {
+                    onRestoringBackupNameChange(null)
+                    actionStatusMessage = ""
+                    localActionBusy = false
+                }
+            }
+        } else {
+            ServerStateHolder.applicationScope.launch(Dispatchers.Main) {
+                onRestoringBackupNameChange(backup.fullFileName)
+                cloudActionBusy = true
+                actionStatusMessage = "Downloading cloud backup..."
+                val tempFile = File(context.cacheDir, "drive_restore_${System.currentTimeMillis()}.zip")
+                try {
+                    DriveBackupManager.downloadBackup(context, account!!, backup.remoteBackup!!, tempFile)
+                    actionStatusMessage = "Restoring backup..."
+                    val entry = BackupEntry(
+                        name = backup.remoteBackup.name,
+                        sizeMb = (tempFile.length() / (1024L * 1024L)).coerceAtLeast(0L),
+                        date = "",
+                        file = tempFile
+                    )
+                    val msg = when (restoreMode) {
+                        RestoreMode.FULL -> stateHolder.restoreBackupFile(tempFile, backup.remoteBackup.name)
+                        RestoreMode.OVERWORLD_ONLY -> stateHolder.restoreOverworldOnly(entry)
+                        RestoreMode.DIMENSIONS_ONLY -> stateHolder.restoreDimensionsOnly(entry)
+                    }
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    val cause = e.cause ?: e
+                    if (cause is com.google.android.gms.auth.UserRecoverableAuthException && cause.intent != null) {
+                        authRecoveryLauncher.launch(cause.intent!!)
+                    } else {
+                        Toast.makeText(context, "Restore failed: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                } finally {
+                    tempFile.delete()
+                    onRestoringBackupNameChange(null)
+                    actionStatusMessage = ""
+                    cloudActionBusy = false
+                }
+            }
+        }
+    }
+
     LaunchedEffect(stateHolder.activeWorld) {
         account = AccountManager.currentDriveAccount(context)
         refreshCloudBackups()
@@ -897,7 +1062,7 @@ private fun BackupsManagementCard(
                     text = if (localActionBusy) "BACKING UP..." else "BACKUP TO DEVICE",
                     enabled = !localActionBusy && !cloudActionBusy && stateHolder.status == ServerStatus.OFFLINE,
                     onClick = {
-                        scope.launch {
+                        ServerStateHolder.applicationScope.launch(Dispatchers.Main) {
                             localActionBusy = true
                             actionStatusMessage = "Creating device backup..."
                             val msg = stateHolder.createBackup()
@@ -914,9 +1079,9 @@ private fun BackupsManagementCard(
                 Box(modifier = Modifier.weight(1f)) {
                     DuoButton(
                         text = if (cloudActionBusy) "UPLOADING..." else "BACKUP TO CLOUD",
-                        enabled = account != null && !localActionBusy && !cloudActionBusy && stateHolder.status == ServerStatus.OFFLINE,
+                        enabled = !cloudActionBusy && !localActionBusy && stateHolder.status == ServerStatus.OFFLINE,
                         onClick = {
-                            scope.launch {
+                            ServerStateHolder.applicationScope.launch(Dispatchers.Main) {
                                 val driveAccount = account
                                 if (driveAccount == null) {
                                     Toast.makeText(context, "Connect Google Drive first.", Toast.LENGTH_LONG).show()
@@ -1050,32 +1215,33 @@ private fun BackupsManagementCard(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // Unified backups list (Local + Cloud)
-            val localUnified = stateHolder.backups.map {
-                UnifiedBackup(
-                    name = it.name.substringAfter("-").removeSuffix(".zip"),
-                    fullFileName = it.name,
-                    isCloud = false,
-                    sizeMb = it.sizeMb,
-                    dateLabel = it.date,
-                    localBackup = it
-                )
-            }
-
-            val cloudUnified = cloudBackups.map {
-                UnifiedBackup(
-                    name = it.name.substringAfter("-").removeSuffix(".zip"),
-                    fullFileName = it.name,
-                    isCloud = true,
-                    sizeMb = 0L,
-                    dateLabel = it.modifiedTime ?: "",
-                    remoteBackup = it
-                )
-            }
+            val normalizedLocalMap = stateHolder.backups.associateBy { it.file.name }
+            val normalizedCloudMap = cloudBackups.associateBy { it.name }
+            val allKeys = (normalizedLocalMap.keys + normalizedCloudMap.keys).toSet()
 
             val unifiedList = remember(stateHolder.backups.toList(), cloudBackups, removingBackupKeys) {
-                (localUnified + cloudUnified)
-                    .filterNot { backupKey(it) in removingBackupKeys }
-                    .sortedByDescending { it.name }
+                allKeys.map { key ->
+                    val local = normalizedLocalMap[key]
+                    val remote = normalizedCloudMap[key]
+                    
+                    val name = local?.name?.substringAfter("-")
+                        ?: remote?.name?.substringAfter("-")?.removeSuffix(".zip")
+                        ?: key.removeSuffix(".zip")
+                        
+                    val sizeMb = local?.sizeMb ?: 0L
+                    val dateLabel = local?.date ?: remote?.modifiedTime ?: ""
+                    
+                    UnifiedBackup(
+                        name = name,
+                        fullFileName = key,
+                        sizeMb = sizeMb,
+                        dateLabel = dateLabel,
+                        localBackup = local,
+                        remoteBackup = remote
+                    )
+                }
+                .filterNot { backupKey(it) in removingBackupKeys }
+                .sortedByDescending { it.fullFileName }
             }
 
             if (unifiedList.isEmpty()) {
@@ -1102,7 +1268,11 @@ private fun BackupsManagementCard(
                                 .padding(horizontal = 10.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            val iconColor = if (backup.isCloud) PocketColors.DownloadBlue else PocketColors.Primary
+                            val iconColor = when {
+                                backup.isLocal && backup.isCloud -> PocketColors.Primary
+                                backup.isCloud -> PocketColors.DownloadBlue
+                                else -> PocketColors.Primary
+                            }
                             Icon(
                                 imageVector = if (backup.isCloud) Icons.Default.Cloud else Icons.Default.Computer,
                                 contentDescription = null,
@@ -1121,7 +1291,11 @@ private fun BackupsManagementCard(
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
-                                        text = if (backup.isCloud) "(Cloud)" else "(Device)",
+                                        text = when {
+                                            backup.isLocal && backup.isCloud -> "(Device & Cloud)"
+                                            backup.isCloud -> "(Cloud)"
+                                            else -> "(Device)"
+                                        },
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = iconColor
@@ -1177,46 +1351,7 @@ private fun BackupsManagementCard(
                                 // 1. Restore Action
                                 IconButton(
                                     onClick = {
-                                        if (backup.isCloud) {
-                                            scope.launch {
-                                                onRestoringBackupNameChange(backup.fullFileName)
-                                                cloudActionBusy = true
-                                                actionStatusMessage = "Downloading cloud backup..."
-                                                val tempFile = File(context.cacheDir, "drive_restore_${System.currentTimeMillis()}.zip")
-                                                try {
-                                                    DriveBackupManager.downloadBackup(context, account!!, backup.remoteBackup!!, tempFile)
-                                                    actionStatusMessage = "Restoring backup..."
-                                                    val msg = stateHolder.restoreBackupFile(tempFile, backup.remoteBackup.name)
-                                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                                } catch (e: Exception) {
-                                                    val cause = e.cause ?: e
-                                                    if (cause is com.google.android.gms.auth.UserRecoverableAuthException && cause.intent != null) {
-                                                        authRecoveryLauncher.launch(cause.intent!!)
-                                                    } else {
-                                                        Toast.makeText(context, "Restore failed: ${e.message}", Toast.LENGTH_LONG).show()
-                                                    }
-                                                } finally {
-                                                    tempFile.delete()
-                                                    onRestoringBackupNameChange(null)
-                                                    actionStatusMessage = ""
-                                                    cloudActionBusy = false
-                                                }
-                                            }
-                                        } else {
-                                            scope.launch {
-                                                onRestoringBackupNameChange(backup.fullFileName)
-                                                localActionBusy = true
-                                                actionStatusMessage = "Restoring backup..."
-                                                try {
-                                                    val msg = stateHolder.restoreBackup(backup.localBackup!!)
-                                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                                } finally {
-                                                    onRestoringBackupNameChange(null)
-                                                    actionStatusMessage = ""
-                                                    localActionBusy = false
-                                                }
-                                            }
-                                        }
+                                        pendingRestoreBackup = backup
                                     },
                                     enabled = actionsEnabled,
                                     modifier = Modifier.size(36.dp)
@@ -1233,8 +1368,17 @@ private fun BackupsManagementCard(
                                 val downloadEnabled = !localActionBusy && !cloudActionBusy
                                 IconButton(
                                     onClick = {
-                                        if (backup.isCloud) {
-                                            scope.launch {
+                                        if (backup.isLocal) {
+                                            ServerStateHolder.applicationScope.launch(Dispatchers.Main) {
+                                                localActionBusy = true
+                                                actionStatusMessage = "Saving to Downloads..."
+                                                val msg = stateHolder.downloadBackup(backup.localBackup!!)
+                                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                                actionStatusMessage = ""
+                                                localActionBusy = false
+                                            }
+                                        } else {
+                                            ServerStateHolder.applicationScope.launch(Dispatchers.Main) {
                                                 cloudActionBusy = true
                                                 actionStatusMessage = "Downloading from cloud..."
                                                 val tempFile = File(context.cacheDir, "drive_download_${System.currentTimeMillis()}.zip")
@@ -1261,15 +1405,6 @@ private fun BackupsManagementCard(
                                                     actionStatusMessage = ""
                                                     cloudActionBusy = false
                                                 }
-                                            }
-                                        } else {
-                                            scope.launch {
-                                                localActionBusy = true
-                                                actionStatusMessage = "Saving to Downloads..."
-                                                val msg = stateHolder.downloadBackup(backup.localBackup!!)
-                                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                                actionStatusMessage = ""
-                                                localActionBusy = false
                                             }
                                         }
                                     },
@@ -1328,8 +1463,240 @@ private fun BackupsManagementCard(
                     color = MaterialTheme.colorScheme.error
                 )
             }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 12.dp),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+            )
+
+            Text(
+                text = "AUTOMATIC BACKUPS",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = PocketColors.Primary,
+                modifier = Modifier.padding(bottom = 6.dp)
+            )
+
+            BackupAutomationToggleCard(
+                title = "Backup on Server Stop",
+                description = "Automatically create a local backup whenever you stop the server.",
+                accent = PocketColors.Primary,
+                checked = autoBackupOnStop,
+                onToggle = { newValue ->
+                    autoBackupOnStop = newValue
+                    prefs.autoBackupOnStop = newValue
+                }
+            )
+
+            BackupAutomationToggleCard(
+                title = "Scheduled Daily Backup",
+                description = "Create a local backup at a particular time of the day when the server is offline.",
+                accent = Color(0xFF3D8BFF),
+                checked = autoBackupTimeEnabled,
+                onToggle = { newValue ->
+                    autoBackupTimeEnabled = newValue
+                    prefs.autoBackupTimeEnabled = newValue
+                    if (newValue) {
+                        com.pocketcraft.server.service.AutoBackupScheduler.scheduleDailyBackup(
+                            context,
+                            autoBackupTimeHour,
+                            autoBackupTimeMinute
+                        )
+                    } else {
+                        com.pocketcraft.server.service.AutoBackupScheduler.cancelDailyBackup(context)
+                    }
+                }
+            )
+
+            if (autoBackupTimeEnabled) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, top = 4.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Scheduled Time:",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    val formattedTime = remember(autoBackupTimeHour, autoBackupTimeMinute) {
+                        val amPm = if (autoBackupTimeHour >= 12) "PM" else "AM"
+                        val displayHour = when {
+                            autoBackupTimeHour == 0 -> 12
+                            autoBackupTimeHour > 12 -> autoBackupTimeHour - 12
+                            else -> autoBackupTimeHour
+                        }
+                        val hourStr = displayHour.toString().padStart(2, '0')
+                        val minuteStr = autoBackupTimeMinute.toString().padStart(2, '0')
+                        "$hourStr:$minuteStr $amPm"
+                    }
+
+                    DuoButton(
+                        text = formattedTime,
+                        onClick = { showTimePickerDialog = true },
+                        minHeight = 34.dp,
+                        modifier = Modifier.width(132.dp)
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (alwaysAliveBackground) {
+                        PocketColors.Primary.copy(alpha = 0.10f)
+                    } else {
+                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.22f)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, top = 4.dp, bottom = 12.dp),
+                    border = BorderStroke(
+                        1.dp,
+                        if (alwaysAliveBackground) PocketColors.Primary.copy(alpha = 0.35f)
+                        else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Icon(
+                            imageVector = if (alwaysAliveBackground) Icons.Filled.CheckCircle else Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = if (alwaysAliveBackground) PocketColors.Primary else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (alwaysAliveBackground) "Always Active is enabled" else "Requires Always Active option",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = if (alwaysAliveBackground) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                text = if (alwaysAliveBackground) {
+                                    "Scheduled backups can run more reliably because PocketCraft is allowed to stay active in the background."
+                                } else {
+                                    "For the scheduled daily backup to run reliably, enable 'Always Alive in Background' in Settings so Android does not suspend the app."
+                                },
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (!alwaysAliveBackground) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                DuoButton(
+                                    text = "OPEN SETTINGS",
+                                    onClick = { onNavigateToSettings(1) },
+                                    minHeight = 32.dp,
+                                    modifier = Modifier.align(Alignment.Start)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
+
+    if (showTimePickerDialog) {
+        IOSStyleTimePickerDialog(
+            initialHour = autoBackupTimeHour,
+            initialMinute = autoBackupTimeMinute,
+            onTimeSelected = { hour, minute ->
+                autoBackupTimeHour = hour
+                autoBackupTimeMinute = minute
+                prefs.autoBackupTimeHour = hour
+                prefs.autoBackupTimeMinute = minute
+                
+                if (autoBackupTimeEnabled) {
+                    com.pocketcraft.server.service.AutoBackupScheduler.scheduleDailyBackup(
+                        context,
+                        hour,
+                        minute
+                    )
+                }
+                showTimePickerDialog = false
+            },
+            onDismiss = {
+                showTimePickerDialog = false
+            }
+        )
+    }
+    if (pendingRestoreBackup != null) {
+        val backup = pendingRestoreBackup!!
+        AlertDialog(
+            onDismissRequest = { pendingRestoreBackup = null },
+            title = { Text("Restore Options", fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Select how you want to restore the backup \"${backup.name}\":",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp
+                    )
+                    
+                    Button(
+                        onClick = {
+                            val targetBackup = pendingRestoreBackup
+                            pendingRestoreBackup = null
+                            if (targetBackup != null) {
+                                performRestore(targetBackup, RestoreMode.FULL)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Primary)
+                    ) {
+                        Text("Restore Full World (Overwrites Overworld)")
+                    }
+
+                    Button(
+                        onClick = {
+                            val targetBackup = pendingRestoreBackup
+                            pendingRestoreBackup = null
+                            if (targetBackup != null) {
+                                performRestore(targetBackup, RestoreMode.OVERWORLD_ONLY)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Primary.copy(alpha = 0.82f))
+                    ) {
+                        Text("Restore Overworld Only (Keeps Nether/End)")
+                    }
+
+                    Button(
+                        onClick = {
+                            val targetBackup = pendingRestoreBackup
+                            pendingRestoreBackup = null
+                            if (targetBackup != null) {
+                                performRestore(targetBackup, RestoreMode.DIMENSIONS_ONLY)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Starting)
+                    ) {
+                        Text("Restore Dimensions Only (Nether/End Only)")
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    TextButton(
+                        onClick = { pendingRestoreBackup = null },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {}
+        )
+    }
+
+
+
     if (showCloudSignInDialog) {
         Dialog(onDismissRequest = { showCloudSignInDialog = false }) {
             Surface(
@@ -1457,7 +1824,11 @@ private fun BackupsManagementCard(
                             color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "This will permanently remove ${backup.name} from ${if (backup.isCloud) "Google Drive" else "your device backups"}.",
+                            text = when {
+                                backup.isLocal && backup.isCloud -> "This will permanently remove ${backup.name} from both your device and Google Drive."
+                                backup.isCloud -> "This will permanently remove ${backup.name} from Google Drive."
+                                else -> "This will permanently remove ${backup.name} from your device backups."
+                            },
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 13.sp,
                             lineHeight = 19.sp
@@ -1481,8 +1852,32 @@ private fun BackupsManagementCard(
                                 val deleteKey = backupKey(deleteTarget)
                                 pendingDeleteBackup = null
                                 removingBackupKeys = removingBackupKeys + deleteKey
-                                scope.launch {
-                                    if (deleteTarget.isCloud) {
+                                ServerStateHolder.applicationScope.launch(Dispatchers.Main) {
+                                    if (deleteTarget.isLocal && deleteTarget.isCloud) {
+                                        localActionBusy = true
+                                        cloudActionBusy = true
+                                        actionStatusMessage = "Deleting backup..."
+                                        try {
+                                            val localBackup = deleteTarget.localBackup
+                                            if (localBackup != null) {
+                                                stateHolder.deleteBackup(localBackup)
+                                            }
+                                            val driveAccount = account
+                                            if (driveAccount != null && deleteTarget.remoteBackup != null) {
+                                                DriveBackupManager.deleteBackup(context, driveAccount, deleteTarget.remoteBackup.id)
+                                                cloudBackups = cloudBackups.filterNot { it.id == deleteTarget.remoteBackup.id }
+                                                refreshCloudBackups()
+                                            }
+                                            Toast.makeText(context, "Backup deleted from device and cloud.", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            removingBackupKeys = removingBackupKeys - deleteKey
+                                            Toast.makeText(context, "Delete failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                        } finally {
+                                            actionStatusMessage = ""
+                                            localActionBusy = false
+                                            cloudActionBusy = false
+                                        }
+                                    } else if (deleteTarget.isCloud) {
                                         cloudActionBusy = true
                                         actionStatusMessage = "Deleting cloud backup..."
                                         try {
@@ -1559,9 +1954,202 @@ private fun PremiumCloudBenefitRow(text: String) {
 private data class UnifiedBackup(
     val name: String,
     val fullFileName: String,
-    val isCloud: Boolean,
     val sizeMb: Long,
     val dateLabel: String,
     val localBackup: BackupEntry? = null,
     val remoteBackup: RemoteDriveBackup? = null
-)
+) {
+    val isLocal: Boolean get() = localBackup != null
+    val isCloud: Boolean get() = remoteBackup != null
+}
+
+enum class RestoreMode {
+    FULL,
+    OVERWORLD_ONLY,
+    DIMENSIONS_ONLY
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun <T> WheelPicker(
+    items: List<T>,
+    initialIndex: Int,
+    onItemSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    visibleItemsCount: Int = 3,
+    itemHeight: Dp = 42.dp,
+    label: (T) -> String = { it.toString() }
+) {
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+    val snapFlingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
+    val density = LocalDensity.current
+    val itemHeightPx = with(density) { itemHeight.toPx() }
+    val haptic = LocalHapticFeedback.current
+
+    // Trigger onItemSelected when the center item changes
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .distinctUntilChanged()
+            .collect { index ->
+                if (index in items.indices) {
+                    onItemSelected(index)
+                    try {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    } catch (e: Exception) {}
+                }
+            }
+    }
+
+    Box(
+        modifier = modifier
+            .height(itemHeight * visibleItemsCount)
+            .width(60.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        LazyColumn(
+            state = listState,
+            flingBehavior = snapFlingBehavior,
+            contentPadding = PaddingValues(vertical = itemHeight * ((visibleItemsCount - 1) / 2)),
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            items(items.size) { index ->
+                Box(
+                    modifier = Modifier
+                        .height(itemHeight)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val item = items[index]
+                    Text(
+                        text = label(item),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.graphicsLayer {
+                            // Subtle 3D rotation and scaling depending on distance to center
+                            val offset = listState.layoutInfo.visibleItemsInfo
+                                .firstOrNull { it.index == index }
+                                ?.let { it.offset + it.size / 2f - listState.layoutInfo.viewportEndOffset / 2f }
+                                ?: 0f
+                            val normalized = (offset / itemHeightPx).coerceIn(-1.5f, 1.5f)
+                            rotationX = normalized * -35f
+                            scaleX = 1f - (Math.abs(normalized) * 0.15f)
+                            scaleY = 1f - (Math.abs(normalized) * 0.15f)
+                            alpha = 1f - (Math.abs(normalized) * 0.4f)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IOSStyleTimePickerDialog(
+    initialHour: Int,
+    initialMinute: Int,
+    onTimeSelected: (hour: Int, minute: Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedHour12 by remember {
+        val h = initialHour % 12
+        mutableStateOf(if (h == 0) 12 else h)
+    }
+    var selectedMinute by remember { mutableStateOf(initialMinute) }
+    var selectedAmPm by remember { mutableStateOf(if (initialHour < 12) 0 else 1) } // 0 = AM, 1 = PM
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Select Time",
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = Monocraft,
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // Highlight center row
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    WheelPicker(
+                        items = (1..12).toList(),
+                        initialIndex = selectedHour12 - 1,
+                        onItemSelected = { selectedHour12 = it + 1 },
+                        label = { String.format("%d", it) }
+                    )
+                    
+                    Text(
+                        text = ":",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                    
+                    WheelPicker(
+                        items = (0..59).toList(),
+                        initialIndex = selectedMinute,
+                        onItemSelected = { selectedMinute = it },
+                        label = { String.format("%02d", it) }
+                    )
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    WheelPicker(
+                        items = listOf("AM", "PM"),
+                        initialIndex = selectedAmPm,
+                        onItemSelected = { selectedAmPm = it },
+                        label = { it }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            DuoButton(
+                text = "SET TIME",
+                onClick = {
+                    val hourOfDay = when {
+                        selectedAmPm == 0 -> if (selectedHour12 == 12) 0 else selectedHour12
+                        else -> if (selectedHour12 == 12) 12 else selectedHour12 + 12
+                    }
+                    onTimeSelected(hourOfDay, selectedMinute)
+                }
+            )
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("CANCEL", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(24.dp)
+    )
+}

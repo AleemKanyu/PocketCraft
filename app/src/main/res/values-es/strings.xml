@@ -3,27 +3,29 @@
     <string name="app_name">PocketCraft</string>
     <string name="server_running">Servidor en ejecución</string>
     <string name="server_stopped">Servidor detenido</string>
-    <string name="server_starting">Iniciando servidor…</string>
+    <string name="server_starting">Servidor iniciando…</string>
     <string name="start_server">Iniciar servidor</string>
     <string name="stop_server">Detener servidor</string>
     <string name="notification_channel_name">Estado del servidor</string>
-    <string name="notification_channel_desc">Muestra el estado del servidor en ejecución y controles</string>
-    <string name="tap_to_copy">Toca para copiar IP</string>
+    <string name="notification_channel_desc">Muestra el estado de ejecución del servidor y los controles.</string>
+    <string name="tap_to_copy">Toque para copiar IP</string>
     <string name="copied">IP copiada al portapapeles</string>
     <string name="how_to_connect">Cómo conectarse</string>
     <string name="send_command">Enviar comando</string>
     <string name="clear_log">Borrar registro</string>
     <string name="apply_restart">Aplicar y reiniciar</string>
-    <string name="delete_world">Eliminar datos del mundo</string>
-    <string name="delete_world_confirm">Esto eliminará permanentemente el mundo. ¿Estás seguro?</string>
-    <string name="thermal_warning">Advertencia: El dispositivo se está sobrecalentando — considere detener el servidor</string>
-    <string name="ram_warning">Advertencia: RAM baja detectada — el rendimiento puede verse afectado</string>
-    <string name="players_online">%1$d/%2$d jugadores</string>
+    <string name="delete_world">Eliminar datos mundiales</string>
+    <string name="delete_world_confirm">Esto eliminará permanentemente el mundo. ¿Está seguro?</string>
+    <string name="thermal_warning">Advertencia: el dispositivo se está sobrecalentando; considere detener el servidor</string>
+    <string name="ram_warning">Advertencia: Se detectó poca RAM; el rendimiento puede verse degradado</string>
+    <string name="players_online">jugadores %1$d/%2$d</string>
     <string name="tps_label">TPS: %1$.1f</string>
-    <string name="uptime_label">Tiempo activo: %1$s</string>
-    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+    <string name="uptime_label">Tiempo de actividad: %1$s</string>
     <string name="announcement_title">Una nota de PocketCraft</string>
-    <string name="announcement_body">¡Hola! Solo queríamos ser sinceros &#8212; PocketCraft siempre será completamente gratis. Sin suscripciones, nunca.\n\nUsamos una pequeña cantidad de anuncios para mantener los servidores funcionando y la aplicación mejorando. Eso es todo.\n\nSi quieres ayudarnos a ser completamente sin anuncios, o simplemente quieres chatear con el equipo, únete a nuestro Discord &#8212; nos encantaría tenerte.</string>
-    <string name="announcement_join_discord">Unirse a Discord</string>
+    <string name="announcement_body">PocketCraft será gratuito para siempre para todos, pero algunas funciones están en Pro solo para que puedas soportar los costos de nuestro servidor y los costos de funcionamiento de las aplicaciones. Son baratos y por eso están ahí, incluido el de mayor valor. 
+ 
+ Si quieres ayudarnos o simplemente quieres conversar con el equipo, únete a nuestro Discord; nos encantaría tenerte.</string>
+    <string name="announcement_join_discord">Unirse a la discordia</string>
     <string name="announcement_got_it">Entendido</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
 </resources>

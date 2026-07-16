@@ -825,6 +825,7 @@ fun ServerScreen(
             reason = stateHolder.crashReason,
             details = stateHolder.crashDetails,
             duringStartup = stateHolder.crashWasDuringStartup,
+            logs = stateHolder.logs,
             onDismiss = { stateHolder.dismissCrashDialog() },
             onRetryWithInProcess = { stateHolder.startServer() }
         )
@@ -981,6 +982,7 @@ fun ServerFailureDialog(
     reason: String,
     details: String,
     duringStartup: Boolean,
+    logs: List<String>,
     onDismiss: () -> Unit,
     onRetryWithInProcess: (() -> Unit)? = null
 ) {
@@ -1233,6 +1235,7 @@ fun ServerFailureDialog(
                                     "ticket" to ticket,
                                     "reason" to reason,
                                     "details" to details,
+                                    "consoleLines" to logs,
                                     "device" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (Android ${android.os.Build.VERSION.RELEASE})",
                                     "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
                                 )

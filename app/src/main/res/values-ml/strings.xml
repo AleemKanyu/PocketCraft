@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">സെർവർ പ്രവർത്തിക്കുന്നു</string>
+    <string name="server_stopped">സെർവർ നിർത്തി</string>
+    <string name="server_starting">സെർവർ ആരംഭിക്കുന്നു...</string>
+    <string name="start_server">സെർവർ ആരംഭിക്കുക</string>
+    <string name="stop_server">സ്റ്റോപ്പ് സെർവർ</string>
+    <string name="notification_channel_name">സെർവർ നില</string>
+    <string name="notification_channel_desc">സെർവർ പ്രവർത്തിക്കുന്ന നിലയും നിയന്ത്രണങ്ങളും കാണിക്കുന്നു</string>
+    <string name="tap_to_copy">IP പകർത്താൻ ടാപ്പുചെയ്യുക</string>
+    <string name="copied">IP ക്ലിപ്പ്ബോർഡിലേക്ക് പകർത്തി</string>
+    <string name="how_to_connect">എങ്ങനെ ബന്ധിപ്പിക്കാം</string>
+    <string name="send_command">കമാൻഡ് അയയ്ക്കുക</string>
+    <string name="clear_log">ലോഗ് മായ്‌ക്കുക</string>
+    <string name="apply_restart">പ്രയോഗിക്കുക &amp; പുനരാരംഭിക്കുക</string>
+    <string name="delete_world">ലോക ഡാറ്റ ഇല്ലാതാക്കുക</string>
+    <string name="delete_world_confirm">ഇത് ലോകത്തെ ശാശ്വതമായി ഇല്ലാതാക്കും. നിങ്ങൾക്ക് ഉറപ്പാണോ?</string>
+    <string name="thermal_warning">മുന്നറിയിപ്പ്: ഉപകരണം അമിതമായി ചൂടാകുന്നു — സെർവർ നിർത്തുന്നത് പരിഗണിക്കുക</string>
+    <string name="ram_warning">മുന്നറിയിപ്പ്: കുറഞ്ഞ റാം കണ്ടെത്തി — പ്രകടനം മോശമായേക്കാം</string>
+    <string name="players_online">%1$d/%2$d കളിക്കാർ</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">പ്രവർത്തനസമയം: %1$s</string>
+    <string name="announcement_title">PocketCraft-ൽ നിന്നുള്ള ഒരു കുറിപ്പ്</string>
+    <string name="announcement_body">PocketCraft എല്ലാവർക്കുമായി എന്നെന്നേക്കുമായി സൗജന്യമായിരിക്കും, എന്നാൽ ഞങ്ങളുടെ സെർവർ ചെലവുകളും ആപ്പ് പ്രവർത്തനച്ചെലവുകളും നിങ്ങൾക്ക് പിന്തുണയ്ക്കാൻ കഴിയുന്ന തരത്തിൽ ചില സവിശേഷതകൾ Pro-യിൽ ഉണ്ട്. അവ വിലകുറഞ്ഞതാണ്, അതിനാലാണ് കൂടുതൽ മൂല്യമുള്ളത് ഉൾപ്പെടെ അവ അവിടെ ഉള്ളത്. 
+ 
+ നിങ്ങൾക്ക് ഞങ്ങളെ സഹായിക്കാനോ ടീമുമായി ചാറ്റ് ചെയ്യാനോ താൽപ്പര്യമുണ്ടെങ്കിൽ, ഞങ്ങളുടെ ഡിസ്‌കോർഡിൽ ചേരുക — നിങ്ങളെ ലഭിക്കാൻ ഞങ്ങൾ ആഗ്രഹിക്കുന്നു.</string>
+    <string name="announcement_join_discord">വിയോജിപ്പിൽ ചേരുക</string>
+    <string name="announcement_got_it">മനസ്സിലായി</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

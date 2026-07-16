@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Серверот работи</string>
+    <string name="server_stopped">Серверот запре</string>
+    <string name="server_starting">Серверот започнува…</string>
+    <string name="start_server">Стартувајте го серверот</string>
+    <string name="stop_server">Стоп сервер</string>
+    <string name="notification_channel_name">Статус на серверот</string>
+    <string name="notification_channel_desc">Го прикажува статусот и контролите што работи на серверот</string>
+    <string name="tap_to_copy">Допрете за да копирате IP</string>
+    <string name="copied">ИП е копирана во таблата со исечоци</string>
+    <string name="how_to_connect">Како да се поврзете</string>
+    <string name="send_command">Испрати команда</string>
+    <string name="clear_log">Исчисти дневник</string>
+    <string name="apply_restart">Примени и рестартирајте</string>
+    <string name="delete_world">Избриши Светски податоци</string>
+    <string name="delete_world_confirm">Ова трајно ќе го избрише светот. Дали си сигурен?</string>
+    <string name="thermal_warning">Предупредување: Уредот се прегрее - размислете за запирање на серверот</string>
+    <string name="ram_warning">Предупредување: Откриена е ниска RAM меморија - перформансите може да се намалат</string>
+    <string name="players_online">%1$d/%2$d играчи</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Време на работа: %1$s</string>
+    <string name="announcement_title">Белешка од PocketCraft</string>
+    <string name="announcement_body">PocketCraft ќе биде бесплатен засекогаш за секого, но некои функции се во Pro само за да можете да ги поддржите трошоците за нашиот сервер и трошоците за работа на апликациите. Тие се евтини, и затоа се таму, вклучувајќи го и тоа за поголема вредност. 
+ 
+ Ако сакате да ни помогнете или само сакате да разговарате со тимот, придружете се на нашиот Discord - би сакале да ве имаме.</string>
+    <string name="announcement_join_discord">Придружете се на Discord</string>
+    <string name="announcement_got_it">Разбрав</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

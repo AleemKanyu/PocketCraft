@@ -112,13 +112,23 @@ object ServerPropertiesWriter {
         props["rcon.port"] = "25575"
         props["rcon.password"] = "pocketcraft-internal-rcon"
         props["broadcast-rcon-to-ops"] = "false"
-        props["pocketcraft-server-type"] = prefs.serverType
+        val existingServerType = props.getProperty("pocketcraft-server-type").orEmpty()
+        val preserveModpackMetadata = existingServerType.equals("MODPACK", ignoreCase = true) &&
+            props.getProperty("pocketcraft-launch-target").orEmpty().isNotBlank()
+
+        props["pocketcraft-server-type"] = if (preserveModpackMetadata && !prefs.serverType.equals("MODPACK", ignoreCase = true)) {
+            existingServerType
+        } else {
+            prefs.serverType
+        }
         props["pocketcraft-game-version"] = prefs.gameVersion
         props["pocketcraft-join-message-enabled"] = "true"
         props["pocketcraft-join-message-text"] = ServerConfig().joinMessageText
         props["pocketcraft-join-message-url"] = ServerConfig().joinMessageUrl
         if (prefs.customJarPath.isNullOrBlank()) {
-            props.remove("pocketcraft-custom-jar-path")
+            if (!preserveModpackMetadata) {
+                props.remove("pocketcraft-custom-jar-path")
+            }
         } else {
             props["pocketcraft-custom-jar-path"] = prefs.customJarPath
         }

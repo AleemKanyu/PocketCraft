@@ -11,9 +11,11 @@ const SERVER_GUID = 0xDEADBEEFCAFE1234n;
 const DEFAULT_PROTOCOL = '800';
 const DEFAULT_VERSION = '1.22.0';
 const statusMap = new Map();
+const DEBUG_NETWORK = process.env.POCKETCRAFT_DEBUG_NETWORK === '1';
 let pingLogCount = 0;
 
 function shouldLogPing() {
+  if (!DEBUG_NETWORK) return false;
   pingLogCount += 1;
   return pingLogCount <= 10 || pingLogCount % 500 === 0;
 }

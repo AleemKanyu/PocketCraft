@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">د سرور چلول</string>
+    <string name="server_stopped">سرور بند شو</string>
+    <string name="server_starting">سرور پیل کیږي…</string>
+    <string name="start_server">سرور پیل کړئ</string>
+    <string name="stop_server">Stop Server</string>
+    <string name="notification_channel_name">د سرور حالت</string>
+    <string name="notification_channel_desc">د سرور چلولو حالت او کنټرول ښیې</string>
+    <string name="tap_to_copy">د IP کاپي کولو لپاره ټایپ کړئ</string>
+    <string name="copied">IP کلپ بورډ ته کاپي شوی</string>
+    <string name="how_to_connect">څنګه نښلول</string>
+    <string name="send_command">قومانده ولېږه</string>
+    <string name="clear_log">پاکه ننوتل</string>
+    <string name="apply_restart">پلي کول او بیا پیل کول</string>
+    <string name="delete_world">د نړۍ ډیټا حذف کړئ</string>
+    <string name="delete_world_confirm">دا به د تل لپاره نړۍ له منځه یوسي. ایا تاسو ډاډه یاست؟</string>
+    <string name="thermal_warning">خبرداری: وسیله ډیره ګرمه ده - د سرور ودرولو ته پام وکړئ</string>
+    <string name="ram_warning">خبرداری: ټیټ RAM کشف شوی - فعالیت ممکن خراب شي</string>
+    <string name="players_online">%1$d/%2$d لوبغاړي</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">د وخت وخت: %1$s</string>
+    <string name="announcement_title">د PocketCraft څخه یو یادښت</string>
+    <string name="announcement_body">PocketCraft به د هرچا لپاره د تل لپاره وړیا وي، مګر ځینې ځانګړتیاوې په پرو کې دي نو تاسو کولی شئ زموږ د سرور لګښتونو او د ایپ چلولو لګښتونو ملاتړ وکړئ. دوی ارزانه دي، او له همدې امله دوی هلته دي، په شمول د ډیر ارزښت لپاره. 
+ 
+ که تاسو غواړئ له موږ سره مرسته وکړئ، یا یوازې د ټیم سره خبرې کول غواړئ، زموږ د Discord سره یوځای شئ — موږ خوښ یو چې تاسو یې ولرو.</string>
+    <string name="announcement_join_discord">د ګډوډۍ سره یوځای شئ</string>
+    <string name="announcement_got_it">ترلاسه کړه</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

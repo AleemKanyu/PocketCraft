@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server Gudu</string>
+    <string name="server_stopped">An Kashe Sabar</string>
+    <string name="server_starting">Ana Fara Sabar…</string>
+    <string name="start_server">Fara uwar garken</string>
+    <string name="stop_server">Tsaya uwar garke</string>
+    <string name="notification_channel_name">Matsayin uwar garken</string>
+    <string name="notification_channel_desc">Yana nuna matsayin uwar garken da ke gudana da sarrafawa</string>
+    <string name="tap_to_copy">Matsa don kwafi IP</string>
+    <string name="copied">An kwafi IP zuwa allo</string>
+    <string name="how_to_connect">Yadda ake Haɗuwa</string>
+    <string name="send_command">Aika Umarni</string>
+    <string name="clear_log">Share Log</string>
+    <string name="apply_restart">Aiwatar &amp; Sake farawa</string>
+    <string name="delete_world">Share Bayanan Duniya</string>
+    <string name="delete_world_confirm">Wannan zai share duniya har abada. Ka tabbata?</string>
+    <string name="thermal_warning">Gargadi: Na\'urar tana zafi fiye da kima - la\'akari da dakatar da sabar</string>
+    <string name="ram_warning">Gargadi: Ƙananan RAM da aka gano - aikin na iya lalacewa</string>
+    <string name="players_online">%1$d/%2$d yan wasa</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Lokaci: %1$s</string>
+    <string name="announcement_title">Bayanan kula daga PocketCraft</string>
+    <string name="announcement_body">PocketCraft zai kasance kyauta ga kowa da kowa, amma wasu fasalulluka suna cikin Pro kawai domin ku iya tallafawa farashin sabar mu da kuma farashin aikace-aikacen. Suna da arha, shi ya sa suke ciki, gami da wannan don ƙarin ƙima. 
+ 
+ Idan kuna son taimaka mana, ko kawai kuna son yin magana da ƙungiyar, ku shiga Discord ɗin mu - muna son samun ku.</string>
+    <string name="announcement_join_discord">Shiga Discord</string>
+    <string name="announcement_got_it">Na samu</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

@@ -137,9 +137,15 @@ object RamUtils {
 
     fun buildDeviceStabilityProfile(totalRamMb: Int, availableRamMb: Int): DeviceStabilityProfile {
         val manufacturer = android.os.Build.MANUFACTURER.orEmpty().lowercase(java.util.Locale.US)
+        val brand = android.os.Build.BRAND.orEmpty().lowercase(java.util.Locale.US)
         val model = android.os.Build.MODEL.orEmpty().lowercase(java.util.Locale.US)
         val device = android.os.Build.DEVICE.orEmpty().lowercase(java.util.Locale.US)
         val product = android.os.Build.PRODUCT.orEmpty().lowercase(java.util.Locale.US)
+        val fingerprint = android.os.Build.FINGERPRINT.orEmpty().lowercase(java.util.Locale.US)
+        val xiaomiMarkers = listOf(manufacturer, brand, model, device, product, fingerprint)
+        val isXiaomiFamily = xiaomiMarkers.any { value ->
+            value.contains("xiaomi") || value.contains("redmi") || value.contains("poco")
+        }
         val isGalaxyA12Family = manufacturer.contains("samsung") && listOf(model, device, product).any { value ->
             value.contains("a12") || value.contains("sm-a125") || value.contains("sm-a127")
         }
@@ -147,6 +153,7 @@ object RamUtils {
             value.contains("m13") || value.contains("sm-m135") ||
             value.contains("sm-m136") || value.contains("sm-m137")
         }
+        val isXiaomiAndroid14PlusFamily = isXiaomiFamily && android.os.Build.VERSION.SDK_INT >= 34
         val constrainedHeap = isGalaxyA12Family || totalRamMb <= 4096
         val targetHeapCap = when {
             isGalaxyA12Family -> minOf((availableRamMb * 0.52f).toInt(), 896)
@@ -156,13 +163,14 @@ object RamUtils {
         }
         val minHeapFloor = if (isGalaxyA12Family || totalRamMb <= 3072) 384 else 512
         val reason = when {
+            isXiaomiAndroid14PlusFamily -> "Xiaomi/Redmi/POCO Android 14+ device detected. Using external JVM to avoid in-process startup stalls during world preparation."
             isGalaxyM13Family -> "Samsung Galaxy M13 detected. Using external JVM to prevent startup stall on Android 14."
             isGalaxyA12Family -> "Samsung Galaxy A12 low-memory profile active. Using safer heap limits to reduce short crash loops."
             constrainedHeap -> "Low-memory device profile active. Heap is capped to reduce background crash risk."
             else -> null
         }
         return DeviceStabilityProfile(
-            forceExternalJvm = isGalaxyM13Family,
+            forceExternalJvm = isGalaxyM13Family || isXiaomiAndroid14PlusFamily,
             constrainedHeap = constrainedHeap,
             maxHeapCapMb = targetHeapCap.coerceAtLeast(minHeapFloor),
             minHeapFloorMb = minHeapFloor,

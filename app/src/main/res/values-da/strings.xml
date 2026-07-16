@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server kører</string>
+    <string name="server_stopped">Server stoppet</string>
+    <string name="server_starting">Server starter...</string>
+    <string name="start_server">Start server</string>
+    <string name="stop_server">Stop server</string>
+    <string name="notification_channel_name">Serverstatus</string>
+    <string name="notification_channel_desc">Viser serverens kørestatus og kontroller</string>
+    <string name="tap_to_copy">Tryk for at kopiere IP</string>
+    <string name="copied">IP kopieret til udklipsholder</string>
+    <string name="how_to_connect">Sådan forbinder du</string>
+    <string name="send_command">Send kommando</string>
+    <string name="clear_log">Ryd log</string>
+    <string name="apply_restart">Anvend og genstart</string>
+    <string name="delete_world">Slet verdensdata</string>
+    <string name="delete_world_confirm">Dette vil permanent slette verden. Er du sikker?</string>
+    <string name="thermal_warning">Advarsel: Enheden overophedes — overvej at stoppe serveren</string>
+    <string name="ram_warning">Advarsel: Lav RAM registreret — ydeevnen kan blive forringet</string>
+    <string name="players_online">%1$d/%2$d spillere</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Oppetid: %1$s</string>
+    <string name="announcement_title">En note fra PocketCraft</string>
+    <string name="announcement_body">PocketCraft vil være gratis for alle, men nogle funktioner er i Pro, bare så du kan understøtte vores serveromkostninger og appdriftsomkostninger. De er billige, og det er derfor, de er derinde, også for mere værdi. 
+ 
+ Hvis du gerne vil hjælpe os, eller bare vil chatte med holdet, så tilmeld dig vores Discord - vi vil meget gerne have dig.</string>
+    <string name="announcement_join_discord">Slut dig til Discord</string>
+    <string name="announcement_got_it">Forstår det</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

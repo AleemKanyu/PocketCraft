@@ -278,7 +278,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            val appStrings = appStringsFor(AppPreferences(this@MainActivity).appLanguage)
+            val appStrings = appStringsFor(this@MainActivity, AppPreferences(this@MainActivity).appLanguage)
             CompositionLocalProvider(LocalAppStrings provides appStrings) {
             PocketCraftTheme(darkTheme = darkTheme, mobTheme = mobTheme) {
                 var jreReady by remember { mutableStateOf(initialJreReady) }

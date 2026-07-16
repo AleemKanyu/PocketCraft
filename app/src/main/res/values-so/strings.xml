@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server-ku ordaya</string>
+    <string name="server_stopped">Server-ku wuu istaagay</string>
+    <string name="server_starting">Server ka bilaabaya…</string>
+    <string name="start_server">Bilow Server</string>
+    <string name="stop_server">Jooji Server-ka</string>
+    <string name="notification_channel_name">Xaaladda Server-ka</string>
+    <string name="notification_channel_desc">Wuxuu muujiyaa heerka socodsiinta serverka iyo kontaroolada</string>
+    <string name="tap_to_copy">Taabo si aad u koobiyeeyso IP</string>
+    <string name="copied">IP-ga waxaa lagu koobiyeeyay sabuuraddii</string>
+    <string name="how_to_connect">Sida loo xidho</string>
+    <string name="send_command">Dir amar</string>
+    <string name="clear_log">Nadiifi Log</string>
+    <string name="apply_restart">Codso oo dib u bilow</string>
+    <string name="delete_world">Tirtir Xogta Adduunka</string>
+    <string name="delete_world_confirm">Tani waxay si joogto ah u tirtiri doontaa adduunka. Ma hubtaa?</string>
+    <string name="thermal_warning">Digniin: Qalabku aad buu u kulul yahay - ka fiirso joojinta server-ka</string>
+    <string name="ram_warning">Digniin: RAM yar oo la ogaaday - waxqabadka waa la dhimi karaa</string>
+    <string name="players_online">%1$d/%2$d ciyaartoyda</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Wakhtiga shaqada: %1$s</string>
+    <string name="announcement_title">Qoraal ka yimid PocketCraft</string>
+    <string name="announcement_body">PocketCraft waligeed xor bay u ahaan doontaa qof walba, laakiin sifada qaar ayaa ku jira Pro si aad u taageerto kharashyada serferka iyo kharashyada socodsiinta abka. Way jaban yihiin, waana sababta ay halkaas ugu jiraan, oo ay ku jirto qiimo badan. 
+ 
+ Haddii aad jeclaan lahayd inaad na caawiso, ama aad rabto inaad la hadasho kooxda, ku biir Discord - waxaan jeclaan lahayn inaan ku haysano.</string>
+    <string name="announcement_join_discord">Ku biir Discord</string>
+    <string name="announcement_got_it">Waan helay</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>
