@@ -279,7 +279,7 @@ class ServerLauncher(private val context: Context) {
             else -> 512
         }
         val maxRamMb = requestedMaxRamMb.coerceIn(deviceProfile.minHeapFloorMb, maxAllowedRam)
-        val minRamMb = requestedMinRamMb.coerceIn(deviceProfile.minHeapFloorMb, maxRamMb)
+        val minRamMb = maxRamMb // Set initial heap equal to max heap to prevent runtime dynamic resizing pauses
 
         deviceProfile.reason?.let { reason ->
             onOutput("[PocketCraft] Stability mode enabled: $reason")
@@ -629,10 +629,14 @@ class ServerLauncher(private val context: Context) {
         val totalRam = getTotalRamMb(context)
 
         val gcFlags = listOf(
-            "-XX:G1HeapWastePercent=10",
-            "-XX:G1MixedGCCountTarget=8",
-            "-XX:G1MixedGCLiveThresholdPercent=85",
-            "-XX:G1RSetUpdatingPauseTimePercent=10"
+            "-XX:G1NewSizePercent=30",
+            "-XX:G1MaxNewSizePercent=40",
+            "-XX:G1ReservePercent=15",
+            "-XX:InitiatingHeapOccupancyPercent=15",
+            "-XX:G1HeapWastePercent=5",
+            "-XX:G1MixedGCCountTarget=4",
+            "-XX:G1MixedGCLiveThresholdPercent=90",
+            "-XX:G1RSetUpdatingPauseTimePercent=5"
         )
 
         val vmArgs = mutableListOf(
@@ -673,7 +677,7 @@ class ServerLauncher(private val context: Context) {
             "-Xshare:off",
             "-XX:+UnlockExperimentalVMOptions",
             "-XX:+UnlockDiagnosticVMOptions",
-            "-XX:-AlwaysPreTouch",
+            "-XX:+AlwaysPreTouch",
             "-XX:+UseStringDeduplication",
             "-XX:+UseG1GC",
             "-XX:+ParallelRefProcEnabled",
@@ -1217,19 +1221,20 @@ class ServerLauncher(private val context: Context) {
 
         // Match Spigot activation and tracking limits to the configured world distances
         // so entities stay active and visible across the full simulation range.
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "animals", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "monsters", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "raiders", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "misc", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "water", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "villagers", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "flying-monsters", simulationTrackingBlocks.toString())
+        // Use optimized entity activation ranges to save CPU overhead and prevent lag spikes
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "animals", "32")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "monsters", "32")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "raiders", "48")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "misc", "16")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "water", "16")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "villagers", "32")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "flying-monsters", "32")
         updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "tick-inactive-villagers", "false")
 
         updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "players", viewTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "animals", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "monsters", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "misc", simulationTrackingBlocks.toString())
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "animals", "48")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "monsters", "48")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "misc", "32")
 
         if (updated != original) {
             spigotFile.writeText(updated)

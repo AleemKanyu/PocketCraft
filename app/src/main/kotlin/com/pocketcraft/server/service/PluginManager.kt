@@ -360,8 +360,8 @@ object PluginManager {
             updated = ensureYamlSectionValue(updated, "server", "auth-type", "floodgate")
         }
 
-        updated = ensureYamlSectionValue(updated, "motd", "passthrough-motd", "false")
-        updated = ensureYamlSectionValue(updated, "motd", "passthrough-player-counts", "false")
+        updated = ensureYamlSectionValue(updated, "motd", "passthrough-motd", "true")
+        updated = ensureYamlSectionValue(updated, "motd", "passthrough-player-counts", "true")
 
         if (updated != original) {
             geyserConfigFile.writeText(updated)
