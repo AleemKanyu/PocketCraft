@@ -677,7 +677,7 @@ class ServerLauncher(private val context: Context) {
             "-Xshare:off",
             "-XX:+UnlockExperimentalVMOptions",
             "-XX:+UnlockDiagnosticVMOptions",
-            "-XX:+AlwaysPreTouch",
+            "-XX:-AlwaysPreTouch",
             "-XX:+UseStringDeduplication",
             "-XX:+UseG1GC",
             "-XX:+ParallelRefProcEnabled",

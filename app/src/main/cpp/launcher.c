@@ -409,7 +409,10 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
     selected_max_mb = (int)default_mb;
   }
 
-  int selected_min_mb = 256;
+  int selected_min_mb = minRamMb;
+  if (selected_min_mb <= 0) {
+    selected_min_mb = 256;
+  }
   snprintf(xmx_opt, sizeof(xmx_opt), "-Xmx%dm", selected_max_mb);
   snprintf(xms_opt, sizeof(xms_opt), "-Xms%dm", selected_min_mb);
   snprintf(java_home_opt, sizeof(java_home_opt), "-Djava.home=%s", jre_path);
@@ -481,6 +484,7 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   "-Xshare:off",
                   "-XX:+UnlockExperimentalVMOptions",
                   "-XX:+UnlockDiagnosticVMOptions",
+                  "-XX:-AlwaysPreTouch",
                   "-XX:+UseStringDeduplication",
                   "-XX:+UseG1GC",
                   "-XX:+ParallelRefProcEnabled",
