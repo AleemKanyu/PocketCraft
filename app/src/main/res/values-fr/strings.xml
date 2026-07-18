@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Serveur en cours d\'exécution</string>
+    <string name="server_stopped">Serveur arrêté</string>
+    <string name="server_starting">Démarrage du serveur…</string>
+    <string name="start_server">Démarrer le serveur</string>
+    <string name="stop_server">Arrêter le serveur</string>
+    <string name="notification_channel_name">État du serveur</string>
+    <string name="notification_channel_desc">Affiche l\'état de fonctionnement du serveur et les contrôles</string>
+    <string name="tap_to_copy">Appuyez pour copier l\'IP</string>
+    <string name="copied">IP copiée dans le presse-papiers</string>
+    <string name="how_to_connect">Comment se connecter</string>
+    <string name="send_command">Envoyer la commande</string>
+    <string name="clear_log">Effacer le journal</string>
+    <string name="apply_restart">Appliquer et redémarrer</string>
+    <string name="delete_world">Supprimer les données du monde</string>
+    <string name="delete_world_confirm">Cela supprimera définitivement le monde. Es-tu sûr?</string>
+    <string name="thermal_warning">Avertissement : l\'appareil surchauffe – pensez à arrêter le serveur</string>
+    <string name="ram_warning">Avertissement : RAM faible détectée – les performances peuvent être dégradées</string>
+    <string name="players_online">joueurs %1$d/%2$d</string>
+    <string name="tps_label">TPS : %1$.1f</string>
+    <string name="uptime_label">Temps de disponibilité : %1$s</string>
+    <string name="announcement_title">Une note de PocketCraft</string>
+    <string name="announcement_body">PocketCraft sera gratuit pour toujours pour tout le monde, mais certaines fonctionnalités sont dans Pro uniquement pour que vous puissiez prendre en charge les coûts de notre serveur et les coûts de fonctionnement de nos applications. Ils sont bon marché, et c\'est pourquoi ils sont là, y compris pour plus de valeur. 
+ 
+ Si vous souhaitez nous aider ou simplement discuter avec l\'équipe, rejoignez notre Discord – nous serions ravis de vous avoir.</string>
+    <string name="announcement_join_discord">Rejoignez Discord</string>
+    <string name="announcement_got_it">Compris</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

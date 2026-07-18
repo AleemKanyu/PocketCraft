@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Máy chủ đang chạy</string>
+    <string name="server_stopped">Máy chủ đã dừng</string>
+    <string name="server_starting">Máy chủ đang khởi động…</string>
+    <string name="start_server">Khởi động máy chủ</string>
+    <string name="stop_server">Dừng máy chủ</string>
+    <string name="notification_channel_name">Trạng thái máy chủ</string>
+    <string name="notification_channel_desc">Hiển thị trạng thái hoạt động và điều khiển của máy chủ</string>
+    <string name="tap_to_copy">Nhấn để sao chép IP</string>
+    <string name="copied">IP được sao chép vào clipboard</string>
+    <string name="how_to_connect">Cách kết nối</string>
+    <string name="send_command">Gửi lệnh</string>
+    <string name="clear_log">Xóa nhật ký</string>
+    <string name="apply_restart">Áp dụng &amp; Khởi động lại</string>
+    <string name="delete_world">Xóa dữ liệu thế giới</string>
+    <string name="delete_world_confirm">Điều này sẽ xóa vĩnh viễn thế giới. Bạn có chắc không?</string>
+    <string name="thermal_warning">Cảnh báo: Thiết bị quá nóng — hãy cân nhắc việc dừng máy chủ</string>
+    <string name="ram_warning">Cảnh báo: Đã phát hiện thấy RAM thấp — hiệu suất có thể bị giảm</string>
+    <string name="players_online">%1$d/%2$d người chơi</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Thời gian hoạt động: %1$s</string>
+    <string name="announcement_title">Ghi chú từ PocketCraft</string>
+    <string name="announcement_body">PocketCraft sẽ miễn phí mãi mãi cho mọi người nhưng một số tính năng chỉ có trong bản Pro để bạn có thể hỗ trợ chi phí máy chủ và chi phí chạy ứng dụng của chúng tôi. Chúng rẻ và đó là lý do tại sao chúng có mặt ở đó, bao gồm cả thứ đó để có giá trị cao hơn. 
+ 
+ Nếu bạn muốn giúp đỡ chúng tôi hoặc chỉ muốn trò chuyện với nhóm, hãy tham gia Discord của chúng tôi — chúng tôi rất vui khi có bạn.</string>
+    <string name="announcement_join_discord">Tham gia bất hòa</string>
+    <string name="announcement_got_it">Hiểu rồi</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

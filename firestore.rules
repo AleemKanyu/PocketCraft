@@ -16,6 +16,18 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, write: if isOwner(userId);
     }
+    match /users/{userId}/dashboard_commands/{commandId} {
+      allow read, write: if isOwner(userId) || (
+        (resource != null && resource.data.secret == get(/databases/$(database)/documents/users/$(userId)).data.dashboardSecret)
+        || (request != null && request.resource != null && request.resource.data.secret == get(/databases/$(database)/documents/users/$(userId)).data.dashboardSecret)
+      );
+    }
+    match /users/{userId}/dashboard_status/{statusId} {
+      allow read, write: if isOwner(userId) || (
+        (resource != null && resource.data.secret == get(/databases/$(database)/documents/users/$(userId)).data.dashboardSecret)
+        || (request != null && request.resource != null && request.resource.data.secret == get(/databases/$(database)/documents/users/$(userId)).data.dashboardSecret)
+      );
+    }
     match /subdomains/{subdomain} {
       allow read: if true;
       allow create: if signedIn()
@@ -37,6 +49,10 @@ service cloud.firestore {
       allow update, delete: if false;
     }
     match /beta_feedback/{document} {
+      allow create: if true;
+      allow read, update, delete: if false;
+    }
+    match /tickets/{ticketId} {
       allow create: if true;
       allow read, update, delete: if false;
     }

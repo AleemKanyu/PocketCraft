@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server Nṣiṣẹ</string>
+    <string name="server_stopped">Server Duro</string>
+    <string name="server_starting">Olupin Bibẹrẹ…</string>
+    <string name="start_server">Bẹrẹ Server</string>
+    <string name="stop_server">Duro Server</string>
+    <string name="notification_channel_name">Ipo olupin</string>
+    <string name="notification_channel_desc">Ṣe afihan ipo ṣiṣe olupin ati awọn iṣakoso</string>
+    <string name="tap_to_copy">Fọwọ ba lati da IP daakọ</string>
+    <string name="copied">IP dakọ si agekuru</string>
+    <string name="how_to_connect">Bawo ni lati Sopọ</string>
+    <string name="send_command">Firanṣẹ Òfin</string>
+    <string name="clear_log">Ko Wọle</string>
+    <string name="apply_restart">Waye &amp; Tun bẹrẹ</string>
+    <string name="delete_world">Pa World Data</string>
+    <string name="delete_world_confirm">Eyi yoo pa agbaye rẹ patapata. Ṣe o da ọ loju?</string>
+    <string name="thermal_warning">Ikilọ: Ẹrọ ti ngbona - ro idaduro olupin naa</string>
+    <string name="ram_warning">Ikilọ: Ramu kekere ti a rii - iṣẹ le bajẹ</string>
+    <string name="players_online">%1$d/%2$d awọn ẹrọ orin</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Akoko ipari: %1$s</string>
+    <string name="announcement_title">Akọsilẹ kan lati PocketCraft</string>
+    <string name="announcement_body">PocketCraft yoo jẹ ọfẹ lailai fun gbogbo eniyan, ṣugbọn diẹ ninu awọn ẹya wa ni Pro kan ki o le ṣe atilẹyin awọn idiyele olupin wa ati awọn idiyele ṣiṣe app. Wọn jẹ olowo poku, ati idi idi ti wọn fi wa nibẹ, pẹlu iyẹn fun iye diẹ sii. 
+ 
+ Ti o ba fẹ ran wa lọwọ, tabi o kan fẹ lati ba ẹgbẹ sọrọ, darapọ mọ Discord wa - a yoo nifẹ lati ni ọ.</string>
+    <string name="announcement_join_discord">Darapọ mọ Discord</string>
+    <string name="announcement_got_it">O gba</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Tumatakbo ang Server</string>
+    <string name="server_stopped">Huminto ang Server</string>
+    <string name="server_starting">Nagsisimula ang Server…</string>
+    <string name="start_server">Simulan ang Server</string>
+    <string name="stop_server">Ihinto ang Server</string>
+    <string name="notification_channel_name">Katayuan ng Server</string>
+    <string name="notification_channel_desc">Nagpapakita ng katayuan sa pagpapatakbo ng server at mga kontrol</string>
+    <string name="tap_to_copy">I-tap para kopyahin ang IP</string>
+    <string name="copied">Nakopya ang IP sa clipboard</string>
+    <string name="how_to_connect">Paano Kumonekta</string>
+    <string name="send_command">Ipadala ang Utos</string>
+    <string name="clear_log">I-clear ang Log</string>
+    <string name="apply_restart">Ilapat at I-restart</string>
+    <string name="delete_world">Tanggalin ang World Data</string>
+    <string name="delete_world_confirm">Ito ay permanenteng magtatanggal sa mundo. Sigurado ka ba?</string>
+    <string name="thermal_warning">Babala: Nag-overheat ang device — pag-isipang ihinto ang server</string>
+    <string name="ram_warning">Babala: Nakita ang mababang RAM — maaaring masira ang pagganap</string>
+    <string name="players_online">%1$d/%2$d na mga manlalaro</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Uptime: %1$s</string>
+    <string name="announcement_title">Isang tala mula sa PocketCraft</string>
+    <string name="announcement_body">Ang PocketCraft ay magiging libre magpakailanman para sa lahat, ngunit ang ilang mga tampok ay nasa Pro para lamang masuportahan mo ang aming mga gastos sa server at mga gastos sa pagpapatakbo ng app. Ang mga ito ay mura, at iyon ang dahilan kung bakit sila naroroon, kasama iyon para sa higit na halaga. 
+ 
+ Kung gusto mo kaming tulungan, o gusto mo lang makipag-chat sa team, sumali sa aming Discord — gusto ka naming makasama.</string>
+    <string name="announcement_join_discord">Sumali sa Discord</string>
+    <string name="announcement_got_it">Nakuha ko</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

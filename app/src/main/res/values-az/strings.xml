@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server işləyir</string>
+    <string name="server_stopped">Server dayandırıldı</string>
+    <string name="server_starting">Server başlayır...</string>
+    <string name="start_server">Serveri işə salın</string>
+    <string name="stop_server">Serveri dayandırın</string>
+    <string name="notification_channel_name">Server Vəziyyəti</string>
+    <string name="notification_channel_desc">Serverin işlək statusunu və nəzarətlərini göstərir</string>
+    <string name="tap_to_copy">IP-ni köçürmək üçün toxunun</string>
+    <string name="copied">IP panoya kopyalandı</string>
+    <string name="how_to_connect">Necə Qoşulmalı</string>
+    <string name="send_command">Komanda göndər</string>
+    <string name="clear_log">Qeydləri silin</string>
+    <string name="apply_restart">Tətbiq et və yenidən başladın</string>
+    <string name="delete_world">Dünya Məlumatlarını silin</string>
+    <string name="delete_world_confirm">Bu, dünyanı həmişəlik siləcək. əminsən?</string>
+    <string name="thermal_warning">Xəbərdarlıq: Cihaz həddindən artıq qızır — serveri dayandırmağı düşünün</string>
+    <string name="ram_warning">Xəbərdarlıq: Aşağı RAM aşkarlandı — performans aşağı düşə bilər</string>
+    <string name="players_online">%1$d/%2$d oyunçular</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">İş vaxtı: %1$s</string>
+    <string name="announcement_title">PocketCraft-dən qeyd</string>
+    <string name="announcement_body">PocketCraft hər kəs üçün əbədi olaraq pulsuz olacaq, lakin bəzi funksiyalar sadəcə Pro-dadır ki, siz server xərclərimizi və tətbiqin işləmə xərclərini dəstəkləyə biləsiniz. Onlar ucuzdur və buna görə də daha çox dəyər üçün oradadırlar. 
+ 
+ Bizə kömək etmək və ya sadəcə komanda ilə söhbət etmək istəyirsinizsə, Discordumuza qoşulun — sizinlə olmaqdan məmnun olarıq.</string>
+    <string name="announcement_join_discord">Discord-a qoşulun</string>
+    <string name="announcement_got_it">Anladım</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

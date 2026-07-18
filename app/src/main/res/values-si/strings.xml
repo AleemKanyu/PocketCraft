@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">සේවාදායක ධාවනය</string>
+    <string name="server_stopped">සේවාදායකය නතර විය</string>
+    <string name="server_starting">සේවාදායකය ආරම්භ වෙමින්...</string>
+    <string name="start_server">සේවාදායකය ආරම්භ කරන්න</string>
+    <string name="stop_server">නැවතුම් සේවාදායකය</string>
+    <string name="notification_channel_name">සේවාදායක තත්ත්වය</string>
+    <string name="notification_channel_desc">සේවාදායක ධාවන තත්ත්වය සහ පාලන පෙන්වයි</string>
+    <string name="tap_to_copy">IP පිටපත් කිරීමට තට්ටු කරන්න</string>
+    <string name="copied">IP පසුරු පුවරුවට පිටපත් කරන ලදී</string>
+    <string name="how_to_connect">සම්බන්ධ වන්නේ කෙසේද</string>
+    <string name="send_command">විධානය යවන්න</string>
+    <string name="clear_log">හිස් ලොගය</string>
+    <string name="apply_restart">අයදුම් කරන්න සහ නැවත ආරම්භ කරන්න</string>
+    <string name="delete_world">ලෝක දත්ත මකන්න</string>
+    <string name="delete_world_confirm">මෙය ස්ථිරවම ලෝකය මකා දමයි. ඔයාට විශ්වාස ද?</string>
+    <string name="thermal_warning">අවවාදයයි: උපාංගය අධික උනුසුම් වෙමින් පවතී — සේවාදායකය නැවැත්වීම සලකා බලන්න</string>
+    <string name="ram_warning">අවවාදයයි: අඩු RAM අනාවරණය කර ඇත - කාර්ය සාධනය පිරිහීමට ලක් විය හැක</string>
+    <string name="players_online">%1$d/%2$d ක්‍රීඩකයන්</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">අතිකාල: %1$s</string>
+    <string name="announcement_title">PocketCraft වෙතින් සටහනක්</string>
+    <string name="announcement_body">PocketCraft සැමට සදහටම නොමිලේ වනු ඇත, නමුත් සමහර විශේෂාංග Pro හි ඇත, එවිට ඔබට අපගේ සේවාදායක පිරිවැය සහ යෙදුම් ධාවන වියදම් සඳහා සහය විය හැක. ඒවා ලාභදායී වන අතර, වැඩි වටිනාකමක් සඳහා ඒවා ඇතුළුව ඒවා එහි ඇත්තේ එබැවිනි. 
+ 
+ ඔබ අපට උදව් කිරීමට කැමති නම්, හෝ කණ්ඩායම සමඟ කතාබස් කිරීමට අවශ්‍ය නම්, අපගේ අසමගිය හා එක්වන්න — අපි ඔබ ලබා ගැනීමට කැමතියි.</string>
+    <string name="announcement_join_discord">විසංවාදයට සම්බන්ධ වන්න</string>
+    <string name="announcement_got_it">තේරුණා</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

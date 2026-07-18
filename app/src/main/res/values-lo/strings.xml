@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">ເຊີບເວີແລ່ນ</string>
+    <string name="server_stopped">ເຊີບເວີຢຸດ</string>
+    <string name="server_starting">ເຊີບເວີກຳລັງເລີ່ມ...</string>
+    <string name="start_server">ເລີ່ມ Server</string>
+    <string name="stop_server">ຢຸດເຊີບເວີ</string>
+    <string name="notification_channel_name">ສະຖານະເຊີບເວີ
+- [7​] ສະ​ແດງ​ໃຫ້​ເຫັນ​ສະ​ຖາ​ນະ​ພາບ​ການ​ແລ່ນ​ຂອງ​ເຄື່ອງ​ແມ່​ຂ່າຍ​ແລະ​ການ​ຄວບ​ຄຸມ​
+- [8​] ແຕະ​ເພື່ອ​ສໍາ​ເນົາ IP​
+- [9​] IP ຄັດ​ລອກ​ໄປ​ທີ່ clipboard​
+- [10​] ວິ​ທີ​ການ​ເຊື່ອມ​ຕໍ່​
+- [11​] ສົ່ງ​ຄໍາ​ສັ່ງ​</string>
+    <string name="notification_channel_desc">Shows server running status and controls</string>
+    <string name="tap_to_copy">Tap to copy IP</string>
+    <string name="copied">IP copied to clipboard</string>
+    <string name="how_to_connect">How to Connect</string>
+    <string name="send_command">Send Command</string>
+    <string name="clear_log">Clear Log</string>
+    <string name="apply_restart">ສະຫມັກ &amp; Restart</string>
+    <string name="delete_world">ລຶບຂໍ້ມູນໂລກ
+- [15​] ນີ້​ຈະ​ລົບ​ລ້າງ​ໂລກ​ຢ່າງ​ຖາ​ວອນ​. ເຈົ້າແນ່ໃຈບໍ?</string>
+    <string name="delete_world_confirm">This will permanently delete the world. Are you sure?</string>
+    <string name="thermal_warning">ຄໍາເຕືອນ: ອຸປະກອນຮ້ອນເກີນໄປ — ພິຈາລະນາຢຸດເຄື່ອງແມ່ຂ່າຍ
+- [17​] ຄໍາ​ເຕືອນ​: ກວດ​ພົບ RAM ຕໍ່າ — ປະ​ຕິ​ບັດ​ອາດ​ຈະ​ຖືກ​ຊຸດ​ໂຊມ​</string>
+    <string name="ram_warning">Warning: Low RAM detected — performance may be degraded</string>
+    <string name="players_online">%1$d/%2$d ຜູ້ຫຼິ້ນ</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">ເວລາເຮັດວຽກ: %1$s</string>
+    <string name="announcement_title">ບັນທຶກຈາກ PocketCraft</string>
+    <string name="announcement_body">PocketCraft ຈະບໍ່ເສຍຄ່າຕະຫຼອດໄປສຳລັບທຸກຄົນ, ແຕ່ຄຸນສົມບັດບາງຢ່າງຢູ່ໃນ Pro ພຽງແຕ່ເພື່ອໃຫ້ທ່ານສາມາດຮອງຮັບຄ່າໃຊ້ຈ່າຍໃນເຊີບເວີ ແລະຄ່າໃຊ້ຈ່າຍໃນການເຮັດວຽກຂອງແອັບຯຂອງພວກເຮົາ. ພວກເຂົາມີລາຄາຖືກ, ແລະນັ້ນແມ່ນເຫດຜົນທີ່ພວກເຂົາຢູ່ໃນນັ້ນ, ລວມທັງສໍາລັບມູນຄ່າຫຼາຍ. 
+ 
+ ຖ້າທ່ານຕ້ອງການຊ່ວຍພວກເຮົາ, ຫຼືພຽງແຕ່ຢາກສົນທະນາກັບທີມງານ, ເຂົ້າຮ່ວມ Discord ຂອງພວກເຮົາ — ພວກເຮົາຢາກມີທ່ານ.</string>
+    <string name="announcement_join_discord">ເຂົ້າຮ່ວມ Discord</string>
+    <string name="announcement_got_it">ເຂົ້າໃຈແລ້ວ</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

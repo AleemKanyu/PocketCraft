@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Rhedeg Gweinydd</string>
+    <string name="server_stopped">Wedi Stopio\'r Gweinydd</string>
+    <string name="server_starting">Gweinydd yn dechrau…</string>
+    <string name="start_server">Cychwyn Gweinydd</string>
+    <string name="stop_server">Stopio Gweinydd</string>
+    <string name="notification_channel_name">Statws Gweinydd</string>
+    <string name="notification_channel_desc">Yn dangos statws rhedeg gweinydd a rheolyddion</string>
+    <string name="tap_to_copy">Tapiwch i gopïo IP</string>
+    <string name="copied">IP wedi\'i gopïo i\'r clipfwrdd</string>
+    <string name="how_to_connect">Sut i Gysylltu</string>
+    <string name="send_command">Anfon Gorchymyn</string>
+    <string name="clear_log">Log Clir</string>
+    <string name="apply_restart">Gwneud Cais &amp; Ailgychwyn</string>
+    <string name="delete_world">Dileu Data\'r Byd</string>
+    <string name="delete_world_confirm">Bydd hyn yn dileu\'r byd yn barhaol. Ydych chi\'n siŵr?</string>
+    <string name="thermal_warning">Rhybudd: Mae\'r ddyfais yn gorboethi - ystyriwch atal y gweinydd</string>
+    <string name="ram_warning">Rhybudd: RAM isel wedi\'i ganfod - gall perfformiad gael ei ddiraddio</string>
+    <string name="players_online">%1$d/%2$d chwaraewyr</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Uptime: %1$s</string>
+    <string name="announcement_title">Nodyn gan PocketCraft</string>
+    <string name="announcement_body">Bydd PocketCraft am ddim am byth i bawb, ond mae rhai nodweddion yn Pro dim ond er mwyn i chi allu cefnogi ein costau gweinydd a chostau rhedeg ap. Maent yn rhad, a dyna pam y maent i mewn yno, gan gynnwys hynny am fwy o werth. 
+ 
+ Os hoffech chi ein helpu ni, neu ddim ond eisiau sgwrsio â\'r tîm, ymunwch â\'n Discord - byddem wrth ein bodd yn eich cael chi.</string>
+    <string name="announcement_join_discord">Ymuno â Discord</string>
+    <string name="announcement_got_it">Wedi ei gael</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

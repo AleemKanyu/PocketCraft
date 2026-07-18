@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Sevha Inomhanya</string>
+    <string name="server_stopped">Server Yakamiswa</string>
+    <string name="server_starting">Server Kutanga…</string>
+    <string name="start_server">Kutanga Server</string>
+    <string name="stop_server">Stop Server</string>
+    <string name="notification_channel_name">Server Status</string>
+    <string name="notification_channel_desc">Inoratidza sevha inomhanya mamiriro uye zvinodzora</string>
+    <string name="tap_to_copy">Tinya kukopa IP</string>
+    <string name="copied">IP yakakopwa kune clipboard</string>
+    <string name="how_to_connect">Ungabatanidza sei</string>
+    <string name="send_command">Send Command</string>
+    <string name="clear_log">Pachena Log</string>
+    <string name="apply_restart">Nyorera &amp; Tangazve</string>
+    <string name="delete_world">Delete World Data</string>
+    <string name="delete_world_confirm">Izvi zvichabvisa zvachose nyika. Une chokwadi here?</string>
+    <string name="thermal_warning">Yambiro: Chishandiso chiri kupisa - funga kumisa sevha</string>
+    <string name="ram_warning">Yambiro: Yakaderera RAM yaonekwa - kuita kunogona kuderedzwa</string>
+    <string name="players_online">%1$d/%2$d vatambi</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Uptime: %1$s</string>
+    <string name="announcement_title">Tsamba kubva kuPocketCraft</string>
+    <string name="announcement_body">PocketCraft ichave yemahara nekusingaperi kumunhu wese, asi mamwe maficha ari muPro kuitira kuti ugone kutsigira sevha yedu mutengo uye mutengo wekushandisa app. Iwo akachipa, uye ndosaka arimo, kusanganisira iwo ekuwedzera kukosha. 
+ 
+ Kana muchida kutibatsira, kana kuti muchingoda kutaura nechikwata, pindai muDiscord yedu — tinoda kuva nemi.</string>
+    <string name="announcement_join_discord">Join Discord</string>
+    <string name="announcement_got_it">Ndazvinzwa</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

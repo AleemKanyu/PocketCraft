@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">サーバー稼働中</string>
+    <string name="server_stopped">サーバーが停止しました</string>
+    <string name="server_starting">サーバー起動中…</string>
+    <string name="start_server">サーバーの起動</string>
+    <string name="stop_server">サーバーを停止する</string>
+    <string name="notification_channel_name">サーバーのステータス</string>
+    <string name="notification_channel_desc">サーバーの実行ステータスと制御を表示します。</string>
+    <string name="tap_to_copy">タップしてIPをコピーします</string>
+    <string name="copied">IPがクリップボードにコピーされました</string>
+    <string name="how_to_connect">接続方法</string>
+    <string name="send_command">コマンド送信</string>
+    <string name="clear_log">ログをクリア</string>
+    <string name="apply_restart">適用して再起動</string>
+    <string name="delete_world">ワールドデータの削除</string>
+    <string name="delete_world_confirm">これにより、ワールドが完全に削除されます。本気ですか？</string>
+    <string name="thermal_warning">警告: デバイスが過熱しています - サーバーを停止することを検討してください</string>
+    <string name="ram_warning">警告: RAM 不足が検出されました - パフォーマンスが低下する可能性があります</string>
+    <string name="players_online">%1$d/%2$d 選手</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">稼働時間: %1$s</string>
+    <string name="announcement_title">PocketCraft からのメモ</string>
+    <string name="announcement_body">PocketCraft は誰でも永久に無料ですが、サーバー コストとアプリの実行コストをサポートできるよう、一部の機能は Pro にあります。それらは安いので、それを含めてより価値のあるものとしてそこにあるのです。 
+ 
+ 私たちを手助けしたい場合、または単にチームとチャットしたい場合は、Discord に参加してください。お待ちしています。</string>
+    <string name="announcement_join_discord">Discordに参加する</string>
+    <string name="announcement_got_it">わかりました</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

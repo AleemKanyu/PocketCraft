@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Palvelin käynnissä</string>
+    <string name="server_stopped">Palvelin pysäytetty</string>
+    <string name="server_starting">Palvelin käynnistyy…</string>
+    <string name="start_server">Käynnistä palvelin</string>
+    <string name="stop_server">Pysäytä palvelin</string>
+    <string name="notification_channel_name">Palvelimen tila</string>
+    <string name="notification_channel_desc">Näyttää palvelimen toimintatilan ja ohjaimet</string>
+    <string name="tap_to_copy">Kopioi IP napauttamalla</string>
+    <string name="copied">IP kopioitu leikepöydälle</string>
+    <string name="how_to_connect">Yhteyden muodostaminen</string>
+    <string name="send_command">Lähetä komento</string>
+    <string name="clear_log">Tyhjennä loki</string>
+    <string name="apply_restart">Käytä ja käynnistä uudelleen</string>
+    <string name="delete_world">Poista maailmantiedot</string>
+    <string name="delete_world_confirm">Tämä poistaa maailman pysyvästi. Oletko varma?</string>
+    <string name="thermal_warning">Varoitus: Laite ylikuumenee – harkitse palvelimen pysäyttämistä</string>
+    <string name="ram_warning">Varoitus: Alhainen RAM-muisti havaittu – suorituskyky saattaa heikentyä</string>
+    <string name="players_online">%1$d/%2$d pelaajaa</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Käyttöaika: %1$s</string>
+    <string name="announcement_title">Huomautus sovelluksesta PocketCraft</string>
+    <string name="announcement_body">PocketCraft on ikuisesti ilmainen kaikille, mutta jotkin ominaisuudet ovat Prossa vain, jotta voit tukea palvelinkulujamme ja sovellusten käyttökustannuksia. Ne ovat halpoja, ja siksi ne ovat siellä, mukaan lukien enemmän arvoa. 
+ 
+ Jos haluat auttaa meitä tai vain jutella tiimin kanssa, liity Discordiin – otamme sinut mielellämme vastaan.</string>
+    <string name="announcement_join_discord">Liity Discordiin</string>
+    <string name="announcement_got_it">Selvä</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

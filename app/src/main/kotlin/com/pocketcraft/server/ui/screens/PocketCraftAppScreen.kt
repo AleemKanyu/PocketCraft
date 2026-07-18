@@ -84,6 +84,7 @@ import com.pocketcraft.server.R
 import com.pocketcraft.server.ui.components.BroadcastBanner
 import com.pocketcraft.server.ui.components.AnnouncementDialog
 import com.pocketcraft.server.ui.components.BroadcastPopup
+import com.pocketcraft.server.ui.components.NewFeaturesPopup
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.theme.PocketColors
 import com.pocketcraft.server.ui.theme.PocketMotion
@@ -97,6 +98,13 @@ import com.google.firebase.crashlytics.ktx.crashlytics
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Restore
 import com.pocketcraft.server.billing.BillingManager
 import com.pocketcraft.server.billing.PremiumTier
 import com.pocketcraft.server.ui.components.PromotionBottomSheet
@@ -167,6 +175,8 @@ fun PocketCraftApp(
     var showExitDialog by remember { mutableStateOf(false) }
     var showAnnouncementDialog by remember { mutableStateOf(false) }
     var pendingAnnouncementDialog by remember { mutableStateOf(false) }
+    var showNewFeaturesDialog by remember { mutableStateOf(false) }
+    var pendingNewFeaturesDialog by remember { mutableStateOf(false) }
     var showInstagramDialog by remember { mutableStateOf(false) }
     var pendingInstagramDialog by remember { mutableStateOf(false) }
     var showConsentDialog by remember { mutableStateOf(false) }
@@ -228,6 +238,7 @@ fun PocketCraftApp(
         showVersionRiskDialog ||
         showConsentDialog ||
         showAnnouncementDialog ||
+        showNewFeaturesDialog ||
         showInstagramDialog ||
         showFeedbackPromptDialog ||
         showRatingPromptDialog ||
@@ -514,7 +525,9 @@ fun PocketCraftApp(
         showInstagramButtonFromRemoteConfig,
         hasPendingBroadcast,
         showAnnouncementDialog,
-        pendingAnnouncementDialog
+        pendingAnnouncementDialog,
+        showNewFeaturesDialog,
+        pendingNewFeaturesDialog
     ) {
         if (screen != Screen.SERVER || !homeScreenReady) {
             return@LaunchedEffect
@@ -533,6 +546,11 @@ fun PocketCraftApp(
         ) {
             pendingAnnouncementDialog = true
         }
+        if (
+            false // Disabled: do not show new features popup
+        ) {
+            pendingNewFeaturesDialog = true
+        }
         val shouldPromptInstagram = !preferences.socialLinksJoined && showInstagramButtonFromRemoteConfig
         if (shouldPromptInstagram) {
             delay(700)
@@ -544,6 +562,7 @@ fun PocketCraftApp(
         pendingConsentDialog,
         showVersionPickerDialog,
         showAnnouncementDialog,
+        showNewFeaturesDialog,
         showInstagramDialog,
         showExitDialog,
         screen,
@@ -551,7 +570,7 @@ fun PocketCraftApp(
     ) {
         if (!pendingConsentDialog) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
-        val hasBlockingPopup = showVersionPickerDialog || showExitDialog || showAnnouncementDialog || showInstagramDialog
+        val hasBlockingPopup = showVersionPickerDialog || showExitDialog || showAnnouncementDialog || showNewFeaturesDialog || showInstagramDialog
         if (hasBlockingPopup) return@LaunchedEffect
         showConsentDialog = true
         pendingConsentDialog = false
@@ -572,7 +591,7 @@ fun PocketCraftApp(
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
         if (pendingConsentDialog) return@LaunchedEffect
         if (popupShownThisLaunch) return@LaunchedEffect
-        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showExitDialog || showAnnouncementDialog || showInstagramDialog || hasPendingBroadcast
+        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showExitDialog || showAnnouncementDialog || showNewFeaturesDialog || showInstagramDialog || hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
         showAnnouncementDialog = true
         pendingAnnouncementDialog = false
@@ -580,32 +599,7 @@ fun PocketCraftApp(
     }
 
     LaunchedEffect(
-        pendingInstagramDialog,
-        pendingFeedbackPrompt,
-        pendingConsentDialog,
-        pendingAnnouncementDialog,
-        showVersionPickerDialog,
-        showConsentDialog,
-        showAnnouncementDialog,
-        showExitDialog,
-        screen,
-        homeScreenReady,
-        hasPendingBroadcast
-    ) {
-        if (!pendingInstagramDialog) return@LaunchedEffect
-        if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
-        if (!showInstagramButtonFromRemoteConfig) return@LaunchedEffect
-        if (pendingConsentDialog || pendingAnnouncementDialog) return@LaunchedEffect
-        if (popupShownThisLaunch) return@LaunchedEffect
-        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showAnnouncementDialog || showExitDialog || showInstagramDialog || showFeedbackPromptDialog || hasPendingBroadcast
-        if (hasBlockingPopup) return@LaunchedEffect
-        showInstagramDialog = true
-        pendingInstagramDialog = false
-        popupShownThisLaunch = true
-    }
-
-    LaunchedEffect(
-        pendingFeedbackPrompt,
+        pendingNewFeaturesDialog,
         pendingConsentDialog,
         pendingAnnouncementDialog,
         showVersionPickerDialog,
@@ -617,11 +611,64 @@ fun PocketCraftApp(
         homeScreenReady,
         hasPendingBroadcast
     ) {
-        if (pendingFeedbackPrompt == null) return@LaunchedEffect
+        if (!pendingNewFeaturesDialog) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
         if (pendingConsentDialog || pendingAnnouncementDialog) return@LaunchedEffect
         if (popupShownThisLaunch) return@LaunchedEffect
-        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showAnnouncementDialog || showInstagramDialog || showExitDialog || hasPendingBroadcast
+        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showExitDialog || showAnnouncementDialog || showNewFeaturesDialog || showInstagramDialog || hasPendingBroadcast
+        if (hasBlockingPopup) return@LaunchedEffect
+        showNewFeaturesDialog = true
+        pendingNewFeaturesDialog = false
+        popupShownThisLaunch = true
+    }
+
+    LaunchedEffect(
+        pendingInstagramDialog,
+        pendingFeedbackPrompt,
+        pendingConsentDialog,
+        pendingAnnouncementDialog,
+        pendingNewFeaturesDialog,
+        showVersionPickerDialog,
+        showConsentDialog,
+        showAnnouncementDialog,
+        showNewFeaturesDialog,
+        showExitDialog,
+        screen,
+        homeScreenReady,
+        hasPendingBroadcast
+    ) {
+        if (!pendingInstagramDialog) return@LaunchedEffect
+        if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
+        if (!showInstagramButtonFromRemoteConfig) return@LaunchedEffect
+        if (pendingConsentDialog || pendingAnnouncementDialog || pendingNewFeaturesDialog) return@LaunchedEffect
+        if (popupShownThisLaunch) return@LaunchedEffect
+        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showAnnouncementDialog || showNewFeaturesDialog || showExitDialog || showInstagramDialog || showFeedbackPromptDialog || hasPendingBroadcast
+        if (hasBlockingPopup) return@LaunchedEffect
+        showInstagramDialog = true
+        pendingInstagramDialog = false
+        popupShownThisLaunch = true
+    }
+
+    LaunchedEffect(
+        pendingFeedbackPrompt,
+        pendingConsentDialog,
+        pendingAnnouncementDialog,
+        pendingNewFeaturesDialog,
+        showVersionPickerDialog,
+        showConsentDialog,
+        showAnnouncementDialog,
+        showNewFeaturesDialog,
+        showInstagramDialog,
+        showExitDialog,
+        screen,
+        homeScreenReady,
+        hasPendingBroadcast
+    ) {
+        if (pendingFeedbackPrompt == null) return@LaunchedEffect
+        if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
+        if (pendingConsentDialog || pendingAnnouncementDialog || pendingNewFeaturesDialog) return@LaunchedEffect
+        if (popupShownThisLaunch) return@LaunchedEffect
+        val hasBlockingPopup = showVersionPickerDialog || showConsentDialog || showAnnouncementDialog || showNewFeaturesDialog || showInstagramDialog || showExitDialog || hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
         showFeedbackPromptDialog = true
         popupShownThisLaunch = true
@@ -633,9 +680,11 @@ fun PocketCraftApp(
         homeScreenReady,
         pendingConsentDialog,
         pendingAnnouncementDialog,
+        pendingNewFeaturesDialog,
         showVersionPickerDialog,
         showConsentDialog,
         showAnnouncementDialog,
+        showNewFeaturesDialog,
         showInstagramDialog,
         showFeedbackPromptDialog,
         showExitDialog,
@@ -643,7 +692,7 @@ fun PocketCraftApp(
     ) {
         if (!isPlayStoreRatingPromptEnabled) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
-        if (pendingConsentDialog || pendingAnnouncementDialog) return@LaunchedEffect
+        if (pendingConsentDialog || pendingAnnouncementDialog || pendingNewFeaturesDialog) return@LaunchedEffect
         if (preferences.ratingPopupDismissedForever) return@LaunchedEffect
         // Show if a real player joined in a previous session OR if the user has successfully started the server 3+ times
         val hasMetStartsThreshold = preferences.successfulServerStarts >= 3
@@ -655,6 +704,7 @@ fun PocketCraftApp(
         val hasBlockingPopup = showVersionPickerDialog ||
             showConsentDialog ||
             showAnnouncementDialog ||
+            showNewFeaturesDialog ||
             showInstagramDialog ||
             showFeedbackPromptDialog ||
             showExitDialog ||
@@ -676,6 +726,7 @@ fun PocketCraftApp(
         showVersionPickerDialog,
         showConsentDialog,
         showAnnouncementDialog,
+        showNewFeaturesDialog,
         showInstagramDialog,
         showFeedbackPromptDialog,
         showRatingPromptDialog,
@@ -703,9 +754,11 @@ fun PocketCraftApp(
         pendingFreeUpsellDialog,
         pendingConsentDialog,
         pendingAnnouncementDialog,
+        pendingNewFeaturesDialog,
         showVersionPickerDialog,
         showConsentDialog,
         showAnnouncementDialog,
+        showNewFeaturesDialog,
         showInstagramDialog,
         showFeedbackPromptDialog,
         showRatingPromptDialog,
@@ -718,10 +771,11 @@ fun PocketCraftApp(
     ) {
         if (!pendingFreeUpsellDialog) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
-        if (pendingConsentDialog || pendingAnnouncementDialog) return@LaunchedEffect
+        if (pendingConsentDialog || pendingAnnouncementDialog || pendingNewFeaturesDialog) return@LaunchedEffect
         val hasBlockingPopup = showVersionPickerDialog ||
             showConsentDialog ||
             showAnnouncementDialog ||
+            showNewFeaturesDialog ||
             showInstagramDialog ||
             showFeedbackPromptDialog ||
             showRatingPromptDialog ||
@@ -745,6 +799,7 @@ fun PocketCraftApp(
         showVersionPickerDialog,
         showConsentDialog,
         showAnnouncementDialog,
+        showNewFeaturesDialog,
         showInstagramDialog,
         showFeedbackPromptDialog,
         showRatingPromptDialog,
@@ -772,9 +827,11 @@ fun PocketCraftApp(
         pendingMemberUpsellDialog,
         pendingConsentDialog,
         pendingAnnouncementDialog,
+        pendingNewFeaturesDialog,
         showVersionPickerDialog,
         showConsentDialog,
         showAnnouncementDialog,
+        showNewFeaturesDialog,
         showInstagramDialog,
         showFeedbackPromptDialog,
         showRatingPromptDialog,
@@ -787,10 +844,11 @@ fun PocketCraftApp(
     ) {
         if (!pendingMemberUpsellDialog) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
-        if (pendingConsentDialog || pendingAnnouncementDialog) return@LaunchedEffect
+        if (pendingConsentDialog || pendingAnnouncementDialog || pendingNewFeaturesDialog) return@LaunchedEffect
         val hasBlockingPopup = showVersionPickerDialog ||
             showConsentDialog ||
             showAnnouncementDialog ||
+            showNewFeaturesDialog ||
             showInstagramDialog ||
             showFeedbackPromptDialog ||
             showRatingPromptDialog ||
@@ -813,6 +871,7 @@ fun PocketCraftApp(
         showVersionPickerDialog,
         showConsentDialog,
         showAnnouncementDialog,
+        showNewFeaturesDialog,
         showInstagramDialog,
         showFeedbackPromptDialog,
         showRatingPromptDialog,
@@ -823,7 +882,7 @@ fun PocketCraftApp(
         pendingMemberUpsellDialog,
         showMemberUpsellDialog
     ) {
-        if (pendingFreeUpsellDialog || showFreeUpsellDialog || pendingMemberUpsellDialog || showMemberUpsellDialog) return@LaunchedEffect
+        if (pendingFreeUpsellDialog || showFreeUpsellDialog || pendingMemberUpsellDialog || showMemberUpsellDialog || showNewFeaturesDialog) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
         val targetGroup = when (entitlement.tier) {
             PremiumTier.NONE -> "free"
@@ -1166,6 +1225,154 @@ fun PocketCraftApp(
         }
     }
 
+    if (stateHolder.isBackingUp || stateHolder.isRestoringBackup) {
+        val isBackingUp = stateHolder.isBackingUp
+        val progress = if (isBackingUp) stateHolder.backupProgressPercent else stateHolder.restoreProgressPercent
+        val statusMessage = if (isBackingUp) stateHolder.backupStatusMessage else stateHolder.restoreStatusMessage
+        val title = if (isBackingUp) "Creating Backup" else "Restoring World"
+        
+        val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
+            targetValue = (progress / 100f).coerceIn(0f, 1f),
+            animationSpec = androidx.compose.animation.core.tween(durationMillis = 300),
+            label = "backup_restore_dialog_progress"
+        )
+        
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = {},
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+                usePlatformDefaultWidth = false
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.82f))
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth(0.9f)
+                        .clip(RoundedCornerShape(24.dp))
+                        .border(
+                            1.5.dp, 
+                            Brush.linearGradient(
+                                listOf(
+                                    Color.White.copy(alpha = 0.2f),
+                                    Color.White.copy(alpha = 0.05f)
+                                )
+                            ), 
+                            RoundedCornerShape(24.dp)
+                        ),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 6.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(
+                                            PocketColors.Primary.copy(alpha = 0.15f),
+                                            PocketColors.PrimaryMuted.copy(alpha = 0.35f)
+                                        )
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isBackingUp) {
+                                Icon(
+                                    imageVector = Icons.Default.CloudUpload,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(32.dp),
+                                    tint = PocketColors.Primary
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Restore,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(32.dp),
+                                    tint = PocketColors.Primary
+                                )
+                            }
+                        }
+                        
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = title,
+                                fontFamily = com.pocketcraft.server.ui.theme.Monocraft,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                text = "Do not close the app or switch screens",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            LinearProgressIndicator(
+                                progress = { animatedProgress },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(10.dp)
+                                    .clip(RoundedCornerShape(999.dp)),
+                                color = PocketColors.Primary,
+                                trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f)
+                            )
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = statusMessage,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = "$progress%",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = PocketColors.Primary,
+                                    fontFamily = com.pocketcraft.server.ui.theme.Monocraft
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     if (showForceReconnectPrompt) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showForceReconnectPrompt = false },
@@ -1218,6 +1425,8 @@ fun PocketCraftApp(
             }
         )
     }
+
+    // Disabled: NewFeaturesPopup.Content is removed.
 
     if (showModpackImportDialog) {
         val importId = pendingModpackImportId.orEmpty()

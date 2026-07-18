@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server Berjalan</string>
+    <string name="server_stopped">Server Berhenti</string>
+    <string name="server_starting">Server Dimulai…</string>
+    <string name="start_server">Mulai Server</string>
+    <string name="stop_server">Hentikan Server</string>
+    <string name="notification_channel_name">Status Server</string>
+    <string name="notification_channel_desc">Menampilkan status dan kontrol server yang berjalan</string>
+    <string name="tap_to_copy">Ketuk untuk menyalin IP</string>
+    <string name="copied">IP disalin ke papan klip</string>
+    <string name="how_to_connect">Cara Menghubungkan</string>
+    <string name="send_command">Kirim Perintah</string>
+    <string name="clear_log">Hapus Log</string>
+    <string name="apply_restart">Terapkan &amp; Mulai Ulang</string>
+    <string name="delete_world">Hapus Data Dunia</string>
+    <string name="delete_world_confirm">Ini akan menghapus dunia secara permanen. Apa kamu yakin?</string>
+    <string name="thermal_warning">Peringatan: Perangkat terlalu panas — pertimbangkan untuk menghentikan server</string>
+    <string name="ram_warning">Peringatan: RAM rendah terdeteksi — kinerja mungkin menurun</string>
+    <string name="players_online">%1$d/%2$d pemain</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Waktu Aktif: %1$s</string>
+    <string name="announcement_title">Catatan dari PocketCraft</string>
+    <string name="announcement_body">PocketCraft akan gratis selamanya untuk semua orang, namun beberapa fitur ada di Pro hanya agar Anda dapat mendukung biaya server kami dan biaya pengoperasian aplikasi. Harganya murah, dan itulah mengapa mereka ada di sana, termasuk untuk nilai lebih. 
+ 
+ Jika Anda ingin membantu kami, atau hanya ingin mengobrol dengan tim, bergabunglah dengan Discord kami — kami akan senang menerima Anda.</string>
+    <string name="announcement_join_discord">Bergabunglah dengan Perselisihan</string>
+    <string name="announcement_got_it">Mengerti</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

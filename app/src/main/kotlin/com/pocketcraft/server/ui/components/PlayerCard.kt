@@ -45,10 +45,13 @@ data class PlayerCardAction(
  * Falls back to mc-heads by username for offline/Bedrock players who lack a UUID.
  */
 fun resolvePlayerAvatarUrl(username: String, uuid: String? = null, size: Int = 64): String {
-    return if (!uuid.isNullOrBlank()) {
+    val cleanName = username.trim().trimStart('.', '!', '*', '_')
+    val cleanUuid = uuid?.replace("-", "")?.lowercase()
+    val isOnlineUuid = cleanUuid != null && cleanUuid.length == 32 && cleanUuid[12] == '4'
+    return if (isOnlineUuid) {
         "https://crafatar.com/avatars/${uuid}?size=${size}&overlay"
     } else {
-        "https://mc-heads.net/avatar/${username}/${size}"
+        "https://mc-heads.net/avatar/${cleanName}/${size}"
     }
 }
 

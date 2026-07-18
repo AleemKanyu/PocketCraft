@@ -77,7 +77,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = autoVersionCode
-        versionName = "1.7.0"
+        versionName = "1.8.0"
 
         buildConfigField("String", "RELAY_PUBLIC_DOMAIN", "\"joinmc.link\"")
         buildConfigField("String", "GITHUB_REPO_OWNER", "\"$githubRepoOwner\"")
@@ -161,7 +161,37 @@ android {
 
     packaging {
         jniLibs {
-            useLegacyPackaging = true
+            useLegacyPackaging = false
+            excludes.addAll(listOf(
+                "**/libawt*",
+                "**/libdt_*",
+                "**/libext*",
+                "**/libfont*",
+                "**/libfree*",
+                "**/libinst*",
+                "**/libj2*",
+                "**/libjaas*",
+                "**/libjava*",
+                "**/libjawt*",
+                "**/libjdwp*",
+                "**/libjimg*",
+                "**/libjli*",
+                "**/libjnid*",
+                "**/libjsig*",
+                "**/libjvm*",
+                "**/liblcms*",
+                "**/libmanag*",
+                "**/libmlib*",
+                "**/libnet*",
+                "**/libnio*",
+                "**/libpref*",
+                "**/librmi*",
+                "**/libsctp*",
+                "**/libsysl*",
+                "**/libver*",
+                "**/libzip*",
+                "**/libc++_shared.so"
+            ))
         }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -226,7 +256,15 @@ dependencies {
 
     implementation(libs.datastore.preferences)
     implementation(libs.play.billing)
-    implementation("androidx.glance:glance-appwidget:1.1.0")
+    implementation("androidx.glance:glance-appwidget:1.1.1")
+    constraints {
+        implementation("androidx.glance:glance-appwidget-proto:1.1.1") {
+            because("Play Console flags 1.1.0 transitives for the protobuf 4.28.2 CVE advisory")
+        }
+        implementation("androidx.glance:glance-appwidget-external-protobuf:1.1.1") {
+            because("Play Console flags 1.1.0 transitives for the protobuf 4.28.2 CVE advisory")
+        }
+    }
 
 
     implementation(libs.retrofit)

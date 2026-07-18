@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <fcntl.h>
+#include <sys/system_properties.h>
 
 #define TAG "PocketCraft"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -79,21 +80,25 @@ static bool has_suffix(const char *value, const char *suffix) {
 }
 
 static void disable_heap_tagging(void) {
-#if defined(__aarch64__)
-  if (prctl(PR_SET_TAGGED_ADDR_CTRL, 0, 0, 0, 0) != 0) {
-    LOGI("prctl(PR_SET_TAGGED_ADDR_CTRL, 0) failed: %s", strerror(errno));
-  } else {
-    LOGI("Tagged address control disabled");
-  }
-#endif
-
-#if defined(M_BIONIC_SET_HEAP_TAGGING_LEVEL) && defined(__ANDROID_API__) &&    \
-    (__ANDROID_API__ >= 30)
-  if (mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, M_HEAP_TAGGING_LEVEL_NONE) ==
-      0) {
-    LOGI("mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, NONE) failed");
-  } else {
-    LOGI("Heap tagging disabled");
+  // Do NOT call prctl(PR_SET_TAGGED_ADDR_CTRL, 0) here!
+  // That disables TBI (Top Byte Ignore), which causes the CPU to reject
+  // ANY address with non-zero high bits — including the JVM's own G1GC heap
+  // which legitimately lives at 0x000000070... (bit 59 set). Disabling TBI
+  // causes SEGV_MAPERR in JVM_DesiredAssertionStatus when the JVM dereferences
+  // its own heap OOPs.
+  //
+  // Instead, only disable Scudo's active pointer tagging so that malloc()
+  // allocations return clean addresses without tag bytes.
+#if defined(__ANDROID__)
+  char api_str[8] = {0};
+  __system_property_get("ro.build.version.sdk", api_str);
+  int api_level = atoi(api_str);
+  if (api_level >= 30) {
+    if (mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, M_HEAP_TAGGING_LEVEL_NONE) == 0) {
+      LOGI("mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, NONE) failed");
+    } else {
+      LOGI("Heap tagging level set to NONE");
+    }
   }
 #endif
 }
@@ -127,7 +132,7 @@ static void reset_signal_handlers(void) {
     if (signal_id >= 32) continue;
     if (signal_id == SIGKILL || signal_id == SIGSTOP) continue;
 
-    clean_action.sa_handler = (signal_id == SIGSEGV) ? SIG_IGN : SIG_DFL;
+    clean_action.sa_handler = SIG_DFL;
     sigaction(signal_id, &clean_action, NULL);
   }
 }
@@ -167,6 +172,10 @@ static void preload_shims(const char *shim_dir) {
 
 static void preload_library(const char *path, const char *label) {
   void *handle = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
+  if (!handle) {
+    LOGI("preload_library: %s absolute path failed, trying default loader path...", label);
+    handle = dlopen(label, RTLD_NOW | RTLD_GLOBAL);
+  }
   if (!handle) {
     LOGI("%s skipped: %s", label, dlerror());
     return;
@@ -340,17 +349,21 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
   LOGI("dlopen: %s", libjli_path);
   void *jli_handle = dlopen(libjli_path, RTLD_LAZY | RTLD_GLOBAL);
   if (!jli_handle) {
+    LOGI("libjli.so absolute path failed: %s. Trying default loader path...", dlerror());
+    jli_handle = dlopen("libjli.so", RTLD_LAZY | RTLD_GLOBAL);
+  }
+  if (!jli_handle) {
     LOGE("libjli.so FAILED: %s", dlerror());
     result = -1;
     goto cleanup;
   }
   LOGI("libjli.so loaded");
 
-  void *jvm_handle = dlopen("libjvm.so", RTLD_NOW | RTLD_GLOBAL);
+  LOGI("dlopen: %s", libjvm_path);
+  void *jvm_handle = dlopen(libjvm_path, RTLD_NOW | RTLD_GLOBAL);
   if (!jvm_handle) {
-    LOGI("libjvm.so via loader path failed: %s", dlerror());
-    LOGI("dlopen: %s", libjvm_path);
-    jvm_handle = dlopen(libjvm_path, RTLD_NOW | RTLD_GLOBAL);
+    LOGI("libjvm.so absolute path failed: %s. Trying default loader path...", dlerror());
+    jvm_handle = dlopen("libjvm.so", RTLD_NOW | RTLD_GLOBAL);
   }
   if (!jvm_handle) {
     LOGE("libjvm.so FAILED: %s", dlerror());
@@ -396,7 +409,10 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
     selected_max_mb = (int)default_mb;
   }
 
-  int selected_min_mb = 256;
+  int selected_min_mb = minRamMb;
+  if (selected_min_mb <= 0) {
+    selected_min_mb = 256;
+  }
   snprintf(xmx_opt, sizeof(xmx_opt), "-Xmx%dm", selected_max_mb);
   snprintf(xms_opt, sizeof(xms_opt), "-Xms%dm", selected_min_mb);
   snprintf(java_home_opt, sizeof(java_home_opt), "-Djava.home=%s", jre_path);
@@ -468,6 +484,7 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   "-Xshare:off",
                   "-XX:+UnlockExperimentalVMOptions",
                   "-XX:+UnlockDiagnosticVMOptions",
+                  "-XX:-AlwaysPreTouch",
                   "-XX:+UseStringDeduplication",
                   "-XX:+UseG1GC",
                   "-XX:+ParallelRefProcEnabled",
@@ -475,7 +492,6 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   "-XX:+DisableExplicitGC",
                   "-XX:G1NewSizePercent=30",
                   "-XX:G1MaxNewSizePercent=40",
-                  "-XX:G1HeapRegionSize=8m",
                   "-XX:G1ReservePercent=20",
                   "-XX:G1HeapWastePercent=5",
                   "-XX:G1MixedGCCountTarget=4",
@@ -495,7 +511,6 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   "-Dio.netty.noUnsafe=false",
                   "-XX:-UseContainerSupport",
                   error_file_opt,
-                  "-Xrs",
                   "-XX:+DisableAttachMechanism",
                   "-jar",
                   (char *)jar_path,

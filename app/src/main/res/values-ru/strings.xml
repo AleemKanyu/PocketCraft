@@ -1,24 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">PocketCraft</string>
-    <string name="server_running">Сервер запущен</string>
+    <string name="server_running">Сервер работает</string>
     <string name="server_stopped">Сервер остановлен</string>
-    <string name="server_starting">Запуск сервера…</string>
+    <string name="server_starting">Сервер запускается…</string>
     <string name="start_server">Запустить сервер</string>
     <string name="stop_server">Остановить сервер</string>
     <string name="notification_channel_name">Статус сервера</string>
-    <string name="notification_channel_desc">Показывает статус работающего сервера и управление</string>
-    <string name="tap_to_copy">Нажмите для копирования IP</string>
-    <string name="copied">IP скопирован в буфер обмена</string>
+    <string name="notification_channel_desc">Показывает состояние работы сервера и элементы управления.</string>
+    <string name="tap_to_copy">Нажмите, чтобы скопировать IP</string>
+    <string name="copied">IP-адрес скопирован в буфер обмена.</string>
     <string name="how_to_connect">Как подключиться</string>
     <string name="send_command">Отправить команду</string>
-    <string name="clear_log">Очистить лог</string>
+    <string name="clear_log">Очистить журнал</string>
     <string name="apply_restart">Применить и перезапустить</string>
-    <string name="delete_world">Удалить данные мира</string>
-    <string name="delete_world_confirm">Это навсегда удалит мир. Вы уверены?</string>
-    <string name="thermal_warning">Предупреждение: Устройство перегревается — рекомендуется остановить сервер</string>
-    <string name="ram_warning">Предупреждение: Недостаточно оперативной памяти — производительность может быть снижена</string>
-    <string name="players_online">Игроков: %1$d/%2$d</string>
+    <string name="delete_world">Удалить мировые данные</string>
+    <string name="delete_world_confirm">Это приведет к безвозвратному удалению мира. Вы уверены?</string>
+    <string name="thermal_warning">Внимание: устройство перегревается — рассмотрите возможность остановки сервера.</string>
+    <string name="ram_warning">Внимание: обнаружен низкий объем оперативной памяти — производительность может снизиться.</string>
+    <string name="players_online">%1$d/%2$d игроков</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Время работы: %1$s</string>
+    <string name="announcement_title">Заметка от PocketCraft</string>
+    <string name="announcement_body">PocketCraft навсегда останется бесплатным для всех, но некоторые функции включены в версию Pro только для того, чтобы вы могли покрыть расходы на наш сервер и расходы на эксплуатацию приложения. Они дешевы, и именно поэтому они здесь, в том числе и из-за большей ценности. 
+ 
+ Если вы хотите помочь нам или просто пообщаться с командой, присоединяйтесь к нашему Discord — мы будем рады вам.</string>
+    <string name="announcement_join_discord">Присоединиться к Discord</string>
+    <string name="announcement_got_it">Понятно</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
 </resources>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server Lafen</string>
+    <string name="server_stopped">Server gestoppt</string>
+    <string name="server_starting">Server Start ...</string>
+    <string name="start_server">Start Server</string>
+    <string name="stop_server">Stop Server</string>
+    <string name="notification_channel_name">Server Status</string>
+    <string name="notification_channel_desc">Weist Server lafen Status a Kontrollen</string>
+    <string name="tap_to_copy">Tippen fir IP ze kopéieren</string>
+    <string name="copied">IP op Clipboard kopéiert</string>
+    <string name="how_to_connect">Wéi Connect</string>
+    <string name="send_command">Kommando schécken</string>
+    <string name="clear_log">Kloer Log</string>
+    <string name="apply_restart">Uwendung &amp; Restart</string>
+    <string name="delete_world">Welt Daten läschen</string>
+    <string name="delete_world_confirm">Dëst wäert d\'Welt permanent läschen. Bass du secher?</string>
+    <string name="thermal_warning">Opgepasst: Den Apparat ass iwwerhëtzt - betruecht de Server ze stoppen</string>
+    <string name="ram_warning">Opgepasst: Niddereg RAM festgestallt - Leeschtung kann ofgebaut ginn</string>
+    <string name="players_online">%1$d/%2$d Spiller</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Uptime: %1$s</string>
+    <string name="announcement_title">Eng Notiz vum PocketCraft</string>
+    <string name="announcement_body">PocketCraft wäert fir ëmmer gratis sinn fir jiddereen, awer e puer Features sinn am Pro just fir datt Dir eis Serverkäschten an App Lafkäschte ënnerstëtzen. Si sinn bëlleg, an dofir si se do dran, och dat fir méi Wäert. 
+ 
+ Wann Dir eis hëllefe wëllt, oder just mat der Équipe wëllt chatten, da maacht mat bei eisem Discord - mir géifen dech gär hunn.</string>
+    <string name="announcement_join_discord">Maacht mat bei Discord</string>
+    <string name="announcement_got_it">Huet et</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

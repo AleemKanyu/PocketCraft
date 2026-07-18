@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">სერვერი მუშაობს</string>
+    <string name="server_stopped">სერვერი გაჩერდა</string>
+    <string name="server_starting">სერვერი იწყება…</string>
+    <string name="start_server">სერვერის დაწყება</string>
+    <string name="stop_server">სერვერის გაჩერება</string>
+    <string name="notification_channel_name">სერვერის სტატუსი</string>
+    <string name="notification_channel_desc">აჩვენებს სერვერის გაშვებულ სტატუსს და კონტროლს</string>
+    <string name="tap_to_copy">შეეხეთ IP-ის დასაკოპირებლად</string>
+    <string name="copied">IP კოპირებულია ბუფერში</string>
+    <string name="how_to_connect">როგორ დაკავშირება</string>
+    <string name="send_command">გაგზავნის ბრძანება</string>
+    <string name="clear_log">გასუფთავება ჟურნალი</string>
+    <string name="apply_restart">მიმართვა და გადატვირთვა</string>
+    <string name="delete_world">მსოფლიო მონაცემების წაშლა</string>
+    <string name="delete_world_confirm">ეს სამუდამოდ წაშლის სამყაროს. დარწმუნებული ხარ?</string>
+    <string name="thermal_warning">გაფრთხილება: მოწყობილობა გადახურებულია — იფიქრეთ სერვერის გაჩერებაზე</string>
+    <string name="ram_warning">გაფრთხილება: გამოვლინდა დაბალი ოპერატიული მეხსიერება — შესრულება შეიძლება დაქვეითდეს</string>
+    <string name="players_online">%1$d/%2$d მოთამაშეები</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">მუშაობის დრო: %1$s</string>
+    <string name="announcement_title">შენიშვნა PocketCraft-დან</string>
+    <string name="announcement_body">PocketCraft უფასო იქნება სამუდამოდ ყველასთვის, მაგრამ ზოგიერთი ფუნქცია Pro-შია მხოლოდ იმისათვის, რომ მხარი დაუჭიროთ ჩვენი სერვერის ხარჯებს და აპლიკაციის გაშვებულ ხარჯებს. ისინი იაფია და ამიტომაც არიან იქ, მათ შორის მეტი ღირებულებისთვის. 
+ 
+ თუ გსურთ დაგვეხმაროთ, ან უბრალოდ გსურთ გუნდთან საუბარი, შემოუერთდით ჩვენს Discord - ჩვენ სიამოვნებით გყავთ.</string>
+    <string name="announcement_join_discord">შეუერთდი Discord</string>
+    <string name="announcement_got_it">მივხვდი</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

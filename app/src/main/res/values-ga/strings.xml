@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Freastalaí ar Rith</string>
+    <string name="server_stopped">Stopadh an Freastalaí</string>
+    <string name="server_starting">Freastalaí ag Tosú…</string>
+    <string name="start_server">Tosaigh Freastalaí</string>
+    <string name="stop_server">Stop Freastalaí</string>
+    <string name="notification_channel_name">Stádas Freastalaí</string>
+    <string name="notification_channel_desc">Taispeánann sé stádas reatha an fhreastalaí agus rialtáin</string>
+    <string name="tap_to_copy">Tapáil chun IP a chóipeáil</string>
+    <string name="copied">IP a chóipeáil chuig an ngearrthaisce</string>
+    <string name="how_to_connect">Conas Ceangail</string>
+    <string name="send_command">Seol Ordú</string>
+    <string name="clear_log">Glan Loga</string>
+    <string name="apply_restart">Cuir i bhfeidhm &amp; Atosaigh</string>
+    <string name="delete_world">Scrios Sonraí Domhanda</string>
+    <string name="delete_world_confirm">Scriosfaidh sé seo an domhan go buan. An bhfuil tú cinnte?</string>
+    <string name="thermal_warning">Rabhadh: Tá an gléas róthéamh - smaoinigh ar an bhfreastalaí a stopadh</string>
+    <string name="ram_warning">Rabhadh: RAM íseal braite - d\'fhéadfadh an fheidhmíocht a bheith díghrádaithe</string>
+    <string name="players_online">%1$d/%2$d imreoirí</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Aga fónaimh: %1$s</string>
+    <string name="announcement_title">Nóta ó PocketCraft</string>
+    <string name="announcement_body">Beidh PocketCraft saor go deo do chách, ach tá roinnt gnéithe in Pro ionas gur féidir leat tacú lenár gcostais fhreastalaí agus lenár gcostais reatha aipe. Tá siad saor, agus sin an fáth go bhfuil siad ann, lena n-áirítear é sin le haghaidh luach níos mó. 
+ 
+ Más mian leat cabhrú linn, nó díreach ag iarraidh comhrá a dhéanamh leis an bhfoireann, bí páirteach inár Discord — ba bhreá linn tú a bheith agat.</string>
+    <string name="announcement_join_discord">Join Discord</string>
+    <string name="announcement_got_it">Fuair</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

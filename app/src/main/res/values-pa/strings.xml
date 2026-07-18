@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">ਸਰਵਰ ਚੱਲ ਰਿਹਾ ਹੈ</string>
+    <string name="server_stopped">ਸਰਵਰ ਬੰਦ ਹੋ ਗਿਆ</string>
+    <string name="server_starting">ਸਰਵਰ ਸ਼ੁਰੂ ਹੋ ਰਿਹਾ ਹੈ...</string>
+    <string name="start_server">ਸਟਾਰਟ ਸਰਵਰ</string>
+    <string name="stop_server">ਸਟਾਪ ਸਰਵਰ</string>
+    <string name="notification_channel_name">ਸਰਵਰ ਸਥਿਤੀ</string>
+    <string name="notification_channel_desc">ਸਰਵਰ ਚੱਲ ਰਹੀ ਸਥਿਤੀ ਅਤੇ ਨਿਯੰਤਰਣ ਦਿਖਾਉਂਦਾ ਹੈ</string>
+    <string name="tap_to_copy">ਆਈਪੀ ਨੂੰ ਕਾਪੀ ਕਰਨ ਲਈ ਟੈਪ ਕਰੋ</string>
+    <string name="copied">IP ਕਲਿੱਪਬੋਰਡ \'ਤੇ ਕਾਪੀ ਕੀਤਾ ਗਿਆ</string>
+    <string name="how_to_connect">ਕਿਵੇਂ ਜੁੜਨਾ ਹੈ</string>
+    <string name="send_command">ਕਮਾਂਡ ਭੇਜੋ</string>
+    <string name="clear_log">ਸਾਫ਼ ਲਾਗ</string>
+    <string name="apply_restart">ਲਾਗੂ ਕਰੋ ਅਤੇ ਮੁੜ ਚਾਲੂ ਕਰੋ</string>
+    <string name="delete_world">ਵਿਸ਼ਵ ਡੇਟਾ ਨੂੰ ਮਿਟਾਓ</string>
+    <string name="delete_world_confirm">ਇਹ ਸੰਸਾਰ ਨੂੰ ਸਥਾਈ ਤੌਰ \'ਤੇ ਮਿਟਾ ਦੇਵੇਗਾ। ਤੁਹਾਨੂੰ ਪੂਰਾ ਵਿਸ਼ਵਾਸ ਹੈ?</string>
+    <string name="thermal_warning">ਚੇਤਾਵਨੀ: ਡਿਵਾਈਸ ਓਵਰਹੀਟ ਹੋ ਰਹੀ ਹੈ - ਸਰਵਰ ਨੂੰ ਰੋਕਣ \'ਤੇ ਵਿਚਾਰ ਕਰੋ</string>
+    <string name="ram_warning">ਚੇਤਾਵਨੀ: ਘੱਟ ਰੈਮ ਦਾ ਪਤਾ ਲਗਾਇਆ ਗਿਆ — ਪ੍ਰਦਰਸ਼ਨ ਨੂੰ ਘਟਾਇਆ ਜਾ ਸਕਦਾ ਹੈ</string>
+    <string name="players_online">%1$d/%2$d ਖਿਡਾਰੀ</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">ਅੱਪਟਾਈਮ: %1$s</string>
+    <string name="announcement_title">PocketCraft ਤੋਂ ਇੱਕ ਨੋਟ</string>
+    <string name="announcement_body">PocketCraft ਹਰ ਕਿਸੇ ਲਈ ਹਮੇਸ਼ਾ ਲਈ ਮੁਫ਼ਤ ਹੋਵੇਗਾ, ਪਰ ਕੁਝ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਪ੍ਰੋ ਵਿੱਚ ਹਨ ਤਾਂ ਜੋ ਤੁਸੀਂ ਸਾਡੇ ਸਰਵਰ ਖਰਚਿਆਂ ਅਤੇ ਐਪ ਨੂੰ ਚਲਾਉਣ ਦੇ ਖਰਚਿਆਂ ਦਾ ਸਮਰਥਨ ਕਰ ਸਕੋ। ਉਹ ਸਸਤੇ ਹਨ, ਅਤੇ ਇਹੀ ਕਾਰਨ ਹੈ ਕਿ ਉਹ ਉੱਥੇ ਹਨ, ਜਿਸ ਵਿੱਚ ਹੋਰ ਮੁੱਲ ਲਈ ਵੀ ਸ਼ਾਮਲ ਹੈ। 
+ 
+ ਜੇਕਰ ਤੁਸੀਂ ਸਾਡੀ ਮਦਦ ਕਰਨਾ ਚਾਹੁੰਦੇ ਹੋ, ਜਾਂ ਸਿਰਫ਼ ਟੀਮ ਨਾਲ ਚੈਟ ਕਰਨਾ ਚਾਹੁੰਦੇ ਹੋ, ਤਾਂ ਸਾਡੇ ਡਿਸਕਾਰਡ ਵਿੱਚ ਸ਼ਾਮਲ ਹੋਵੋ — ਸਾਨੂੰ ਤੁਹਾਡੇ ਨਾਲ ਮਿਲ ਕੇ ਖੁਸ਼ੀ ਹੋਵੇਗੀ।</string>
+    <string name="announcement_join_discord">ਡਿਸਕਾਰਡ ਵਿੱਚ ਸ਼ਾਮਲ ਹੋਵੋ</string>
+    <string name="announcement_got_it">ਸਮਝ ਲਿਆ</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

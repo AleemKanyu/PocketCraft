@@ -80,7 +80,15 @@ object BundledPluginInstaller {
             if (!existingFile.exists()) return@forEach
 
             runCatching {
-                val assetSize = context.assets.openFd("plugins/$pluginName").use { it.length }
+                val assetSize = context.assets.open("plugins/$pluginName").use { input ->
+                    var size = 0L
+                    val buffer = ByteArray(8192)
+                    var read: Int
+                    while (input.read(buffer).also { read = it } >= 0) {
+                        size += read
+                    }
+                    size
+                }
                 if (existingFile.length() != assetSize) {
                     if (!existingFile.delete()) {
                         Log.w(TAG, "Could not delete stale bundled plugin ${existingFile.name}")

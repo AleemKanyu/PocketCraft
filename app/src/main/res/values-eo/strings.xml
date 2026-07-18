@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Servilo Funkcianta</string>
+    <string name="server_stopped">Servilo Ĉesis</string>
+    <string name="server_starting">Servilo Komencante...</string>
+    <string name="start_server">Komencu Servilon</string>
+    <string name="stop_server">Haltu Servilon</string>
+    <string name="notification_channel_name">Servilo-Stato</string>
+    <string name="notification_channel_desc">Montras servilon funkciantan staton kaj kontrolojn</string>
+    <string name="tap_to_copy">Frapu por kopii IP</string>
+    <string name="copied">IP kopiita al tondujo</string>
+    <string name="how_to_connect">Kiel Konekti</string>
+    <string name="send_command">Sendu Komandon</string>
+    <string name="clear_log">Forigi Protokolon</string>
+    <string name="apply_restart">Apliki &amp; Rekomenci</string>
+    <string name="delete_world">Forigu Mondajn Datumojn</string>
+    <string name="delete_world_confirm">Ĉi tio konstante forigos la mondon. Ĉu vi certas?</string>
+    <string name="thermal_warning">Averto: Aparato trovarmiĝas — konsideru haltigi la servilon</string>
+    <string name="ram_warning">Averto: Malalta RAM detektita — rendimento povas esti malbonigita</string>
+    <string name="players_online">%1$d/%2$d ludantoj</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Aktivtempo: %1$s</string>
+    <string name="announcement_title">Noto de PocketCraft</string>
+    <string name="announcement_body">PocketCraft estos senpaga por ĉiam por ĉiuj, sed iuj funkcioj estas en Pro nur por ke vi povu subteni niajn servilkostojn kaj aplikajn funkciajn kostojn. Ili estas malmultekostaj, kaj tial ili estas tie, inkluzive de tio por pli da valoro. 
+ 
+ Se vi ŝatus helpi nin, aŭ nur volas babili kun la teamo, aliĝu al nia Discord — ni ŝatus havi vin.</string>
+    <string name="announcement_join_discord">Aliĝu al Discord</string>
+    <string name="announcement_got_it">Kaptis</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

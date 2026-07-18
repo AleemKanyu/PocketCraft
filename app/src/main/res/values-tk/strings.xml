@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Serweriň işlemegi</string>
+    <string name="server_stopped">Serwer saklandy</string>
+    <string name="server_starting">Serwer başlaýar…</string>
+    <string name="start_server">Başlangyç serweri</string>
+    <string name="stop_server">Serweri duruzyň</string>
+    <string name="notification_channel_name">Serweriň ýagdaýy</string>
+    <string name="notification_channel_desc">Serweriň işleýiş ýagdaýyny we dolandyryşlaryny görkezýär</string>
+    <string name="tap_to_copy">IP-ni göçürmek üçin basyň</string>
+    <string name="copied">IP paneli göçürildi</string>
+    <string name="how_to_connect">Nädip birikdirmeli</string>
+    <string name="send_command">Buýruk iber</string>
+    <string name="clear_log">Logurnaldan arassala</string>
+    <string name="apply_restart">Gaýtadan başlaň</string>
+    <string name="delete_world">Dünýä maglumatlaryny pozuň</string>
+    <string name="delete_world_confirm">Bu dünýäni hemişelik ýok eder. Ynanýarsyňyzmy?</string>
+    <string name="thermal_warning">Duýduryş: Enjam aşa gyzýar - serweri duruzmagy göz öňünde tutuň</string>
+    <string name="ram_warning">Duýduryş: RAM pes tapyldy - öndürijilik peselip biler</string>
+    <string name="players_online">%1$d/%2$d oýunçylary</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Iş wagty: %1$s</string>
+    <string name="announcement_title">PocketCraft-den bellik</string>
+    <string name="announcement_body">PocketCraft hemmeler üçin hemişelik mugt bolar, ýöne käbir aýratynlyklar diňe serwerimiziň çykdajylaryny we programma üpjünçiliginiň çykdajylaryny goldap bilersiňiz. Olar arzan we şonuň üçinem has gymmatly bolmak üçin şol ýerde. 
+ 
+ Bize kömek etmek isleseňiz ýa-da diňe topar bilen gürleşmek isleseňiz, “Discord” -a goşulyň - sizi isleýäris.</string>
+    <string name="announcement_join_discord">Diskord-a goşulyň</string>
+    <string name="announcement_got_it">düşündim</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

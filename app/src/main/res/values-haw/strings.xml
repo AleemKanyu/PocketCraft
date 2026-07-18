@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Ke holo nei ke kikowaena</string>
+    <string name="server_stopped">Ua kū ke kikowaena</string>
+    <string name="server_starting">Ke hoʻomaka nei ke kikowaena…</string>
+    <string name="start_server">Hoʻomaka Server</string>
+    <string name="stop_server">Hoʻopau i ke kikowaena</string>
+    <string name="notification_channel_name">Kūlana kikowaena</string>
+    <string name="notification_channel_desc">Hōʻike i ke kūlana holo o ke kikowaena a me nā mana</string>
+    <string name="tap_to_copy">Kaomi no ke kope IP</string>
+    <string name="copied">Kope ʻia ʻo IP i ka papa ʻokiʻoki</string>
+    <string name="how_to_connect">Pehea e hoʻohui ai</string>
+    <string name="send_command">Hoʻouna Kauoha</string>
+    <string name="clear_log">Moʻokaʻaʻa</string>
+    <string name="apply_restart">E noi a hoʻomaka hou</string>
+    <string name="delete_world">Holoi i ka ʻikepili honua</string>
+    <string name="delete_world_confirm">E hoʻopau mau kēia i ka honua. He ʻoiaʻiʻo kēnā?</string>
+    <string name="thermal_warning">\'Ōlelo Aʻo: Ua wela loa ka mea hana - e noʻonoʻo e hoʻōki i ke kikowaena</string>
+    <string name="ram_warning">\'Ōlelo Aʻo: ʻIke ʻia ka RAM haʻahaʻa - hiki ke hoʻohaʻahaʻa ʻia ka hana</string>
+    <string name="players_online">%1$d/%2$d mea pāʻani</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Manawa: %1$s</string>
+    <string name="announcement_title">He leka mai PocketCraft</string>
+    <string name="announcement_body">ʻAʻole manuahi ʻo PocketCraft no nā mea a pau, akā aia kekahi mau hiʻohiʻona i Pro i hiki iā ʻoe ke kākoʻo i kā mākou kikowaena koina a me nā koina holo polokalamu. He ʻuʻuku lākou, a ʻo ia ke kumu i loaʻa ai lākou i laila, me kēlā no ka waiwai ʻoi aku. 
+ 
+ Inā makemake ʻoe e kōkua iā mākou, a makemake paha e kamaʻilio me ka hui, e hui pū me kā mākou Discord — makemake mākou e loaʻa iā ʻoe.</string>
+    <string name="announcement_join_discord">E hui pū me Discord</string>
+    <string name="announcement_got_it">Loaʻa</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

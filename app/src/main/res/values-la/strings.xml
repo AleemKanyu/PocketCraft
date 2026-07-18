@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Servo Cursor
+—</string>
+    <string name="server_stopped">Servo constitit</string>
+    <string name="server_starting">Servo Satus...</string>
+    <string name="start_server">Committitur Servo
+—</string>
+    <string name="stop_server">Desine Servo</string>
+    <string name="notification_channel_name">Servo Status</string>
+    <string name="notification_channel_desc">Monstrat servo currentem statum et imperium</string>
+    <string name="tap_to_copy">Tap ad effingo IP</string>
+    <string name="copied">IP exscriptus ut clipboard</string>
+    <string name="how_to_connect">Quomodo coniungere?
+—</string>
+    <string name="send_command">Mitte mandatum</string>
+    <string name="clear_log">Serena Log</string>
+    <string name="apply_restart">Applicare &amp; Sileo</string>
+    <string name="delete_world">Delere Mundo Data
+— [15.] Hoc perpetuum delebit mundum. Certus es?
+- [XVI] Admonitio: Fabrica est overheating - considerans claudens servo</string>
+    <string name="delete_world_confirm">This will permanently delete the world. Are you sure?</string>
+    <string name="thermal_warning">Warning: Device is overheating — consider stopping the server</string>
+    <string name="ram_warning">Admonitio: Ram humilis deprehensus — effectus degradetur
+- [XVIII] %1$d/%2$d lusorius</string>
+    <string name="players_online">%1$d/%2$d players</string>
+    <string name="tps_label">TPS: %1$.1f 
+- [XX] Uptime: %1$s</string>
+    <string name="uptime_label">Uptime: %1$s</string>
+    <string name="announcement_title">Nota ex PocketCraft</string>
+    <string name="announcement_body">PocketCraft liberum erit omnibus in perpetuum, sed quaedam lineamenta sunt in Pro ita ut sumptibus servientis et app currentis gratuita sustinere possis. Vilia sunt, et ideo ibi sunt, etiam pluris. 
+ 
+ Si nos iuvare velis, aut cum theam loqui tantum vis, iunge Discordiam nostram — amamus te habere.
+—</string>
+    <string name="announcement_join_discord">Coniunge Discordiam
+—</string>
+    <string name="announcement_got_it">Got it .</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

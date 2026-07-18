@@ -36,6 +36,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
@@ -53,10 +54,9 @@ class RelayManager(private val context: Context) {
         // behind seconds of unsent data on constrained mobile relay routes.
         private const val SOCKET_BUFFER_SIZE = 256 * 1024
         private const val PLAYER_BRIDGE_BUFFER_SIZE = 8 * 1024
-        // Smaller upstream reads so chunk blobs do not monopolize one relay socket write.
         private const val PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE = 8 * 1024
         private const val BEDROCK_TX_BUFFER_SIZE = 8 * 1024
-        private const val BEDROCK_SMALL_FRAME_MAX_BYTES = 1024
+        private const val BEDROCK_SMALL_FRAME_MAX_BYTES = 3072
         private const val BEDROCK_LARGE_FRAME_BATCH_MAX = 4
         private const val BEDROCK_MAX_BYTES_PER_CYCLE = 16 * 1024
         private const val BEDROCK_PING_CHANNEL_CAPACITY = 512
@@ -64,18 +64,32 @@ class RelayManager(private val context: Context) {
         private const val UPSTREAM_YIELD_EVERY_FULL_READS = 2
         private const val LOW_LATENCY_WARMUP_BYTES = 128 * 1024L
         private const val LOW_LATENCY_WARMUP_NS = 4_000_000_000L
-        private const val INITIAL_POOL_SIZE = 5
-        private const val TARGET_POOL_SIZE = 5
-        private const val POOL_REFRESH_FLOOR = 2
-        private const val IDLE_REPLENISH_DELAY_MS = 1_500L
-        private const val SOCKET_OPEN_STAGGER_MS = 100L
-        private const val TUNNEL_HEARTBEAT_INTERVAL_MS = 25_000L
+        private const val INITIAL_POOL_SIZE = 3
+        private const val TARGET_POOL_SIZE = 3
+        private const val POOL_REFRESH_FLOOR = 1
+        private const val IDLE_REPLENISH_DELAY_MS = 500L
+        private const val SOCKET_OPEN_STAGGER_MS = 50L
+        // Heartbeat every 20s instead of 10s — reduces network request traffic while keeping session alive.
+        private const val TUNNEL_HEARTBEAT_INTERVAL_MS = 20_000L
         private const val IDLE_SOCKET_REFRESH_INTERVAL_MS = 5 * 60_000L
         private const val SOCKET_IDLE_TIMEOUT_MS = 8 * 60_000L
         private const val SOCKET_IDLE_TIMEOUT_JITTER_MS = 90_000L
         private const val INITIAL_POOL_READY_TIMEOUT_MS = 8_000L
         private const val READY_POOL_SIZE = 2
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+
+        fun extractIPv4FromNAT64(addr: InetAddress): InetAddress {
+            val bytes = addr.address
+            if (bytes.size == 16) {
+                val ip4Bytes = byteArrayOf(bytes[12], bytes[13], bytes[14], bytes[15])
+                try {
+                    return InetAddress.getByAddress(addr.hostName, ip4Bytes)
+                } catch (e: Exception) {
+                    // Ignore
+                }
+            }
+            return addr
+        }
     }
 
     private var activeRelaySessionId: String? = null
@@ -112,7 +126,26 @@ class RelayManager(private val context: Context) {
     private var poolJob = SupervisorJob()
     private var poolScope = CoroutineScope(Dispatchers.IO + poolJob)
     private var tunnelHeartbeatJob: kotlinx.coroutines.Job? = null
-    private val statusHttpClient = OkHttpClient()
+    private val statusHttpClient = OkHttpClient.Builder()
+        .dns(object : okhttp3.Dns {
+            override fun lookup(hostname: String): List<InetAddress> {
+                val resolved = try {
+                    InetAddress.getAllByName(hostname).map { addr ->
+                        if (addr is java.net.Inet6Address) {
+                            extractIPv4FromNAT64(addr)
+                        } else {
+                            addr
+                        }
+                    }
+                } catch (e: Exception) {
+                    okhttp3.Dns.SYSTEM.lookup(hostname)
+                }
+                return resolved
+            }
+        })
+        .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
     @Volatile
     private var lastIdleSocketRefreshAtMs = 0L
     @Volatile
@@ -122,12 +155,29 @@ class RelayManager(private val context: Context) {
     @Volatile
     private var activeGeyserUdpHost: String = "127.0.0.1"
     private val inboundBedrockFrameCount = AtomicInteger(0)
+    private val logThrottleMap = ConcurrentHashMap<String, Long>()
 
     private data class PooledSocket(
         val socket: Socket,
         var isBridging: Boolean = false,
         val createdAt: Long = System.currentTimeMillis()
     )
+
+    private inline fun logThrottled(
+        key: String,
+        intervalMs: Long,
+        crossinline logAction: () -> Unit
+    ) {
+        val now = System.currentTimeMillis()
+        val previous = logThrottleMap.putIfAbsent(key, now)
+        if (previous == null) {
+            logAction()
+            return
+        }
+        if (now - previous >= intervalMs && logThrottleMap.replace(key, previous, now)) {
+            logAction()
+        }
+    }
 
     data class RelayAddress(val host: String, val port: Int, val isFallback: Boolean = false) {
         override fun toString() = "$host:$port"
@@ -153,12 +203,11 @@ class RelayManager(private val context: Context) {
      */
     suspend fun register(): RelayAddress = withContext(Dispatchers.IO) {
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
-        val userId = currentRelaySessionId()
         val preferredRelayHost = prefs.relayHost
-        val fallbackRelayHost = if (preferredRelayHost == RelayServers.MUMBAI.host) {
-            RelayServers.EUROPE.host
-        } else {
-            RelayServers.MUMBAI.host
+        val fallbackRelayHost = when (preferredRelayHost) {
+            RelayServers.MUMBAI.host -> RelayServers.EUROPE.host
+            RelayServers.AMERICA.host -> RelayServers.EUROPE.host
+            else -> RelayServers.MUMBAI.host
         }
         val hostCandidates = buildList {
             if (preferFallbackRelay && preferredRelayHost != fallbackRelayHost) {
@@ -172,15 +221,20 @@ class RelayManager(private val context: Context) {
 
         var lastError: Exception? = null
         for (relayHost in hostCandidates) {
+            // Use a region-scoped ID so each relay server assigns a different port
+            // from its 10 000-slot pool instead of all three sharing the same one.
+            val userId = relaySessionIdForHost(relayHost)
             val isFallback = relayHost != preferredRelayHost
             android.util.Log.d("RelayManager", "Registering relay session: $userId on $relayHost")
 
-            val url = URL("http://$relayHost:$CONTROL_PORT/register")
+            val resolvedHost = resolveRelayIp(relayHost) ?: relayHost
+            val url = URL("http://$resolvedHost:$CONTROL_PORT/register")
             val conn = url.openConnection() as HttpURLConnection
 
             try {
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("Host", relayHost)
                 conn.connectTimeout = 10_000
                 conn.readTimeout = 10_000
                 conn.doOutput = true
@@ -229,7 +283,6 @@ class RelayManager(private val context: Context) {
 
         bedrockTxJob?.cancel()
         bedrockTxJob = poolScope.launch(Dispatchers.IO) {
-            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
             var currentSocket: java.net.Socket? = null
             var outStream: java.io.BufferedOutputStream? = null
 
@@ -256,11 +309,15 @@ class RelayManager(private val context: Context) {
 
                 try {
                     drainBedrockPingFrames(stream, socket)
-                    if (!bedrockPingChannel.isEmpty) continue
+                    if (!bedrockPingChannel.isEmpty) {
+                        kotlinx.coroutines.yield()
+                        continue
+                    }
 
                     val readyChunk = bedrockChunkChannel.tryReceive()
                     if (readyChunk.isSuccess) {
                         sendBedrockChunkBurst(stream, socket, readyChunk.getOrThrow())
+                        kotlinx.coroutines.yield()
                         continue
                     }
 
@@ -304,7 +361,7 @@ class RelayManager(private val context: Context) {
         val channel = if (pingFrame) bedrockPingChannel else bedrockChunkChannel
         if (channel.trySend(frame).isSuccess) return
         if (pingFrame) {
-            bedrockChunkChannel.tryReceive()
+            bedrockPingChannel.tryReceive()
             if (channel.trySend(frame).isFailure) {
                 logDroppedBedrockFrame()
             }
@@ -361,10 +418,19 @@ class RelayManager(private val context: Context) {
         outStream: java.io.BufferedOutputStream,
         socket: Socket
     ) {
+        var drainedAny = false
         while (true) {
             val next = bedrockPingChannel.tryReceive()
             if (!next.isSuccess) break
-            if (!writeBedrockFrame(outStream, socket, next.getOrThrow())) break
+            if (!writeBedrockFrame(outStream, socket, next.getOrThrow(), flush = false)) break
+            drainedAny = true
+        }
+        if (drainedAny) {
+            synchronized(bedrockSocketWriteLock) {
+                if (activeBedrockSocket === socket && !socket.isClosed) {
+                    try { outStream.flush() } catch (_: Exception) {}
+                }
+            }
         }
     }
 
@@ -536,8 +602,9 @@ class RelayManager(private val context: Context) {
             return@withContext false
         }
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
-        val userId = currentRelaySessionId()
         val relayHost = activeRelayHost ?: prefs.relayHost
+        // Use the same region-scoped ID used in register() / tunnel sockets.
+        val userId = relaySessionIdForHost(relayHost)
         val localIpCandidates = buildList {
             add(com.pocketcraft.server.server.ServerAddressResolver.getLocalIpAddress())
             add(resolveRouteLocalIp(relayHost))
@@ -577,11 +644,13 @@ class RelayManager(private val context: Context) {
 
         for (endpoint in endpointCandidates) {
             for (body in payloadCandidates) {
-                val url = URL("http://$relayHost:$CONTROL_PORT$endpoint")
+                val resolvedHost = resolveRelayIp(relayHost) ?: relayHost
+                val url = URL("http://$resolvedHost:$CONTROL_PORT$endpoint")
                 val conn = url.openConnection() as HttpURLConnection
                 try {
                     conn.requestMethod = "POST"
                     conn.setRequestProperty("Content-Type", "application/json")
+                    conn.setRequestProperty("Host", relayHost)
                     conn.connectTimeout = 10_000
                     conn.readTimeout = 10_000
                     conn.doOutput = true
@@ -636,8 +705,10 @@ class RelayManager(private val context: Context) {
         var anySuccess = false
 
         relayHosts.forEach { relayHost ->
+            val resolvedHost = resolveRelayIp(relayHost) ?: relayHost
             val request = Request.Builder()
-                .url("http://$relayHost:$CONTROL_PORT$endpoint")
+                .url("http://$resolvedHost:$CONTROL_PORT$endpoint")
+                .header("Host", relayHost)
                 .addHeader("X-PocketCraft-Secret", secret)
                 .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
                 .build()
@@ -669,7 +740,8 @@ class RelayManager(private val context: Context) {
     private fun resolveRouteLocalIp(relayHost: String): String? {
         return runCatching {
             Socket().use { socket ->
-                socket.connect(InetSocketAddress(relayHost, CONTROL_PORT), 1500)
+                val resolvedHost = resolveRelayIp(relayHost) ?: relayHost
+                socket.connect(InetSocketAddress(resolvedHost, CONTROL_PORT), 1500)
                 socket.localAddress?.hostAddress
             }
         }
@@ -695,21 +767,22 @@ class RelayManager(private val context: Context) {
     }
 
     private fun resolvePreferIPv4(host: String): InetAddress {
-        return InetAddress.getAllByName(host)
-            .firstOrNull { it is Inet4Address }
-            ?: InetAddress.getByName(host)
+        val resolved = try {
+            InetAddress.getAllByName(host)
+        } catch (e: Exception) {
+            emptyArray<InetAddress>()
+        }
+        val ipv4 = resolved.firstOrNull { it is Inet4Address }
+        if (ipv4 != null) return ipv4
+        val ipv6 = resolved.firstOrNull { it is java.net.Inet6Address }
+        if (ipv6 != null) {
+            return extractIPv4FromNAT64(ipv6)
+        }
+        return InetAddress.getByName(host)
     }
 
     private fun resolveRelayIp(relayHost: String): String? {
-        val configuredFallback = RelayServers.getByHost(relayHost).fallbackIp
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-
-        if (configuredFallback != null) {
-            return configuredFallback
-        }
-
-        return runBlocking(Dispatchers.IO) {
+        val dnsResolved = runBlocking(Dispatchers.IO) {
             runCatching {
                 withTimeoutOrNull(2_000L) {
                     resolvePreferIPv4(relayHost).hostAddress
@@ -718,6 +791,14 @@ class RelayManager(private val context: Context) {
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
         }
+
+        if (dnsResolved != null) {
+            return dnsResolved
+        }
+
+        return RelayServers.getByHost(relayHost).fallbackIp
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
     }
 
     private fun topUpPool(localPort: Int) {
@@ -797,8 +878,10 @@ class RelayManager(private val context: Context) {
                     delay(staggerDelayMs)
                 }
 
-                val userId = currentRelaySessionId()
                 val relayHost = activeRelayHost ?: com.pocketcraft.server.data.preferences.AppPreferences(context).relayHost
+                // Use the same region-scoped ID that was used during register() so the relay
+                // can match this tunnel socket to the correct port assignment.
+                val userId = relaySessionIdForHost(relayHost)
 
                 var targetIp = resolvedRelayIp
                 if (targetIp == null) {
@@ -811,8 +894,7 @@ class RelayManager(private val context: Context) {
                 }
 
                 socket = Socket()
-                configureSocket(socket)
-                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE)
+                configureRelaySocket(socket)
                 socket.connect(java.net.InetSocketAddress(targetIp, PHONE_TUNNEL_PORT), 10_000)
 
                 socket.outputStream.write("$userId\n".toByteArray(Charsets.UTF_8))
@@ -903,7 +985,7 @@ class RelayManager(private val context: Context) {
     }
 
     private suspend fun bridgeBedrockConnection(relaySocket: Socket, firstByte: Int) {
-        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE)
         android.util.Log.i("RelayManager", "Bedrock UDP bridge ACTIVE via TCP tunnel.")
         android.util.Log.d(
             "RelayManager",
@@ -992,7 +1074,7 @@ class RelayManager(private val context: Context) {
                 if (npOff < len) break
 
                 val frameNo = inboundBedrockFrameCount.incrementAndGet()
-                if (frameNo <= 20 || frameNo % 25 == 0) {
+                if (frameNo <= 20 || frameNo % 250 == 0) {
                     android.util.Log.d(
                         "RelayManager",
                         "Inbound Bedrock relay frame #$frameNo type=0x02 bytes=${frame.size} payload=$len client=${frame[3].toInt() and 0xFF}.${frame[4].toInt() and 0xFF}.${frame[5].toInt() and 0xFF}.${frame[6].toInt() and 0xFF}:${((frame[7].toInt() and 0xFF) shl 8) or (frame[8].toInt() and 0xFF)}"
@@ -1030,7 +1112,7 @@ class RelayManager(private val context: Context) {
         val localSocket = try {
             withContext(Dispatchers.IO) {
                 Socket().apply {
-                    configureSocket(this)
+                    configureLocalSocket(this)
                     connect(java.net.InetSocketAddress("127.0.0.1", localPort), 5000)
                 }
             }
@@ -1041,19 +1123,20 @@ class RelayManager(private val context: Context) {
         }
 
         android.util.Log.i("RelayManager", "Bridge ACTIVE: Relay <-> Local:$localPort")
-        android.util.Log.i(
-            "RelayManager",
-            "Bridge queues: relaySend=${relaySocket.sendBufferSize}, relayReceive=${relaySocket.receiveBufferSize}, " +
-                "localSend=${localSocket.sendBufferSize}, localReceive=${localSocket.receiveBufferSize}"
-        )
+        logThrottled("bridge-queues", intervalMs = 30_000L) {
+            android.util.Log.i(
+                "RelayManager",
+                "Bridge queues: relaySend=${relaySocket.sendBufferSize}, relayReceive=${relaySocket.receiveBufferSize}, " +
+                    "localSend=${localSocket.sendBufferSize}, localReceive=${localSocket.receiveBufferSize}"
+            )
+        }
 
         val relayToLocalThread = Thread {
-            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE)
             var totalBytes = 0L
             try {
                 val output = localSocket.getOutputStream()
-                // A Bedrock-to-Java handoff must keep using the BufferedInputStream:
-                // it may already contain bytes read ahead from the Java handshake.
+                // A Bedrock-to-Java handoff must keep using the BufferedInputStream.
                 val relayInput = relayInputOverride ?: relaySocket.getInputStream()
 
                 // Manually push the first byte to the server
@@ -1090,13 +1173,12 @@ class RelayManager(private val context: Context) {
             }
         }
         relayToLocalThread.name = "JavaRelayToLocal"
-        relayToLocalThread.priority = Thread.MAX_PRIORITY
 
         val localToRelayThread = Thread {
-            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE)
             var totalBytes = 0L
             try {
-                val input = localSocket.getInputStream()
+                val input  = localSocket.getInputStream()
                 val output = relaySocket.getOutputStream()
                 val buffer = ByteArray(PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE)
                 var bytesRead: Int
@@ -1107,7 +1189,7 @@ class RelayManager(private val context: Context) {
 
                     val startTime = System.nanoTime()
                     output.write(buffer, 0, bytesRead)
-                    totalBytes += bytesRead
+                    totalBytes  += bytesRead
 
                     val durationMicros = (System.nanoTime() - startTime) / 1000
                     if (durationMicros > 100_000) {
@@ -1123,7 +1205,6 @@ class RelayManager(private val context: Context) {
             }
         }
         localToRelayThread.name = "JavaLocalToRelay"
-        localToRelayThread.priority = Thread.MAX_PRIORITY
 
         relayToLocalThread.start()
         localToRelayThread.start()
@@ -1140,7 +1221,7 @@ class RelayManager(private val context: Context) {
         }
     }
 
-    private fun configureSocket(socket: Socket) {
+    private fun configureLocalSocket(socket: Socket) {
         runCatching {
             socket.tcpNoDelay = true
             socket.keepAlive = true
@@ -1148,7 +1229,19 @@ class RelayManager(private val context: Context) {
             socket.sendBufferSize = SOCKET_BUFFER_SIZE
             socket.receiveBufferSize = SOCKET_BUFFER_SIZE
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
-            socket.setPerformancePreferences(0, 1, 0)
+            socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
+        }
+    }
+
+    private fun configureRelaySocket(socket: Socket) {
+        runCatching {
+            socket.tcpNoDelay = true
+            socket.keepAlive = true
+            socket.reuseAddress = true
+            socket.sendBufferSize = SOCKET_BUFFER_SIZE
+            socket.receiveBufferSize = SOCKET_BUFFER_SIZE
+            socket.trafficClass = 0x10 // IPTOS_LOWDELAY
+            socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
         }
     }
 
@@ -1170,7 +1263,6 @@ class RelayManager(private val context: Context) {
         poolTopUpScheduled.set(false)
         lastIdleSocketRefreshAtMs = 0L
         resolvedRelayIp = null
-        activeRelayHost = null
         activeRelayIsFallback = false
         preferFallbackRelay = false
         _isPoolReady.value = false
@@ -1180,8 +1272,6 @@ class RelayManager(private val context: Context) {
             socketPool.clear()
         }
         connectingSockets.set(0)
-        // assignedPort = null // Keep port persistent across restarts
-        activeRelaySessionId = null
         android.util.Log.i("RelayManager", "Tunnel disconnected and scope reset.")
     }
 
@@ -1205,10 +1295,12 @@ class RelayManager(private val context: Context) {
         if (!sessionId.isNullOrBlank() && normalizedHost.isNotBlank()) {
             for (attempt in 0 until 3) {
                 try {
-                    val url = URL("http://$normalizedHost:$CONTROL_PORT/unregister")
+                    val resolvedHost = resolveRelayIp(normalizedHost) ?: normalizedHost
+                    val url = URL("http://$resolvedHost:$CONTROL_PORT/unregister")
                     val conn = url.openConnection() as HttpURLConnection
                     conn.requestMethod = "POST"
                     conn.setRequestProperty("Content-Type", "application/json")
+                    conn.setRequestProperty("Host", normalizedHost)
                     conn.connectTimeout = 5_000
                     conn.readTimeout = 5_000
                     conn.doOutput = true
@@ -1273,5 +1365,26 @@ class RelayManager(private val context: Context) {
         activeRelaySessionId = deviceId
         android.util.Log.i("RelayManager", "Using persistent relay user id: $deviceId")
         return deviceId
+    }
+
+    /**
+     * Returns a region-scoped session ID so that each relay server assigns a
+     * DIFFERENT port from its pool. Without this, all regions hash the same
+     * userId to the same port, wasting the 10 000-slot capacity per server.
+     *
+     * Format: "<deviceId>-<region>" where <region> is a short slug derived from
+     * the relay hostname (e.g. "mine.pocketcraft.online" → "mumbai").
+     * This makes the ID deterministic — the same phone always gets the same
+     * port on the same region, which keeps DNS-based routing stable.
+     */
+    private fun relaySessionIdForHost(relayHost: String): String {
+        val base = currentRelaySessionId()
+        val regionSlug = when {
+            relayHost.contains("mine.") || relayHost.contains("mumbai") || relayHost.contains("india") -> "mumbai"
+            relayHost.contains("eu.") || relayHost.contains("europe") || relayHost.contains("frankfurt") -> "eu"
+            relayHost.contains("us.") || relayHost.contains("america") || relayHost.contains("ohio") -> "us"
+            else -> relayHost.substringBefore(".").take(8).lowercase().ifBlank { "custom" }
+        }
+        return "$base-$regionSlug"
     }
 }

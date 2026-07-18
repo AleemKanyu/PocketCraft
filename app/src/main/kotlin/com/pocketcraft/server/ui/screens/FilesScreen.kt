@@ -204,7 +204,7 @@ fun FilesScreen(
                     label = s.filesQuickBackup,
                     emoji = "💾",
                     onClick = {
-                        scope.launch { onMessage(stateHolder.createBackup()) }
+                        stateHolder.startCreateBackup { onMessage(it) }
                     }
                 )
                 ActionTile(

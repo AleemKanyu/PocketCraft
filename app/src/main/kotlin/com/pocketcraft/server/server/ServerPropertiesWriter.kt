@@ -48,7 +48,7 @@ object ServerPropertiesWriter {
     fun apply(serverDir: File, prefs: ServerPrefsSnapshot, isPremium: Boolean = false) {
         val file = File(serverDir, "server.properties")
         val props = loadExisting(file)
-        overlayManagedValues(props, prefs, isPremium)
+        overlayManagedValues(serverDir, props, prefs, isPremium)
         save(file, props)
         Log.d(
             TAG,
@@ -58,11 +58,11 @@ object ServerPropertiesWriter {
 
     fun write(file: File, prefs: ServerPrefsSnapshot, isPremium: Boolean = false) {
         val props = loadExisting(file)
-        overlayManagedValues(props, prefs, isPremium)
+        overlayManagedValues(file.parentFile, props, prefs, isPremium)
         save(file, props)
     }
 
-    fun overlayManagedValues(props: Properties, prefs: ServerPrefsSnapshot, isPremium: Boolean = false) {
+    fun overlayManagedValues(serverDir: File?, props: Properties, prefs: ServerPrefsSnapshot, isPremium: Boolean = false) {
         props["level-name"] = prefs.worldName
         props["level-seed"] = prefs.worldSeed
         val maxLimit = if (isPremium) 50 else 10
@@ -72,6 +72,7 @@ object ServerPropertiesWriter {
         props["difficulty"] = prefs.difficulty.lowercase()
         props["gamemode"] = prefs.gameMode.lowercase()
         props["online-mode"] = prefs.onlineMode.toString()
+
         // enforce-secure-profile causes chat signing requirement which breaks on some
         // client builds; keep it false regardless of online-mode setting.
         props["enforce-secure-profile"] = "false"
@@ -111,13 +112,23 @@ object ServerPropertiesWriter {
         props["rcon.port"] = "25575"
         props["rcon.password"] = "pocketcraft-internal-rcon"
         props["broadcast-rcon-to-ops"] = "false"
-        props["pocketcraft-server-type"] = prefs.serverType
+        val existingServerType = props.getProperty("pocketcraft-server-type").orEmpty()
+        val preserveModpackMetadata = existingServerType.equals("MODPACK", ignoreCase = true) &&
+            props.getProperty("pocketcraft-launch-target").orEmpty().isNotBlank()
+
+        props["pocketcraft-server-type"] = if (preserveModpackMetadata && !prefs.serverType.equals("MODPACK", ignoreCase = true)) {
+            existingServerType
+        } else {
+            prefs.serverType
+        }
         props["pocketcraft-game-version"] = prefs.gameVersion
         props["pocketcraft-join-message-enabled"] = "true"
         props["pocketcraft-join-message-text"] = ServerConfig().joinMessageText
         props["pocketcraft-join-message-url"] = ServerConfig().joinMessageUrl
         if (prefs.customJarPath.isNullOrBlank()) {
-            props.remove("pocketcraft-custom-jar-path")
+            if (!preserveModpackMetadata) {
+                props.remove("pocketcraft-custom-jar-path")
+            }
         } else {
             props["pocketcraft-custom-jar-path"] = prefs.customJarPath
         }

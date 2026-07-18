@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Group
@@ -316,6 +317,7 @@ fun PocketTopBar(
                     )
                 }
 
+
                 Box {
                     Box(
                         modifier = Modifier
@@ -407,7 +409,7 @@ fun PocketTopBar(
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                         relayOptions.forEach { region ->
-                            val isComingSoon = region.host == RelayServers.AMERICA.host
+                            val isComingSoon = false
                             PremiumDropdownItem(
                                 title = region.label,
                                 subtitle = if (isComingSoon) {

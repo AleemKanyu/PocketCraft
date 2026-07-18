@@ -36,17 +36,46 @@ open class PocketCraftApp : Application(), Configuration.Provider {
         AppPreferences.init(this)
 
         val processName = currentProcessName()
-        if (processName != packageName) {
-            // The Minecraft service has its own process. Do not initialize Firebase clients
-            // here: Firestore's disk cache is single-process and would crash the server process.
+        val isMainProcess = processName == packageName
+        val isServerProcess = processName == "$packageName:server"
+
+        if (!isMainProcess && !isServerProcess) {
+            // Unknown secondary process — skip all initialization.
+            return
+        }
+
+        // Initialize FirebaseApp once for all valid processes.
+        runCatching {
+            FirebaseApp.initializeApp(this)
+        }
+
+        if (isServerProcess) {
+            // Disable Firestore disk persistence in the background process to prevent database locks/crashes
+            runCatching {
+                val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                val settings = com.google.firebase.firestore.FirebaseFirestoreSettings.Builder()
+                    .setPersistenceEnabled(false)
+                    .build()
+                db.firestoreSettings = settings
+            }
+            // Enable Crashlytics in the background process for release builds to capture JNI/Hotspot crashes
+            runCatching {
+                com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().apply {
+                    setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG)
+                    setCustomKey("app_process", processName)
+                    setCustomKey("app_version", BuildConfig.VERSION_NAME)
+                }
+            }
             return
         }
 
         runCatching {
-            FirebaseApp.initializeApp(this)
-            Firebase.crashlytics.setCrashlyticsCollectionEnabled(false)
-            Firebase.crashlytics.setCustomKey("app_process", currentProcessName())
-            Firebase.crashlytics.setCustomKey("app_version", BuildConfig.VERSION_NAME)
+            // Configure and enable Crashlytics for the main process in release builds
+            com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().apply {
+                setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG)
+                setCustomKey("app_process", processName)
+                setCustomKey("app_version", BuildConfig.VERSION_NAME)
+            }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -68,11 +97,13 @@ open class PocketCraftApp : Application(), Configuration.Provider {
     }
 
     private fun currentProcessName(): String {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            Application.getProcessName()
-        } else {
-            packageName
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return Application.getProcessName()
         }
+        // Fallback for API < 28
+        return runCatching {
+            File("/proc/self/cmdline").readText().trim('\u0000')
+        }.getOrNull()?.trim() ?: packageName
     }
 
     private fun reinstallBundledPluginsAfterAppUpdate() {

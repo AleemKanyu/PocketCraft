@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server töötab</string>
+    <string name="server_stopped">Server peatus</string>
+    <string name="server_starting">Serveri käivitamine…</string>
+    <string name="start_server">Käivitage server</string>
+    <string name="stop_server">Peata server</string>
+    <string name="notification_channel_name">Serveri olek</string>
+    <string name="notification_channel_desc">Näitab serveri tööolekut ja juhtelemente</string>
+    <string name="tap_to_copy">Puudutage IP kopeerimiseks</string>
+    <string name="copied">IP kopeeriti lõikelauale</string>
+    <string name="how_to_connect">Kuidas ühendada</string>
+    <string name="send_command">Saada käsk</string>
+    <string name="clear_log">Tühjenda logi</string>
+    <string name="apply_restart">Rakenda ja taaskäivitage</string>
+    <string name="delete_world">Kustutage maailma andmed</string>
+    <string name="delete_world_confirm">See kustutab maailma jäädavalt. Oled sa kindel?</string>
+    <string name="thermal_warning">Hoiatus: seade kuumeneb üle – kaaluge serveri peatamist</string>
+    <string name="ram_warning">Hoiatus: tuvastati vähe RAM-i – jõudlus võib olla halvenenud</string>
+    <string name="players_online">%1$d/%2$d mängijat</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Tööaeg: %1$s</string>
+    <string name="announcement_title">Märkus rakendusest PocketCraft</string>
+    <string name="announcement_body">PocketCraft on kõigile igaveseks tasuta, kuid mõned funktsioonid on Pro-s ainult selleks, et saaksite toetada meie serverikulusid ja rakenduste kasutuskulusid. Need on odavad ja seetõttu on need seal sees, sealhulgas suurema väärtuse eest. 
+ 
+ Kui soovite meid aidata või lihtsalt meeskonnaga vestelda, liituge meie discordiga – me ootame teid hea meelega.</string>
+    <string name="announcement_join_discord">Liitu Discordiga</string>
+    <string name="announcement_got_it">Sain aru</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

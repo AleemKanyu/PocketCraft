@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server Running</string>
+    <string name="server_stopped">Server Waqqaf</string>
+    <string name="server_starting">Server qed jibda...</string>
+    <string name="start_server">Ibda Server</string>
+    <string name="stop_server">Waqqaf Server</string>
+    <string name="notification_channel_name">L-Istatus tas-Server</string>
+    <string name="notification_channel_desc">Juri l-istatus tat-tħaddim tas-server u l-kontrolli</string>
+    <string name="tap_to_copy">Tektek biex tikkopja l-IP</string>
+    <string name="copied">IP ikkupjat fil-clipboard</string>
+    <string name="how_to_connect">Kif Tqabbad</string>
+    <string name="send_command">Ibgħat Kmand</string>
+    <string name="clear_log">Ċar Log</string>
+    <string name="apply_restart">Applika u Erġa\' Ibda</string>
+    <string name="delete_world">Ħassar Data Dinjija</string>
+    <string name="delete_world_confirm">Dan se jħassar id-dinja b\'mod permanenti. Int żgur?</string>
+    <string name="thermal_warning">Twissija: L-apparat qed jisħon iżżejjed — ikkunsidra li twaqqaf is-server</string>
+    <string name="ram_warning">Twissija: RAM baxxa misjuba — il-prestazzjoni tista\' tkun degradata</string>
+    <string name="players_online">%1$d/%2$d plejers</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Uptime: %1$s</string>
+    <string name="announcement_title">Nota minn PocketCraft</string>
+    <string name="announcement_body">PocketCraft se tkun b\'xejn għal dejjem għal kulħadd, iżda xi karatteristiċi huma fi Pro biss sabiex tkun tista\' tappoġġja l-ispejjeż tas-server tagħna u l-ispejjeż tat-tħaddim tal-app. Huma rħas, u għalhekk huma hemm, inkluż dak għal aktar valur. 
+ 
+ Jekk tixtieq tgħinna, jew sempliċement trid tiċċettja mat-tim, ingħaqad mad-Discord tagħna — nixtiequ li jkollna lilek.</string>
+    <string name="announcement_join_discord">Ingħaqad ma\' Discord</string>
+    <string name="announcement_got_it">Ghandek</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

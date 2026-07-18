@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">مۇلازىمېتىر ئىجرا</string>
+    <string name="server_stopped">مۇلازىمېتىر توختىتىلدى</string>
+    <string name="server_starting">مۇلازىمېتىرنى باشلاش…</string>
+    <string name="start_server">مۇلازىمېتىرنى قوزغىتىش</string>
+    <string name="stop_server">مۇلازىمېتىرنى توختىتىڭ</string>
+    <string name="notification_channel_name">مۇلازىمېتىر ھالىتى</string>
+    <string name="notification_channel_desc">مۇلازىمېتىرنىڭ ئىجرا ھالىتى ۋە كونتروللىرىنى كۆرسىتىدۇ</string>
+    <string name="tap_to_copy">IP نى كۆچۈرۈش ئۈچۈن چېكىڭ</string>
+    <string name="copied">IP چاپلاش تاختىسىغا كۆچۈرۈلدى</string>
+    <string name="how_to_connect">قانداق ئۇلىنىش</string>
+    <string name="send_command">بۇيرۇق ئەۋەتىش</string>
+    <string name="clear_log">خاتىرىنى تازىلاش</string>
+    <string name="apply_restart">ئىلتىماس قىلىش ۋە قايتا قوزغىتىش</string>
+    <string name="delete_world">دۇنيا سانلىق مەلۇماتلىرىنى ئۆچۈرۈڭ</string>
+    <string name="delete_world_confirm">بۇ دۇنيانى مەڭگۈلۈك ئۆچۈرىدۇ. ئىشىنەمسىز؟</string>
+    <string name="thermal_warning">ئاگاھلاندۇرۇش: ئۈسكۈنە بەك قىزىپ كەتتى - مۇلازىمېتىرنى توختىتىشنى ئويلاڭ</string>
+    <string name="ram_warning">ئاگاھلاندۇرۇش: تۆۋەن ئىچكى ساقلىغۇچ بايقالدى - ئىقتىدارى ناچارلىشىشى مۇمكىن</string>
+    <string name="players_online">%1$d/%2$d قويغۇچىلار</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">ۋاقتى: %1$s</string>
+    <string name="announcement_title">PocketCraft نىڭ ئىزاھاتى</string>
+    <string name="announcement_body">PocketCraft ھەممە ئادەم ئۈچۈن مەڭگۈ ھەقسىز بولىدۇ ، ئەمما بەزى ئىقتىدارلار Pro دا بولۇپ ، بىزنىڭ مۇلازىمېتىر چىقىمىمىزنى ۋە ئەپ ئىجرا چىقىمىمىزنى قوللىيالايسىز. ئۇلار ئەرزان ، شۇڭلاشقا ئۇلار بۇ يەردە ، تېخىمۇ كۆپ قىممەتنى ئۆز ئىچىگە ئالىدۇ. 
+ 
+ ئەگەر بىزگە ياردەم قىلماقچى بولسىڭىز ، ياكى پەقەت كوماندا بىلەن پاراڭلاشماقچى بولسىڭىز ، بىزنىڭ Discord غا قوشۇلۇڭ - بىز سىزنى ياخشى كۆرىمىز.</string>
+    <string name="announcement_join_discord">قالايمىقانچىلىققا قوشۇلۇڭ</string>
+    <string name="announcement_got_it">تاپتى</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

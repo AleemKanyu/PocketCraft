@@ -17,6 +17,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".PocketCraftApplication"
@@ -34,10 +35,10 @@
         android:theme="@style/Theme.PocketCraft"
         tools:targetApi="31">
 
-        <!-- Disable pointer tagging for JRE compatibility -->
+        <!-- Enable 16KB page size compatibility mode for 4KB aligned JVM libraries -->
         <meta-data
             android:name="com.android.dynamic_linker.use_16kb_app_compat"
-            android:value="false" />
+            android:value="true" />
 
         <provider
             android:name="androidx.startup.InitializationProvider"
@@ -85,7 +86,7 @@
             android:exported="false"
             android:foregroundServiceType="specialUse"
             android:process=":server"
-            android:stopWithTask="true">
+            android:stopWithTask="false">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keeps a Minecraft server process running in the foreground so the user can host an active game session on their device." />
@@ -99,6 +100,12 @@
             </intent-filter>
         </service>
 
+        <service
+            android:name=".service.BackupForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <receiver
             android:name=".widget.ServerWidgetReceiver"
             android:enabled="true"
@@ -110,6 +117,16 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/server_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".service.AutoBackupReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
         </receiver>
 
         <activity

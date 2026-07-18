@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Сервер иштеп жатат</string>
+    <string name="server_stopped">Сервер токтоп калды</string>
+    <string name="server_starting">Сервер Башталып жатат…</string>
+    <string name="start_server">Серверди баштоо</string>
+    <string name="stop_server">Серверди токтотуу</string>
+    <string name="notification_channel_name">Сервердин абалы</string>
+    <string name="notification_channel_desc">Сервердин иштөө абалын жана башкаруу элементтерин көрсөтөт</string>
+    <string name="tap_to_copy">IP көчүрүү үчүн таптаңыз</string>
+    <string name="copied">IP алмашуу буферине көчүрүлдү</string>
+    <string name="how_to_connect">Кантип туташса болот</string>
+    <string name="send_command">Буйрук жөнөтүү</string>
+    <string name="clear_log">Журналды тазалоо</string>
+    <string name="apply_restart">Колдонуу жана кайра баштоо</string>
+    <string name="delete_world">Дүйнөлүк дайындарды жок кылуу</string>
+    <string name="delete_world_confirm">Бул дүйнөнү биротоло жок кылат. Ишенесиңби?</string>
+    <string name="thermal_warning">Эскертүү: Түзмөк өтө ысып жатат — серверди токтотууну ойлонуп көрүңүз</string>
+    <string name="ram_warning">Эскертүү: Төмөн RAM аныкталды — иштеши начарлашы мүмкүн</string>
+    <string name="players_online">%1$d/%2$d оюнчулар</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Иштөө убактысы: %1$s</string>
+    <string name="announcement_title">PocketCraft колдонмосунан эскертүү</string>
+    <string name="announcement_body">PocketCraft ар бир адам үчүн түбөлүккө акысыз болот, бирок кээ бир функциялар Pro\'до болгону үчүн сервердин чыгымдарын жана колдонмонун иштөө баасын көтөрө аласыз. Алар арзан, ошондуктан алар ошол жерде, анын ичинде көбүрөөк баалуулук үчүн. 
+ 
+ Эгер сиз бизге жардам бергиңиз келсе же жөн гана команда менен баарлашууну кааласаңыз, биздин Discord\'ка кошулуңуз — биз сизди каалайбыз.</string>
+    <string name="announcement_join_discord">Discord\'ка кошулуңуз</string>
+    <string name="announcement_got_it">Түшүндүм</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

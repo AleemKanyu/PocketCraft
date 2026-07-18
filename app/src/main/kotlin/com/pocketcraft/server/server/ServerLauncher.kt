@@ -22,11 +22,20 @@ import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import java.util.Locale
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 import kotlin.math.pow
 
 class ServerLauncher(private val context: Context) {
+
+    private data class DeviceStabilityProfile(
+        val forceExternalJvm: Boolean,
+        val constrainedHeap: Boolean,
+        val maxHeapCapMb: Int,
+        val minHeapFloorMb: Int,
+        val reason: String?
+    )
 
     private fun normalizeAndroidPath(path: String): String {
         return if (path.startsWith("/data/user/0/")) {
@@ -36,9 +45,74 @@ class ServerLauncher(private val context: Context) {
         }
     }
 
+    private fun buildDeviceStabilityProfile(totalRamMb: Int, availableRamMb: Int): DeviceStabilityProfile {
+        val manufacturer = Build.MANUFACTURER.orEmpty().lowercase(Locale.US)
+        val brand = Build.BRAND.orEmpty().lowercase(Locale.US)
+        val model = Build.MODEL.orEmpty().lowercase(Locale.US)
+        val device = Build.DEVICE.orEmpty().lowercase(Locale.US)
+        val product = Build.PRODUCT.orEmpty().lowercase(Locale.US)
+        val fingerprint = Build.FINGERPRINT.orEmpty().lowercase(Locale.US)
+        val xiaomiMarkers = listOf(manufacturer, brand, model, device, product, fingerprint)
+        val isXiaomiFamily = xiaomiMarkers.any { value ->
+            value.contains("xiaomi") || value.contains("redmi") || value.contains("poco")
+        }
+        val isGalaxyA12Family = manufacturer.contains("samsung") && listOf(model, device, product).any { value ->
+            value.contains("a12") || value.contains("sm-a125") || value.contains("sm-a127")
+        }
+        // Galaxy M13 (SM-M135/SM-M136/SM-M137) silently stalls during in-process JVM
+        // initialisation on Android 14 — force external JVM to avoid the startup timeout.
+        val isGalaxyM13Family = manufacturer.contains("samsung") && listOf(model, device, product).any { value ->
+            value.contains("m13") || value.contains("sm-m135") ||
+            value.contains("sm-m136") || value.contains("sm-m137")
+        }
+        // Xiaomi/Redmi/POCO devices on Android 14+ have shown silent stalls at
+        // "Preparing spawn area" while using the in-process JNI launcher.
+        // Force the external JVM path on this family until the root cause is isolated.
+        val isXiaomiAndroid14PlusFamily = isXiaomiFamily && Build.VERSION.SDK_INT >= 34
+        val constrainedHeap = isGalaxyA12Family || totalRamMb <= 4096
+        val targetHeapCap = when {
+            isGalaxyA12Family -> minOf((availableRamMb * 0.52f).toInt(), 896)
+            totalRamMb <= 3072 -> minOf((availableRamMb * 0.58f).toInt(), 768)
+            totalRamMb <= 4096 -> minOf((availableRamMb * 0.62f).toInt(), 1024)
+            else -> minOf((availableRamMb * 0.72f).toInt(), (totalRamMb * 0.90f).toInt())
+        }
+        val minHeapFloor = if (isGalaxyA12Family || totalRamMb <= 3072) 384 else 512
+        val reason = when {
+            isXiaomiAndroid14PlusFamily -> "Xiaomi/Redmi/POCO Android 14+ device detected. Using external JVM to avoid in-process startup stalls during world preparation."
+            isGalaxyM13Family -> "Samsung Galaxy M13 detected. Using external JVM to prevent startup stall on Android 14."
+            isGalaxyA12Family -> "Samsung Galaxy A12 low-memory profile active. Using safer heap limits to reduce short crash loops."
+            constrainedHeap -> "Low-memory device profile active. Heap is capped to reduce background crash risk."
+            else -> null
+        }
+        return DeviceStabilityProfile(
+            forceExternalJvm = isGalaxyM13Family || isXiaomiAndroid14PlusFamily,
+            constrainedHeap = constrainedHeap,
+            maxHeapCapMb = targetHeapCap.coerceAtLeast(minHeapFloor),
+            minHeapFloorMb = minHeapFloor,
+            reason = reason
+        )
+    }
+
     companion object {
         @Volatile
         private var activeExternalProcess: Process? = null
+
+        /** Cached result of noexec mount detection; null = not yet checked. */
+        @Volatile
+        private var noexecCacheResult: Boolean? = null
+
+        /** Cached result of canonical Java binary execution safety; null = not yet checked. */
+        @Volatile
+        private var execSafeCache: Boolean? = null
+
+        /**
+         * Set to true when ALL writable directories (files/, code_cache/, external) are
+         * noexec — meaning this device (e.g. Samsung Knox lockdown) prevents execution
+         * of any user-placed binary. Used to show a device-specific error message.
+         */
+        @Volatile
+        var allStorageNoexecDetected: Boolean = false
+            private set
 
         fun hasActiveExternalProcess(): Boolean = activeExternalProcess?.isAlive == true
 
@@ -127,6 +201,15 @@ class ServerLauncher(private val context: Context) {
             }
         }
         
+        if (levelDat.exists()) {
+            try {
+                val difficultyStr = props.getProperty("difficulty", "normal")
+                com.pocketcraft.server.service.NBTParser.updateDifficultyInLevelDat(levelDat, difficultyStr)
+            } catch (e: Exception) {
+                onOutput("[PocketCraft] Failed to sync difficulty to level.dat: ${e.message}")
+            }
+        }
+        
         com.pocketcraft.server.service.DimensionMigrator.syncDimensionsForServerType(context, worldName, serverType)
         PluginManager.preserveFloodgateKey(context, worldName)
         PluginManager.enforceBedrockBridgeLocalConfig(context, worldName)
@@ -137,7 +220,8 @@ class ServerLauncher(private val context: Context) {
         val tmpDir    = normalizeAndroidPath(File(context.filesDir, "runtime-tmp").also { it.mkdirs() }.absolutePath)
         val shimDir = File(normalizeAndroidPath(File(context.filesDir, "lib-shims").also { it.mkdirs() }.absolutePath))
         ensureSystemShims(shimDir, File(tmpDir), onOutput)
-        val forceExternal = AppPreferences(context).forceExternalJvm
+        val deviceProfile = buildDeviceStabilityProfile(totalRamMb = getTotalRamMb(context), availableRamMb = com.pocketcraft.server.util.RamUtils.getAvailableRamMb(context))
+        val forceExternal = AppPreferences(context).forceExternalJvm || deviceProfile.forceExternalJvm
         val preferInProcessJvm = launchMode == ServerFileManager.LaunchMode.JAR && !forceExternal && NativeLauncher.loadLibrary()
 
         val resolvedRuntime = ensureLaunchableRuntime(
@@ -167,24 +251,43 @@ class ServerLauncher(private val context: Context) {
         val maxRamMbFromProps = worldProps.getProperty("pocketcraft-max-ram-mb", "1024").toIntOrNull() ?: 1024
         
         val availRam = com.pocketcraft.server.util.RamUtils.getAvailableRamMb(context)
-        val maxAllowedRam = (totalRam * 0.90).toInt().coerceAtLeast(1024)
+        val maxAllowedRam = minOf((totalRam * 0.90).toInt(), deviceProfile.maxHeapCapMb)
+            .coerceAtLeast(deviceProfile.minHeapFloorMb)
         
-        val maxRamMb = when (ramModeFromProps) {
-            "low" -> if (totalRam >= 6000) 2048 else if (totalRam >= 4000) 1536 else 1024
+        val requestedMaxRamMb = when (ramModeFromProps) {
+            "low" -> when {
+                deviceProfile.constrainedHeap && totalRam <= 3500 -> 768
+                deviceProfile.constrainedHeap -> 896
+                totalRam >= 6000 -> 2048
+                totalRam >= 4000 -> 1536
+                else -> 1024
+            }
             "full" -> maxAllowedRam
-            "manual" -> maxRamMbFromProps.coerceIn(512, maxAllowedRam)
+            "manual" -> maxRamMbFromProps.coerceIn(deviceProfile.minHeapFloorMb, maxAllowedRam)
             else -> 1024
         }
-        val minRamMb = when (ramModeFromProps) {
-            "low" -> if (totalRam >= 6000) 1024 else if (totalRam >= 4000) 768 else 512
-            "full" -> maxAllowedRam
-            "manual" -> maxRamMbFromProps.coerceIn(512, maxAllowedRam)
+        val requestedMinRamMb = when (ramModeFromProps) {
+            "low" -> when {
+                deviceProfile.constrainedHeap && totalRam <= 3500 -> 384
+                deviceProfile.constrainedHeap -> 512
+                totalRam >= 6000 -> 1024
+                totalRam >= 4000 -> 768
+                else -> 512
+            }
+            // For full and manual modes, default to a conservative initial heap size (512MB)
+            // to avoid immediate startup OOM kills by the OS when launching.
             else -> 512
         }
+        val maxRamMb = requestedMaxRamMb.coerceIn(deviceProfile.minHeapFloorMb, maxAllowedRam)
+        val minRamMb = maxRamMb // Set initial heap equal to max heap to prevent runtime dynamic resizing pauses
 
+        deviceProfile.reason?.let { reason ->
+            onOutput("[PocketCraft] Stability mode enabled: $reason")
+        }
         onOutput("[PocketCraft] JVM memory: mode=$ramModeFromProps, heap=${minRamMb}MB..${maxRamMb}MB, available=${availRam}MB, total=${totalRam}MB")
 
-        val javaBin = File(normalizeAndroidPath(JreExtractor.getJavaBinary(context, resolvedRuntime).absolutePath))
+        // Use exec-safe java binary path — falls back to codeCacheDir copy on noexec devices.
+        val javaBin = ensureExecSafeJavaBin(context, resolvedRuntime)
         val libjli = File(jrePath, "lib/libjli.so")
         val libjvm = File(jrePath, "lib/server/libjvm.so")
         if (!javaBin.exists()) {
@@ -215,7 +318,7 @@ class ServerLauncher(private val context: Context) {
                 if (launchMode != ServerFileManager.LaunchMode.JAR || forceExternal) {
                     onOutput("[PocketCraft] Routing to out-of-process JVM execution (ForceExternal=$forceExternal)")
                     result = launchExternalJvm(
-                        javaBin = javaBin,
+                        runtime = resolvedRuntime,
                         jrePath = jrePath,
                         launchTargetPath = normalizedJarPath,
                         launchMode = launchMode,
@@ -252,7 +355,7 @@ class ServerLauncher(private val context: Context) {
                     if (result != 0) {
                         onOutput("[PocketCraft] In-process JVM failed with code $result. Trying out-of-process JVM fallback...")
                         result = launchExternalJvm(
-                            javaBin = javaBin,
+                            runtime = resolvedRuntime,
                             jrePath = jrePath,
                             launchTargetPath = normalizedJarPath,
                             launchMode = launchMode,
@@ -371,7 +474,9 @@ class ServerLauncher(private val context: Context) {
         shimDir: File
     ): RuntimePreflightResult {
         val jrePath = normalizeAndroidPath(JreExtractor.getJreDir(context, runtime).absolutePath)
-        val javaBin = File(normalizeAndroidPath(JreExtractor.getJavaBinary(context, runtime).absolutePath))
+        // Use exec-safe path: on Samsung M13/A13x (Android 14) the files/ dir is noexec.
+        // ensureExecSafeJavaBin() transparently falls back to a codeCacheDir copy if needed.
+        val javaBin = ensureExecSafeJavaBin(context, runtime)
         val nativeLibDir = normalizeAndroidPath(context.applicationInfo.nativeLibraryDir)
         val wrapperBin = File(normalizeAndroidPath(File(nativeLibDir, "libserverwrap.so").absolutePath))
         if (wrapperBin.exists() && !wrapperBin.canExecute()) {
@@ -485,7 +590,7 @@ class ServerLauncher(private val context: Context) {
     }
 
     private fun launchExternalJvm(
-        javaBin: File,
+        runtime: JreExtractor.RuntimeSpec,
         jrePath: String,
         launchTargetPath: String,
         launchMode: ServerFileManager.LaunchMode,
@@ -496,8 +601,10 @@ class ServerLauncher(private val context: Context) {
         maxRamMb: Int,
         worldName: String,
         onOutput: (String) -> Unit,
-        onError: (String) -> Unit
+        onError: (String) -> Unit,
+        isRetry: Boolean = false
     ): Int {
+        val javaBin = ensureExecSafeJavaBin(context, runtime)
         val errorFilePattern = File(serverDir, "hs_err_pid%p.log").absolutePath
         val nativeLibDir = normalizeAndroidPath(context.applicationInfo.nativeLibraryDir)
         val wrapperBin = File(normalizeAndroidPath(File(nativeLibDir, "libserverwrap.so").absolutePath))
@@ -522,10 +629,14 @@ class ServerLauncher(private val context: Context) {
         val totalRam = getTotalRamMb(context)
 
         val gcFlags = listOf(
-            "-XX:G1HeapWastePercent=10",
-            "-XX:G1MixedGCCountTarget=8",
-            "-XX:G1MixedGCLiveThresholdPercent=85",
-            "-XX:G1RSetUpdatingPauseTimePercent=10"
+            "-XX:G1NewSizePercent=30",
+            "-XX:G1MaxNewSizePercent=40",
+            "-XX:G1ReservePercent=15",
+            "-XX:InitiatingHeapOccupancyPercent=15",
+            "-XX:G1HeapWastePercent=5",
+            "-XX:G1MixedGCCountTarget=4",
+            "-XX:G1MixedGCLiveThresholdPercent=90",
+            "-XX:G1RSetUpdatingPauseTimePercent=5"
         )
 
         val vmArgs = mutableListOf(
@@ -566,16 +677,15 @@ class ServerLauncher(private val context: Context) {
             "-Xshare:off",
             "-XX:+UnlockExperimentalVMOptions",
             "-XX:+UnlockDiagnosticVMOptions",
-            if (totalRam >= 4500) "-XX:+AlwaysPreTouch" else "-XX:-AlwaysPreTouch",
+            "-XX:-AlwaysPreTouch",
             "-XX:+UseStringDeduplication",
             "-XX:+UseG1GC",
             "-XX:+ParallelRefProcEnabled",
-            "-XX:MaxGCPauseMillis=80",
+            "-XX:MaxGCPauseMillis=100",
             "-XX:+DisableExplicitGC",
         ).apply {
             addAll(gcFlags)
             addAll(listOf(
-                "-XX:+PerfDisableSharedMem",
                 "-XX:-UsePerfData",
                 "-XX:-UseContainerSupport",
                 "-XX:ErrorFile=$errorFilePattern",
@@ -639,20 +749,49 @@ class ServerLauncher(private val context: Context) {
         }
         val command = listOf("/system/bin/sh", "-c", shellCmd)
  
-        val process = ProcessBuilder(command)
-            .directory(File(serverDir))
-            .redirectErrorStream(true)
-            .apply {
-                environment()["POJAV_NATIVEDIR"] = nativeLibDir
-                environment()["JAVA_HOME"] = jrePath
-                environment()["HOME"] = serverDir
-                environment()["TMPDIR"] = tmpDir
-                environment()["LD_LIBRARY_PATH"] = "$jrePath/lib/server:$jrePath/lib:$jrePath/lib/jli:$ldLibraryPath"
-                environment()["PATH"] = "$jrePath/bin:/system/bin:/system/xbin:${javaBin.parent}:${System.getenv("PATH").orEmpty()}"
-                environment()["BIONIC_DISABLE_PTR_TAGGING"] = "1"
-            }
-            .start()
+        val startTime = System.currentTimeMillis()
+        val processResult = runCatching {
+            ProcessBuilder(command)
+                .directory(File(serverDir))
+                .redirectErrorStream(true)
+                .apply {
+                    environment()["POJAV_NATIVEDIR"] = nativeLibDir
+                    environment()["JAVA_HOME"] = jrePath
+                    environment()["HOME"] = serverDir
+                    environment()["TMPDIR"] = tmpDir
+                    environment()["LD_LIBRARY_PATH"] = "$jrePath/lib/server:$jrePath/lib:$jrePath/lib/jli:$ldLibraryPath"
+                    environment()["PATH"] = "$jrePath/bin:/system/bin:/system/xbin:${javaBin.parent}:${System.getenv("PATH").orEmpty()}"
+                    environment()["BIONIC_DISABLE_PTR_TAGGING"] = "1"
+                }
+                .start()
+        }
 
+        if (processResult.isFailure) {
+            val error = processResult.exceptionOrNull()
+            if (!isRetry && !javaBin.name.contains("libjava_exec")) {
+                onOutput("[PocketCraft] Out-of-process JVM execution failed to start: ${error?.message}. Retrying with Knox/noexec fallback...")
+                noexecCacheResult = true
+                execSafeCache = false
+                return launchExternalJvm(
+                    runtime = runtime,
+                    jrePath = jrePath,
+                    launchTargetPath = launchTargetPath,
+                    launchMode = launchMode,
+                    serverDir = serverDir,
+                    tmpDir = tmpDir,
+                    shimDir = shimDir,
+                    minRamMb = minRamMb,
+                    maxRamMb = maxRamMb,
+                    worldName = worldName,
+                    onOutput = onOutput,
+                    onError = onError,
+                    isRetry = true
+                )
+            }
+            throw error ?: Exception("Process start failed")
+        }
+
+        val process = processResult.getOrThrow()
         activeExternalProcess = process
         val pid = runCatching {
             val method = process.javaClass.getMethod("pid")
@@ -690,6 +829,32 @@ class ServerLauncher(private val context: Context) {
             activeExternalProcess = null
         }
         ServerHostService.persistExternalJvmPid(context, -1L)
+
+        val duration = System.currentTimeMillis() - startTime
+        if (!isRetry && 
+            !javaBin.name.contains("libjava_exec") && 
+            (exitCode == 126 || exitCode == 127 || (exitCode != 0 && duration < 2500))
+        ) {
+            onOutput("[PocketCraft] Out-of-process JVM execution failed (code=$exitCode, duration=${duration}ms). Retrying with Knox/noexec fallback...")
+            noexecCacheResult = true
+            execSafeCache = false
+            return launchExternalJvm(
+                runtime = runtime,
+                jrePath = jrePath,
+                launchTargetPath = launchTargetPath,
+                launchMode = launchMode,
+                serverDir = serverDir,
+                tmpDir = tmpDir,
+                shimDir = shimDir,
+                minRamMb = minRamMb,
+                maxRamMb = maxRamMb,
+                worldName = worldName,
+                onOutput = onOutput,
+                onError = onError,
+                isRetry = true
+            )
+        }
+
         if (exitCode != 0) {
             reportHotspotCrash(serverDir, onError)
         }
@@ -807,32 +972,28 @@ class ServerLauncher(private val context: Context) {
         flightModeEnabled: Boolean
     ): Int {
         val vd = viewDistance.coerceIn(4, 32)
-        return if (!cellularRelay) {
-            // Wi-Fi: High speed for fast chunk loading
-            if (flightModeEnabled) 80 else 50
-        } else {
-            // Cellular/relay: Responsive chunk loading, uplink stable at ~140ms
-            if (flightModeEnabled) 45 else 40
+        if (flightModeEnabled) {
+            // Elytra travel discovers chunks far faster than normal movement. Favor a
+            // steadier stream over burst throughput so keepalives and movement packets
+            // do not queue behind large chunk floods on the phone uplink.
+            val base = if (cellularRelay) 24 else 36
+            val viewScale = (7.0 / vd).pow(0.7).coerceIn(0.45, 1.0)
+            return (base * viewScale + 2).toInt().coerceIn(20, 38)
         }
+        val base = if (cellularRelay) 20 else 30
+        val viewScale = (7.0 / vd).pow(0.65).coerceIn(0.55, 1.0)
+        return (base * viewScale).toInt().coerceIn(16, 32)
     }
 
     private fun computeRelayChunkConcurrency(
         cellularRelay: Boolean,
         flightModeEnabled: Boolean
     ): Triple<Int, Int, Int> {
-        return if (cellularRelay) {
-            if (flightModeEnabled) {
-                Triple(5, 8, 5) // generate, load, send
-            } else {
-                Triple(5, 8, 5) // same as flight — uplink confirmed stable
-            }
+        // Returns Triple(concurrentGenerates, concurrentLoads, concurrentSends)
+        return if (flightModeEnabled) {
+            if (cellularRelay) Triple(3, 5, 4) else Triple(4, 8, 8)
         } else {
-            // Wi-Fi: High-throughput async chunk loading pipeline
-            if (flightModeEnabled) {
-                Triple(10, 18, 12)
-            } else {
-                Triple(6, 12, 8)
-            }
+            if (cellularRelay) Triple(3, 4, 3) else Triple(4, 6, 6)
         }
     }
 
@@ -842,13 +1003,13 @@ class ServerLauncher(private val context: Context) {
     ): Pair<Int, Int> {
         return if (flightModeEnabled) {
             Pair(
-                (chunkSendRate * 1.5).toInt().coerceIn(24, 300),
-                (chunkSendRate * 2.0).toInt().coerceIn(36, 400)
+                (chunkSendRate * 4).coerceIn(48, 96),
+                (chunkSendRate * 5).coerceIn(64, 128)
             )
         } else {
             Pair(
-                (chunkSendRate * 1.2).toInt().coerceIn(16, 200),
-                (chunkSendRate * 1.5).toInt().coerceIn(24, 300)
+                (chunkSendRate * 4).coerceIn(48, 80),
+                (chunkSendRate * 6).coerceIn(64, 110)
             )
         }
     }
@@ -881,7 +1042,7 @@ class ServerLauncher(private val context: Context) {
         }
 
         val tunedCompression = ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD
-        val tunedEntityBroadcast = ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
+        val tunedEntityBroadcast = currentEntityBroadcast?.coerceIn(70, 100) ?: ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT
 
         var changed = false
         if (tunedCompression != currentCompression) {
@@ -917,10 +1078,10 @@ class ServerLauncher(private val context: Context) {
             ?: props.getProperty("simulation-distance")?.toIntOrNull()
             ?: ServerPropertiesHelper.DEFAULT_SIMULATION_DISTANCE
 
-        // Preserve the configured distances. Relay latency is handled by bounded
-        // socket queues and Paper's chunk send budget, not by shrinking the world.
-        val tunedView = desiredView.coerceIn(3, 32)
-        val tunedSimulation = desiredSimulation.coerceIn(3, 32)
+        // Preserve gameplay settings exactly as the user configured them. Ping optimization
+        // must come from pacing and transport, not from silently shrinking distances.
+        val tunedView = desiredView
+        val tunedSimulation = desiredSimulation
 
         if (props.getProperty("view-distance")?.toIntOrNull() != tunedView) {
             props["view-distance"] = tunedView.toString()
@@ -949,7 +1110,7 @@ class ServerLauncher(private val context: Context) {
         val viewDistance = props.getProperty("view-distance")?.toIntOrNull()
             ?: ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE
         val chunkBudget = computeRelayChunkSendBudget(
-            cellularRelay = true, // Force cellular budget for relay to prevent uplink saturation
+            cellularRelay = com.pocketcraft.server.util.NetworkUtils.isCellular(context),
             viewDistance = viewDistance,
             flightModeEnabled = flightModeEnabled
         )
@@ -963,7 +1124,7 @@ class ServerLauncher(private val context: Context) {
         val configDir = File(serverDir, "config").also { it.mkdirs() }
         val paperGlobal = File(configDir, "paper-global.yml")
         val original = runCatching { paperGlobal.readText() }.getOrDefault("")
-        val cellularRelay = true // Force cellular budget for relay to prevent uplink saturation
+        val cellularRelay = com.pocketcraft.server.util.NetworkUtils.isCellular(context)
         val flightModeEnabled = runBlocking { AppPreferencesStore.isFlightModeEnabledFlow(context).first() }
         val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
         val viewDistance = props.getProperty("view-distance")?.toIntOrNull()
@@ -999,8 +1160,8 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", concurrentLoads.toString())
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-sends", concurrentSends.toString())
 
-        val cores = Runtime.getRuntime().availableProcessors()
-        val threads = (cores / 2).coerceIn(2, 3)
+        // Capping to 2 threads prevents CPU core oversaturation, leaving cores open for main thread, GC, and bridge.
+        val threads = 2
 
         updated = removeYamlPathKey(updated, listOf("misc"), "io-threads")
         updated = removeYamlPathKey(updated, listOf("misc"), "worker-threads")
@@ -1017,11 +1178,13 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlPathValue(updated, listOf("timings"), "really-enabled", "false")
         updated = ensureYamlPathValue(updated, listOf("timings"), "server-name-privacy", "true")
 
-        // Keep-alive: extend timeout so high-latency relay players aren't kicked,
-        // and send keepalives every tick (50ms) so the client tab ping reflects true RTT
-        // instead of RTT + up to 1000ms scheduling jitter.
+        // Keep-alive: extend timeout so high-latency relay players aren't kicked.
+        // Use a moderate 10-tick interval (500ms): lower than the Paper default so idle
+        // ping reporting has less scheduling jitter, but not so low that keepalives flood
+        // the uplink during chunk bursts like the old 1-tick setting did.
         updated = ensureYamlSectionValue(updated, "misc", "keep-alive-timeout", "60")
-        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-interval", "1")
+        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-interval", "10")
+        updated = ensureYamlSectionValue(updated, "misc", "compression-level", "6")
 
         // Disable updater and metrics submission checks to prevent slow network lookup stalls on startup
         updated = ensureYamlPathValue(updated, listOf("updater"), "updater-status", "none")
@@ -1040,44 +1203,43 @@ class ServerLauncher(private val context: Context) {
         val spigotFile = File(serverDir, "spigot.yml")
         val original = runCatching { spigotFile.readText() }.getOrDefault("")
         val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
-        val desiredView = props.getProperty(ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull()
-            ?: props.getProperty("view-distance")?.toIntOrNull()
+        val activeView = props.getProperty("view-distance")?.toIntOrNull()
             ?: ServerPropertiesHelper.DEFAULT_VIEW_DISTANCE
-        val desiredSimulation = props.getProperty(ServerPropertiesHelper.DESIRED_SIMULATION_DISTANCE_KEY)?.toIntOrNull()
-            ?: props.getProperty("simulation-distance")?.toIntOrNull()
+        val activeSimulation = props.getProperty("simulation-distance")?.toIntOrNull()
             ?: ServerPropertiesHelper.DEFAULT_SIMULATION_DISTANCE
-        val viewTrackingBlocks = desiredView.coerceIn(3, 32) * 16
-        val simulationTrackingBlocks = desiredSimulation.coerceIn(3, 32) * 16
+        val viewTrackingBlocks = activeView.coerceIn(3, 32) * 16
+        val simulationTrackingBlocks = activeSimulation.coerceIn(3, 32) * 16
 
         var updated = original
         // Spigot can override both distances; keep them on "default" so the current
         // server.properties value is always the one Paper actually uses.
         updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "view-distance", "default")
         updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "simulation-distance", "default")
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "mob-spawn-range", desiredSimulation.coerceIn(3, 32).toString())
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default"), "mob-spawn-range", activeSimulation.coerceIn(3, 32).toString())
         updated = ensureYamlPathValue(updated, listOf("settings"), "moved-too-quickly-multiplier", "1000.0")
         updated = ensureYamlPathValue(updated, listOf("settings"), "moved-wrongly-threshold", "1000.0")
         updated = ensureYamlPathValue(updated, listOf("settings"), "user-suggest-updater", "false")
 
         // Match Spigot activation and tracking limits to the configured world distances
         // so entities stay active and visible across the full simulation range.
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "animals", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "monsters", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "raiders", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "misc", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "water", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "villagers", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "flying-monsters", simulationTrackingBlocks.toString())
+        // Use optimized entity activation ranges to save CPU overhead and prevent lag spikes
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "animals", "32")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "monsters", "32")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "raiders", "48")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "misc", "16")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "water", "16")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "villagers", "32")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "flying-monsters", "32")
         updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-activation-range"), "tick-inactive-villagers", "false")
 
         updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "players", viewTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "animals", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "monsters", simulationTrackingBlocks.toString())
-        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "misc", simulationTrackingBlocks.toString())
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "animals", "48")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "monsters", "48")
+        updated = ensureYamlPathValue(updated, listOf("world-settings", "default", "entity-tracking-range"), "misc", "32")
 
         if (updated != original) {
             spigotFile.writeText(updated)
-            onOutput("[PocketCraft] Spigot entity ranges synced to view=$desiredView and simulation=$desiredSimulation.")
+            onOutput("[PocketCraft] Spigot entity ranges synced to active view=$activeView and simulation=$activeSimulation.")
         }
     }
 
@@ -1312,6 +1474,19 @@ class ServerLauncher(private val context: Context) {
     private fun chmodJreRuntime(context: Context, runtime: JreExtractor.RuntimeSpec) {
         val jreDir = JreExtractor.getJreDir(context, runtime)
         val marker = File(jreDir, ".chmod_applied_v1")
+        val javaBin = JreExtractor.getJavaBinary(context, runtime)
+
+        // Always ensure the java binary is executable as a fast-path guard.
+        // On Samsung Knox / Android 14, execute bits in files/ can be silently reset
+        // after a cold boot, app update, or SELinux policy reload — even if chmod was
+        // previously applied. If the binary is not executable, delete the marker so the
+        // full chmod pass below is unconditionally re-applied.
+        if (javaBin.exists() && !javaBin.canExecute()) {
+            android.util.Log.w("ServerLauncher",
+                "java binary lost execute bit (Samsung Knox/SELinux reset?) — forcing full re-chmod for ${runtime.displayName}")
+            runCatching { marker.delete() }
+        }
+
         if (marker.exists()) {
             android.util.Log.d("ServerLauncher", "Skipping JRE chmod — already applied for ${runtime.displayName}")
             return
@@ -1332,6 +1507,172 @@ class ServerLauncher(private val context: Context) {
         }
         runCatching { marker.writeText(runtime.displayName) }
         android.util.Log.d("ServerLauncher", "Finished chmod on jre-runtime (Android 10 compat)")
+    }
+
+    /**
+     * Returns true if the app's `files/` directory is on a `noexec`-mounted filesystem.
+     *
+     * On some Samsung Galaxy devices running Android 14 (e.g. M13/A13x with Knox),
+     * `/data/data/<pkg>/files/` is mount-flagged `noexec`. `Os.chmod(0755)` succeeds
+     * at the syscall level but the kernel still refuses `execve()` — producing
+     * `Permission denied` (exit 127). We detect this by attempting to execute
+     * a temporary script directly.
+     */
+    private fun isFilesdirNoexec(): Boolean {
+        // Return cached result if available.
+        noexecCacheResult?.let { return it }
+
+        // Strategy: write a minimal shell script to files/, mark it executable,
+        // then try to exec it via /system/bin/sh. If sh reports "Permission denied",
+        // the directory is noexec. This is more reliable than parsing /proc/self/mountinfo
+        // because Samsung Knox uses bind mounts that inherit noexec without listing it.
+        val result = runCatching {
+            val probe = java.io.File(normalizeAndroidPath(context.filesDir.absolutePath), ".noexec_probe")
+            probe.writeText("#!/system/bin/sh\nexit 0\n")
+            runCatching { android.system.Os.chmod(probe.absolutePath, 0x1ED) } // 0755
+            val p = ProcessBuilder("/system/bin/sh", "-c",
+                "'${probe.absolutePath}' 2>&1; echo \"rc:\$?\""
+            ).redirectErrorStream(true).start()
+            val out = p.inputStream.bufferedReader().readText()
+            val timedOut = !p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+            if (timedOut) p.destroyForcibly()
+            probe.delete()
+            // If output contains "Permission denied" or rc is non-zero due to exec failure, it's noexec.
+            out.contains("Permission denied") || out.contains("cannot execute") || timedOut
+        }.getOrDefault(false)
+
+        noexecCacheResult = result
+        android.util.Log.w("ServerLauncher",
+            if (result) "Detected noexec on files/ — java binary will be copied to codeCacheDir"
+            else "files/ dir is exec-safe (probe passed)"
+        )
+        return result
+    }
+
+    /**
+     * Returns an exec-safe path to the java binary for the given runtime.
+     *
+     * On Samsung Galaxy M13/A13x (Android 14 with Knox), the entire /data/data/<pkg>/
+     * partition can be mounted noexec — including both `files/` AND `code_cache/`.
+     * We probe each candidate location in order and return the first one that can
+     * actually execute a script:
+     *   1. Canonical path (`files/jre-runtime/bin/java`) — fast path if exec-safe.
+     *   2. Copy to `code_cache/jre-bin/<id>/java` — usually exec-safe on normal Android.
+     *   3. Copy to `getExternalFilesDir("jre-bin")/<id>/java` — last resort.
+     * If all three fail, `allStorageNoexecDetected` is set to true so callers can
+     * surface a device-specific error (Samsung Knox restriction) to the user.
+     */
+    private fun ensureExecSafeJavaBin(
+        context: Context,
+        runtime: JreExtractor.RuntimeSpec
+    ): File {
+        val canonical = File(normalizeAndroidPath(JreExtractor.getJavaBinary(context, runtime).absolutePath))
+
+        // 1. If we have already verified that canonical is exec-safe, use it.
+        execSafeCache?.let { isSafe ->
+            if (isSafe) {
+                allStorageNoexecDetected = false
+                return canonical
+            }
+        }
+
+        // 2. If the canonical path exists, probe it directly.
+        if (canonical.exists()) {
+            val isSafe = runCatching {
+                android.system.Os.chmod(canonical.absolutePath, 0x1ED) // 0755
+                val p = ProcessBuilder("/system/bin/sh", "-c",
+                    "'${canonical.absolutePath}' -Xshare:off -version 2>&1"
+                ).redirectErrorStream(true).start()
+                val out = p.inputStream.bufferedReader().readText()
+                val finished = p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+                if (!finished) p.destroyForcibly()
+                finished && p.exitValue() == 0 && out.contains("version", ignoreCase = true)
+            }.getOrDefault(false)
+
+            if (isSafe) {
+                execSafeCache = true
+                allStorageNoexecDetected = false
+                return canonical
+            } else {
+                android.util.Log.w("ServerLauncher", "Canonical java binary failed execution probe (permission or ELF error). Triggering fallback.")
+            }
+        } else {
+            // If the canonical path doesn't exist yet, we check the general noexec status.
+            // If the files directory is generally exec-safe, we assume canonical will be safe once extracted.
+            if (!isFilesdirNoexec()) {
+                allStorageNoexecDetected = false
+                return canonical
+            }
+        }
+
+        // Try the bundled native library wrapper (libjava_exec.so) first.
+        // Since it is extracted to nativeLibraryDir by the package manager, it is guaranteed
+        // to be executable even on Knox-hardened devices where all writable directories are noexec.
+        val nativeJavaBin = File(context.applicationInfo.nativeLibraryDir, "libjava_exec.so")
+        if (nativeJavaBin.exists() && nativeJavaBin.canExecute()) {
+            allStorageNoexecDetected = false
+            android.util.Log.i("ServerLauncher", "Using bundled exec-safe java from nativeLibraryDir: ${nativeJavaBin.absolutePath}")
+            return nativeJavaBin
+        }
+
+        // files/ is noexec — try candidate directories in priority order.
+        val candidates = buildList {
+            // 1. code_cache/ (ART JIT cache dir, usually exec-safe on stock Android)
+            add(File(normalizeAndroidPath(context.codeCacheDir.absolutePath), "jre-bin/${runtime.id}"))
+            // 2. External files dir (app-scoped, no permission needed on Android 10+)
+            context.getExternalFilesDir("jre-bin/${runtime.id}")?.let { add(it) }
+        }
+
+        for (execDir in candidates) {
+            runCatching { execDir.mkdirs() }
+            val copy = File(execDir, "java")
+
+            // Copy only if source changed (re-extraction) or copy missing.
+            val needsCopy = !copy.exists()
+                || copy.length() != canonical.length()
+                || copy.lastModified() < canonical.lastModified()
+
+            var copyOk = true
+            if (needsCopy && canonical.exists()) {
+                copyOk = runCatching {
+                    canonical.inputStream().use { i -> copy.outputStream().use { o -> i.copyTo(o) } }
+                    android.system.Os.chmod(copy.absolutePath, 0x1ED) // 0755
+                }.onFailure {
+                    android.util.Log.e("ServerLauncher", "Failed to copy java to ${execDir.absolutePath}: ${it.message}")
+                }.isSuccess
+            } else if (copy.exists()) {
+                runCatching { android.system.Os.chmod(copy.absolutePath, 0x1ED) }
+            }
+
+            if (!copyOk || !copy.exists()) continue
+
+            // Verify the copy is actually executable (probe with a quick exec test).
+            val execSafe = runCatching {
+                val p = ProcessBuilder("/system/bin/sh", "-c",
+                    "'${copy.absolutePath}' -Xshare:off -version 2>&1 | head -c 256; echo \"rc:\$?\""
+                ).redirectErrorStream(true).start()
+                val out = p.inputStream.bufferedReader().readText()
+                p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+                // Success if we get java version output; fail if Permission denied
+                !out.contains("Permission denied") && !out.contains("cannot execute")
+            }.getOrDefault(false)
+
+            if (execSafe) {
+                allStorageNoexecDetected = false
+                android.util.Log.i("ServerLauncher",
+                    "Using exec-safe java copy at: ${copy.absolutePath} (noexec workaround for ${runtime.displayName})")
+                return copy
+            } else {
+                android.util.Log.w("ServerLauncher",
+                    "${execDir.absolutePath} is also noexec — trying next candidate")
+            }
+        }
+
+        // All candidate locations are noexec — device has full Knox storage lockdown.
+        allStorageNoexecDetected = true
+        android.util.Log.e("ServerLauncher",
+            "ALL storage locations are noexec — Samsung Knox total lockdown detected. Cannot exec java binary.")
+        return canonical // Return canonical so error surfaces from the actual exec attempt
     }
 
     private fun extractAndPatchJnaLibrary(paperJarPath: String, serverDir: File, shimDir: File): Boolean {

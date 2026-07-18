@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server actief</string>
+    <string name="server_stopped">Server gestopt</string>
+    <string name="server_starting">Server starten…</string>
+    <string name="start_server">Startserver</string>
+    <string name="stop_server">Server stoppen</string>
+    <string name="notification_channel_name">Serverstatus</string>
+    <string name="notification_channel_desc">Toont de status en bedieningselementen van de server</string>
+    <string name="tap_to_copy">Tik om IP te kopiëren</string>
+    <string name="copied">IP gekopieerd naar klembord</string>
+    <string name="how_to_connect">Verbinding maken</string>
+    <string name="send_command">Commando verzenden</string>
+    <string name="clear_log">Logboek wissen</string>
+    <string name="apply_restart">Toepassen en opnieuw opstarten</string>
+    <string name="delete_world">Wereldgegevens verwijderen</string>
+    <string name="delete_world_confirm">Hierdoor wordt de wereld permanent verwijderd. Weet je het zeker?</string>
+    <string name="thermal_warning">Waarschuwing: apparaat raakt oververhit. Overweeg om de server te stoppen</string>
+    <string name="ram_warning">Waarschuwing: laag RAM-geheugen gedetecteerd: de prestaties kunnen afnemen</string>
+    <string name="players_online">%1$d/%2$d spelers</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Uptime: %1$s</string>
+    <string name="announcement_title">Een opmerking van PocketCraft</string>
+    <string name="announcement_body">PocketCraft zal voor altijd gratis zijn voor iedereen, maar sommige functies zijn alleen in Pro zodat u onze serverkosten en app-loopkosten kunt dekken. Ze zijn goedkoop, en daarom zijn ze daar, ook voor meer waarde. 
+ 
+ Als je ons wilt helpen, of gewoon wilt chatten met het team, sluit je dan aan bij onze Discord - we willen je graag verwelkomen.</string>
+    <string name="announcement_join_discord">Sluit je aan bij Discord</string>
+    <string name="announcement_got_it">Ik snap het</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

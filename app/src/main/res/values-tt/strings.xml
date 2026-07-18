@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Серверның эшләве</string>
+    <string name="server_stopped">Сервер туктатылды</string>
+    <string name="server_starting">Сервер башлана ...</string>
+    <string name="start_server">Серверны башлау</string>
+    <string name="stop_server">Серверны туктату</string>
+    <string name="notification_channel_name">Сервер статусы</string>
+    <string name="notification_channel_desc">Серверның эш статусын һәм контролен күрсәтә</string>
+    <string name="tap_to_copy">IP күчерү өчен басыгыз</string>
+    <string name="copied">IP буферга күчерелде</string>
+    <string name="how_to_connect">Ничек тоташырга</string>
+    <string name="send_command">Команда җибәрегез</string>
+    <string name="clear_log">Бүрәнәне чистарту</string>
+    <string name="apply_restart">Куллану һәм яңадан башлау</string>
+    <string name="delete_world">Дөнья мәгълүматларын бетерү</string>
+    <string name="delete_world_confirm">Бу дөньяны мәңгегә юк итәчәк. Сез ышанасызмы?</string>
+    <string name="thermal_warning">Кисәтү: җайланма артык кызып китә - серверны туктатырга уйлагыз</string>
+    <string name="ram_warning">Кисәтү: Түбән RAM ачыкланган - эш начарланырга мөмкин</string>
+    <string name="players_online">%1$d/%2$d уенчылары</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Эш вакыты: __ВАРД__</string>
+    <string name="announcement_title">PocketCraft язмасы</string>
+    <string name="announcement_body">PocketCraft һәркем өчен мәңгегә бушлай булачак, ләкин кайбер функцияләр Pro серверында, сез безнең сервер чыгымнарын һәм кушымтаны эшләтеп җибәрү чыгымнарын тәэмин итә аласыз. Алар арзан, һәм шуңа күрә алар анда, шул исәптән кыйммәтрәк. 
+ 
+ Әгәр сез безгә булышырга телисез, яки команда белән аралашырга телисез икән, безнең Дискордка кушылыгыз - без сезнең белән булырга теләр идек.</string>
+    <string name="announcement_join_discord">Дискордка кушылыгыз</string>
+    <string name="announcement_got_it">Аңладым</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

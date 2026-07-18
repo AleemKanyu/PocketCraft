@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -64,8 +65,10 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Memory
 import com.pocketcraft.server.ui.components.IpBottomSheet
@@ -138,6 +141,7 @@ import com.pocketcraft.server.data.model.ServerType
 import com.pocketcraft.server.data.model.PlayerInfo
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
+import com.pocketcraft.server.data.repository.ServerConfigRepository
 import com.pocketcraft.server.server.ServerHostService
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.service.NBTParser
@@ -172,6 +176,7 @@ import com.pocketcraft.server.ui.theme.pocketWarningBorderColor
 import com.pocketcraft.server.ui.theme.pocketWarningIconChipColor
 import com.pocketcraft.server.ui.theme.pocketWarningSurfaceColor
 import com.pocketcraft.server.ui.theme.pocketWarningTitleColor
+import com.pocketcraft.server.ui.theme.raisedBorder
 import com.pocketcraft.server.util.RamUtils
 import com.pocketcraft.server.util.LocalAppStrings
 import kotlinx.coroutines.Dispatchers
@@ -263,8 +268,8 @@ fun ConsoleScreen(
         acceptedByFile || prefs.eulaAccepted
     }
     val totalRamMb = remember { RamUtils.getTotalRamMb(context) }
-    var ramMode by remember { mutableStateOf(prefs.ramMode) }
-    var manualRamMb by remember { mutableStateOf(prefs.manualRamMb.coerceIn(512, totalRamMb)) }
+    var ramMode by remember(stateHolder.config.ramMode) { mutableStateOf(stateHolder.config.ramMode) }
+    var manualRamMb by remember(stateHolder.config.maxRamMb) { mutableStateOf(stateHolder.config.maxRamMb.coerceIn(512, totalRamMb)) }
     var usedRamMb by remember { mutableStateOf(0) }
 
     var availableVersions by remember { mutableStateOf(listOf(
@@ -331,12 +336,15 @@ fun ConsoleScreen(
         }
     }
 
-    // Poll RAM usage every 2 seconds while server is running
+    // Poll actual Minecraft server JVM process RAM usage every 3 seconds while online.
+    // We retrieve the resident set size (RSS) of the server child process.
+    // The cap is the configured server RAM allocation (manualRamMb) so the bar
+    // fills against what the user gave to the server.
     LaunchedEffect(stateHolder.status == ServerStatus.ONLINE) {
         if (stateHolder.status == ServerStatus.ONLINE) {
             while (stateHolder.status == ServerStatus.ONLINE) {
                 usedRamMb = RamUtils.getUsedRamMb(context)
-                delay(5000)
+                delay(3000)
             }
         } else {
             usedRamMb = 0
@@ -727,10 +735,28 @@ fun ConsoleScreen(
                     onRamModeChange = { mode ->
                         ramMode = mode
                         prefs.ramMode = mode
+                        scope.launch(Dispatchers.IO) {
+                            val repository = ServerConfigRepository(context)
+                            val currentConfig = repository.loadConfig()
+                            val updatedConfig = currentConfig.copy(ramMode = mode)
+                            repository.saveConfig(updatedConfig)
+                            withContext(Dispatchers.Main) {
+                                stateHolder.refreshAll()
+                            }
+                        }
                     },
                     onManualRamChange = { mb ->
                         manualRamMb = mb
                         prefs.manualRamMb = mb
+                        scope.launch(Dispatchers.IO) {
+                            val repository = ServerConfigRepository(context)
+                            val currentConfig = repository.loadConfig()
+                            val updatedConfig = currentConfig.copy(maxRamMb = mb)
+                            repository.saveConfig(updatedConfig)
+                            withContext(Dispatchers.Main) {
+                                stateHolder.refreshAll()
+                            }
+                        }
                     }
                 )
             }
@@ -738,7 +764,8 @@ fun ConsoleScreen(
         if (stateHolder.status == ServerStatus.ONLINE) {
             item {
                 AnimatedEntranceContainer(index = 12) {
-                    RamUsageCard(usedMb = usedRamMb, maxMb = totalRamMb)
+                    val totalPhoneRamMb = RamUtils.getTotalRamMb(context)
+                    RamUsageCard(usedMb = usedRamMb, maxMb = totalPhoneRamMb)
                 }
             }
         }
@@ -1388,7 +1415,7 @@ private fun ServerIdentityCard(
                         Column(modifier = Modifier.weight(1f)) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
                                     text = stateHolder.serverName.ifBlank { stateHolder.activeWorld.ifBlank { "world" } },
@@ -1400,6 +1427,7 @@ private fun ServerIdentityCard(
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f, fill = false)
                                 )
+
                             }
                             Text(
                                 text = stateHolder.serverDescription.ifBlank { "Hosted on PocketCraft" },
@@ -2216,9 +2244,8 @@ private fun AddressValueRow(
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
+                maxLines = 2,
+                softWrap = true,
                 fontFamily = FontFamily.Monospace,
                 letterSpacing = (-0.2).sp,
                 modifier = Modifier.weight(1f)
@@ -2478,6 +2505,7 @@ private fun ConsoleCard(
     logListState: androidx.compose.foundation.lazy.LazyListState
 ) {
     val context = LocalContext.current
+    var isUploading by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -2510,7 +2538,7 @@ private fun ConsoleCard(
                 IconButton(
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        val logsToCopy = if (stateHolder.status == ServerStatus.OFFLINE) emptyList() else stateHolder.logs
+                        val logsToCopy = stateHolder.logs
                         val clip = android.content.ClipData.newPlainText("PocketCraft Logs", logsToCopy.joinToString("\n"))
                         clipboard.setPrimaryClip(clip)
                         Toast.makeText(context, "Logs copied to clipboard", Toast.LENGTH_SHORT).show()
@@ -2523,6 +2551,62 @@ private fun ConsoleCard(
                         modifier = Modifier.size(18.dp),
                         tint = PocketColors.ConsoleBright.copy(alpha = 0.85f)
                     )
+                }
+                IconButton(
+                    onClick = {
+                        val logsToUpload = stateHolder.logs
+                        if (logsToUpload.isEmpty()) {
+                            Toast.makeText(context, "No logs to send", Toast.LENGTH_SHORT).show()
+                            return@IconButton
+                        }
+                        if (isUploading) return@IconButton
+                        
+                        isUploading = true
+                        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+                            ?: com.pocketcraft.server.util.MultiProcessAuthSync.readUid(context)
+                            ?: AppPreferences(context).firebaseUserUid
+                            
+                        if (uid == null) {
+                            isUploading = false
+                            Toast.makeText(context, "Error: User not signed in", Toast.LENGTH_SHORT).show()
+                            return@IconButton
+                        }
+                        
+                        val data = mapOf(
+                            "consoleLines" to logsToUpload,
+                            "lastSeen" to com.google.firebase.Timestamp.now()
+                        )
+                        
+                        com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                            .collection("users").document(uid)
+                            .collection("dashboard_status").document("status")
+                            .set(data, com.google.firebase.firestore.SetOptions.merge())
+                            .addOnSuccessListener {
+                                isUploading = false
+                                Toast.makeText(context, "Logs sent to Firestore", Toast.LENGTH_SHORT).show()
+                            }
+                            .addOnFailureListener { e ->
+                                isUploading = false
+                                Toast.makeText(context, "Failed to send logs: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                    },
+                    modifier = Modifier.size(32.dp),
+                    enabled = !isUploading
+                ) {
+                    if (isUploading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = PocketColors.ConsoleBright
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Upload,
+                            contentDescription = "Send logs to Firestore",
+                            modifier = Modifier.size(18.dp),
+                            tint = PocketColors.ConsoleBright.copy(alpha = 0.85f)
+                        )
+                    }
                 }
                 TextButton(onClick = stateHolder::clearLogs) {
                     Text(

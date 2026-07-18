@@ -31,6 +31,8 @@ import kotlinx.coroutines.tasks.await
 import com.pocketcraft.server.BuildConfig
 import com.pocketcraft.server.RelayManager
 import com.pocketcraft.server.WorldImporter
+import com.pocketcraft.server.afk.AfkFarmLocation
+import com.pocketcraft.server.afk.AfkHelperManager
 import com.pocketcraft.server.data.model.PlayerInfo
 import com.pocketcraft.server.data.model.ServerConfig
 import com.pocketcraft.server.data.model.ServerType
@@ -40,8 +42,10 @@ import com.pocketcraft.server.data.repository.ServerConfigRepository
 import com.pocketcraft.server.notification.NotificationHelper
 import com.pocketcraft.server.service.PluginManager
 import com.pocketcraft.server.service.ConsoleParser
+import com.pocketcraft.server.service.ParsedPlayerPing
 import com.pocketcraft.server.service.DimensionMigrator
 import com.pocketcraft.server.service.ServerFileManager
+import com.pocketcraft.server.service.AutoBackupReceiver
 import com.pocketcraft.server.service.ServerPropertiesHelper
 import com.pocketcraft.server.server.ServerPropertiesWriter
 import com.pocketcraft.server.server.ServerHostService
@@ -108,16 +112,37 @@ data class WorldEntry(
 class ServerStateHolder(
     private val context: Context,
     val versionId: String,
-    var activeWorld: String = "world"
+    initialWorld: String = "world"
 ) {
     companion object {
         const val DEFAULT_SERVER_DESCRIPTION = "Hosted on Pocketcraft"
         private const val POCKETCRAFT_JOIN_MESSAGE_TEXT =
             "hosted on Pocketcraft"
         private const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/7xw3Rd2vs2"
+        private const val MAX_REALISTIC_WIFI_PING_MS = 5_000
+
+        val applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        
+        val isBackingUpState = mutableStateOf(false)
+        val backupProgressPercentState = mutableStateOf(0)
+        val backupStatusMessageState = mutableStateOf("")
+        val backupSaveLocationState = mutableStateOf("")
+
+        val isRestoringBackupState = mutableStateOf(false)
+        val restoreProgressPercentState = mutableStateOf(0)
+        val restoreStatusMessageState = mutableStateOf("")
+
+        val isDownloadingBackupState = mutableStateOf(false)
+        val downloadBackupProgressPercentState = mutableStateOf(0)
+        val downloadBackupStatusMessageState = mutableStateOf("")
     }
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    var activeWorld: String = initialWorld.ifBlank { "world" }
+        private set(value) {
+            field = value.ifBlank { "world" }
+            afkHelperManager.onWorldChanged()
+        }
     private val serverDir: File
         get() = ServerFileManager.getServerDir(appContext, activeWorld.ifBlank { "world" })
     private val serverPhotosDir: File
@@ -149,6 +174,19 @@ class ServerStateHolder(
         "crash-reports", "bundler", "versions", "world_plugin_profiles",
         "server_photos"
     )
+
+    // Directories excluded from backups — all are re-downloadable or regenerated automatically.
+    // plugins/, mods/, resourcepacks/, config/, and all world folders are NOT in this list
+    // and will always be included in the backup.
+    private val backupExcludeDirs = setOf(
+        "jre", "jre-21", "jre-runtime",      // Java runtime — re-downloaded on next start
+        "libraries", "bundler", "versions",   // Paper/Fabric internals — re-downloaded
+        "binaries",                            // Cached server JARs — re-downloaded
+        "cache",                               // Runtime caches — regenerated
+        "logs",                                // Server logs — not needed for restore
+        "crash-reports",                       // Crash logs — not needed for restore
+        "world_plugin_profiles"                // Internal profile cache — already excluded
+    )
     private val stopWatchdogTimeoutMs = 25_000L
     private val restartFallbackDelayMs = 10_000L
     private val worldPluginProfilesDir: File
@@ -158,6 +196,19 @@ class ServerStateHolder(
         val info = ActivityManager.MemoryInfo()
         manager.getMemoryInfo(info)
         (info.totalMem / (1024L * 1024L * 1024L)).toInt().coerceAtLeast(1)
+    }
+    private val afkHelperManager by lazy {
+        AfkHelperManager(
+            context = appContext,
+            scope = scope,
+            currentWorldProvider = { activeWorld },
+            isServerRunningProvider = { isRunning && !isStopping },
+            onlinePlayersProvider = { onlinePlayers.toList() },
+            knownPlayersProvider = { knownPlayers.toList() },
+            sendRconCommand = ::sendRconCommand,
+            appendLog = ::appendLog,
+            notifyStateChanged = ::notifyStateChanged
+        )
     }
 
     private val _stateUpdateTrigger = MutableStateFlow(0)
@@ -173,6 +224,7 @@ class ServerStateHolder(
         private set(value) {
             _isRunning.value = value
             updateServerUiState()
+            afkHelperManager.onServerStateChanged(value)
             notifyStateChanged()
         }
 
@@ -270,28 +322,98 @@ class ServerStateHolder(
             _isStopping.value = value
             notifyStateChanged()
         }
-    var isBackingUp by mutableStateOf(false)
-        private set
-    var backupProgressPercent by mutableStateOf(0)
-        private set
-    var backupStatusMessage by mutableStateOf("")
-        private set
-    var backupSaveLocation by mutableStateOf("")
-        private set
+    var isBackingUp: Boolean
+        get() = isBackingUpState.value
+        private set(value) { isBackingUpState.value = value }
+    var backupProgressPercent: Int
+        get() = backupProgressPercentState.value
+        private set(value) { backupProgressPercentState.value = value }
+    var backupStatusMessage: String
+        get() = backupStatusMessageState.value
+        private set(value) { backupStatusMessageState.value = value }
+    var backupSaveLocation: String
+        get() = backupSaveLocationState.value
+        private set(value) { backupSaveLocationState.value = value }
     var activeWorldNeedsSetup by mutableStateOf(false)
         private set
-    var isRestoringBackup by mutableStateOf(false)
-        private set
-    var restoreProgressPercent by mutableStateOf(0)
-        private set
-    var restoreStatusMessage by mutableStateOf("")
-        private set
-    var isDownloadingBackup by mutableStateOf(false)
-        private set
-    var downloadBackupProgressPercent by mutableStateOf(0)
-        private set
-    var downloadBackupStatusMessage by mutableStateOf("")
-        private set
+    var isRestoringBackup: Boolean
+        get() = isRestoringBackupState.value
+        private set(value) { isRestoringBackupState.value = value }
+    var restoreProgressPercent: Int
+        get() = restoreProgressPercentState.value
+        private set(value) { restoreProgressPercentState.value = value }
+    var restoreStatusMessage: String
+        get() = restoreStatusMessageState.value
+        private set(value) { restoreStatusMessageState.value = value }
+    var isDownloadingBackup: Boolean
+        get() = isDownloadingBackupState.value
+        private set(value) { isDownloadingBackupState.value = value }
+    var downloadBackupProgressPercent: Int
+        get() = downloadBackupProgressPercentState.value
+        private set(value) { downloadBackupProgressPercentState.value = value }
+    var downloadBackupStatusMessage: String
+        get() = downloadBackupStatusMessageState.value
+        private set(value) { downloadBackupStatusMessageState.value = value }
+
+    fun startCreateBackup(onResult: (String) -> Unit = {}) {
+        applicationScope.launch {
+            val result = createBackup()
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(appContext, result, android.widget.Toast.LENGTH_LONG).show()
+                onResult(result)
+            }
+        }
+    }
+
+    fun startImportBackup(uri: android.net.Uri, onResult: (String) -> Unit = {}) {
+        applicationScope.launch {
+            val result = importBackup(uri)
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(appContext, result, android.widget.Toast.LENGTH_LONG).show()
+                onResult(result)
+            }
+        }
+    }
+
+    fun startRestoreBackup(backup: BackupEntry, onResult: (String) -> Unit = {}) {
+        applicationScope.launch {
+            val result = restoreBackup(backup)
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(appContext, result, android.widget.Toast.LENGTH_LONG).show()
+                onResult(result)
+            }
+        }
+    }
+
+    fun startRestoreOverworldOnly(backup: BackupEntry, onResult: (String) -> Unit = {}) {
+        applicationScope.launch {
+            val result = restoreOverworldOnly(backup)
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(appContext, result, android.widget.Toast.LENGTH_LONG).show()
+                onResult(result)
+            }
+        }
+    }
+
+    fun startRestoreDimensionsOnly(backup: BackupEntry, onResult: (String) -> Unit = {}) {
+        applicationScope.launch {
+            val result = restoreDimensionsOnly(backup)
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(appContext, result, android.widget.Toast.LENGTH_LONG).show()
+                onResult(result)
+            }
+        }
+    }
+
+    fun startDownloadBackup(backup: BackupEntry, onResult: (String) -> Unit = {}) {
+        applicationScope.launch {
+            val result = downloadBackup(backup)
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(appContext, result, android.widget.Toast.LENGTH_LONG).show()
+                onResult(result)
+            }
+        }
+    }
     var startupProgressPercent by mutableStateOf(0)
         private set
     var startupStatusMessage by mutableStateOf("")
@@ -338,6 +460,12 @@ class ServerStateHolder(
     val bannedPlayers = mutableStateListOf<PlayerInfo>()
     val backups = mutableStateListOf<BackupEntry>()
     val worlds = mutableStateListOf<WorldEntry>()
+    val afkFarms: List<AfkFarmLocation>
+        get() = afkHelperManager.farms
+    val isAfkHelperBusy: Boolean
+        get() = afkHelperManager.isBusy
+    var lastAfkEnabledTime by mutableStateOf(0L)
+        private set
 
     private fun attemptTransitionToOnline() {
         if (!isStarting) return
@@ -363,6 +491,16 @@ class ServerStateHolder(
             
             if (intent?.action != ServerHostService.ACTION_SERVER_EVENT) return
             if (intentVersionId != versionId) return
+
+            if (type != ServerHostService.EVENT_STOPPED &&
+                type != ServerHostService.EVENT_SERVER_CRASHED &&
+                type != ServerHostService.EVENT_ERROR
+            ) {
+                if (!isRunning && !isStarting) {
+                    isStarting = true
+                    isRunning = false
+                }
+            }
 
             if (type == ServerHostService.EVENT_STOPPED || type == ServerHostService.EVENT_SERVER_CRASHED) {
                 val prefs = AppPreferences(appContext)
@@ -429,9 +567,8 @@ class ServerStateHolder(
                         isJavaServerDone = true
                         isGeyserDone = true
                         areSpawnChunksLoaded = true
-                        if (isStarting) {
-                            attemptTransitionToOnline()
-                        }
+                        isStarting = true
+                        attemptTransitionToOnline()
                     }
                     ServerHostService.EVENT_OUTPUT -> appendLog(line)
                     ServerHostService.EVENT_TUNNEL_CONNECTING -> {
@@ -516,6 +653,21 @@ class ServerStateHolder(
                         appendLog(line)
                         stopWatchdogJob?.cancel()
                         stopWatchdogJob = null
+
+                        val appPrefs = com.pocketcraft.server.data.preferences.AppPreferences(appContext)
+                        val runOnStop = appPrefs.autoBackupOnStop && !shouldRestart
+                        val runPendingAuto = appPrefs.pendingAutoBackup && !shouldRestart
+
+                        if (runPendingAuto) {
+                            appendLog("[PocketCraft] Running queued daily automatic backup...")
+                            AutoBackupReceiver.startPendingBackup(appContext)
+                        } else if (runOnStop) {
+                            applicationScope.launch {
+                                appendLog("[PocketCraft] Triggering automated backup on stop...")
+                                val msg = createBackup()
+                                appendLog("[PocketCraft] Auto Backup: $msg")
+                            }
+                        }
                         if (shouldRestart) {
                             isStarting = true
                             appendLog("[PocketCraft] Starting server again...")
@@ -658,8 +810,39 @@ class ServerStateHolder(
                 prefs.consecutiveCrashCount = 0
                 recordServerFailure(crashReasonText, duringStartup = true)
             }
+
+            withContext(Dispatchers.IO) {
+                afkHelperManager.refreshNow()
+            }
         }
     }
+
+    suspend fun addAfkFarm(name: String, x: Int, y: Int, z: Int): String =
+        afkHelperManager.addFarm(name = name, x = x, y = y, z = z)
+
+    suspend fun toggleAfkFarm(id: String): String {
+        val farm = afkHelperManager.farms.firstOrNull { it.id == id }
+        val wasActive = farm?.isActive == true
+        val result = afkHelperManager.toggleFarm(id)
+        if (farm != null && !wasActive) {
+            val context = appContext
+            val isPremium = com.pocketcraft.server.billing.BillingManager.getInstance(context).isPremium.value
+            if (isPremium) {
+                lastAfkEnabledTime = System.currentTimeMillis()
+            }
+        }
+        return result
+    }
+
+    suspend fun deleteAfkFarm(id: String): String =
+        afkHelperManager.deleteFarm(id)
+
+    suspend fun refreshAfkHelpers() {
+        afkHelperManager.refreshNow()
+    }
+
+    suspend fun suggestAfkFarmLocation(playerName: String? = null): Triple<Int, Int, Int>? =
+        afkHelperManager.captureSuggestedLocation(playerName)
 
     var showEulaDialog by mutableStateOf(false)
         private set
@@ -740,6 +923,12 @@ class ServerStateHolder(
     }
 
     fun startServer(isRestart: Boolean = false) {
+        if (isBackingUp || isRestoringBackup || isDownloadingBackup) {
+            val msg = "Cannot start server while a backup, restore, or download is in progress."
+            appendLog("[ERROR] $msg")
+            recordServerFailure(msg, duringStartup = true)
+            return
+        }
         if (versionId.isBlank()) {
             val reason = "No server version is selected."
             appendLog("[ERROR] $reason")
@@ -806,8 +995,8 @@ class ServerStateHolder(
         chunkyProgressPercent = null
         consoleVisibleAfterStart = true
         startStartupProgressTracking()
-        if (!isRestart) {
-            clearLogs()
+        if (logsQueue.isNotEmpty()) {
+            appendLog("[PocketCraft] ----------------------------------------")
         }
         consoleVisibleAfterStart = true
         onlinePlayers.clear()
@@ -862,6 +1051,8 @@ class ServerStateHolder(
 
                 withContext(Dispatchers.IO) {
                     val currentActiveWorld = sanitizeWorldName(activeWorld.ifBlank { "world" })
+                    // Ensure flat→nested migration runs before fixOfflineUuids and server boot
+                    ensureWorldDirectories(currentActiveWorld)
                     PlayerDataManager.fixOfflineUuids(serverDir, currentActiveWorld)
 
                     val isPremium = prefs.isPremiumUser || prefs.debugPremiumOverride
@@ -1053,9 +1244,10 @@ class ServerStateHolder(
             onlinePlayers.replaceAll { player ->
                 val newPing = pings[player.name] ?: pings[player.name.lowercase()]
                 if (newPing != null) {
+                    val nextIp = newPing.ip.ifBlank { player.ip }
                     val updated = player.copy(
-                        pingMs = newPing.pingMs,
-                        ip = newPing.ip.ifBlank { player.ip }
+                        pingMs = sanitizeWifiPingSample(player, newPing, nextIp),
+                        ip = nextIp
                     )
                     val sessionIdx = sessionPlayers.indexOfFirst { canonicalPlayerName(it.name) == canonicalPlayerName(player.name) }
                     if (sessionIdx >= 0) {
@@ -1200,6 +1392,8 @@ class ServerStateHolder(
         logs.clear()
         consoleVisibleAfterStart = false
     }
+
+    fun currentLogLines(): List<String> = logsQueue.toList()
 
     private fun loadLogsFromDisk() {
         scope.launch(Dispatchers.IO) {
@@ -1446,7 +1640,6 @@ class ServerStateHolder(
                 stopWatchdogJob?.cancel()
                 stopWatchdogJob = null
                 resetJoinable()
-                clearLogs()
             }
             return
         }
@@ -1472,9 +1665,6 @@ class ServerStateHolder(
             startPeriodicPingPolling()
             markJoinable()
         } else if (!isStarting) {
-            if (logs.isNotEmpty()) {
-                clearLogs()
-            }
             stopPeriodicWorldSave()
             stopPeriodicLocationPolling()
             resetJoinable()
@@ -1551,8 +1741,8 @@ class ServerStateHolder(
             if (portOpen) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
-            // If the port is closed, double check the process just in case
-            if (serviceActive) {
+            // If the port is closed, double check if service is running or process is active
+            if (ServerHostService.isServiceRunning(appContext) || serviceActive) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
             ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
@@ -1563,8 +1753,8 @@ class ServerStateHolder(
             if (portOpen) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
-            // If starting, just check if the service process is alive
-            if (serviceActive) {
+            // If starting, check if the service is running or process is active
+            if (ServerHostService.isServiceRunning(appContext) || serviceActive) {
                 return PersistedRuntimeState(isStarting = true, publicAddress = address)
             }
             // Dead state
@@ -1885,7 +2075,7 @@ class ServerStateHolder(
                 config = next
             }
 
-            val rconResult = applyWhitelistRuntimeState(next)
+            val rconResult = applyRuntimeSettingsState(next, onlyWhitelist = true)
 
             withContext(Dispatchers.Main) {
                 if (rconResult == null) {
@@ -1918,7 +2108,7 @@ class ServerStateHolder(
         }
 
         if (isRunning) {
-            val rconResult = applyWhitelistRuntimeState(enforced)
+            val rconResult = applyRuntimeSettingsState(enforced, onlyWhitelist = false)
             if (rconResult != null) {
                 android.util.Log.w("ServerStateHolder", "Settings dynamic update RCON failed, fell back to stdin: $rconResult")
             }
@@ -1930,18 +2120,26 @@ class ServerStateHolder(
         "Settings saved."
     }
 
-    private fun applyWhitelistRuntimeState(config: ServerConfig): String? {
-        val whitelistCmd = if (config.whiteList) "whitelist on" else "whitelist off"
+    private fun applyRuntimeSettingsState(config: ServerConfig, onlyWhitelist: Boolean = false): String? {
+        val commands = buildList {
+            add(if (config.whiteList) "whitelist on" else "whitelist off")
+            add("whitelist reload")
+            if (!onlyWhitelist) {
+                add("difficulty ${config.difficulty.lowercase()}")
+                add("defaultgamemode ${config.gameMode.lowercase()}")
+                add("gamemode ${config.gameMode.lowercase()} @a")
+                add("gamerule pvp ${config.pvp}")
+                add("gamerule doMobSpawning ${config.spawnMonsters}")
+            }
+        }
         return runCatching {
-            sendRconCommand(whitelistCmd)
-            sendRconCommand("whitelist reload")
+            commands.forEach { sendRconCommand(it) }
             if (config.whiteList && config.enforceWhitelist) {
                 kickPlayersNotOnWhitelist(::sendRconCommand)
             }
             null
         }.getOrElse { error ->
-            com.pocketcraft.server.server.ServerLauncher.sendCommand(whitelistCmd)
-            com.pocketcraft.server.server.ServerLauncher.sendCommand("whitelist reload")
+            commands.forEach { com.pocketcraft.server.server.ServerLauncher.sendCommand(it) }
             if (config.whiteList && config.enforceWhitelist) {
                 kickPlayersNotOnWhitelist(com.pocketcraft.server.server.ServerLauncher::sendCommand)
             }
@@ -2104,8 +2302,8 @@ class ServerStateHolder(
     }
 
     suspend fun setActiveWorld(worldName: String, syncPluginProfiles: Boolean = true): String = withContext(Dispatchers.IO) {
-        if (isRunning || isStarting || isStopping) {
-            return@withContext "Stop the server before switching worlds."
+        if (isRunning || isStarting || isStopping || isBackingUp || isRestoringBackup || isDownloadingBackup) {
+            return@withContext "Stop active server or backup operations before switching worlds."
         }
 
         val normalized = sanitizeWorldName(worldName)
@@ -2179,8 +2377,8 @@ class ServerStateHolder(
     }
 
     suspend fun createWorld(worldName: String): String = withContext(Dispatchers.IO) {
-        if (isRunning || isStarting || isStopping) {
-            return@withContext "Stop the server before creating a world."
+        if (isRunning || isStarting || isStopping || isBackingUp || isRestoringBackup || isDownloadingBackup) {
+            return@withContext "Stop active server or backup operations before creating a world."
         }
 
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(appContext)
@@ -2251,8 +2449,8 @@ class ServerStateHolder(
             ?: return@withContext "$worldName was not found."
 
         val currentActive = activeWorld.ifBlank { "world" }
-        if ((isRunning || isStarting || isStopping) && currentActive.equals(match, ignoreCase = true)) {
-            return@withContext "Stop the server before deleting the active world."
+        if ((isRunning || isStarting || isStopping || isBackingUp || isRestoringBackup || isDownloadingBackup) && currentActive.equals(match, ignoreCase = true)) {
+            return@withContext "Stop active server or backup operations before deleting the active world."
         }
         val remainingWorlds = knownWorlds.filterNot { it.equals(match, ignoreCase = true) }
         val nextActive = if (currentActive.equals(match, ignoreCase = true)) {
@@ -2330,6 +2528,11 @@ class ServerStateHolder(
             val entries = collectBackupEntries()
             val fileEntries = entries.filterNot { it.isDirectory }
             if (fileEntries.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    isBackingUp = false
+                    backupProgressPercent = 0
+                    backupStatusMessage = ""
+                }
                 return@withContext "No server files found to back up."
             }
 
@@ -2358,12 +2561,10 @@ class ServerStateHolder(
                         zip.putNextEntry(ZipEntry(entry.relativePath))
                         zip.closeEntry()
                     } else {
-                        // Exclude the profile cache directory to avoid doubling the backup size,
-                        // as we already included the active plugins/mods/resourcepacks.
-                        if (!entry.relativePath.startsWith("world_plugin_profiles/")) {
-                            addFileToZip(entry.file, entry.relativePath, zip)
-                            processedFiles++
-                        }
+                        // backupExcludeDirs already filters the top-level heavy dirs;
+                        // this check is kept as a safety net for any subdirs matched by name.
+                        addFileToZip(entry.file, entry.relativePath, zip)
+                        processedFiles++
                     }
                 }
 
@@ -2506,10 +2707,10 @@ class ServerStateHolder(
                 restoreProgressPercent = 97
                 restoreStatusMessage = "Normalizing restored world files..."
             }
-            WorldImporter.normalizeRestoredServerBackup(serverDir, config.serverType)
+            WorldImporter.normalizeRestoredServerBackup(serverDir, config.serverType, targetWorld)
             saveConfig(config.copy(worldName = targetWorld))
             flattenWorldStructure(targetWorld)
-            DimensionMigrator.syncDimensionsForServerType(appContext, versionId, config.serverType)
+            DimensionMigrator.syncDimensionsForServerType(appContext, targetWorld, config.serverType)
             val dimensionRestoreSummary = restoreDimensionsFromLatestPreviousBackup(
                 targetWorld = targetWorld,
                 importedFileName = importedFileName
@@ -2564,6 +2765,11 @@ class ServerStateHolder(
             java.util.zip.ZipFile(entry.file).use { zip ->
                 val totalEntries = zip.size()
                 if (totalEntries == 0) {
+                    withContext(Dispatchers.Main) {
+                        isRestoringBackup = false
+                        restoreProgressPercent = 0
+                        restoreStatusMessage = ""
+                    }
                     return@withContext "Backup is empty."
                 }
                 clearServerDirectoryForRestore()
@@ -2600,10 +2806,16 @@ class ServerStateHolder(
                 restoreProgressPercent = 97
                 restoreStatusMessage = "Normalizing restored world files..."
             }
-            WorldImporter.normalizeRestoredServerBackup(serverDir, config.serverType)
+            WorldImporter.normalizeRestoredServerBackup(serverDir, config.serverType, targetWorld)
             saveConfig(config.copy(worldName = targetWorld))
             flattenWorldStructure(targetWorld)
-            DimensionMigrator.syncDimensionsForServerType(appContext, versionId, config.serverType)
+            DimensionMigrator.syncDimensionsForServerType(appContext, targetWorld, config.serverType)
+            // Restore Nether/End from a previous backup if the current backup is missing them.
+            // This handles cases where the backup was created before the user visited those dimensions.
+            val dimensionRestoreSummary = restoreDimensionsFromLatestPreviousBackup(
+                targetWorld = targetWorld,
+                importedFileName = entry.file.name
+            )
             syncProfileIntoActiveWorldContent(targetWorld)
             
             // Fix offline UUIDs after restore in case the backup came from an online server
@@ -2620,7 +2832,14 @@ class ServerStateHolder(
             }
             FirebaseAnalyticsManager.logBackupRestored(activeWorld, entry.name)
 
-            return@withContext "Backup restored successfully. Start the server to load it."
+            return@withContext buildString {
+                append("Backup restored successfully.")
+                if (dimensionRestoreSummary != null) {
+                    append("\n")
+                    append(dimensionRestoreSummary)
+                }
+                append("\nStart the server to load it.")
+            }
         } catch (e: Exception) {
             android.util.Log.e("ServerRestore", "Restore failed", e)
             withContext(Dispatchers.Main) {
@@ -2641,6 +2860,420 @@ class ServerStateHolder(
                 file = file
             )
         )
+    }
+
+    /**
+     * Restores ONLY the Nether and End dimension folders from the given backup entry.
+     * The overworld (and all other server files) are left completely untouched.
+     *
+     * For Paper/Purpur backups the Nether lives at  <world>_nether/  and the End at  <world>_the_end/.
+     * For Fabric/Modpack backups the Nether lives at  <world>/DIM-1/  and the End at  <world>/DIM1/.
+     */
+    suspend fun restoreDimensionsOnly(entry: BackupEntry): String = withContext(Dispatchers.IO) {
+        if (isRunning || isStarting || isStopping) {
+            return@withContext "Stop the server before restoring dimensions."
+        }
+
+        val targetWorld = sanitizeWorldName(activeWorld.ifBlank { "world" })
+        val isVanillaStyle = config.serverType == ServerType.FABRIC || config.serverType == ServerType.MODPACK
+
+        val netherZipPrefixes = mutableListOf<String>()
+        val endZipPrefixes = mutableListOf<String>()
+
+        if (isVanillaStyle) {
+            netherZipPrefixes += listOf("$targetWorld/DIM-1/", "world/DIM-1/")
+            endZipPrefixes += listOf("$targetWorld/DIM1/", "world/DIM1/")
+        } else {
+            netherZipPrefixes += listOf("${targetWorld}_nether/", "world_nether/")
+            endZipPrefixes += listOf("${targetWorld}_the_end/", "world_the_end/")
+        }
+
+        // Auto-detect any folder ending with _nether or _the_end or _end
+        try {
+            java.util.zip.ZipFile(entry.file).use { zip ->
+                val zipEntries = zip.entries()
+                while (zipEntries.hasMoreElements()) {
+                    val name = zipEntries.nextElement().name.replace('\\', '/').removePrefix("/").removePrefix("./").trim()
+                    val parts = name.split('/')
+                    if (parts.isNotEmpty()) {
+                        val firstPart = parts[0]
+                        val lowerFirst = firstPart.lowercase(Locale.getDefault())
+                        if (lowerFirst.endsWith("_nether") || lowerFirst == "nether" || lowerFirst == "dim-1") {
+                            val prefix = if (parts.size > 1 && firstPart != "dim-1") "$firstPart/" else firstPart
+                            if (prefix !in netherZipPrefixes) netherZipPrefixes.add(prefix)
+                        }
+                        if (lowerFirst.endsWith("_the_end") || lowerFirst.endsWith("_end") || lowerFirst == "end" || lowerFirst == "dim1") {
+                            val prefix = if (parts.size > 1 && firstPart != "dim1") "$firstPart/" else firstPart
+                            if (prefix !in endZipPrefixes) endZipPrefixes.add(prefix)
+                        }
+                        
+                        if (parts.size > 1) {
+                            val secondPart = parts[1]
+                            val lowerSecond = secondPart.lowercase(Locale.getDefault())
+                            if (lowerSecond.endsWith("_nether") || lowerSecond == "nether" || lowerSecond == "dim-1") {
+                                val prefix = "$firstPart/$secondPart/"
+                                if (prefix !in netherZipPrefixes) netherZipPrefixes.add(prefix)
+                            }
+                            if (lowerSecond.endsWith("_the_end") || lowerSecond.endsWith("_end") || lowerSecond == "end" || lowerSecond == "dim1") {
+                                val prefix = "$firstPart/$secondPart/"
+                                if (prefix !in endZipPrefixes) endZipPrefixes.add(prefix)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("ServerStateHolder", "Failed to scan ZIP for dimension folders: ${e.message}")
+        }
+
+        val tempDir = File(appContext.cacheDir, "dim_restore_${System.currentTimeMillis()}")
+        try {
+            withContext(Dispatchers.Main) {
+                isRestoringBackup = true
+                restoreProgressPercent = 0
+                restoreStatusMessage = "Opening backup for dimension restore…"
+            }
+
+            tempDir.mkdirs()
+
+            java.util.zip.ZipFile(entry.file).use { zip ->
+                val totalEntries = zip.size().coerceAtLeast(1)
+                var processed = 0
+                var lastPercent = -1
+
+                val allEntries = zip.entries()
+                while (allEntries.hasMoreElements()) {
+                    val zEntry = allEntries.nextElement()
+                    processed++
+                    val progress = (processed * 90 / totalEntries).coerceIn(0, 90)
+                    if (progress != lastPercent) {
+                        lastPercent = progress
+                        withContext(Dispatchers.Main) {
+                            restoreProgressPercent = progress
+                            restoreStatusMessage = "Scanning ${zEntry.name}…"
+                        }
+                    }
+
+                    val rawName = zEntry.name
+                        .replace('\\', '/')
+                        .removePrefix("/")
+                        .removePrefix("./")
+                        .trim()
+                    if (rawName.isBlank() || rawName.startsWith("__MACOSX/") || rawName.endsWith(".DS_Store")) continue
+
+                    val isNether = netherZipPrefixes.any { rawName == it.trimEnd('/') || rawName.startsWith(it) }
+                    val isEnd    = endZipPrefixes.any   { rawName == it.trimEnd('/') || rawName.startsWith(it) }
+                    if (!isNether && !isEnd) continue
+
+                    // Extract into tempDir preserving the relative path inside the ZIP
+                    val target = File(tempDir, rawName).canonicalFile
+                    if (!target.path.startsWith(tempDir.canonicalPath)) continue
+
+                    if (zEntry.isDirectory) {
+                        target.mkdirs()
+                    } else {
+                        target.parentFile?.mkdirs()
+                        zip.getInputStream(zEntry).use { inp ->
+                            target.outputStream().use { out -> inp.copyTo(out) }
+                        }
+                    }
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                restoreProgressPercent = 92
+                restoreStatusMessage = "Placing dimension files…"
+            }
+
+            // Move extracted dimension folders to their correct live locations.
+            val restoredNames = mutableListOf<String>()
+
+            if (isVanillaStyle) {
+                var foundNether: File? = null
+                var foundEnd: File? = null
+                
+                tempDir.walkTopDown().maxDepth(4).forEach { file ->
+                    if (file.isDirectory) {
+                        if (file.name.lowercase(Locale.getDefault()) == "dim-1") foundNether = file
+                        if (file.name.lowercase(Locale.getDefault()) == "dim1") foundEnd = file
+                    }
+                }
+                
+                val destWorldDir = File(serverDir, targetWorld)
+                destWorldDir.mkdirs()
+                
+                foundNether?.let { src ->
+                    val dest = File(destWorldDir, "DIM-1")
+                    if (dest.exists()) dest.deleteRecursively()
+                    src.renameTo(dest)
+                    restoredNames += "the nether"
+                }
+                foundEnd?.let { src ->
+                    val dest = File(destWorldDir, "DIM1")
+                    if (dest.exists()) dest.deleteRecursively()
+                    src.renameTo(dest)
+                    restoredNames += "the end"
+                }
+            } else {
+                var foundNetherSrc: File? = null
+                var foundEndSrc: File? = null
+                
+                tempDir.walkTopDown().maxDepth(4).forEach { file ->
+                    if (file.isDirectory) {
+                        val nameLower = file.name.lowercase(Locale.getDefault())
+                        if (nameLower.endsWith("_nether") || nameLower == "nether") {
+                            foundNetherSrc = file
+                        } else if (nameLower == "dim-1") {
+                            if (foundNetherSrc == null || foundNetherSrc?.name?.lowercase(Locale.getDefault()) == "dim-1") {
+                                foundNetherSrc = file
+                            }
+                        }
+
+                        if (nameLower.endsWith("_the_end") || nameLower.endsWith("_end") || nameLower == "end") {
+                            foundEndSrc = file
+                        } else if (nameLower == "dim1") {
+                            if (foundEndSrc == null || foundEndSrc?.name?.lowercase(Locale.getDefault()) == "dim1") {
+                                foundEndSrc = file
+                            }
+                        }
+                    }
+                }
+                
+                foundNetherSrc?.let { src ->
+                    val isDIM = src.name.lowercase(Locale.getDefault()) == "dim-1"
+                    val sourceFolder = if (isDIM) src else {
+                        val nested = File(src, "DIM-1")
+                        if (nested.exists() && nested.isDirectory) nested else src
+                    }
+                    
+                    val destDir = File(serverDir, "${targetWorld}_nether")
+                    destDir.mkdirs()
+                    
+                    // Copy the contents of sourceFolder (region, poi, entities, data) directly into destDir
+                    sourceFolder.listFiles()?.forEach { child ->
+                        val childName = child.name.lowercase(Locale.getDefault())
+                        if (childName != "level.dat" && childName != "uid.dat" && childName != "level.dat_old") {
+                            val targetDest = File(destDir, child.name)
+                            if (targetDest.exists()) targetDest.deleteRecursively()
+                            if (!child.renameTo(targetDest)) {
+                                child.copyRecursively(targetDest, overwrite = true)
+                                child.deleteRecursively()
+                            }
+                        }
+                    }
+                    
+                    // Clear local level.dat and uid.dat in destDir so Paper regenerates them with correct UUID
+                    val netherLevelDat = File(destDir, "level.dat")
+                    if (netherLevelDat.exists()) netherLevelDat.delete()
+                    val netherUid = File(destDir, "uid.dat")
+                    if (netherUid.exists()) netherUid.delete()
+                    
+                    restoredNames += "the nether"
+                }
+                
+                foundEndSrc?.let { src ->
+                    val isDIM = src.name.lowercase(Locale.getDefault()) == "dim1"
+                    val sourceFolder = if (isDIM) src else {
+                        val nested = File(src, "DIM1")
+                        if (nested.exists() && nested.isDirectory) nested else src
+                    }
+                    
+                    val destDir = File(serverDir, "${targetWorld}_the_end")
+                    destDir.mkdirs()
+                    
+                    // Copy the contents of sourceFolder directly into destDir
+                    sourceFolder.listFiles()?.forEach { child ->
+                        val childName = child.name.lowercase(Locale.getDefault())
+                        if (childName != "level.dat" && childName != "uid.dat" && childName != "level.dat_old") {
+                            val targetDest = File(destDir, child.name)
+                            if (targetDest.exists()) targetDest.deleteRecursively()
+                            if (!child.renameTo(targetDest)) {
+                                child.copyRecursively(targetDest, overwrite = true)
+                                child.deleteRecursively()
+                            }
+                        }
+                    }
+                    
+                    // Clear local level.dat and uid.dat in destDir so Paper regenerates them with correct UUID
+                    val endLevelDat = File(destDir, "level.dat")
+                    if (endLevelDat.exists()) endLevelDat.delete()
+                    val endUid = File(destDir, "uid.dat")
+                    if (endUid.exists()) endUid.delete()
+                    
+                    restoredNames += "the end"
+                }
+
+            }
+
+            withContext(Dispatchers.Main) {
+                restoreProgressPercent = 100
+                restoreStatusMessage = "Done!"
+                delay(400)
+                refreshAll()
+                isRestoringBackup = false
+                restoreProgressPercent = 0
+                restoreStatusMessage = ""
+            }
+
+            return@withContext if (restoredNames.isEmpty()) {
+                "No Nether or End data found in ${entry.name}. " +
+                "The backup may have been created before those dimensions were visited."
+            } else {
+                "Restored ${restoredNames.joinToString(" and ")} from ${entry.name}.\n" +
+                "Overworld was not touched. Start the server to load it."
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ServerStateHolder", "Dimension-only restore failed", e)
+            withContext(Dispatchers.Main) {
+                isRestoringBackup = false
+                restoreProgressPercent = 0
+                restoreStatusMessage = ""
+            }
+            return@withContext "Dimension restore failed: ${e.message ?: e.javaClass.simpleName}"
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    suspend fun restoreOverworldOnly(entry: BackupEntry): String = withContext(Dispatchers.IO) {
+        if (isRunning || isStarting || isStopping) {
+            return@withContext "Stop the server before restoring."
+        }
+
+        val targetWorld = sanitizeWorldName(activeWorld.ifBlank { "world" })
+        val isVanillaStyle = config.serverType == ServerType.FABRIC || config.serverType == ServerType.MODPACK
+
+        val netherZipPrefixes = mutableListOf<String>()
+        val endZipPrefixes = mutableListOf<String>()
+
+        if (isVanillaStyle) {
+            netherZipPrefixes += listOf("$targetWorld/DIM-1/", "world/DIM-1/")
+            endZipPrefixes += listOf("$targetWorld/DIM1/", "world/DIM1/")
+        } else {
+            netherZipPrefixes += listOf("${targetWorld}_nether/", "world_nether/")
+            endZipPrefixes += listOf("${targetWorld}_the_end/", "world_the_end/")
+        }
+
+        try {
+            java.util.zip.ZipFile(entry.file).use { zip ->
+                val zipEntries = zip.entries()
+                while (zipEntries.hasMoreElements()) {
+                    val name = zipEntries.nextElement().name.replace('\\', '/').removePrefix("/").removePrefix("./").trim()
+                    val parts = name.split('/')
+                    if (parts.isNotEmpty()) {
+                        val firstPart = parts[0]
+                        val lowerFirst = firstPart.lowercase(Locale.getDefault())
+                        if (lowerFirst.endsWith("_nether") || lowerFirst == "nether" || lowerFirst == "dim-1") {
+                            val prefix = if (parts.size > 1 && firstPart != "dim-1") "$firstPart/" else firstPart
+                            if (prefix !in netherZipPrefixes) netherZipPrefixes.add(prefix)
+                        }
+                        if (lowerFirst.endsWith("_the_end") || lowerFirst.endsWith("_end") || lowerFirst == "end" || lowerFirst == "dim1") {
+                            val prefix = if (parts.size > 1 && firstPart != "dim1") "$firstPart/" else firstPart
+                            if (prefix !in endZipPrefixes) endZipPrefixes.add(prefix)
+                        }
+                        
+                        if (parts.size > 1) {
+                            val secondPart = parts[1]
+                            val lowerSecond = secondPart.lowercase(Locale.getDefault())
+                            if (lowerSecond.endsWith("_nether") || lowerSecond == "nether" || lowerSecond == "dim-1") {
+                                val prefix = "$firstPart/$secondPart/"
+                                if (prefix !in netherZipPrefixes) netherZipPrefixes.add(prefix)
+                            }
+                            if (lowerSecond.endsWith("_the_end") || lowerSecond.endsWith("_end") || lowerSecond == "end" || lowerSecond == "dim1") {
+                                val prefix = "$firstPart/$secondPart/"
+                                if (prefix !in endZipPrefixes) endZipPrefixes.add(prefix)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("ServerStateHolder", "Failed to scan ZIP for dimension folders: ${e.message}")
+        }
+
+        val tempDir = File(appContext.cacheDir, "overworld_restore_${System.currentTimeMillis()}")
+        try {
+            withContext(Dispatchers.Main) {
+                isRestoringBackup = true
+                restoreProgressPercent = 0
+                restoreStatusMessage = "Opening backup for Overworld restore…"
+            }
+
+            tempDir.mkdirs()
+
+            java.util.zip.ZipFile(entry.file).use { zip ->
+                val totalEntries = zip.size().coerceAtLeast(1)
+                var processed = 0
+                var lastPercent = -1
+
+                val allEntries = zip.entries()
+                while (allEntries.hasMoreElements()) {
+                    val zEntry = allEntries.nextElement()
+                    processed++
+                    val progress = (processed * 90 / totalEntries).coerceIn(0, 90)
+                    if (progress != lastPercent) {
+                        lastPercent = progress
+                        withContext(Dispatchers.Main) {
+                            restoreProgressPercent = progress
+                            restoreStatusMessage = "Restoring ${zEntry.name}…"
+                        }
+                    }
+
+                    val rawName = zEntry.name
+                        .replace('\\', '/')
+                        .removePrefix("/")
+                        .removePrefix("./")
+                        .trim()
+                    if (rawName.isBlank() || rawName.startsWith("__MACOSX/") || rawName.endsWith(".DS_Store")) continue
+
+                    val isNether = netherZipPrefixes.any { rawName == it.trimEnd('/') || rawName.startsWith(it) }
+                    val isEnd    = endZipPrefixes.any   { rawName == it.trimEnd('/') || rawName.startsWith(it) }
+                    if (isNether || isEnd) continue
+
+                    val target = File(tempDir, rawName).canonicalFile
+                    if (!target.path.startsWith(tempDir.canonicalPath)) continue
+
+                    if (zEntry.isDirectory) {
+                        target.mkdirs()
+                    } else {
+                        target.parentFile?.mkdirs()
+                        zip.getInputStream(zEntry).use { inp ->
+                            target.outputStream().use { out -> inp.copyTo(out) }
+                        }
+                    }
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                restoreProgressPercent = 92
+                restoreStatusMessage = "Normalizing Overworld files…"
+            }
+
+            WorldImporter.normalizeRestoredServerBackup(tempDir, config.serverType, targetWorld)
+            tempDir.copyRecursively(serverDir, overwrite = true)
+
+            withContext(Dispatchers.Main) {
+                restoreProgressPercent = 100
+                restoreStatusMessage = "Done!"
+                delay(400)
+                refreshAll()
+                isRestoringBackup = false
+                restoreProgressPercent = 0
+                restoreStatusMessage = ""
+            }
+
+            return@withContext "Restored Overworld from ${entry.name}.\nNether and End were not touched."
+        } catch (e: Exception) {
+            android.util.Log.e("ServerStateHolder", "Overworld-only restore failed", e)
+            withContext(Dispatchers.Main) {
+                isRestoringBackup = false
+                restoreProgressPercent = 0
+                restoreStatusMessage = ""
+            }
+            return@withContext "Overworld restore failed: ${e.message ?: e.javaClass.simpleName}"
+        } finally {
+            tempDir.deleteRecursively()
+        }
     }
 
     private fun deleteFileFromDownloads(fileName: String, worldName: String): Boolean {
@@ -2760,8 +3393,8 @@ class ServerStateHolder(
         deleteDatapacks: Boolean,
         deleteLogs: Boolean
     ): String = withContext(Dispatchers.IO) {
-        if (isRunning || isStarting) {
-            return@withContext "Stop the server before resetting the world."
+        if (isRunning || isStarting || isStopping || isBackingUp || isRestoringBackup || isDownloadingBackup) {
+            return@withContext "Stop the server or finish active backup operations before resetting the world."
         }
         val activeWorldCopy = sanitizeWorldName(activeWorld.ifBlank { "world" })
         val targetServerDir = ServerFileManager.getServerDirNoCreate(appContext, activeWorldCopy)
@@ -3116,54 +3749,11 @@ class ServerStateHolder(
     }
 
     private fun loadConfig(): ServerConfig {
-        val props = ServerPropertiesHelper.readProperties(serverDir)
-        var loaded = ServerConfig(
-            worldName = props.getProperty("level-name", activeWorld),
-            worldSeed = props.getProperty("level-seed", ""),
-            maxPlayers = (props.getProperty("max-players", adaptiveMaxPlayers().toString()).toIntOrNull() ?: adaptiveMaxPlayers()).coerceIn(1, 50),
-            port = singleServerPort,
-            difficulty = props.getProperty("difficulty", "normal"),
-            gameMode = props.getProperty("gamemode", "survival"),
-            onlineMode = props.getProperty("online-mode", "false").toBoolean(),
-            motd = props.getProperty("motd", "A PocketCraft Server").removeSuffix(" - Hosted on Pocketcraft").trim(),
-            pvp = props.getProperty("pvp", "true").toBoolean(),
-            viewDistance = props.getProperty(ServerPropertiesHelper.DESIRED_VIEW_DISTANCE_KEY)
-                ?.toIntOrNull()
-                ?: props.getProperty("view-distance", adaptiveViewDistance().toString()).toIntOrNull()
-                ?: adaptiveViewDistance(),
-            simulationDistance = props.getProperty(ServerPropertiesHelper.DESIRED_SIMULATION_DISTANCE_KEY)
-                ?.toIntOrNull()
-                ?: props.getProperty("simulation-distance", adaptiveSimulationDistance().toString()).toIntOrNull()
-                ?: adaptiveSimulationDistance(),
-            spawnProtection = props.getProperty("spawn-protection", "16").toIntOrNull() ?: 16,
-            allowFlight = props.getProperty("allow-flight", "false").toBoolean(),
-            whiteList = props.getProperty("white-list", "false").toBoolean(),
-            enforceWhitelist = props.getProperty("enforce-whitelist", "false").toBoolean(),
-            commandBlocks = props.getProperty("enable-command-block", "true").toBoolean(),
-            netherEnabled = props.getProperty("allow-nether", "true").toBoolean(),
-            spawnMonsters = props.getProperty("spawn-monsters", "true").toBoolean(),
-            spawnAnimals = props.getProperty("spawn-animals", "true").toBoolean(),
-            spawnNpcs = props.getProperty("spawn-npcs", "true").toBoolean(),
-            hardcore = props.getProperty("hardcore", "false").toBoolean(),
-            maxRamMb = props.getProperty("pocketcraft-max-ram-mb", "1024").toIntOrNull() ?: 1024,
-            entityBroadcastRangePercentage = props.getProperty(
-                "entity-broadcast-range-percentage",
-                ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT.toString()
-            ).toIntOrNull() ?: ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT,
-            generateStructures = props.getProperty("generate-structures", "true").toBoolean(),
-            levelType = props.getProperty("level-type", "default"),
-            serverType = props.getProperty("pocketcraft-server-type")
-                ?.takeIf { it.isNotBlank() }
-                ?.let(ServerType::fromString)
-                ?: ServerType.PAPER,
-            gameVersion = props.getProperty("pocketcraft-game-version", ""),
-            customJarPath = props.getProperty("pocketcraft-custom-jar-path")?.takeIf { it.isNotBlank() }
-        )
-        return loaded.copy(
-            joinMessageEnabled = true,
-            joinMessageText = POCKETCRAFT_JOIN_MESSAGE_TEXT,
-            joinMessageUrl = POCKETCRAFT_JOIN_MESSAGE_URL
-        )
+        return kotlinx.coroutines.runBlocking {
+            ServerConfigRepository(appContext).apply {
+                setWorldNameOverride(activeWorld)
+            }.loadConfig()
+        }
     }
 
     private fun saveConfig(config: ServerConfig, targetDir: File = serverDir) {
@@ -3176,7 +3766,7 @@ class ServerStateHolder(
             simulationDistance = config.simulationDistance.coerceIn(3, 32)
         )
         val props = ServerPropertiesHelper.readProperties(targetDir)
-        ServerPropertiesWriter.overlayManagedValues(props, ServerPropertiesWriter.toSnapshot(enforcedConfig), isPremium)
+        ServerPropertiesWriter.overlayManagedValues(targetDir, props, ServerPropertiesWriter.toSnapshot(enforcedConfig), isPremium)
         ServerPropertiesHelper.saveProperties(targetDir, props)
 
 
@@ -3286,34 +3876,40 @@ class ServerStateHolder(
      */
     fun applyOptimizationPreset(preset: String) {
         scope.launch(Dispatchers.IO) {
-            val bukkitFile = File(serverDir, "bukkit.yml")
-            val paperWorldFile = File(serverDir, "config/paper-world-defaults.yml")
-            paperWorldFile.parentFile?.mkdirs()
-
-            when (preset) {
-                "lite" -> {
-                    writeBukkitSpawnLimits(bukkitFile, monsters = 50, animals = 12, waterAnimals = 5, waterAmbient = 15, ambient = 10)
-                    writePaperWorldOptimization(paperWorldFile, entityActivation = true, eigenRedstone = true, crammingLimit = 16)
-                }
-                "balanced" -> {
-                    writeBukkitSpawnLimits(bukkitFile, monsters = 35, animals = 10, waterAnimals = 5, waterAmbient = 10, ambient = 5)
-                    writePaperWorldOptimization(paperWorldFile, entityActivation = true, eigenRedstone = true, crammingLimit = 8)
-                }
-                "performance" -> {
-                    writeBukkitSpawnLimits(bukkitFile, monsters = 20, animals = 8, waterAnimals = 3, waterAmbient = 5, ambient = 3)
-                    writePaperWorldOptimization(paperWorldFile, entityActivation = true, eigenRedstone = true, crammingLimit = 6)
-                }
-                else -> {
-                    // "none" — restore vanilla defaults
-                    writeBukkitSpawnLimits(bukkitFile, monsters = 70, animals = 15, waterAnimals = 5, waterAmbient = 20, ambient = 15)
-                    writePaperWorldOptimization(paperWorldFile, entityActivation = false, eigenRedstone = false, crammingLimit = 24)
-                }
-            }
-            // Persist preset choice
-            val props = ServerPropertiesHelper.readProperties(serverDir)
-            props["pocketcraft-optimization-preset"] = preset
-            ServerPropertiesHelper.saveProperties(serverDir, props)
+            writeOptimizationPreset(preset)
         }
+    }
+
+    suspend fun applyOptimizationPresetBlocking(preset: String) = withContext(Dispatchers.IO) {
+        writeOptimizationPreset(preset)
+    }
+
+    private fun writeOptimizationPreset(preset: String) {
+        val bukkitFile = File(serverDir, "bukkit.yml")
+        val paperWorldFile = File(serverDir, "config/paper-world-defaults.yml")
+        paperWorldFile.parentFile?.mkdirs()
+
+        when (preset) {
+            "lite" -> {
+                writeBukkitSpawnLimits(bukkitFile, monsters = 50, animals = 12, waterAnimals = 5, waterAmbient = 15, ambient = 10)
+                writePaperWorldOptimization(paperWorldFile, entityActivation = true, eigenRedstone = true, crammingLimit = 16)
+            }
+            "balanced" -> {
+                writeBukkitSpawnLimits(bukkitFile, monsters = 35, animals = 10, waterAnimals = 5, waterAmbient = 10, ambient = 5)
+                writePaperWorldOptimization(paperWorldFile, entityActivation = true, eigenRedstone = true, crammingLimit = 8)
+            }
+            "performance" -> {
+                writeBukkitSpawnLimits(bukkitFile, monsters = 20, animals = 8, waterAnimals = 3, waterAmbient = 5, ambient = 3)
+                writePaperWorldOptimization(paperWorldFile, entityActivation = true, eigenRedstone = true, crammingLimit = 6)
+            }
+            else -> {
+                writeBukkitSpawnLimits(bukkitFile, monsters = 70, animals = 15, waterAnimals = 5, waterAmbient = 20, ambient = 15)
+                writePaperWorldOptimization(paperWorldFile, entityActivation = false, eigenRedstone = false, crammingLimit = 24)
+            }
+        }
+        val props = ServerPropertiesHelper.readProperties(serverDir)
+        props["pocketcraft-optimization-preset"] = preset
+        ServerPropertiesHelper.saveProperties(serverDir, props)
     }
 
     fun readOptimizationPreset(): String {
@@ -3534,6 +4130,24 @@ class ServerStateHolder(
 
     private fun canonicalPlayerName(name: String): String =
         name.trim().trimStart('.', '!', '*').lowercase(Locale.getDefault())
+
+    private fun sanitizeWifiPingSample(
+        player: PlayerInfo,
+        sample: ParsedPlayerPing,
+        nextIp: String
+    ): Int {
+        if (!isPrivateWifiIp(nextIp) || sample.pingMs <= MAX_REALISTIC_WIFI_PING_MS) {
+            return sample.pingMs
+        }
+        return player.pingMs.takeIf { it in 0..MAX_REALISTIC_WIFI_PING_MS } ?: -1
+    }
+
+    private fun isPrivateWifiIp(value: String): Boolean {
+        val host = value.trim()
+        return host.startsWith("192.168.") ||
+            host.startsWith("10.") ||
+            Regex("""^172\.(1[6-9]|2\d|3[0-1])\.""").containsMatchIn(host)
+    }
 
     private fun readNamedList(fileName: String): List<PlayerInfo> {
         val file = File(serverDir, fileName)
@@ -3949,12 +4563,37 @@ class ServerStateHolder(
     private fun ensureWorldDirectories(worldName: String) {
         val targetServerDir = ServerFileManager.getServerDir(appContext, worldName)
         val base = File(targetServerDir, sanitizeWorldName(worldName))
-        if (!base.exists()) {
+        val flatLayoutExists = File(targetServerDir, "level.dat").exists() ||
+            File(targetServerDir, "region").isDirectory
+
+        if (flatLayoutExists) {
+            base.mkdirs()
+            migrateFlatLayoutToNested(targetServerDir, base)
+        } else if (!base.exists()) {
             base.mkdirs()
         }
         pluginProfileDir(worldName).mkdirs()
         modsProfileDir(worldName).mkdirs()
         resourcePacksProfileDir(worldName).mkdirs()
+    }
+
+    private fun migrateFlatLayoutToNested(serverDir: File, nestedDir: File) {
+        val skip = setOf("server.properties", "eula.txt", "usercache.json",
+            "ops.json", "whitelist.json", "banned-players.json", "banned-ips.json")
+        val systemDirs = setOf("plugins", "logs", "cache", "jre", "jre-21", "jre-runtime",
+            "config", "libraries", "binaries", "backups", "crash-reports", "bundler", "versions")
+        serverDir.listFiles()?.forEach { file ->
+            val name = file.name
+            if (name.startsWith("pocketcraft-") || name in skip || name in systemDirs || name == nestedDir.name) return@forEach
+            val target = File(nestedDir, name)
+            if (file.isDirectory) {
+                file.copyRecursively(target, overwrite = true)
+                file.deleteRecursively()
+            } else {
+                file.copyTo(target, overwrite = true)
+                file.delete()
+            }
+        }
     }
 
     private fun generateUniqueWorldName(requestedName: String, existingNames: List<String>): String {
@@ -4122,21 +4761,46 @@ class ServerStateHolder(
 
     private fun listBackupsForWorld(worldName: String): List<BackupEntry> {
         val formatter = SimpleDateFormat("MMM d, yyyy • h:mm a", Locale.getDefault())
-        val merged = linkedMapOf<String, File>()
-        listOf(backupsDirForWorld(worldName), exportedBackupsDirForWorld(worldName)).forEach { dir ->
-            dir.listFiles()
-                .orEmpty()
-                .filter { it.isFile && it.extension.equals("zip", ignoreCase = true) }
-                .sortedByDescending { it.lastModified() }
-                .forEach { file ->
-                    val key = file.name.lowercase(Locale.getDefault())
-                    val existing = merged[key]
-                    if (existing == null || existing.parentFile == exportedBackupsDirForWorld(worldName)) {
-                        merged[key] = file
+        val downloads = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+        val filesList = mutableListOf<File>()
+        
+        fun scanDir(dir: File, depth: Int) {
+            if (depth > 3 || !dir.exists() || !dir.isDirectory) return
+            val children = dir.listFiles() ?: return
+            for (child in children) {
+                if (child.isDirectory) {
+                    scanDir(child, depth + 1)
+                } else if (child.isFile && child.extension.equals("zip", ignoreCase = true)) {
+                    val nameLower = child.name.lowercase(Locale.getDefault())
+                    val parentName = child.parentFile?.name?.lowercase(Locale.getDefault()) ?: ""
+                    val parentParentName = child.parentFile?.parentFile?.name?.lowercase(Locale.getDefault()) ?: ""
+                    
+                    val isPCFolder = parentName.contains("pocketcraft") || parentParentName.contains("pocketcraft") ||
+                                     parentName == "world" || parentName == "main_world" || parentName == "modded" ||
+                                     parentName == "alrigth" || parentName == "fabric_26_1_2" || parentName == "wwww"
+                                     
+                    val isPCFile = nameLower.contains("backup") || nameLower.contains("nether") || nameLower.contains("end") ||
+                                   nameLower.contains("world") || nameLower.matches(Regex(".*\\d{8}-\\d{6}.*"))
+                                   
+                    if (isPCFolder || isPCFile) {
+                        filesList.add(child)
                     }
                 }
+            }
         }
-        return merged.values
+        
+        val extFiles = appContext.getExternalFilesDir(null)
+        val privateFiles = appContext.filesDir
+
+        scanDir(downloads, 0)
+        scanDir(backupsDir, 0)
+        if (extFiles != null) {
+            scanDir(extFiles, 0)
+        }
+        scanDir(privateFiles, 0)
+        
+        return filesList
+            .distinctBy { runCatching { it.canonicalPath }.getOrDefault(it.absolutePath) }
             .sortedByDescending { it.lastModified() }
             .map { file ->
                 BackupEntry(
@@ -4191,10 +4855,12 @@ class ServerStateHolder(
             importedFileName.lowercase(Locale.getDefault()),
             importedFileName.substringBeforeLast('.').lowercase(Locale.getDefault())
         )
+        val prefix = "${sanitizeWorldName(worldName).lowercase(Locale.getDefault())}-"
         return listBackupsForWorld(worldName).firstOrNull { entry ->
             val fileName = entry.file.name.lowercase(Locale.getDefault())
             val baseName = entry.file.nameWithoutExtension.lowercase(Locale.getDefault())
-            fileName !in excludedNames && baseName !in excludedNames
+            val isSameWorld = fileName.startsWith(prefix) || entry.file.parentFile?.name?.lowercase(Locale.getDefault()) == sanitizeWorldName(worldName).lowercase(Locale.getDefault())
+            isSameWorld && fileName !in excludedNames && baseName !in excludedNames
         }
     }
 
@@ -4205,20 +4871,30 @@ class ServerStateHolder(
         if (isVanillaStyle) {
             val sourceWorldRoot = File(sourceRoot, targetWorld)
             val targetWorldRoot = File(serverDir, targetWorld)
-            if (replaceDirectoryIfPresent(File(sourceWorldRoot, "DIM-1"), File(targetWorldRoot, "DIM-1"))) {
-                restored += "the nether"
+            // Only restore from previous backup if the dimension is genuinely missing from current restore
+            if (!File(targetWorldRoot, "DIM-1").exists()) {
+                if (replaceDirectoryIfPresent(File(sourceWorldRoot, "DIM-1"), File(targetWorldRoot, "DIM-1"))) {
+                    restored += "the nether"
+                }
             }
-            if (replaceDirectoryIfPresent(File(sourceWorldRoot, "DIM1"), File(targetWorldRoot, "DIM1"))) {
-                restored += "the end"
+            if (!File(targetWorldRoot, "DIM1").exists()) {
+                if (replaceDirectoryIfPresent(File(sourceWorldRoot, "DIM1"), File(targetWorldRoot, "DIM1"))) {
+                    restored += "the end"
+                }
             }
             return restored
         }
 
-        if (replaceDirectoryIfPresent(File(sourceRoot, "${targetWorld}_nether"), File(serverDir, "${targetWorld}_nether"))) {
-            restored += "the nether"
+        // Only restore from previous backup if the dimension is genuinely missing from current restore
+        if (!File(serverDir, "${targetWorld}_nether").exists()) {
+            if (replaceDirectoryIfPresent(File(sourceRoot, "${targetWorld}_nether"), File(serverDir, "${targetWorld}_nether"))) {
+                restored += "the nether"
+            }
         }
-        if (replaceDirectoryIfPresent(File(sourceRoot, "${targetWorld}_the_end"), File(serverDir, "${targetWorld}_the_end"))) {
-            restored += "the end"
+        if (!File(serverDir, "${targetWorld}_the_end").exists()) {
+            if (replaceDirectoryIfPresent(File(sourceRoot, "${targetWorld}_the_end"), File(serverDir, "${targetWorld}_the_end"))) {
+                restored += "the end"
+            }
         }
         return restored
     }
@@ -4399,6 +5075,7 @@ class ServerStateHolder(
         val entries = mutableListOf<BackupPathEntry>()
         serverDir.listFiles()
             .orEmpty()
+            .filter { it.name !in backupExcludeDirs }
             .sortedBy { it.name.lowercase(Locale.getDefault()) }
             .forEach { child ->
                 collectBackupEntries(child, entries)
@@ -4631,9 +5308,10 @@ class ServerStateHolder(
                     onlinePlayers.replaceAll { p ->
                         val newPing = pings[p.name] ?: pings[p.name.lowercase()]
                         if (newPing != null) {
+                            val nextIp = newPing.ip.ifBlank { p.ip }
                             val updated = p.copy(
-                                pingMs = newPing.pingMs,
-                                ip = newPing.ip.ifBlank { p.ip }
+                                pingMs = sanitizeWifiPingSample(p, newPing, nextIp),
+                                ip = nextIp
                             )
                             val sessionIdx = sessionPlayers.indexOfFirst {
                                 canonicalPlayerName(it.name) == canonicalPlayerName(p.name)
@@ -4679,6 +5357,13 @@ class ServerStateHolder(
             val realRoot = levelDat.parentFile ?: return@forEach
 
             if (realRoot.absolutePath != worldDir.absolutePath) {
+                // Guard: if the worldDir root already has its own level.dat the structure is
+                // already correct — skip flattening to avoid overwriting good restored content.
+                if (File(worldDir, "level.dat").exists()) {
+                    android.util.Log.i("PocketCraft", "Skipping flatten for $worldName — root level.dat already present")
+                    return@forEach
+                }
+
                 android.util.Log.i("PocketCraft", "Auto-flattening nested world: ${realRoot.absolutePath} -> ${worldDir.absolutePath}")
                 
                 // 1. Move all contents up
@@ -4696,7 +5381,11 @@ class ServerStateHolder(
                 if (parent != null && parent.absolutePath != worldDir.absolutePath && parent.absolutePath != serverDir.absolutePath) {
                     parent.listFiles()?.forEach { sibling ->
                         if (sibling.isDirectory && sibling != realRoot) {
-                            if (File(sibling, "level.dat").exists() || File(sibling, "region").isDirectory) {
+                            // Check both flat (region/) and Paper-nested (DIM-1/, DIM1/) structures
+                            if (File(sibling, "level.dat").exists() ||
+                                File(sibling, "region").isDirectory ||
+                                File(sibling, "DIM-1").isDirectory ||
+                                File(sibling, "DIM1").isDirectory) {
                                 val target = File(serverDir, sibling.name)
                                 if (!target.exists()) {
                                     android.util.Log.i("PocketCraft", "Auto-migrating nested dimension: ${sibling.name}")

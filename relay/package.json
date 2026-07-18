@@ -1,0 +1,14 @@
+{
+  "name": "pocketcraft-relay",
+  "version": "1.0.0",
+  "description": "PocketCraft Bedrock and Java Relay Server",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "firebase-admin": "^12.1.0",
+    "pm2": "^5.4.0"
+  }
+}

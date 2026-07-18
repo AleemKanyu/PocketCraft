@@ -328,7 +328,9 @@ object PluginManager {
         updated = ensureYamlSectionValue(updated, "bedrock", "enable-proxy-protocol", "false")
         updated = ensureYamlSectionValue(updated, "bedrock", "motd1", "PocketCraft Server")
         updated = ensureYamlSectionValue(updated, "bedrock", "motd2", "Tap to join")
-        updated = ensureTopLevelYamlValue(updated, "ping-passthrough-interval", "1")
+        // Geyser status passthrough every second is unnecessary for relay hosting and adds
+        // extra background status queries while the phone is already bandwidth-constrained.
+        updated = ensureTopLevelYamlValue(updated, "ping-passthrough-interval", "3")
         updated = ensureTopLevelYamlValue(updated, "async-motd", "false")
         updated = ensureTopLevelYamlValue(updated, "cache-chunks", "true")
         updated = ensureTopLevelYamlValue(updated, "use-native-transport", "false")
@@ -340,10 +342,12 @@ object PluginManager {
         updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "validate-bedrock-login", "false")
         updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "mtu", "1200")
         updated = ensureYamlSectionValue(updated, "advanced", "floodgate-key-file", floodgateKeyPath)
+        updated = ensureYamlSectionValue(updated, "java", "address", "auto")
+        updated = ensureYamlSectionValue(updated, "java", "port", "25565")
         updated = ensureYamlSectionValue(updated, "java", "auth-type", "floodgate")
+        updated = ensureYamlSectionValue(updated, "java", "forward-hostname", "false")
 
-        // Older Geyser configs use a dedicated remote section. Only patch it when
-        // it already exists so we don't append an obsolete block to newer configs.
+        // Older Geyser configs use a dedicated remote section.
         if (updated.lines().any { it.trim() == "remote:" }) {
             // Let Geyser resolve the active Paper bind target instead of forcing loopback.
             updated = ensureYamlSectionValue(updated, "remote", "address", "auto")
@@ -356,8 +360,8 @@ object PluginManager {
             updated = ensureYamlSectionValue(updated, "server", "auth-type", "floodgate")
         }
 
-        updated = ensureYamlSectionValue(updated, "motd", "passthrough-motd", "false")
-        updated = ensureYamlSectionValue(updated, "motd", "passthrough-player-counts", "false")
+        updated = ensureYamlSectionValue(updated, "motd", "passthrough-motd", "true")
+        updated = ensureYamlSectionValue(updated, "motd", "passthrough-player-counts", "true")
 
         if (updated != original) {
             geyserConfigFile.writeText(updated)
@@ -1762,9 +1766,134 @@ object PluginManager {
         }
     }
 
+    fun isPreinstalledPlugin(plugin: Plugin): Boolean {
+        val normalized = plugin.name.lowercase(Locale.US)
+        return normalized.contains("geyser") || normalized.contains("viaversion") || normalized.contains("floodgate")
+    }
+
+    private val resolvedProjectCache = java.util.concurrent.ConcurrentHashMap<String, RemoteCatalogItem>()
+
+    suspend fun resolveModrinthProjectByName(
+        context: Context,
+        name: String,
+        type: ContentType
+    ): RemoteCatalogItem? = withContext(Dispatchers.IO) {
+        val cacheKey = "${type.name}|$name"
+        resolvedProjectCache[cacheKey]?.let { return@withContext it }
+
+        // Clean up the name (remove file extensions, version numbers, brackets, etc.)
+        var cleanName = name.replace(Regex("\\.jar$", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("[-_]?[0-9\\.]+(-SNAPSHOT)?[-_]?.*$", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("[\\[\\(].*?[\\]\\)]"), "")
+            .trim()
+        if (cleanName.isBlank()) cleanName = name
+
+        try {
+            val facets = buildModrinthFacets(type)
+            val encodedQuery = java.net.URLEncoder.encode(cleanName, "UTF-8")
+            val encodedFacets = java.net.URLEncoder.encode(facets, "UTF-8")
+            val url = "$MODRINTH_BASE_URL/search?query=$encodedQuery&limit=1&index=relevance&facets=$encodedFacets"
+
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", userAgent())
+                .build()
+
+            getHttpClient(context).newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                val payload = response.body?.string().orEmpty()
+                if (payload.isBlank()) return@withContext null
+
+                val root = org.json.JSONObject(payload)
+                val hits = root.optJSONArray("hits") ?: return@withContext null
+                if (hits.length() > 0) {
+                    val hit = hits.getJSONObject(0)
+                    val projectId = hit.optString("project_id").ifBlank { hit.optString("projectId") }
+                    val slug = hit.optString("slug").ifBlank { projectId }
+                    val title = hit.optString("title").ifBlank { slug }
+                    val description = hit.optString("description")
+                    val iconUrl = hit.optString("icon_url")
+                    
+                    if (projectId.isNotBlank()) {
+                        val catalogItem = RemoteCatalogItem(
+                            source = "modrinth",
+                            projectId = projectId,
+                            title = title,
+                            slug = slug,
+                            iconUrl = iconUrl,
+                            description = description,
+                            downloads = hit.optLong("downloads"),
+                            owner = hit.optString("author")
+                        )
+                        resolvedProjectCache[cacheKey] = catalogItem
+                        return@withContext catalogItem
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PluginManager", "Failed to resolve Modrinth project for $name: ${e.message}")
+        }
+        null
+    }
+
+    private val latestVersionsCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    suspend fun getLatestVersionFromModrinth(context: Context, projectId: String): String? = withContext(Dispatchers.IO) {
+        val cached = latestVersionsCache[projectId]
+        if (cached != null) return@withContext cached
+
+        try {
+            val url = "https://api.modrinth.com/v2/project/$projectId/version"
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", userAgent())
+                .build()
+
+            getHttpClient(context).newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                val payload = response.body?.string().orEmpty()
+                if (payload.isBlank()) return@withContext null
+
+                val array = JSONArray(payload)
+                if (array.length() > 0) {
+                    val latestVersion = array.getJSONObject(0).optString("version_number")
+                    if (latestVersion.isNotBlank()) {
+                        latestVersionsCache[projectId] = latestVersion
+                        return@withContext latestVersion
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PluginManager", "Failed to fetch latest version for $projectId: ${e.message}")
+        }
+        null
+    }
+
+    fun isUpdateAvailable(localVersion: String, remoteVersion: String): Boolean {
+        if (localVersion.isBlank() || remoteVersion.isBlank()) return false
+        if (localVersion == remoteVersion) return false
+        
+        val localParts = localVersion.split(Regex("[^0-9]+")).filter { it.isNotEmpty() }.mapNotNull { it.toIntOrNull() }
+        val remoteParts = remoteVersion.split(Regex("[^0-9]+")).filter { it.isNotEmpty() }.mapNotNull { it.toIntOrNull() }
+        
+        val minSize = minOf(localParts.size, remoteParts.size)
+        for (i in 0 until minSize) {
+            if (remoteParts[i] > localParts[i]) return true
+            if (remoteParts[i] < localParts[i]) return false
+        }
+        return remoteParts.size > localParts.size
+    }
+
     private fun isManagedBridgePlugin(plugin: Plugin): Boolean {
         val candidates = listOf(plugin.name, plugin.fileName)
             .map(::normalizeCatalogKey)
+        
+        // Do not filter out geyser and viaversion so they can be shown in plugin lists
+        val isGeyserOrVia = candidates.any { normalized ->
+            normalized.contains("geyser") || normalized.contains("viaversion")
+        }
+        if (isGeyserOrVia) return false
+
         return candidates.any { normalized ->
             builtInBridgeKeywords.any { keyword -> normalized.contains(keyword) }
         }

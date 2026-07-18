@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Kuendesha Seva</string>
+    <string name="server_stopped">Seva Imesimamishwa</string>
+    <string name="server_starting">Seva Inaanza...</string>
+    <string name="start_server">Anza Seva</string>
+    <string name="stop_server">Acha Seva</string>
+    <string name="notification_channel_name">Hali ya Seva</string>
+    <string name="notification_channel_desc">Inaonyesha hali ya seva inayoendesha na vidhibiti</string>
+    <string name="tap_to_copy">Gusa ili kunakili IP</string>
+    <string name="copied">IP imenakiliwa kwenye ubao wa kunakili</string>
+    <string name="how_to_connect">Jinsi ya Kuunganisha</string>
+    <string name="send_command">Tuma Amri</string>
+    <string name="clear_log">Futa Kumbukumbu</string>
+    <string name="apply_restart">Tekeleza &amp; Anzisha Upya</string>
+    <string name="delete_world">Futa Data ya Dunia</string>
+    <string name="delete_world_confirm">Hii itafuta ulimwengu kabisa. Je, una uhakika?</string>
+    <string name="thermal_warning">Onyo: Kifaa kina joto kupita kiasi - zingatia kuzima seva</string>
+    <string name="ram_warning">Onyo: RAM ya Chini imetambuliwa - utendakazi unaweza kupunguzwa</string>
+    <string name="players_online">%1$d / wachezaji %2$d</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Muda wa ziada: %1$s</string>
+    <string name="announcement_title">Dokezo kutoka kwa PocketCraft</string>
+    <string name="announcement_body">PocketCraft itakuwa bila malipo kwa kila mtu milele, lakini baadhi ya vipengele viko katika Pro ili tu uweze kuhimili gharama za seva na gharama za uendeshaji wa programu. Wao ni nafuu, na ndiyo sababu wako ndani, ikiwa ni pamoja na hiyo kwa thamani zaidi. 
+ 
+ Ikiwa ungependa kutusaidia, au ungependa tu kuzungumza na timu, jiunge na Discord yetu — tungependa kuwa nawe.</string>
+    <string name="announcement_join_discord">Jiunge na Discord</string>
+    <string name="announcement_got_it">Nimeielewa</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

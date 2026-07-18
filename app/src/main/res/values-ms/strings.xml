@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Pelayan Berjalan</string>
+    <string name="server_stopped">Pelayan Berhenti</string>
+    <string name="server_starting">Pelayan Memulakan…</string>
+    <string name="start_server">Mulakan Pelayan</string>
+    <string name="stop_server">Hentikan Pelayan</string>
+    <string name="notification_channel_name">Status Pelayan</string>
+    <string name="notification_channel_desc">Menunjukkan status dan kawalan berjalan pelayan</string>
+    <string name="tap_to_copy">Ketik untuk menyalin IP</string>
+    <string name="copied">IP disalin ke papan keratan</string>
+    <string name="how_to_connect">Cara Menyambung</string>
+    <string name="send_command">Hantar Perintah</string>
+    <string name="clear_log">Kosongkan Log</string>
+    <string name="apply_restart">Gunakan &amp; Mulakan Semula</string>
+    <string name="delete_world">Padamkan Data Dunia</string>
+    <string name="delete_world_confirm">Ini akan memadamkan dunia secara kekal. Adakah anda pasti?</string>
+    <string name="thermal_warning">Amaran: Peranti terlalu panas — pertimbangkan untuk menghentikan pelayan</string>
+    <string name="ram_warning">Amaran: RAM rendah dikesan — prestasi mungkin menurun</string>
+    <string name="players_online">%1$d/%2$d pemain</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Masa aktif: %1$s</string>
+    <string name="announcement_title">Nota daripada PocketCraft</string>
+    <string name="announcement_body">PocketCraft akan percuma selama-lamanya untuk semua orang, tetapi beberapa ciri ada dalam Pro hanya supaya anda boleh menyokong kos pelayan kami dan kos menjalankan apl. Mereka murah, dan itulah sebabnya mereka ada di sana, termasuk itu untuk nilai yang lebih. 
+ 
+ Jika anda ingin membantu kami, atau hanya mahu berbual dengan pasukan, sertai Discord kami — kami ingin mendapatkan anda.</string>
+    <string name="announcement_join_discord">Sertai Discord</string>
+    <string name="announcement_got_it">Faham</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

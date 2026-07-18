@@ -143,10 +143,20 @@ object ConsoleParser {
 
     // e.g. "[17:30:06 INFO]: [PocketCraftPing] Steve:10@127.0.0.1 Alex:42"
     private val PING_REGEX = Regex("""\[PocketCraftPing\](.*)""")
+    // Purpur: "Steve's ping is 42ms"
     private val PURPUR_PING_REGEX = Regex("""(\S+)'s ping is (\d+)ms""", RegexOption.IGNORE_CASE)
+    // Paper: "Steve has a ping of 42ms"  (RCON response, may contain §-color codes)
+    private val PAPER_PING_REGEX = Regex("""(\S+)\s+has a ping of\s+(\d+)\s*ms""", RegexOption.IGNORE_CASE)
+
+    /** Strip Minecraft legacy color/format codes (§X). */
+    private fun stripMinecraftColors(text: String): String =
+        text.replace(Regex("§[0-9a-fk-orA-FK-OR]"), "")
 
     fun parsePing(line: String): Map<String, ParsedPlayerPing> {
-        val match = PING_REGEX.find(line)
+        // Strip Minecraft color codes first so all patterns work against clean text.
+        val cleanLine = stripMinecraftColors(line)
+
+        val match = PING_REGEX.find(cleanLine)
         if (match != null) {
             val data = match.groupValues[1].trim()
             val pings = mutableMapOf<String, ParsedPlayerPing>()
@@ -161,9 +171,20 @@ object ConsoleParser {
             return pings
         }
 
-        val purpurMatch = PURPUR_PING_REGEX.find(line)
+        // Paper RCON response: "<player> has a ping of <N>ms"
+        val paperMatch = PAPER_PING_REGEX.find(cleanLine)
+        if (paperMatch != null) {
+            val name = paperMatch.groupValues[1].trim()
+            val ping = paperMatch.groupValues[2].toIntOrNull() ?: -1
+            if (name.isNotBlank() && ping >= 0) {
+                return mapOf(name to ParsedPlayerPing(pingMs = ping))
+            }
+        }
+
+        // Purpur RCON response: "<player>'s ping is <N>ms"
+        val purpurMatch = PURPUR_PING_REGEX.find(cleanLine)
         if (purpurMatch != null) {
-            val name = purpurMatch.groupValues[1].replace(Regex("§[0-9a-fk-or]"), "").trim()
+            val name = purpurMatch.groupValues[1].trim()
             val ping = purpurMatch.groupValues[2].toIntOrNull() ?: -1
             if (name.isNotBlank() && ping >= 0) {
                 return mapOf(name to ParsedPlayerPing(pingMs = ping))

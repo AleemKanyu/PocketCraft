@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server Running</string>
+    <string name="server_stopped">Tsjinner stoppe</string>
+    <string name="server_starting">Server begjint…</string>
+    <string name="start_server">Start Server</string>
+    <string name="stop_server">Stop Server</string>
+    <string name="notification_channel_name">Server Status</string>
+    <string name="notification_channel_desc">Toant tsjinner rinnende status en kontrôles</string>
+    <string name="tap_to_copy">Tik om IP te kopiearjen</string>
+    <string name="copied">IP kopiearre nei klamboerd</string>
+    <string name="how_to_connect">Hoe te ferbinen</string>
+    <string name="send_command">Kommando stjoere</string>
+    <string name="clear_log">Wiskje Log</string>
+    <string name="apply_restart">Tapasse en opnij starte</string>
+    <string name="delete_world">Wiskje World Data</string>
+    <string name="delete_world_confirm">Dit sil permanint wiskje de wrâld. Bisto wis?</string>
+    <string name="thermal_warning">Warskôging: Apparaat wurdt oververhit - tink om te stopjen de tsjinner</string>
+    <string name="ram_warning">Warskôging: Leech RAM ûntdutsen - prestaasjes kinne wurde degradearre</string>
+    <string name="players_online">%1$d/%2$d spilers</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Uptime: %1$s</string>
+    <string name="announcement_title">In notysje fan PocketCraft</string>
+    <string name="announcement_body">PocketCraft sil foar altyd fergees wêze foar elkenien, mar guon funksjes binne yn Pro krekt sadat jo ús serverkosten en app-rinnende kosten kinne stypje. Se binne goedkeap, en dêrom binne se dêr, ynklusyf dat foar mear wearde. 
+ 
+ As jo ​​ús helpe wolle, of gewoan wolle petearje mei it team, doch dan mei oan ús Discord - wy wolle jo graach hawwe.</string>
+    <string name="announcement_join_discord">Doch mei oan Discord</string>
+    <string name="announcement_got_it">Ik snap it</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

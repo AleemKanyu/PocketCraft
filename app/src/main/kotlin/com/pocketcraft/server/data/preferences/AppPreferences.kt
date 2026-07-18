@@ -66,6 +66,7 @@ object AppPreferencesKeys {
     val WIDGET_CUSTOM_TEXT_ON_ACCENT = intPreferencesKey("widget_custom_text_on_accent")
     val WIDGET_CUSTOM_ICON_TINT = intPreferencesKey("widget_custom_icon_tint")
     val SERVER_STARTED_AT_MILLIS = longPreferencesKey("server_started_at_millis")
+    val ALWAYS_ALIVE_BACKGROUND = booleanPreferencesKey("always_alive_background")
 }
 
 data class WidgetThemeSettings(
@@ -174,8 +175,20 @@ class AppPreferences(context: Context) {
         set(value) = prefs.edit().putBoolean("auto_restart", value).apply()
 
     var forceExternalJvm: Boolean
-        get() = prefs.getBoolean("force_external_jvm", false)
+        get() = prefs.getBoolean("force_external_jvm", android.os.Build.VERSION.SDK_INT >= 34)
         set(value) = prefs.edit().putBoolean("force_external_jvm", value).apply()
+
+    fun saveRuntimeSettings(
+        autoRestart: Boolean,
+        maxPowerMode: Boolean,
+        forceExternalJvm: Boolean
+    ): Boolean {
+        return prefs.edit()
+            .putBoolean("auto_restart", autoRestart)
+            .putBoolean(KEY_MAX_POWER_MODE, maxPowerMode)
+            .putBoolean("force_external_jvm", forceExternalJvm)
+            .commit()
+    }
 
     var selectedWorldPath: String?
         get() = prefs.getString("selected_world_path", null)
@@ -503,6 +516,14 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean("debug_premium_override", false)
         set(value) = prefs.edit().putBoolean("debug_premium_override", value).apply()
 
+    var firebaseUserUid: String?
+        get() = prefs.getString("firebase_user_uid", null)
+        set(value) = prefs.edit().putString("firebase_user_uid", value).apply()
+
+    var dashboardSecret: String?
+        get() = prefs.getString("dashboard_secret", null)
+        set(value) = prefs.edit().putString("dashboard_secret", value).apply()
+
     var customSubdomain: String?
         get() = prefs.getString("custom_subdomain", null)
         set(value) = prefs.edit().putString("custom_subdomain", value).apply()
@@ -519,6 +540,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean("has_completed_start_stop_cycle", false)
         set(value) = prefs.edit().putBoolean("has_completed_start_stop_cycle", value).apply()
 
+    var alwaysAliveBackground: Boolean
+        get() = prefs.getBoolean("always_alive_background", false)
+        set(value) = prefs.edit().putBoolean("always_alive_background", value).apply()
+
     /**
      * Set to true when the server stops after a real player has joined that session.
      * Cleared once the rating popup has been shown on the next app launch.
@@ -526,6 +551,26 @@ class AppPreferences(context: Context) {
     var pendingRatingPopup: Boolean
         get() = prefs.getBoolean("pending_rating_popup", false)
         set(value) = prefs.edit().putBoolean("pending_rating_popup", value).apply()
+
+    var autoBackupOnStop: Boolean
+        get() = prefs.getBoolean("auto_backup_on_stop", false)
+        set(value) = prefs.edit().putBoolean("auto_backup_on_stop", value).apply()
+
+    var pendingAutoBackup: Boolean
+        get() = prefs.getBoolean("pending_auto_backup", false)
+        set(value) = prefs.edit().putBoolean("pending_auto_backup", value).apply()
+
+    var autoBackupTimeEnabled: Boolean
+        get() = prefs.getBoolean("auto_backup_time_enabled", false)
+        set(value) = prefs.edit().putBoolean("auto_backup_time_enabled", value).apply()
+
+    var autoBackupTimeHour: Int
+        get() = prefs.getInt("auto_backup_time_hour", 2)
+        set(value) = prefs.edit().putInt("auto_backup_time_hour", value).apply()
+
+    var autoBackupTimeMinute: Int
+        get() = prefs.getInt("auto_backup_time_minute", 0)
+        set(value) = prefs.edit().putInt("auto_backup_time_minute", value).apply()
 
     fun getShownPromotions(): Set<String> {
         return prefs.getStringSet("shown_promotions", emptySet()) ?: emptySet()
@@ -969,6 +1014,17 @@ object AppPreferencesStore {
     suspend fun setFloatingChatFirstTimeShown(context: Context, shown: Boolean) {
         context.appPreferencesDataStore.edit { prefs ->
             prefs[AppPreferencesKeys.FLOATING_CHAT_FIRST_TIME_SHOWN] = shown
+        }
+    }
+
+    fun isAlwaysAliveBackgroundFlow(context: Context): Flow<Boolean> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.ALWAYS_ALIVE_BACKGROUND] ?: false
+        }
+
+    suspend fun setAlwaysAliveBackground(context: Context, enabled: Boolean) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.ALWAYS_ALIVE_BACKGROUND] = enabled
         }
     }
 

@@ -21,6 +21,8 @@ import com.pocketcraft.server.R
 import com.pocketcraft.server.analytics.FirebaseAnalyticsManager
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
+import com.pocketcraft.server.service.ServerPropertiesHelper
+import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.setup.JreExtractor
 import com.pocketcraft.server.ui.onboarding.OnboardingActivity
 import com.pocketcraft.server.ui.screens.ErrorScreen
@@ -39,6 +41,8 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -78,16 +82,23 @@ class MainActivity : ComponentActivity() {
         private val RATE_REQUEST_COOLDOWN_MS = TimeUnit.DAYS.toMillis(30)
     }
 
+    private var uiCommandListener: com.pocketcraft.server.broadcast.DashboardCommandListener? = null
+
     override fun onStart() {
         super.onStart()
         isAppInForeground = true
         com.pocketcraft.server.broadcast.RemoteCommandListener.startListening(this)
+
+
+
+
     }
 
     override fun onStop() {
         super.onStop()
         isAppInForeground = false
         com.pocketcraft.server.broadcast.RemoteCommandListener.stopListening()
+
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -110,8 +121,24 @@ class MainActivity : ComponentActivity() {
         }
 
         val preferences = AppPreferences(this)
+        // Sync Firebase auth state to preferences for multi-process safety
+        val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+        preferences.firebaseUserUid = currentUser?.uid
+
+
         val onboardingCompleted = preferences.onboardingCompleted
         preferences.recordAppLaunch()
+
+        if (onboardingCompleted && preferences.alwaysAliveBackground && !com.pocketcraft.server.server.ServerHostService.isServiceRunning(this)) {
+            val listenerIntent = Intent(this, com.pocketcraft.server.server.ServerHostService::class.java).apply {
+                action = com.pocketcraft.server.server.ServerHostService.ACTION_START_LISTENER
+            }
+            try {
+                ContextCompat.startForegroundService(this, listenerIntent)
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Failed to auto-start background listener: ${e.message}")
+            }
+        }
         ThemePreferenceStore.loadCustomColors(this)
         val initialThemePreference = ThemePreferenceStore.load(this)
         val initialMobTheme = ThemePreferenceStore.loadMobTheme(this)
@@ -251,7 +278,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            val appStrings = appStringsFor(AppPreferences(this@MainActivity).appLanguage)
+            val appStrings = appStringsFor(this@MainActivity, AppPreferences(this@MainActivity).appLanguage)
             CompositionLocalProvider(LocalAppStrings provides appStrings) {
             PocketCraftTheme(darkTheme = darkTheme, mobTheme = mobTheme) {
                 var jreReady by remember { mutableStateOf(initialJreReady) }
@@ -344,6 +371,7 @@ class MainActivity : ComponentActivity() {
                                 PocketColors.isDark = enabled
                                 themePreference = nextPreference
                                 ThemePreferenceStore.save(this@MainActivity, nextPreference)
+                                com.pocketcraft.server.server.ServerHostService.pushWidgetUpdate(this@MainActivity)
                                 FirebaseAnalyticsManager.logThemeChanged(nextPreference.name.lowercase())
                             }
                         },
@@ -352,6 +380,7 @@ class MainActivity : ComponentActivity() {
                                 PocketColors.activeMobTheme = nextTheme
                                 mobTheme = nextTheme
                                 ThemePreferenceStore.saveMobTheme(this@MainActivity, nextTheme)
+                                com.pocketcraft.server.server.ServerHostService.pushWidgetUpdate(this@MainActivity)
                                 FirebaseAnalyticsManager.logThemeChanged(nextTheme.id)
                             }
                         }

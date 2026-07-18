@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Serveri në punë</string>
+    <string name="server_stopped">Serveri u ndal</string>
+    <string name="server_starting">Serveri po fillon…</string>
+    <string name="start_server">Nis serverin</string>
+    <string name="stop_server">Ndalo serverin</string>
+    <string name="notification_channel_name">Statusi i Serverit</string>
+    <string name="notification_channel_desc">Tregon statusin e funksionimit të serverit dhe kontrollet</string>
+    <string name="tap_to_copy">Prekni për të kopjuar IP</string>
+    <string name="copied">IP u kopjua në kujtesën e fragmenteve</string>
+    <string name="how_to_connect">Si të lidheni</string>
+    <string name="send_command">Dërgo komandën</string>
+    <string name="clear_log">Pastro regjistrin</string>
+    <string name="apply_restart">Apliko dhe rinis</string>
+    <string name="delete_world">Fshij të dhënat botërore</string>
+    <string name="delete_world_confirm">Kjo do ta fshijë përgjithmonë botën. je i sigurt?</string>
+    <string name="thermal_warning">Paralajmërim: Pajisja po mbinxehet — merrni parasysh ndalimin e serverit</string>
+    <string name="ram_warning">Paralajmërim: U zbulua RAM i ulët - performanca mund të degradohet</string>
+    <string name="players_online">%1$d/%2$d lojtarë</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Koha e funksionimit: %1$s</string>
+    <string name="announcement_title">Një shënim nga PocketCraft</string>
+    <string name="announcement_body">PocketCraft do të jetë falas përgjithmonë për të gjithë, por disa veçori janë në Pro vetëm për të mbështetur kostot e serverit tonë dhe kostot e funksionimit të aplikacionit. Ata janë të lirë, dhe kjo është arsyeja pse ata janë atje, duke përfshirë atë për më shumë vlerë. 
+ 
+ Nëse dëshironi të na ndihmoni, ose thjesht dëshironi të bisedoni me ekipin, bashkohuni me Discord tonë - do të donim t\'ju kishim.</string>
+    <string name="announcement_join_discord">Bashkohu me Discord</string>
+    <string name="announcement_got_it">E kuptova</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Սերվերը աշխատում է</string>
+    <string name="server_stopped">Սերվերը դադարեցրեց</string>
+    <string name="server_starting">Սերվերը սկսվում է…</string>
+    <string name="start_server">Սկսել սերվերը</string>
+    <string name="stop_server">Stop Server</string>
+    <string name="notification_channel_name">Սերվերի կարգավիճակ</string>
+    <string name="notification_channel_desc">Ցույց է տալիս սերվերի գործարկման կարգավիճակը և կառավարումը</string>
+    <string name="tap_to_copy">Հպեք՝ IP-ն պատճենելու համար</string>
+    <string name="copied">IP-ն պատճենվել է clipboard-ում</string>
+    <string name="how_to_connect">Ինչպես միանալ</string>
+    <string name="send_command">Ուղարկել հրաման</string>
+    <string name="clear_log">Մաքրել մատյան</string>
+    <string name="apply_restart">Դիմել և վերագործարկել</string>
+    <string name="delete_world">Ջնջել համաշխարհային տվյալները</string>
+    <string name="delete_world_confirm">Սա ընդմիշտ կջնջի աշխարհը: Համոզվա՞ծ ես։</string>
+    <string name="thermal_warning">Զգուշացում. սարքը գերտաքանում է. մտածեք դադարեցնել սերվերը</string>
+    <string name="ram_warning">Զգուշացում. Հայտնաբերվել է օպերատիվ հիշողության ցածր մակարդակ. գործունակությունը կարող է վատթարանալ</string>
+    <string name="players_online">%1$d/%2$d խաղացողներ</string>
+    <string name="tps_label">TPS՝ %1$.1f</string>
+    <string name="uptime_label">Գործողության ժամանակը՝ %1$s</string>
+    <string name="announcement_title">Գրառում PocketCraft-ից</string>
+    <string name="announcement_body">PocketCraft-ը ընդմիշտ անվճար կլինի բոլորի համար, սակայն որոշ գործառույթներ Pro-ում են, որպեսզի կարողանաք աջակցել մեր սերվերի և հավելվածի գործարկման ծախսերին: Նրանք էժան են, և դրա համար էլ նրանք այնտեղ են, այդ թվում՝ ավելի մեծ արժեքի համար: 
+ 
+ Եթե ցանկանում եք օգնել մեզ, կամ պարզապես ցանկանում եք զրուցել թիմի հետ, միացեք մեր Discord-ին, մենք կցանկանայինք ունենալ ձեզ:</string>
+    <string name="announcement_join_discord">Միացեք Discord-ին</string>
+    <string name="announcement_got_it">Հասկացա</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

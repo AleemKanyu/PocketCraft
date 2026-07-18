@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">서버 실행 중</string>
+    <string name="server_stopped">서버가 중지되었습니다</string>
+    <string name="server_starting">서버 시작 중…</string>
+    <string name="start_server">서버 시작</string>
+    <string name="stop_server">서버 중지</string>
+    <string name="notification_channel_name">서버 상태</string>
+    <string name="notification_channel_desc">서버 실행 상태 및 제어를 보여줍니다.</string>
+    <string name="tap_to_copy">IP를 복사하려면 탭하세요.</string>
+    <string name="copied">IP가 클립보드에 복사되었습니다.</string>
+    <string name="how_to_connect">연결 방법</string>
+    <string name="send_command">명령 보내기</string>
+    <string name="clear_log">로그 지우기</string>
+    <string name="apply_restart">적용 및 재시작</string>
+    <string name="delete_world">월드 데이터 삭제</string>
+    <string name="delete_world_confirm">월드가 영구적으로 삭제됩니다. 확실합니까?</string>
+    <string name="thermal_warning">경고: 장치가 과열되었습니다. 서버를 중지하는 것이 좋습니다.</string>
+    <string name="ram_warning">경고: RAM 부족이 감지되었습니다. 성능이 저하될 수 있습니다.</string>
+    <string name="players_online">%1$d/%2$d 선수</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">가동 시간: %1$s</string>
+    <string name="announcement_title">PocketCraft에서 보낸 메모</string>
+    <string name="announcement_body">PocketCraft은 모든 사람에게 영원히 무료로 제공되지만 서버 비용과 앱 실행 비용을 지원하기 위해 Pro에 일부 기능이 포함되어 있습니다. 가격이 저렴하기 때문에 더 많은 가치를 지닌 제품이 포함되어 있습니다. 
+ 
+ 우리를 돕고 싶거나 팀과 채팅하고 싶다면 Discord에 가입하세요. 우리는 여러분을 환영합니다.</string>
+    <string name="announcement_join_discord">디스코드에 합류하세요</string>
+    <string name="announcement_got_it">알겠습니다</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

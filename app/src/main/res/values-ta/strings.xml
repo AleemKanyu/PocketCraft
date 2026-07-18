@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">சர்வர் இயங்குகிறது</string>
+    <string name="server_stopped">சர்வர் நிறுத்தப்பட்டது</string>
+    <string name="server_starting">சர்வர் தொடங்குகிறது…</string>
+    <string name="start_server">சேவையகத்தைத் தொடங்கவும்</string>
+    <string name="stop_server">ஸ்டாப் சர்வர்</string>
+    <string name="notification_channel_name">சர்வர் நிலை</string>
+    <string name="notification_channel_desc">சர்வர் இயங்கும் நிலை மற்றும் கட்டுப்பாடுகளைக் காட்டுகிறது</string>
+    <string name="tap_to_copy">ஐபியை நகலெடுக்க தட்டவும்</string>
+    <string name="copied">ஐபி கிளிப்போர்டுக்கு நகலெடுக்கப்பட்டது</string>
+    <string name="how_to_connect">எப்படி இணைப்பது</string>
+    <string name="send_command">கட்டளையை அனுப்பு</string>
+    <string name="clear_log">தெளிவான பதிவு</string>
+    <string name="apply_restart">விண்ணப்பிக்கவும் &amp; மறுதொடக்கம் செய்யவும்</string>
+    <string name="delete_world">உலகத் தரவை நீக்கு</string>
+    <string name="delete_world_confirm">இது உலகை நிரந்தரமாக நீக்கும். நீங்கள் உறுதியாக இருக்கிறீர்களா?</string>
+    <string name="thermal_warning">எச்சரிக்கை: சாதனம் அதிக வெப்பமடைகிறது — சேவையகத்தை நிறுத்துவதைக் கவனியுங்கள்</string>
+    <string name="ram_warning">எச்சரிக்கை: குறைந்த ரேம் கண்டறியப்பட்டது — செயல்திறன் குறையக்கூடும்</string>
+    <string name="players_online">%1$d/%2$d வீரர்கள்</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">இயக்க நேரம்: %1$s</string>
+    <string name="announcement_title">PocketCraft இடமிருந்து ஒரு குறிப்பு</string>
+    <string name="announcement_body">PocketCraft அனைவருக்கும் எப்போதும் இலவசம், ஆனால் சில அம்சங்கள் புரோவில் இருப்பதால், எங்கள் சேவையக செலவுகள் மற்றும் பயன்பாட்டின் இயக்க செலவுகளை நீங்கள் ஆதரிக்கலாம். அவை மலிவானவை, அதனால்தான் அவை அதிக மதிப்புக்கு உட்படுகின்றன. 
+ 
+ நீங்கள் எங்களுக்கு உதவ விரும்பினால் அல்லது குழுவுடன் அரட்டையடிக்க விரும்பினால், எங்கள் டிஸ்கார்டில் சேரவும் — நாங்கள் உங்களைப் பெற விரும்புகிறோம்.</string>
+    <string name="announcement_join_discord">டிஸ்கார்டில் சேரவும்</string>
+    <string name="announcement_got_it">புரிந்தது</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

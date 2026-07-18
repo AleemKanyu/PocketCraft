@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Serveris veikia</string>
+    <string name="server_stopped">Serveris sustabdytas</string>
+    <string name="server_starting">Serveris paleidžiamas…</string>
+    <string name="start_server">Paleisti serverį</string>
+    <string name="stop_server">Sustabdyti serverį</string>
+    <string name="notification_channel_name">Serverio būsena</string>
+    <string name="notification_channel_desc">Rodo serverio veikimo būseną ir valdiklius</string>
+    <string name="tap_to_copy">Bakstelėkite, kad nukopijuotumėte IP</string>
+    <string name="copied">IP nukopijuotas į mainų sritį</string>
+    <string name="how_to_connect">Kaip prisijungti</string>
+    <string name="send_command">Siųsti komandą</string>
+    <string name="clear_log">Išvalyti žurnalą</string>
+    <string name="apply_restart">Taikyti ir paleisti iš naujo</string>
+    <string name="delete_world">Ištrinti pasaulio duomenis</string>
+    <string name="delete_world_confirm">Tai visam laikui ištrins pasaulį. Ar esi tikras?</string>
+    <string name="thermal_warning">Įspėjimas: įrenginys perkaista – apsvarstykite galimybę sustabdyti serverį</string>
+    <string name="ram_warning">Įspėjimas: aptikta mažai RAM – gali sumažėti našumas</string>
+    <string name="players_online">%1$d/%2$d žaidėjai</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Veikimo laikas: %1$s</string>
+    <string name="announcement_title">Pastaba iš PocketCraft
+–</string>
+    <string name="announcement_body">„PocketCraft“ bus nemokama visiems, tačiau kai kurios „Pro“ funkcijos yra tik tam, kad galėtumėte padengti serverio ir programos eksploatavimo išlaidas. Jie yra pigūs, todėl jie ten yra, įskaitant ir dėl didesnės vertės. 
+ 
+ Jei norite mums padėti arba tiesiog norite pabendrauti su komanda, prisijunkite prie mūsų „Discord“ – norėtume jūsų.</string>
+    <string name="announcement_join_discord">Prisijunkite prie „Discord“.</string>
+    <string name="announcement_got_it">Supratau</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

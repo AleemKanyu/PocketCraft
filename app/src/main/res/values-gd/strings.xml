@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Ruith an fhrithealaiche</string>
+    <string name="server_stopped">Sguir am frithealaiche</string>
+    <string name="server_starting">Frithealaiche a’ tòiseachadh…</string>
+    <string name="start_server">Tòisich am frithealaiche</string>
+    <string name="stop_server">Stad am frithealaiche</string>
+    <string name="notification_channel_name">Inbhe an Fhrithealaiche</string>
+    <string name="notification_channel_desc">A’ sealltainn inbhe ruith frithealaiche agus smachdan</string>
+    <string name="tap_to_copy">Tap air gus IP a chopaigeadh</string>
+    <string name="copied">IP air a chopaigeadh chun bhòrd bhidio</string>
+    <string name="how_to_connect">Mar a nì thu ceangal
+—</string>
+    <string name="send_command">Cuiribh àithne</string>
+    <string name="clear_log">Loga soilleir</string>
+    <string name="apply_restart">Cuir a-steach &amp; ath-thòiseachadh</string>
+    <string name="delete_world">Cuir às do dhàta an t-saoghail</string>
+    <string name="delete_world_confirm">Sguabaidh seo às an saoghal gu maireannach. A bheil thu cinnteach?</string>
+    <string name="thermal_warning">Rabhadh: Tha an inneal ro theth - smaoinich air stad a chuir air an fhrithealaiche</string>
+    <string name="ram_warning">Rabhadh: RAM ìosal air a lorg - dh’ fhaodadh coileanadh a bhith air a lughdachadh</string>
+    <string name="players_online">%1$d/%2$d cluicheadairean</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Uptime: %1$s</string>
+    <string name="announcement_title">Nòta o PocketCraft</string>
+    <string name="announcement_body">Bidh PocketCraft an-asgaidh gu bràth airson a h-uile duine, ach tha cuid de fheartan ann am Pro dìreach gus an urrainn dhut taic a thoirt do chosgaisean an fhrithealaiche againn agus cosgaisean ruith na h-aplacaid. Tha iad saor, agus is ann air sgàth sin a tha iad ann, a’ toirt a-steach sin airson barrachd luach. 
+ 
+ Ma tha thu airson ar cuideachadh, no dìreach airson cabadaich leis an sgioba, thig còmhla ris an Discord againn - bu mhath leinn do bhith againn.</string>
+    <string name="announcement_join_discord">Thig còmhla ri Discord</string>
+    <string name="announcement_got_it">Fhuair e</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

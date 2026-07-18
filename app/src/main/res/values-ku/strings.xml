@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server Dikeve</string>
+    <string name="server_stopped">Server Rawestiya</string>
+    <string name="server_starting">Pêşkêşkar dest pê dike…</string>
+    <string name="start_server">Pêşkêşkarê dest pê bike</string>
+    <string name="stop_server">Pêşkêşkara Rawestîne</string>
+    <string name="notification_channel_name">Rewşa Server</string>
+    <string name="notification_channel_desc">Rewş û kontrolên serverê nîşan dide</string>
+    <string name="tap_to_copy">Ji bo kopîkirina IP-ê bikirtînin</string>
+    <string name="copied">IP li clipboard hate kopî kirin</string>
+    <string name="how_to_connect">Meriv çawa tê girêdan</string>
+    <string name="send_command">Fermana bişîne</string>
+    <string name="clear_log">Têketinê paqij bike</string>
+    <string name="apply_restart">Serlêdan &amp; Ji nû ve bidin destpêkirin</string>
+    <string name="delete_world">Daneyên Cîhanê jêbirin</string>
+    <string name="delete_world_confirm">Ev ê cîhanê bi domdarî jê bibe. Piştrastin?</string>
+    <string name="thermal_warning">Hişyarî: Alav zêde germ dibe - rawestana serverê bifikirin</string>
+    <string name="ram_warning">Hişyarî: RAM-a kêm hate tespît kirin - dibe ku performans kêm bibe</string>
+    <string name="players_online">%1$d/%2$d lîstikvan</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Dema xebatê: %1$s</string>
+    <string name="announcement_title">Nîşeyek ji PocketCraft</string>
+    <string name="announcement_body">PocketCraft dê her û her ji bo her kesî belaş be, lê hin taybetmendî di Pro de hene tenê ji bo ku hûn piştgirî bidin lêçûnên servera me û lêçûnên xebitandina sepanê. Ew erzan in, û ji ber vê yekê ew li wir in, di nav de ew ji bo nirxek bêtir. 
+ 
+ Ger hûn dixwazin alîkariya me bikin, an jî tenê dixwazin bi tîmê re sohbet bikin, beşdarî Discord-a me bibin - em ji we hez dikin.</string>
+    <string name="announcement_join_discord">Tevlî Discord bibin</string>
+    <string name="announcement_got_it">Fêm kir</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

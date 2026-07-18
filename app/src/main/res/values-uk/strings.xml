@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Сервер працює</string>
+    <string name="server_stopped">Сервер зупинено</string>
+    <string name="server_starting">Сервер запускається…</string>
+    <string name="start_server">Запустити сервер</string>
+    <string name="stop_server">Зупинити сервер</string>
+    <string name="notification_channel_name">Статус сервера</string>
+    <string name="notification_channel_desc">Показує стан роботи сервера та елементи керування</string>
+    <string name="tap_to_copy">Натисніть, щоб скопіювати IP</string>
+    <string name="copied">IP скопійовано в буфер обміну</string>
+    <string name="how_to_connect">Як підключитися</string>
+    <string name="send_command">Надіслати команду</string>
+    <string name="clear_log">Очистити журнал</string>
+    <string name="apply_restart">Застосувати та перезапустити</string>
+    <string name="delete_world">Видалити світові дані</string>
+    <string name="delete_world_confirm">Це назавжди видалить світ. Ви впевнені?</string>
+    <string name="thermal_warning">Попередження: пристрій перегрівається — зупиніть сервер</string>
+    <string name="ram_warning">Попередження: виявлено брак оперативної пам\'яті — продуктивність може бути знижена</string>
+    <string name="players_online">%1$d/%2$d гравців</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Час роботи: %1$s</string>
+    <string name="announcement_title">Примітка від PocketCraft</string>
+    <string name="announcement_body">PocketCraft буде назавжди безкоштовним для всіх, але деякі функції доступні в Pro лише для того, щоб ви могли покрити наші витрати на сервер і експлуатаційні витрати програми. Вони дешеві, і тому вони там, в тому числі для більшої вартості. 
+ 
+ Якщо ви хочете допомогти нам або просто хочете поспілкуватися з командою, приєднуйтесь до нашого Discord — ми будемо раді вам.</string>
+    <string name="announcement_join_discord">Приєднуйтесь до Discord</string>
+    <string name="announcement_got_it">Зрозуміло</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

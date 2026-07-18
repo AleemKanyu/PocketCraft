@@ -19,14 +19,23 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const admin = require('firebase-admin');
-const { resolveSubdomainRoute } = require('./hostname-router');
+const { resolveSubdomainRoute, parseRegionalHostname } = require('./hostname-router');
+const { createJavaSLPResponseDirect, createJavaPongResponse, readPacket } = require('./java-ping');
 
 const LISTEN_PORT = Number(process.env.SUBDOMAIN_LISTEN_PORT || 25565);
 const CONTROL_API_BASE = process.env.CONTROL_API_BASE || 'http://127.0.0.1:8080';
 const BASE_DOMAIN = process.env.SUBDOMAIN_BASE_DOMAIN || 'pocketcraft.online';
-const HANDSHAKE_TIMEOUT_MS = 5_000;
+const HANDSHAKE_TIMEOUT_MS = 3_000;
 const MAX_HANDSHAKE_BYTES = 1024;
-const BACKEND_CONNECT_TIMEOUT_MS = 5_000;
+const BACKEND_CONNECT_TIMEOUT_MS = 3_000;
+// Reduced from 128KB: smaller HWM fires data events sooner, lowering Java player ping.
+const STREAM_HIGH_WATER_MARK = 16 * 1024; // Match index.js
+
+// Short-lived cache for relay /status responses.
+// Prevents a burst of simultaneous joins from all making individual HTTP calls.
+const STATUS_CACHE_TTL_MS = 5_000;
+let _cachedStatus = null;
+let _cachedStatusAt = 0;
 
 // --- Firebase Admin init (separate credential from the app/functions side) ---
 // Supports either FIREBASE_SERVICE_ACCOUNT_JSON or a colocated service-account.json
@@ -67,9 +76,9 @@ function readVarInt(buf, offset) {
 }
 
 // Returns:
-//   { status: 'incomplete' }                            - need more bytes, keep buffering
-//   { status: 'invalid' }                               - not a parseable handshake, drop
-//   { status: 'ok', hostname, nextState, totalLength }  - parsed; totalLength = bytes to replay
+//   { status: 'incomplete' }                - need more bytes, keep buffering
+//   { status: 'invalid' }                   - not a parseable handshake, drop
+//   { status: 'ok', hostname, totalLength } - parsed; totalLength = bytes to replay
 function tryParseHandshake(buf) {
   const lenRes = readVarInt(buf, 0);
   if (!lenRes) return { status: 'incomplete' };
@@ -102,7 +111,7 @@ function tryParseHandshake(buf) {
   offset += strLen;
 
   if (offset + 2 > packetStart + packetLength) return { status: 'invalid' };
-  offset += 2;
+  offset += 2; // skip port
 
   const nextStateRes = readVarInt(buf, offset);
   if (!nextStateRes || nextStateRes.invalid) return { status: 'invalid' };
@@ -113,7 +122,7 @@ function tryParseHandshake(buf) {
 
 // --- Relay status lookup (read-only, existing endpoint) ---
 
-function fetchRelayStatus() {
+function fetchRelayStatusFromNetwork() {
   return new Promise((resolve, reject) => {
     const req = http.get(`${CONTROL_API_BASE}/status`, (res) => {
       let data = '';
@@ -131,145 +140,74 @@ function fetchRelayStatus() {
   });
 }
 
-// --- Minecraft SLP status response builders ---
-
-function readPacketVarInt(buf, offset = 0) {
-  let val = 0;
-  let shift = 0;
-  for (let i = 0; i < 5; i++) {
-    if (offset + i >= buf.length) return null;
-    const byte = buf[offset + i];
-    val |= (byte & 0x7f) << shift;
-    if ((byte & 0x80) === 0) {
-      return { value: val, size: i + 1 };
-    }
-    shift += 7;
+async function fetchRelayStatus() {
+  const now = Date.now();
+  if (_cachedStatus && (now - _cachedStatusAt) < STATUS_CACHE_TTL_MS) {
+    return _cachedStatus;
   }
-  return null;
+  const status = await fetchRelayStatusFromNetwork();
+  _cachedStatus = status;
+  _cachedStatusAt = Date.now();
+  return status;
 }
 
-function readPacket(buf, offset = 0) {
-  const lengthVarInt = readPacketVarInt(buf, offset);
-  if (!lengthVarInt) return null;
-  const payloadStart = offset + lengthVarInt.size;
-  const payloadEnd = payloadStart + lengthVarInt.value;
-  if (payloadEnd > buf.length) return null;
-  const packetIdVarInt = readPacketVarInt(buf, payloadStart);
-  if (!packetIdVarInt) return null;
-  return {
-    packetId: packetIdVarInt.value,
-    payload: buf.subarray(payloadStart + packetIdVarInt.size, payloadEnd),
-    nextOffset: payloadEnd
+// Backpressure-aware pipe — mirrors wireBackpressure() in index.js.
+// Raw .pipe() doesn't respect TCP backpressure, causing buffer bloat and
+// elevated RTT when chunk throughput is high (e.g. during chunk loading).
+function wirePipe(src, dst) {
+  const onData = (chunk) => {
+    if (dst.destroyed) return;
+    const ok = dst.write(chunk);
+    if (!ok) src.pause();
   };
-}
-
-function varIntBuffer(val) {
-  const bytes = [];
-  while (true) {
-    let byte = val & 0x7f;
-    val >>>= 7;
-    if (val !== 0) byte |= 0x80;
-    bytes.push(byte);
-    if (val === 0) break;
-  }
-  return Buffer.from(bytes);
-}
-
-function wrapPacket(packetId, payload = Buffer.alloc(0)) {
-  const packetIdBuf = varIntBuffer(packetId);
-  const dataLenBuf = varIntBuffer(packetIdBuf.length + payload.length);
-  return Buffer.concat([dataLenBuf, packetIdBuf, payload]);
-}
-
-function createCustomJavaSLPResponse(motd) {
-  const responseObj = {
-    version: { name: 'PocketCraft', protocol: 774 },
-    players: { max: 0, online: 0, sample: [] },
-    description: { text: motd }
+  const onDrain = () => {
+    if (!src.destroyed) src.resume();
   };
-  const jsonStr = JSON.stringify(responseObj);
-  const jsonBuf = Buffer.from(jsonStr, 'utf8');
-  const jsonLen = varIntBuffer(jsonBuf.length);
-  return wrapPacket(0x00, Buffer.concat([jsonLen, jsonBuf]));
-}
-
-function createJavaPongResponse(payload) {
-  return wrapPacket(0x01, payload);
-}
-
-function handleOfflineStatusPackets(socket, motd, initialBuffer) {
-  let buffer = Buffer.from(initialBuffer || Buffer.alloc(0));
-  let respondedToStatus = false;
-  let closed = false;
-  const closeSoon = (delayMs = 100) => {
-    if (closed) return;
-    closed = true;
-    setTimeout(() => { if (!socket.destroyed) socket.end(); }, delayMs);
+  src.on('data', onData);
+  dst.on('drain', onDrain);
+  return () => {
+    src.removeListener('data', onData);
+    dst.removeListener('drain', onDrain);
   };
-  const timeout = setTimeout(() => closeSoon(0), 5000);
-  const processBufferedPackets = () => {
-    let offset = 0;
-    while (offset < buffer.length) {
-      const packet = readPacket(buffer, offset);
-      if (!packet) break;
-      offset = packet.nextOffset;
-      if (packet.packetId === 0x00 && !respondedToStatus) {
-        respondedToStatus = true;
-        socket.write(createCustomJavaSLPResponse(motd));
-        continue;
-      }
-      if (packet.packetId === 0x01 && packet.payload.length >= 8) {
-        socket.write(createJavaPongResponse(packet.payload.subarray(0, 8)));
-        clearTimeout(timeout);
-        closeSoon(100);
-        continue;
-      }
-    }
-    if (offset > 0) buffer = buffer.subarray(offset);
-  };
-  socket.on('data', (chunk) => {
-    if (!chunk || chunk.length === 0) return;
-    buffer = Buffer.concat([buffer, chunk]);
-    processBufferedPackets();
-  });
-  socket.on('close', () => clearTimeout(timeout));
-  socket.on('error', () => clearTimeout(timeout));
-  processBufferedPackets();
-}
-
-function respondError(playerSocket, nextState, remainingBytes, message) {
-  if (nextState === 1) {
-    handleOfflineStatusPackets(playerSocket, message, remainingBytes);
-  } else {
-    playerSocket.destroy();
-  }
 }
 
 // --- Routing ---
 
-async function routeConnection(playerSocket, bufferedBytes, hostname, nextState, remainingBytes) {
+async function routeConnection(playerSocket, fullBuffer, handshakeLength, hostname) {
+  const bufferedBytes = fullBuffer.subarray(0, handshakeLength);
+  const extraBytes = fullBuffer.subarray(handshakeLength);
   let result;
   try {
     result = await resolveSubdomainRoute({ hostname, firestore, baseDomain: BASE_DOMAIN });
   } catch (err) {
     console.error(`[subdomain-listener] Firestore lookup failed for ${hostname}:`, err.message);
-    respondError(playerSocket, nextState, remainingBytes, `§c[PocketCraft] Database error.`);
-    return;
+    const parsed = parseRegionalHostname(hostname, BASE_DOMAIN);
+    if (parsed && parsed.subdomain) {
+      console.warn(`[subdomain-listener] FALLBACK: Routing connection to subdomain "${parsed.subdomain}" directly as ownerId`);
+      result = {
+        ok: true,
+        route: {
+          subdomain: parsed.subdomain,
+          region: parsed.region,
+          ownerId: parsed.subdomain,
+        }
+      };
+    } else {
+      playerSocket.destroy();
+      return;
+    }
   }
 
   if (!result.ok) {
     console.warn(`[subdomain-listener] Rejecting ${hostname}: ${result.code}`);
-    const msg = (result.code === 'invalid-hostname')
-      ? `§c[PocketCraft] Please use your custom subdomain!`
-      : `§c[PocketCraft] Subdomain not found: ${hostname}`;
-    respondError(playerSocket, nextState, remainingBytes, msg);
+    playerSocket.destroy();
     return;
   }
 
   const ownerId = result.route.ownerId;
   if (!ownerId) {
     console.warn(`[subdomain-listener] No ownerId for subdomain ${result.route.subdomain}`);
-    respondError(playerSocket, nextState, remainingBytes, `§c[PocketCraft] Subdomain has no owner.`);
+    playerSocket.destroy();
     return;
   }
 
@@ -278,26 +216,25 @@ async function routeConnection(playerSocket, bufferedBytes, hostname, nextState,
     status = await fetchRelayStatus();
   } catch (err) {
     console.error('[subdomain-listener] Failed to fetch relay status:', err.message);
-    respondError(playerSocket, nextState, remainingBytes, `§c[PocketCraft] Relay status error.`);
+    playerSocket.destroy();
     return;
   }
 
   const entry = status[ownerId];
   if (!entry || !entry.port) {
     console.warn(`[subdomain-listener] No active tunnel for owner ${ownerId} (subdomain ${result.route.subdomain})`);
-    respondError(playerSocket, nextState, remainingBytes, `§c[PocketCraft] Server is offline (not started in app).`);
+    playerSocket.destroy();
     return;
   }
 
-  const backendSocket = net.connect({ host: '127.0.0.1', port: entry.port, timeout: BACKEND_CONNECT_TIMEOUT_MS });
+  const backendSocket = net.connect({
+    host: '127.0.0.1',
+    port: entry.port,
+    timeout: BACKEND_CONNECT_TIMEOUT_MS,
+    allowHalfOpen: false,
+  });
   playerSocket.setNoDelay(true);
   playerSocket.setKeepAlive(true, 10000);
-  if (typeof playerSocket.setSendBufferSize === 'function') {
-    try { playerSocket.setSendBufferSize(64 * 1024); } catch (e) {}
-  }
-  if (typeof playerSocket.setRecvBufferSize === 'function') {
-    try { playerSocket.setRecvBufferSize(64 * 1024); } catch (e) {}
-  }
 
   const cleanup = () => {
     if (!playerSocket.destroyed) playerSocket.destroy();
@@ -307,18 +244,20 @@ async function routeConnection(playerSocket, bufferedBytes, hostname, nextState,
   backendSocket.once('connect', () => {
     backendSocket.setNoDelay(true);
     backendSocket.setKeepAlive(true, 10000);
-    if (typeof backendSocket.setSendBufferSize === 'function') {
-      try { backendSocket.setSendBufferSize(64 * 1024); } catch (e) {}
+    // Write the buffered handshake bytes first, then write any extra payload bytes
+    // that arrived alongside the handshake, and finally wire bidirectional piping.
+    if (!backendSocket.destroyed) {
+      backendSocket.write(bufferedBytes);
+      if (extraBytes.length > 0) {
+        backendSocket.write(extraBytes);
+      }
     }
-    if (typeof backendSocket.setRecvBufferSize === 'function') {
-      try { backendSocket.setRecvBufferSize(64 * 1024); } catch (e) {}
-    }
-    backendSocket.write(bufferedBytes);
-    if (remainingBytes && remainingBytes.length > 0) {
-      backendSocket.write(remainingBytes);
-    }
-    playerSocket.pipe(backendSocket);
-    backendSocket.pipe(playerSocket);
+    const unwire1 = wirePipe(playerSocket, backendSocket);
+    const unwire2 = wirePipe(backendSocket, playerSocket);
+    const fullCleanup = () => { unwire1(); unwire2(); cleanup(); };
+    playerSocket.once('close', fullCleanup);
+    backendSocket.once('close', fullCleanup);
+    playerSocket.resume();
     console.log(`[subdomain-listener] Routed ${hostname} -> 127.0.0.1:${entry.port} (owner=${ownerId})`);
   });
 
@@ -335,17 +274,115 @@ async function routeConnection(playerSocket, bufferedBytes, hostname, nextState,
   backendSocket.on('close', cleanup);
 }
 
-// --- TCP listener ---
+// --- TCP listener (separate port, separate process — index.js untouched) ---
 
-const server = net.createServer((playerSocket) => {
+function sendSLPAndPong(socket, status, initialBuffer) {
+  let buffer = Buffer.from(initialBuffer || Buffer.alloc(0));
+  let respondedToStatus = false;
+  let closed = false;
+
+  const closeSoon = (delayMs = 100) => {
+    if (closed) return;
+    closed = true;
+    setTimeout(() => {
+      if (!socket.destroyed) socket.end();
+    }, delayMs);
+  };
+
+  const timeout = setTimeout(() => closeSoon(0), 2000);
+
+  const processBufferedPackets = () => {
+    let offset = 0;
+    while (offset < buffer.length) {
+      const packet = readPacket(buffer, offset);
+      if (!packet) break;
+
+      offset = packet.nextOffset;
+
+      if (packet.packetId === 0x00 && !respondedToStatus) {
+        respondedToStatus = true;
+        socket.write(createJavaSLPResponseDirect(status));
+        continue;
+      }
+
+      if (packet.packetId === 0x01 && packet.payload.length >= 8) {
+        socket.write(createJavaPongResponse(packet.payload.subarray(0, 8)));
+        clearTimeout(timeout);
+        closeSoon(100);
+        continue;
+      }
+    }
+
+    if (offset > 0) {
+      buffer = buffer.subarray(offset);
+    }
+  };
+
+  socket.on('data', (chunk) => {
+    if (!chunk || chunk.length === 0) return;
+    buffer = Buffer.concat([buffer, chunk]);
+    processBufferedPackets();
+  });
+
+  socket.on('close', () => clearTimeout(timeout));
+  socket.on('error', () => clearTimeout(timeout));
+
+  socket.resume();
+  processBufferedPackets();
+}
+
+async function handleCloudStatusPing(playerSocket, fullBuffer, handshakeLength, hostname) {
+  const remaining = fullBuffer.subarray(handshakeLength);
+  let result;
+  try {
+    result = await resolveSubdomainRoute({ hostname, firestore, baseDomain: BASE_DOMAIN });
+  } catch (err) {
+    console.error(`[subdomain-listener] Firestore lookup failed for ping ${hostname}:`, err.message);
+    const parsed = parseRegionalHostname(hostname, BASE_DOMAIN);
+    if (parsed && parsed.subdomain) {
+      result = { ok: true, route: { ownerId: parsed.subdomain } };
+    } else {
+      playerSocket.destroy();
+      return;
+    }
+  }
+
+  if (!result.ok || !result.route.ownerId) {
+    playerSocket.destroy();
+    return;
+  }
+
+  const ownerId = result.route.ownerId;
+  let status;
+  try {
+    status = await fetchRelayStatus();
+  } catch (err) {
+    console.error('[subdomain-listener] Failed to fetch status for ping:', err.message);
+    playerSocket.destroy();
+    return;
+  }
+
+  const entry = status[ownerId];
+  if (!entry) {
+    const offlineStatus = {
+      version: '1.21.11',
+      motd: '§cServer is offline',
+      players: 0,
+      maxPlayers: 20
+    };
+    sendSLPAndPong(playerSocket, offlineStatus, remaining);
+    return;
+  }
+
+  sendSLPAndPong(playerSocket, entry, remaining);
+}
+
+const server = net.createServer({
+  allowHalfOpen: false,
+  highWaterMark: STREAM_HIGH_WATER_MARK,
+}, (playerSocket) => {
   playerSocket.setNoDelay(true);
   playerSocket.setKeepAlive(true, 10000);
-  if (typeof playerSocket.setSendBufferSize === 'function') {
-    try { playerSocket.setSendBufferSize(64 * 1024); } catch (e) {}
-  }
-  if (typeof playerSocket.setRecvBufferSize === 'function') {
-    try { playerSocket.setRecvBufferSize(64 * 1024); } catch (e) {}
-  }
   let buffer = Buffer.alloc(0);
   let settled = false;
 
@@ -371,6 +408,7 @@ const server = net.createServer((playerSocket) => {
     if (parsed.status === 'incomplete') return;
 
     playerSocket.removeListener('data', onData);
+    playerSocket.pause(); // Pause so we do not lose subsequent network chunks while routing async
     clearTimeout(timeout);
 
     if (parsed.status !== 'ok') {
@@ -380,16 +418,20 @@ const server = net.createServer((playerSocket) => {
     }
 
     settled = true;
-    routeConnection(
-      playerSocket,
-      buffer.subarray(0, parsed.totalLength),
-      parsed.hostname,
-      parsed.nextState,
-      buffer.subarray(parsed.totalLength)
-    ).catch((err) => {
-      console.error('[subdomain-listener] Unexpected routing error:', err.message);
-      if (!playerSocket.destroyed) playerSocket.destroy();
-    });
+    if (parsed.nextState === 1) {
+      handleCloudStatusPing(playerSocket, buffer, parsed.totalLength, parsed.hostname)
+        .catch((err) => {
+          console.error('[subdomain-listener] Cloud status ping error:', err.message);
+          if (!playerSocket.destroyed) playerSocket.destroy();
+        });
+      return;
+    }
+
+    routeConnection(playerSocket, buffer, parsed.totalLength, parsed.hostname)
+      .catch((err) => {
+        console.error('[subdomain-listener] Unexpected routing error:', err.message);
+        if (!playerSocket.destroyed) playerSocket.destroy();
+      });
   };
 
   playerSocket.on('data', onData);

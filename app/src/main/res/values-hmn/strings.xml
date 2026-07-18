@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server khiav</string>
+    <string name="server_stopped">Neeg rau zaub mov nres</string>
+    <string name="server_starting">Server Starting…</string>
+    <string name="start_server">Pib Server</string>
+    <string name="stop_server">Nres Server</string>
+    <string name="notification_channel_name">Server Status</string>
+    <string name="notification_channel_desc">Qhia neeg rau zaub mov khiav raws li txoj cai thiab tswj</string>
+    <string name="tap_to_copy">Coj mus rhaub kom luam IP</string>
+    <string name="copied">IP theej rau cov ntawv teev cia</string>
+    <string name="how_to_connect">Yuav Txuas Li Cas</string>
+    <string name="send_command">Xa lus txib</string>
+    <string name="clear_log">Clear Log</string>
+    <string name="apply_restart">Thov &amp; Restart</string>
+    <string name="delete_world">Rho tawm Cov Ntaub Ntawv Ntiaj Teb</string>
+    <string name="delete_world_confirm">Qhov no yuav tshem tawm lub ntiaj teb mus tas li. Koj puas paub tseeb?</string>
+    <string name="thermal_warning">Ceeb Toom: Cov cuab yeej kub dhau - xav txog kev txwv lub server</string>
+    <string name="ram_warning">Ceeb toom: Tsawg RAM kuaj pom - kev ua haujlwm yuav raug degraded</string>
+    <string name="players_online">%1$d/%2$d players</string>
+    <string name="tps_label">TSI: %1$.1f</string>
+    <string name="uptime_label">Lub Sijhawm Ua Haujlwm: %1$s</string>
+    <string name="announcement_title">Ib daim ntawv los ntawm PocketCraft</string>
+    <string name="announcement_body">PocketCraft yuav pub dawb mus ib txhis rau txhua tus, tab sis qee qhov nta muaj nyob hauv Pro tsuas yog kom koj tuaj yeem pab txhawb peb cov nqi server thiab cov nqi khiav app. Lawv pheej yig, thiab yog vim li cas lawv nyob rau hauv, nrog rau cov nqi ntau dua. 
+ 
+ Yog tias koj xav pab peb, lossis tsuas yog xav tham nrog pab pawg, koom nrog peb Discord — peb xav kom koj muaj.</string>
+    <string name="announcement_join_discord">Koom nrog Discord</string>
+    <string name="announcement_got_it">Tau</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

@@ -119,3 +119,7 @@
 # Protobuf Rules
 -keep class com.google.protobuf.** { *; }
 -dontwarn com.google.protobuf.**
+
+# AppStrings keep rule for Gson translation mapping
+-keep class com.pocketcraft.server.util.AppStrings { *; }
+

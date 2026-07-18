@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Διακομιστής σε λειτουργία</string>
+    <string name="server_stopped">Ο διακομιστής σταμάτησε</string>
+    <string name="server_starting">Έναρξη διακομιστή…</string>
+    <string name="start_server">Έναρξη διακομιστή</string>
+    <string name="stop_server">Διακοπή διακομιστή</string>
+    <string name="notification_channel_name">Κατάσταση διακομιστή</string>
+    <string name="notification_channel_desc">Εμφανίζει την κατάσταση λειτουργίας του διακομιστή και τα στοιχεία ελέγχου</string>
+    <string name="tap_to_copy">Πατήστε για αντιγραφή IP</string>
+    <string name="copied">Η IP αντιγράφηκε στο πρόχειρο</string>
+    <string name="how_to_connect">Πώς να συνδεθείτε</string>
+    <string name="send_command">Αποστολή εντολής</string>
+    <string name="clear_log">Εκκαθάριση αρχείου καταγραφής</string>
+    <string name="apply_restart">Εφαρμογή και επανεκκίνηση</string>
+    <string name="delete_world">Διαγραφή παγκόσμιων δεδομένων</string>
+    <string name="delete_world_confirm">Αυτό θα διαγράψει οριστικά τον κόσμο. Είσαι σίγουρος;</string>
+    <string name="thermal_warning">Προειδοποίηση: Η συσκευή υπερθερμαίνεται — εξετάστε το ενδεχόμενο διακοπής του διακομιστή</string>
+    <string name="ram_warning">Προειδοποίηση: Εντοπίστηκε χαμηλή μνήμη RAM — η απόδοση μπορεί να υποβαθμιστεί</string>
+    <string name="players_online">%1$d/%2$d παίκτες</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Χρόνος λειτουργίας: %1$s</string>
+    <string name="announcement_title">Μια σημείωση από το PocketCraft</string>
+    <string name="announcement_body">Το PocketCraft θα είναι δωρεάν για πάντα για όλους, αλλά ορισμένες λειτουργίες είναι στο Pro μόνο και μόνο για να μπορείτε να υποστηρίξετε το κόστος του διακομιστή μας και το κόστος λειτουργίας της εφαρμογής. Είναι φθηνά, και γι\' αυτό είναι εκεί, συμπεριλαμβανομένου αυτού για μεγαλύτερη αξία. 
+ 
+ Εάν θέλετε να μας βοηθήσετε ή απλά θέλετε να συνομιλήσετε με την ομάδα, εγγραφείτε στο Discord μας — θα θέλαμε πολύ να σας έχουμε.</string>
+    <string name="announcement_join_discord">Εγγραφείτε στο Discord</string>
+    <string name="announcement_got_it">Κατάλαβα</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

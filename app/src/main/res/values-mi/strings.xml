@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">E Rere ana te Tūmau</string>
+    <string name="server_stopped">Tūmau Tūmau</string>
+    <string name="server_starting">Ka timata te Tūmau…</string>
+    <string name="start_server">Tīmata Tūmau</string>
+    <string name="stop_server">Kati te Tūmau</string>
+    <string name="notification_channel_name">Tūnga Tūmau</string>
+    <string name="notification_channel_desc">Ka whakaatu i te mana whakahaere me nga mana whakahaere</string>
+    <string name="tap_to_copy">Paoa ki te kape IP</string>
+    <string name="copied">I tāruahia te IP ki te papatopenga</string>
+    <string name="how_to_connect">Me pehea te hono</string>
+    <string name="send_command">Tukua Whakahau</string>
+    <string name="clear_log">Maama Rangitaki</string>
+    <string name="apply_restart">Hoatu &amp; Whakahoutia</string>
+    <string name="delete_world">Muku Raraunga Ao</string>
+    <string name="delete_world_confirm">Ma tenei ka mukua te ao. Kei te tino mohio koe?</string>
+    <string name="thermal_warning">Whakatupato: Kei te wera rawa te taputapu — whakaaroa te whakamutu i te tūmau</string>
+    <string name="ram_warning">Whakatupato: Kua kitea te iti o te RAM — ka heke te mahi</string>
+    <string name="players_online">%1$d/%2$d kaitākaro</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Wā mahi: %1$s</string>
+    <string name="announcement_title">He tuhipoka na PocketCraft</string>
+    <string name="announcement_body">Ka noho kore utu a PocketCraft mo ake tonu atu mo te katoa, engari ko etahi ahuatanga kei roto i te Pro kia taea ai e koe te tautoko i a maatau utu tūmau me nga utu whakahaere taupānga. He iti te utu, no reira kei roto ratou, tae atu ki tera mo te utu nui ake. 
+ 
+ Mena kei te pirangi koe ki te awhina i a matou, ki te hiahia noa ranei ki te korerorero ki te roopu, uru mai ki ta matou Discord — kei te pirangi matou ki a koe.</string>
+    <string name="announcement_join_discord">Hono atu ki Discord</string>
+    <string name="announcement_got_it">Kua whiwhi</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

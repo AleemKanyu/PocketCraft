@@ -492,7 +492,7 @@ object ServerWidgetUpdater {
             .ifBlank { AppPreferencesStore.getSelectedVersionFlow(context).first().orEmpty() }
         val selectedWorld = AppPreferencesStore.getSelectedWorldFlow(context).first()
         val activeWorld = ServerHostService.getPersistedActiveWorld(context).ifBlank { selectedWorld }
-        val resolvedStatus = resolveStatus(context, versionId)
+        val resolvedStatus = resolveStatus(context, versionId, activeWorld)
         val status = when {
             resolvedStatus == ServerHostService.RUNTIME_STATE_RUNNING -> resolvedStatus
             resolvedStatus == ServerHostService.RUNTIME_STATE_OFFLINE && statusOverride == "stopping" -> statusOverride
@@ -522,9 +522,18 @@ object ServerWidgetUpdater {
         )
     }
 
-    fun resolveStatus(context: Context, versionId: String): String {
+    fun resolveStatus(context: Context, versionId: String, activeWorld: String): String {
         if (versionId.isBlank()) return ServerHostService.RUNTIME_STATE_OFFLINE
-        return ServerHostService.getPersistedRuntimeState(context, versionId)
+        val persisted = ServerHostService.getPersistedRuntimeState(context, versionId)
+        val serviceRunning = ServerHostService.isServiceRunning(context)
+        val portOpen = isLocalServerPortOpen(context, activeWorld)
+
+        return when {
+            serviceRunning && portOpen -> ServerHostService.RUNTIME_STATE_RUNNING
+            serviceRunning && persisted == ServerHostService.RUNTIME_STATE_OFFLINE -> ServerHostService.RUNTIME_STATE_STARTING
+            !serviceRunning -> ServerHostService.RUNTIME_STATE_OFFLINE
+            else -> persisted
+        }
     }
 
     private fun readMaxPlayers(context: Context, worldName: String): Int {
@@ -535,6 +544,22 @@ object ServerWidgetUpdater {
             runCatching { propsFile.inputStream().use(props::load) }
         }
         return props.getProperty("max-players", "10").toIntOrNull()?.coerceIn(1, 50) ?: 10
+    }
+
+    private fun isLocalServerPortOpen(context: Context, worldName: String): Boolean {
+        val serverDir = ServerFileManager.getServerDir(context, worldName.ifBlank { "world" })
+        val propsFile = File(serverDir, "server.properties")
+        val props = Properties()
+        if (propsFile.exists()) {
+            runCatching { propsFile.inputStream().use(props::load) }
+        }
+        val port = props.getProperty("server-port", "25565").toIntOrNull() ?: 25565
+        return runCatching {
+            java.net.Socket().use { socket ->
+                socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 700)
+                true
+            }
+        }.getOrDefault(false)
     }
 
 }

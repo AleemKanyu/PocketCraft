@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">I-PocketCraft</string>
+    <string name="server_running">Umncedisi osebenzayo</string>
+    <string name="server_stopped">Umncedisi umisiwe</string>
+    <string name="server_starting">Iseva IyaQalisa...</string>
+    <string name="start_server">Qalisa Umncedisi</string>
+    <string name="stop_server">Misa umncedisi</string>
+    <string name="notification_channel_name">Isimo somncedisi</string>
+    <string name="notification_channel_desc">Ibonisa imo yokusebenza yomncedisi kunye nolawulo</string>
+    <string name="tap_to_copy">Cofa ukukopa i-IP</string>
+    <string name="copied">IP ikopishwe kwibhodi eqhotyoshwayo</string>
+    <string name="how_to_connect">Indlela Connect</string>
+    <string name="send_command">Thumela Umyalelo</string>
+    <string name="clear_log">Sula iLog</string>
+    <string name="apply_restart">Faka kwaye uqalise kwakhona</string>
+    <string name="delete_world">Cima iDatha yehlabathi</string>
+    <string name="delete_world_confirm">Oku kuya kulicima ngokusisigxina ihlabathi. Ingaba uqinisekile?</string>
+    <string name="thermal_warning">Isilumkiso: Isixhobo sishushu kakhulu — cinga ngokumisa umncedisi</string>
+    <string name="ram_warning">Isilumkiso: I-RAM ephantsi ichongiwe - ukusebenza kungathotywa</string>
+    <string name="players_online">%1$d/%2$d abadlali</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Ixesha lokuphumla: %1$s</string>
+    <string name="announcement_title">Inqaku elisuka kwi-PocketCraft</string>
+    <string name="announcement_body">I-PocketCraft iza kukhululeka ngonaphakade kuye wonke umntu, kodwa ezinye iifitsha zikwiPro ukuze ukwazi ukuxhasa iindleko zeseva yethu kunye neendleko zokuqhuba iapp. Amaxabiso aphantsi, kwaye yiyo loo nto belapho, kubandakanya nexabiso elingaphezulu. 
+ 
+ Ukuba ungathanda ukusinceda, okanye ufuna nje ukuncokola neqela, ukujoyina iDiscord yethu — singathanda ukuba nawe.</string>
+    <string name="announcement_join_discord">Joyina iDiscord</string>
+    <string name="announcement_got_it">Ndiyifumene</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

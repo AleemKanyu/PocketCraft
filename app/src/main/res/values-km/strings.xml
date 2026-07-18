@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">ដំណើរការម៉ាស៊ីនមេ</string>
+    <string name="server_stopped">ម៉ាស៊ីនមេបានឈប់</string>
+    <string name="server_starting">ចាប់ផ្តើមម៉ាស៊ីនមេ…</string>
+    <string name="start_server">ចាប់ផ្តើមម៉ាស៊ីនមេ</string>
+    <string name="stop_server">បញ្ឈប់ម៉ាស៊ីនមេ</string>
+    <string name="notification_channel_name">ស្ថានភាពម៉ាស៊ីនមេ</string>
+    <string name="notification_channel_desc">បង្ហាញស្ថានភាពដំណើរការ និងការគ្រប់គ្រងរបស់ម៉ាស៊ីនមេ</string>
+    <string name="tap_to_copy">ប៉ះដើម្បីចម្លង IP</string>
+    <string name="copied">IP ត្រូវបានចម្លងទៅក្ដារតម្បៀតខ្ទាស់</string>
+    <string name="how_to_connect">របៀបភ្ជាប់</string>
+    <string name="send_command">ផ្ញើពាក្យបញ្ជា</string>
+    <string name="clear_log">ជម្រះកំណត់ហេតុ</string>
+    <string name="apply_restart">អនុវត្ត &amp; ចាប់ផ្ដើមឡើងវិញ</string>
+    <string name="delete_world">លុបទិន្នន័យពិភពលោក</string>
+    <string name="delete_world_confirm">នេះនឹងលុបពិភពលោកជារៀងរហូត។ តើអ្នកប្រាកដទេ?</string>
+    <string name="thermal_warning">ការព្រមាន៖ ឧបករណ៍កំពុងឡើងកំដៅខ្លាំង — ពិចារណាបញ្ឈប់ម៉ាស៊ីនមេ</string>
+    <string name="ram_warning">ការព្រមាន៖ បានរកឃើញ RAM ទាប — ដំណើរការអាចនឹងធ្លាក់ចុះ</string>
+    <string name="players_online">អ្នកលេង %1$d/%2$d</string>
+    <string name="tps_label">TPS៖ %1$.1f</string>
+    <string name="uptime_label">ម៉ោងធ្វើការ៖ %1$s</string>
+    <string name="announcement_title">កំណត់ចំណាំពី PocketCraft</string>
+    <string name="announcement_body">PocketCraft នឹងមិនគិតថ្លៃជារៀងរហូតសម្រាប់អ្នករាល់គ្នា ប៉ុន្តែមុខងារមួយចំនួនមាននៅក្នុង Pro ដើម្បីឱ្យអ្នកអាចផ្គត់ផ្គង់ការចំណាយលើម៉ាស៊ីនមេរបស់យើង និងតម្លៃដំណើរការកម្មវិធី។ ពួកគេមានតម្លៃថោក ហើយនោះជាមូលហេតុដែលពួកគេនៅទីនោះ រួមទាំងតម្លៃកាន់តែច្រើន។ 
+ 
+ បើអ្នកចង់ជួយយើង ឬគ្រាន់តែចង់ជជែកជាមួយក្រុម ចូលរួម Discord របស់យើង — យើងចង់មានអ្នក។</string>
+    <string name="announcement_join_discord">ចូលរួមជម្លោះ</string>
+    <string name="announcement_got_it">យល់ហើយ។</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

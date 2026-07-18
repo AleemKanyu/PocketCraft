@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">सर्व्हर चालू आहे</string>
+    <string name="server_stopped">सर्व्हर थांबला</string>
+    <string name="server_starting">सर्व्हर सुरू होत आहे...</string>
+    <string name="start_server">सर्व्हर सुरू करा</string>
+    <string name="stop_server">स्टॉप सर्व्हर</string>
+    <string name="notification_channel_name">सर्व्हर स्थिती</string>
+    <string name="notification_channel_desc">सर्व्हर चालू स्थिती आणि नियंत्रणे दाखवते</string>
+    <string name="tap_to_copy">आयपी कॉपी करण्यासाठी टॅप करा</string>
+    <string name="copied">IP क्लिपबोर्डवर कॉपी केला</string>
+    <string name="how_to_connect">कसे कनेक्ट करावे</string>
+    <string name="send_command">कमांड पाठवा</string>
+    <string name="clear_log">लॉग साफ करा</string>
+    <string name="apply_restart">अर्ज करा आणि रीस्टार्ट करा</string>
+    <string name="delete_world">जागतिक डेटा हटवा</string>
+    <string name="delete_world_confirm">हे जग कायमचे हटवेल. तुम्हाला खात्री आहे का?</string>
+    <string name="thermal_warning">चेतावणी: डिव्हाइस जास्त गरम होत आहे — सर्व्हर थांबवण्याचा विचार करा</string>
+    <string name="ram_warning">चेतावणी: कमी RAM आढळली — कार्यप्रदर्शन खराब होऊ शकते</string>
+    <string name="players_online">%1$d/%2$d खेळाडू</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">अपटाइम: %1$s</string>
+    <string name="announcement_title">PocketCraft कडून एक टीप</string>
+    <string name="announcement_body">PocketCraft सर्वांसाठी कायमस्वरूपी विनामूल्य असेल, परंतु काही वैशिष्ट्ये प्रो मध्ये आहेत जेणेकरून तुम्ही आमच्या सर्व्हर खर्च आणि ॲप चालवण्याच्या खर्चाचे समर्थन करू शकता. ते स्वस्त आहेत, आणि म्हणूनच ते तेथे आहेत, त्यासह अधिक मूल्यासाठी. 
+ 
+ जर तुम्हाला आमची मदत करायची असेल किंवा फक्त टीमशी गप्पा मारायच्या असतील, तर आमच्या Discord मध्ये सामील व्हा — आम्हाला तुमच्यासोबत राहायला आवडेल.</string>
+    <string name="announcement_join_discord">मतभेदात सामील व्हा</string>
+    <string name="announcement_got_it">समजले</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

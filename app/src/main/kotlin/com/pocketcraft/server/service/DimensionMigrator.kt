@@ -18,43 +18,115 @@ object DimensionMigrator {
         val isBukkitBased = serverType == ServerType.PAPER || serverType == ServerType.PURPUR
 
         if (isBukkitBased) {
-            // Move DIM-1 and DIM1 out to levelName_nether and levelName_the_end
+            // Move DIM-1 and DIM1 contents out to levelName_nether and levelName_the_end
             val fabricNether = File(rootLevelDir, "DIM-1")
-            val bukkitNether = File(serverDir, "${levelName}_nether/DIM-1")
             val bukkitNetherRoot = File(serverDir, "${levelName}_nether")
             
             if (fabricNether.exists() && fabricNether.isDirectory) {
-                if (!bukkitNetherRoot.exists()) bukkitNetherRoot.mkdirs()
-                copyOrMoveDir(fabricNether, bukkitNether)
+                val targetNested = File(bukkitNetherRoot, "DIM-1")
+                moveContents(fabricNether, targetNested)
+            }
+
+            // Convert any flat structure (region/ at root of world_nether) down to DIM-1/
+            val flatNetherRegion = File(bukkitNetherRoot, "region")
+            if (flatNetherRegion.exists() && flatNetherRegion.isDirectory) {
+                val targetNested = File(bukkitNetherRoot, "DIM-1")
+                listOf("region", "entities", "poi", "data").forEach { folder ->
+                    val src = File(bukkitNetherRoot, folder)
+                    if (src.exists() && src.isDirectory) {
+                        copyOrMoveDir(src, File(targetNested, folder))
+                    }
+                }
             }
 
             val fabricEnd = File(rootLevelDir, "DIM1")
-            val bukkitEnd = File(serverDir, "${levelName}_the_end/DIM1")
             val bukkitEndRoot = File(serverDir, "${levelName}_the_end")
 
             if (fabricEnd.exists() && fabricEnd.isDirectory) {
-                if (!bukkitEndRoot.exists()) bukkitEndRoot.mkdirs()
-                copyOrMoveDir(fabricEnd, bukkitEnd)
+                val targetNested = File(bukkitEndRoot, "DIM1")
+                moveContents(fabricEnd, targetNested)
+            }
+
+            // Convert any flat structure (region/ at root of world_the_end) down to DIM1/
+            val flatEndRegion = File(bukkitEndRoot, "region")
+            if (flatEndRegion.exists() && flatEndRegion.isDirectory) {
+                val targetNested = File(bukkitEndRoot, "DIM1")
+                listOf("region", "entities", "poi", "data").forEach { folder ->
+                    val src = File(bukkitEndRoot, folder)
+                    if (src.exists() && src.isDirectory) {
+                        copyOrMoveDir(src, File(targetNested, folder))
+                    }
+                }
             }
         } else {
-            // Fabric / Custom JAR: Move levelName_nether/DIM-1 and levelName_the_end/DIM1 inside levelName
-            val bukkitNether = File(serverDir, "${levelName}_nether/DIM-1")
+            // Fabric / Custom JAR: Move levelName_nether contents inside levelName/DIM-1 and levelName_the_end inside levelName/DIM1
+            val bukkitNetherRoot = File(serverDir, "${levelName}_nether")
             val fabricNether = File(rootLevelDir, "DIM-1")
 
-            if (bukkitNether.exists() && bukkitNether.isDirectory && !fabricNether.exists()) {
-                copyOrMoveDir(bukkitNether, fabricNether)
+            if (bukkitNetherRoot.exists() && bukkitNetherRoot.isDirectory) {
+                val flatNetherRegion = File(bukkitNetherRoot, "region")
+                if (flatNetherRegion.exists() && flatNetherRegion.isDirectory) {
+                    val nestedNether = File(bukkitNetherRoot, "DIM-1")
+                    listOf("region", "entities", "poi", "data").forEach { folder ->
+                        val src = File(bukkitNetherRoot, folder)
+                        if (src.exists() && src.isDirectory) {
+                            copyOrMoveDir(src, File(nestedNether, folder))
+                        }
+                    }
+                }
+                val nestedNether = File(bukkitNetherRoot, "DIM-1")
+                if (nestedNether.exists() && nestedNether.isDirectory) {
+                    moveContents(nestedNether, fabricNether)
+                }
             }
 
-            val bukkitEnd = File(serverDir, "${levelName}_the_end/DIM1")
+            val bukkitEndRoot = File(serverDir, "${levelName}_the_end")
             val fabricEnd = File(rootLevelDir, "DIM1")
 
-            if (bukkitEnd.exists() && bukkitEnd.isDirectory && !fabricEnd.exists()) {
-                copyOrMoveDir(bukkitEnd, fabricEnd)
+            if (bukkitEndRoot.exists() && bukkitEndRoot.isDirectory) {
+                val flatEndRegion = File(bukkitEndRoot, "region")
+                if (flatEndRegion.exists() && flatEndRegion.isDirectory) {
+                    val nestedEnd = File(bukkitEndRoot, "DIM1")
+                    listOf("region", "entities", "poi", "data").forEach { folder ->
+                        val src = File(bukkitEndRoot, folder)
+                        if (src.exists() && src.isDirectory) {
+                            copyOrMoveDir(src, File(nestedEnd, folder))
+                        }
+                    }
+                }
+                val nestedEnd = File(bukkitEndRoot, "DIM1")
+                if (nestedEnd.exists() && nestedEnd.isDirectory) {
+                    moveContents(nestedEnd, fabricEnd)
+                }
             }
         }
     }
 
+    private fun moveContents(sourceDir: File, targetDir: File) {
+        if (!sourceDir.exists() || !sourceDir.isDirectory) return
+        if (!targetDir.exists()) {
+            targetDir.mkdirs()
+        }
+        sourceDir.listFiles()?.forEach { file ->
+            val destFile = File(targetDir, file.name)
+            copyOrMoveDir(file, destFile)
+        }
+        sourceDir.deleteRecursively()
+    }
+
     private fun copyOrMoveDir(source: File, target: File) {
+        if (target.exists()) {
+            if (source.isDirectory && target.isDirectory) {
+                // Merge contents recursively
+                source.listFiles()?.forEach { file ->
+                    copyOrMoveDir(file, File(target, file.name))
+                }
+                source.deleteRecursively()
+                return
+            } else {
+                target.deleteRecursively()
+            }
+        }
         if (!target.parentFile!!.exists()) {
             target.parentFile!!.mkdirs()
         }

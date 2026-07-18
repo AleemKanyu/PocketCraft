@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketCraft</string>
+    <string name="server_running">Server kjører</string>
+    <string name="server_stopped">Server stoppet</string>
+    <string name="server_starting">Server starter...</string>
+    <string name="start_server">Start server</string>
+    <string name="stop_server">Stopp server</string>
+    <string name="notification_channel_name">Serverstatus</string>
+    <string name="notification_channel_desc">Viser serverens kjørestatus og kontroller</string>
+    <string name="tap_to_copy">Trykk for å kopiere IP</string>
+    <string name="copied">IP kopiert til utklippstavlen</string>
+    <string name="how_to_connect">Hvordan koble til</string>
+    <string name="send_command">Send kommando</string>
+    <string name="clear_log">Tøm logg</string>
+    <string name="apply_restart">Bruk og start på nytt</string>
+    <string name="delete_world">Slett verdensdata</string>
+    <string name="delete_world_confirm">Dette vil slette verden permanent. Er du sikker?</string>
+    <string name="thermal_warning">Advarsel: Enheten overopphetes — vurder å stoppe serveren</string>
+    <string name="ram_warning">Advarsel: Lite RAM oppdaget — ytelsen kan bli dårligere</string>
+    <string name="players_online">%1$d/%2$d spillere</string>
+    <string name="tps_label">TPS: %1$.1f</string>
+    <string name="uptime_label">Oppetid: %1$s</string>
+    <string name="announcement_title">Et notat fra PocketCraft</string>
+    <string name="announcement_body">PocketCraft vil være gratis for alle, men noen funksjoner er i Pro bare slik at du kan støtte serverkostnadene og driftskostnadene for apper. De er billige, og det er derfor de er der inne, inkludert det for mer verdi. 
+ 
+ Hvis du vil hjelpe oss, eller bare vil chatte med teamet, kan du bli med i vår Discord - vi vil gjerne ha deg.</string>
+    <string name="announcement_join_discord">Bli med i Discord</string>
+    <string name="announcement_got_it">Skjønner</string>
+    <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
+</resources>

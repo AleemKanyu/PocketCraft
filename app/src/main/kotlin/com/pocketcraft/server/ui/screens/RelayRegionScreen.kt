@@ -42,10 +42,17 @@ import com.pocketcraft.server.config.RelayServerConfig
 import com.pocketcraft.server.config.RemoteConfigManager
 import com.pocketcraft.server.config.RelayServers
 import com.pocketcraft.server.ui.theme.PocketColors
+import androidx.compose.material3.OutlinedTextField
 import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.DuoButtonVariant
 import com.pocketcraft.server.ui.components.PocketCraftCard
+import com.pocketcraft.server.ui.components.duoTextFieldShape
+import com.pocketcraft.server.ui.components.duoOutlinedTextFieldColors
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun RelayRegionScreen(
@@ -58,9 +65,25 @@ fun RelayRegionScreen(
     val scope = rememberCoroutineScope()
     val relayRegions by RemoteConfigManager.relayRegions.collectAsState(initial = RelayServers.defaultRegions())
     var isFindingBestRelay by androidx.compose.runtime.remember { mutableStateOf(false) }
+    var pings by androidx.compose.runtime.remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+    var customIpText by androidx.compose.runtime.remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         RemoteConfigManager.initialize(context)
+    }
+
+    LaunchedEffect(relayRegions) {
+        pings = withContext(Dispatchers.IO) {
+            relayRegions
+                .map { region ->
+                    async {
+                        region.host to RelayLatencySelector.measureRelayLatency(region.host)
+                    }
+                }
+                .awaitAll()
+                .filter { (_, ping) -> ping != Long.MAX_VALUE }
+                .toMap()
+        }
     }
 
     Column(
@@ -162,8 +185,54 @@ fun RelayRegionScreen(
                 RelayRegionCard(
                     config = region,
                     selected = region.host == selectedHost,
+                    ping = pings[region.host],
                     onClick = { onSelectHost(region.host) }
                 )
+            }
+
+            item {
+                PocketCraftCard(
+                    cornerRadius = 28.dp,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            "Use Custom Relay",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 18.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "Specify a private or custom relay server's IP address or hostname to connect through.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = customIpText,
+                            onValueChange = { customIpText = it },
+                            placeholder = { Text("e.g. 18.225.223.45") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = duoTextFieldShape(),
+                            colors = duoOutlinedTextFieldColors()
+                        )
+                        DuoButton(
+                            text = "Connect to Custom Relay",
+                            onClick = {
+                                val trimmed = customIpText.trim()
+                                if (trimmed.isNotBlank()) {
+                                    onSelectHost(trimmed)
+                                }
+                            },
+                            variant = DuoButtonVariant.Primary,
+                            enabled = customIpText.trim().isNotBlank(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
             }
         }
     }
@@ -173,6 +242,7 @@ fun RelayRegionScreen(
 private fun RelayRegionCard(
     config: RelayServerConfig,
     selected: Boolean,
+    ping: Long?,
     onClick: () -> Unit
 ) {
     PocketCraftCard(
@@ -199,12 +269,36 @@ private fun RelayRegionCard(
                     Text(config.icon, fontSize = 24.sp)
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        config.displayName,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 18.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            config.displayName,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 18.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (ping != null) {
+                            val pingColor = when {
+                                ping < 100 -> PocketColors.Online
+                                ping < 200 -> PocketColors.Warning
+                                else -> PocketColors.Danger
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = pingColor.copy(alpha = 0.12f)
+                            ) {
+                                Text(
+                                    text = "${ping}ms",
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp),
+                                    color = pingColor,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                        }
+                    }
                     Text(config.description, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (selected) {

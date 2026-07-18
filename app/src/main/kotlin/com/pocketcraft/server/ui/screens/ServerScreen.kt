@@ -45,11 +45,14 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -124,6 +127,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.pocketcraft.server.service.BackupProgressTracker
+import com.pocketcraft.server.ui.components.BackupProgressBottomSheet
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -182,6 +187,9 @@ fun ServerScreen(
     val navigationHistory = remember { mutableStateListOf<PocketTab>() }
     var settingsInitialActiveTab by remember { mutableStateOf<Int?>(null) }
     var settingsInitialAuthTab by remember { mutableStateOf<Int?>(null) }
+    val backupState by BackupProgressTracker.state.collectAsState()
+    val backupProgress by BackupProgressTracker.progress.collectAsState()
+    var showBackupSheet by remember { mutableStateOf(false) }
 
     fun navigateToTab(tab: PocketTab) {
         if (currentTab != tab) {
@@ -444,6 +452,10 @@ fun ServerScreen(
                                             } else {
                                                 onChangeVersion()
                                             }
+                                        },
+                                        onNavigateToSettings = { initialActiveTab ->
+                                            settingsInitialActiveTab = initialActiveTab
+                                            navigateToTab(PocketTab.SETTINGS)
                                         }
                                     )
 
@@ -725,6 +737,7 @@ fun ServerScreen(
                         }
                     }
                 }
+
                 
                 if (showFloatingChatSheet) {
                     FloatingChatBottomSheet(
@@ -738,6 +751,76 @@ fun ServerScreen(
                         }
                     )
                 }
+            }
+
+            // Backup progress circle — visible on all screens when a backup is running
+            if (backupState == BackupProgressTracker.State.RUNNING) {
+                val trackerInteractionSource = remember { MutableInteractionSource() }
+                val trackerPressed by trackerInteractionSource.collectIsPressedAsState()
+                val trackerOffsetY = if (trackerPressed) 1.5.dp else 0.dp
+                val trackerBorder = if (trackerPressed) 1.5.dp else 3.dp
+
+                val widgetOffsetY by animateDpAsState(
+                    targetValue = trackerOffsetY,
+                    animationSpec = PocketMotion.softDpTween(durationMillis = 150),
+                    label = "backup_widget_press_offset"
+                )
+                val widgetBorder by animateDpAsState(
+                    targetValue = trackerBorder,
+                    animationSpec = PocketMotion.softDpTween(durationMillis = 150),
+                    label = "backup_widget_border"
+                )
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(end = 16.dp, top = topPadding + 16.dp + widgetOffsetY)
+                        .size(56.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        progress = { backupProgress / 100f },
+                        modifier = Modifier.fillMaxSize(),
+                        color = PocketColors.Primary,
+                        trackColor = PocketColors.PrimaryBorder.copy(alpha = 0.25f),
+                        strokeWidth = 3.dp
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .buttonDropShadow(isDark = pocketIsDarkTheme(), shadowColor = PocketColors.Primary.copy(alpha = 0.25f), cornerRadius = 22.dp)
+                            .button3d(
+                                elevation = 6.dp,
+                                borderColor = PocketColors.PrimaryBorder,
+                                depthColor = PocketColors.PrimaryBorderBottom,
+                                depthWidth = widgetBorder
+                            )
+                            .clip(CircleShape)
+                            .background(PocketColors.PrimaryDark)
+                            .clickable(
+                                interactionSource = trackerInteractionSource,
+                                indication = null,
+                                onClick = {
+                                    showBackupSheet = true
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudUpload,
+                            contentDescription = "Backup in Progress",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            if (showBackupSheet) {
+                BackupProgressBottomSheet(
+                    onDismissRequest = { showBackupSheet = false }
+                )
             }
 
             if (showPremiumBottomSheet) {
@@ -819,7 +902,9 @@ fun ServerScreen(
             reason = stateHolder.crashReason,
             details = stateHolder.crashDetails,
             duringStartup = stateHolder.crashWasDuringStartup,
-            onDismiss = { stateHolder.dismissCrashDialog() }
+            logs = stateHolder.logs,
+            onDismiss = { stateHolder.dismissCrashDialog() },
+            onRetryWithInProcess = { stateHolder.startServer() }
         )
     }
 
@@ -974,9 +1059,15 @@ fun ServerFailureDialog(
     reason: String,
     details: String,
     duringStartup: Boolean,
-    onDismiss: () -> Unit
+    logs: List<String>,
+    onDismiss: () -> Unit,
+    onRetryWithInProcess: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isSending by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var ticketNumber by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var submitError by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     val failureSummary = remember(reason, details, duringStartup) {
         serverFailureSummary(reason = reason, details = details, duringStartup = duringStartup)
     }
@@ -1069,6 +1160,105 @@ fun ServerFailureDialog(
                     icon = Icons.Default.Lightbulb
                 )
 
+                if (ticketNumber != null) {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = PocketColors.Online.copy(alpha = 0.12f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, PocketColors.Online.copy(alpha = 0.35f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "LOCKED IN SUPPORT TICKET",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = PocketColors.Online,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = ticketNumber!!,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = PocketColors.Online,
+                                letterSpacing = 2.sp
+                            )
+                            Text(
+                                text = "Logs submitted! Join our Discord server and drop this ticket number in the support channel.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                                textAlign = TextAlign.Center,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                } else if (!submitError.isNullOrBlank()) {
+                    Text(
+                        text = "Error: $submitError",
+                        color = Color(0xFFFF5252),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                val prefs = remember { AppPreferences(context) }
+                val deviceProfile = remember {
+                    val totalRam = com.pocketcraft.server.util.RamUtils.getTotalRamMb(context)
+                    val availRam = com.pocketcraft.server.util.RamUtils.getAvailableRamMb(context)
+                    com.pocketcraft.server.util.RamUtils.buildDeviceStabilityProfile(totalRam, availRam)
+                }
+                val showInProcessFallbackOption = duringStartup && prefs.forceExternalJvm && !deviceProfile.forceExternalJvm && onRetryWithInProcess != null
+
+                if (showInProcessFallbackOption) {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.12f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "STARTUP FAILURE DETECTED",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.error,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = "Try disabling the external JVM. Some devices run more reliably using the built-in, in-process execution mode.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                                textAlign = TextAlign.Center,
+                                lineHeight = 18.sp
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            androidx.compose.material3.Button(
+                                onClick = {
+                                    prefs.forceExternalJvm = false
+                                    onDismiss()
+                                    onRetryWithInProcess?.invoke()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Disable External JVM & Retry", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1111,27 +1301,87 @@ fun ServerFailureDialog(
                         Text("Discord", modifier = Modifier.padding(vertical = 2.dp), fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
                     }
 
-                    androidx.compose.material3.OutlinedButton(
-                        onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(
-                                ClipData.newPlainText(
-                                    "PocketCraft server issue",
-                                    details.ifBlank { reason }
+                    if (ticketNumber == null) {
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                isSending = true
+                                submitError = null
+                                val ticket = "PC-" + String.format("%06d", java.util.Random().nextInt(1000000))
+                                val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                                val data = hashMapOf(
+                                    "ticket" to ticket,
+                                    "reason" to reason,
+                                    "details" to details,
+                                    "consoleLines" to logs,
+                                    "device" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (Android ${android.os.Build.VERSION.RELEASE})",
+                                    "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
                                 )
+                                val timeoutJob = scope.launch {
+                                    kotlinx.coroutines.delay(8000)
+                                    if (isSending && ticketNumber == null) {
+                                        submitError = "Upload timed out. Check your connection or try again."
+                                        isSending = false
+                                    }
+                                }
+                                db.collection("tickets").document(ticket).set(data)
+                                    .addOnSuccessListener {
+                                        timeoutJob.cancel()
+                                        if (ticketNumber == null) {
+                                            ticketNumber = ticket
+                                            isSending = false
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                            val clip = android.content.ClipData.newPlainText("PocketCraft Ticket", ticket)
+                                            clipboard.setPrimaryClip(clip)
+                                            Toast.makeText(context, "Ticket created & copied to clipboard!", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                    .addOnFailureListener { e ->
+                                        timeoutJob.cancel()
+                                        if (isSending) {
+                                            submitError = e.message ?: "Failed to upload logs"
+                                            isSending = false
+                                        }
+                                    }
+                            },
+                            enabled = !isSending,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(15.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.2.dp, PocketColors.Primary.copy(alpha = if (isDarkTheme) 0.58f else 0.42f)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = PocketColors.Primary
                             )
-                            Toast.makeText(context, "Full issue copied. Paste it in Discord.", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(15.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.2.dp, glassBorder.copy(alpha = 0.64f)),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(7.dp))
-                        Text("Copy Issue", modifier = Modifier.padding(vertical = 2.dp), fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+                        ) {
+                            if (isSending) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = PocketColors.Primary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(7.dp))
+                                Text("Send Logs", modifier = Modifier.padding(vertical = 2.dp), fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+                            }
+                        }
+                    } else {
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("PocketCraft Ticket", ticketNumber!!)
+                                clipboard.setPrimaryClip(clip)
+                                Toast.makeText(context, "Ticket copied!", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(15.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.2.dp, PocketColors.Online.copy(alpha = if (isDarkTheme) 0.58f else 0.42f)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = PocketColors.Online
+                            )
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(7.dp))
+                            Text("Copy Ticket", modifier = Modifier.padding(vertical = 2.dp), fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+                        }
                     }
                 }
             }
@@ -1200,6 +1450,8 @@ private fun serverFailureSummary(
 ): ServerFailureSummary {
     val rawReason = reason.trim()
     val combined = "$rawReason\n$details".lowercase()
+    val mentionsModpack = "modpack" in combined
+    val mentionsLaunchTarget = "launch target" in combined
     val commandLineOnly = rawReason.startsWith("Command Line", ignoreCase = true) ||
         rawReason.contains("-Xmx", ignoreCase = true) ||
         rawReason.contains("-Djava.home", ignoreCase = true)
@@ -1213,9 +1465,13 @@ private fun serverFailureSummary(
             reason = "The selected world is configured for a modpack, but the modpack has not been installed yet.",
             fix = "Tap Install Modpack on the Home screen, wait for it to finish, then start the server again."
         )
-        "modpack files are missing" in combined || "launch target" in combined -> ServerFailureSummary(
+        "modpack files are missing" in combined || (mentionsModpack && mentionsLaunchTarget) -> ServerFailureSummary(
             reason = "PocketCraft could not find the modpack files needed to launch this world.",
             fix = "Re-install the modpack from the Home screen so the missing launch files are restored."
+        )
+        "launch target not found" in combined || "server jar could not be resolved" in combined || mentionsLaunchTarget -> ServerFailureSummary(
+            reason = "PocketCraft could not find the server launch files needed for this world.",
+            fix = "Re-select or re-install the server version from the version card, then start the server again."
         )
         "outofmemory" in combined || "heap" in combined || "cannot allocate" in combined -> ServerFailureSummary(
             reason = "The server ran out of available memory while starting or loading the world.",

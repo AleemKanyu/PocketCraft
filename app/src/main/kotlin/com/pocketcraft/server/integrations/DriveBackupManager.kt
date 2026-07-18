@@ -100,6 +100,63 @@ object DriveBackupManager {
         }
     }
 
+    /**
+     * Uploads a specific local backup file to Google Drive.
+     * Used when the user taps the "Upload to Cloud" button on a specific backup entry.
+     */
+    suspend fun uploadSpecificBackupFile(
+        context: Context,
+        account: GoogleSignInAccount,
+        file: File,
+        onProgress: suspend (Int, String) -> Unit = { _, _ -> }
+    ): String = withContext(Dispatchers.IO) {
+        if (!file.exists() || !file.canRead()) {
+            return@withContext "Backup file not found or not readable."
+        }
+        val token = accessToken(context, account)
+        onProgress(5, "Preparing cloud upload...")
+        val metadataJson = org.json.JSONObject()
+            .put("name", file.name)
+            .put("parents", org.json.JSONArray().put("appDataFolder"))
+            .toString()
+        val boundary = "----PocketCraftDrive${System.currentTimeMillis()}"
+        val connection = openConnection(
+            url = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name",
+            method = "POST",
+            token = token,
+            contentType = "multipart/related; boundary=$boundary"
+        )
+        connection.setChunkedStreamingMode(256 * 1024)
+        connection.doOutput = true
+        connection.outputStream.use { raw ->
+            val output = BufferedOutputStream(raw)
+            output.write("--$boundary\r\n".toByteArray())
+            output.write("Content-Type: application/json; charset=UTF-8\r\n\r\n".toByteArray())
+            output.write(metadataJson.toByteArray(Charsets.UTF_8))
+            output.write("\r\n--$boundary\r\n".toByteArray())
+            output.write("Content-Type: application/zip\r\n\r\n".toByteArray())
+            val totalBytes = file.length().coerceAtLeast(1L)
+            BufferedInputStream(file.inputStream()).use { input ->
+                val buffer = ByteArray(16 * 1024)
+                var copied = 0L
+                var bytesRead = input.read(buffer)
+                while (bytesRead != -1) {
+                    output.write(buffer, 0, bytesRead)
+                    copied += bytesRead
+                    val progress = 12 + ((copied * 78L) / totalBytes).toInt().coerceIn(0, 78)
+                    onProgress(progress, "Uploading to Google Drive...")
+                    bytesRead = input.read(buffer)
+                }
+            }
+            output.write("\r\n--$boundary--\r\n".toByteArray())
+            output.flush()
+        }
+        val body = readResponseBody(connection)
+        ensureSuccess(connection, body, "upload backup to Google Drive")
+        onProgress(100, "Cloud backup complete.")
+        return@withContext "Uploaded ${file.name} to Google Drive."
+    }
+
     suspend fun listWorldBackups(
         context: Context,
         account: GoogleSignInAccount,
@@ -562,6 +619,37 @@ object DriveBackupManager {
             }
             true
         }.getOrDefault(false)
+    }
+
+    suspend fun listAllCloudBackups(
+        context: Context,
+        account: GoogleSignInAccount
+    ): List<RemoteDriveBackup> = withContext(Dispatchers.IO) {
+        val token = accessToken(context, account)
+        val query = "trashed = false and name contains '.zip'"
+        val url = buildString {
+            append("https://www.googleapis.com/drive/v3/files")
+            append("?spaces=")
+            append(URLEncoder.encode("appDataFolder", "UTF-8"))
+            append("&q=")
+            append(URLEncoder.encode(query, "UTF-8"))
+            append("&orderBy=")
+            append(URLEncoder.encode("modifiedTime desc", "UTF-8"))
+            append("&fields=")
+            append(URLEncoder.encode("files(id,name,modifiedTime)", "UTF-8"))
+        }
+        val connection = openConnection(url = url, method = "GET", token = token)
+        val body = readResponseBody(connection)
+        ensureSuccess(connection, body, "list all cloud backups")
+        val files = org.json.JSONObject(body).optJSONArray("files") ?: org.json.JSONArray()
+        return@withContext List(files.length()) { index ->
+            val item = files.getJSONObject(index)
+            RemoteDriveBackup(
+                id = item.optString("id"),
+                name = item.optString("name"),
+                modifiedTime = item.optString("modifiedTime").ifBlank { null }
+            )
+        }
     }
 
     private suspend fun <T> com.google.android.gms.tasks.Task<T>.awaitTask(): T = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
