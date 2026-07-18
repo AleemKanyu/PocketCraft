@@ -1487,6 +1487,37 @@ private fun BackupsManagementCard(
                     prefs.autoBackupOnStop = newValue
                 }
             )
+            if (autoBackupOnStop) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, top = 4.dp, bottom = 4.dp),
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(15.dp).padding(top = 1.dp)
+                        )
+                        Text(
+                            text = "Backup runs when the server stops. The app must be open at that moment, or \"Always Active\" must be enabled in Settings.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
 
             BackupAutomationToggleCard(
                 title = "Scheduled Daily Backup",
@@ -1521,7 +1552,6 @@ private fun BackupsManagementCard(
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    
                     val formattedTime = remember(autoBackupTimeHour, autoBackupTimeMinute) {
                         val amPm = if (autoBackupTimeHour >= 12) "PM" else "AM"
                         val displayHour = when {
@@ -1533,7 +1563,6 @@ private fun BackupsManagementCard(
                         val minuteStr = autoBackupTimeMinute.toString().padStart(2, '0')
                         "$hourStr:$minuteStr $amPm"
                     }
-
                     DuoButton(
                         text = formattedTime,
                         onClick = { showTimePickerDialog = true },
@@ -1541,21 +1570,19 @@ private fun BackupsManagementCard(
                         modifier = Modifier.width(132.dp)
                     )
                 }
+            }
+
+            if (autoBackupTimeEnabled && !alwaysAliveBackground) {
 
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = if (alwaysAliveBackground) {
-                        PocketColors.Primary.copy(alpha = 0.10f)
-                    } else {
-                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.22f)
-                    },
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.22f),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 8.dp, top = 4.dp, bottom = 12.dp),
                     border = BorderStroke(
                         1.dp,
-                        if (alwaysAliveBackground) PocketColors.Primary.copy(alpha = 0.35f)
-                        else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f)
+                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f)
                     )
                 ) {
                     Row(
@@ -1564,36 +1591,30 @@ private fun BackupsManagementCard(
                         verticalAlignment = Alignment.Top
                     ) {
                         Icon(
-                            imageVector = if (alwaysAliveBackground) Icons.Filled.CheckCircle else Icons.Filled.Info,
+                            imageVector = Icons.Filled.Info,
                             contentDescription = null,
-                            tint = if (alwaysAliveBackground) PocketColors.Primary else MaterialTheme.colorScheme.error,
+                            tint = MaterialTheme.colorScheme.error,
                             modifier = Modifier.size(18.dp)
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (alwaysAliveBackground) "Always Active is enabled" else "Requires Always Active option",
+                                text = "Requires Always Active option",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
-                                color = if (alwaysAliveBackground) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onErrorContainer
+                                color = MaterialTheme.colorScheme.onErrorContainer
                             )
                             Text(
-                                text = if (alwaysAliveBackground) {
-                                    "Scheduled backups can run more reliably because PocketCraft is allowed to stay active in the background."
-                                } else {
-                                    "For the scheduled daily backup to run reliably, enable 'Always Alive in Background' in Settings so Android does not suspend the app."
-                                },
+                                text = "For the scheduled daily backup to run reliably, enable 'Always Alive in Background' in Settings so Android does not suspend the app.",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            if (!alwaysAliveBackground) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                DuoButton(
-                                    text = "OPEN SETTINGS",
-                                    onClick = { onNavigateToSettings(1) },
-                                    minHeight = 32.dp,
-                                    modifier = Modifier.align(Alignment.Start)
-                                )
-                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            DuoButton(
+                                text = "OPEN SETTINGS",
+                                onClick = { onNavigateToSettings(1) },
+                                minHeight = 32.dp,
+                                modifier = Modifier.align(Alignment.Start)
+                            )
                         }
                     }
                 }
