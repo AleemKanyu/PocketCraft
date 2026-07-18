@@ -492,11 +492,21 @@ class ServerStateHolder(
             if (intent?.action != ServerHostService.ACTION_SERVER_EVENT) return
             if (intentVersionId != versionId) return
 
-            if (type != ServerHostService.EVENT_STOPPED &&
-                type != ServerHostService.EVENT_SERVER_CRASHED &&
-                type != ServerHostService.EVENT_ERROR
-            ) {
-                if (!isRunning && !isStarting) {
+            // Bug fix: Only re-enter STARTING state for events that genuinely signal
+            // an active server process (not plain output lines). Plain EVENT_OUTPUT
+            // events buffered after the server has already stopped would otherwise
+            // briefly flip the UI back to "Starting server…".
+            val isLaunchSignal = type == ServerHostService.EVENT_SERVER_READY ||
+                type == ServerHostService.EVENT_TUNNEL_CONNECTING ||
+                type == ServerHostService.EVENT_TUNNEL_CONNECTED ||
+                type == ServerHostService.EVENT_TUNNEL_FAILED ||
+                type == ServerHostService.EVENT_CHUNKY_PROGRESS ||
+                type == ServerHostService.EVENT_CHUNKS_LOADING
+            val isStopSignal = type == ServerHostService.EVENT_STOPPED ||
+                type == ServerHostService.EVENT_SERVER_CRASHED ||
+                type == ServerHostService.EVENT_ERROR
+            if (!isStopSignal && !isStopping) {
+                if (!isRunning && !isStarting && isLaunchSignal) {
                     isStarting = true
                     isRunning = false
                 }
@@ -546,6 +556,20 @@ class ServerStateHolder(
                     }
                     stopWatchdogJob?.cancel()
                     stopWatchdogJob = null
+
+                    // ── Auto-backup on stop (Bug fix: was dead code in the when-branch below) ──
+                    val appPrefs = com.pocketcraft.server.data.preferences.AppPreferences(appContext)
+                    val runOnStop = appPrefs.autoBackupOnStop && !shouldRestart
+                    val runPendingAuto = appPrefs.pendingAutoBackup && !shouldRestart
+                    if (runPendingAuto) {
+                        appendLog("[PocketCraft] Running queued daily automatic backup...")
+                        AutoBackupReceiver.startPendingBackup(appContext)
+                    } else if (runOnStop) {
+                        appendLog("[PocketCraft] Triggering automated backup on stop...")
+                        val msg = createBackup()
+                        appendLog("[PocketCraft] Auto Backup: $msg")
+                    }
+
                     if (shouldRestart) {
                         isStarting = true
                         appendLog("[PocketCraft] Starting server again...")
@@ -635,45 +659,8 @@ class ServerStateHolder(
                         )
                     }
                     ServerHostService.EVENT_STOPPED -> {
-                        val shouldRestart = pendingRestart
-                        pendingRestart = false
-                        stopStartupProgressTracking(reset = !shouldRestart)
-                        isStopping = false
-                        isStarting = false
-                        isRunning = false
-                        tps = 0f
-                        if (!shouldRestart) {
-                            publicAddress = null
-                            tunnelConnecting = false
-                            tunnelError = null
-                            startedAtRealtime = null
-                            resetJoinable()
-                        }
-                        onlinePlayers.clear()
-                        appendLog(line)
-                        stopWatchdogJob?.cancel()
-                        stopWatchdogJob = null
-
-                        val appPrefs = com.pocketcraft.server.data.preferences.AppPreferences(appContext)
-                        val runOnStop = appPrefs.autoBackupOnStop && !shouldRestart
-                        val runPendingAuto = appPrefs.pendingAutoBackup && !shouldRestart
-
-                        if (runPendingAuto) {
-                            appendLog("[PocketCraft] Running queued daily automatic backup...")
-                            AutoBackupReceiver.startPendingBackup(appContext)
-                        } else if (runOnStop) {
-                            applicationScope.launch {
-                                appendLog("[PocketCraft] Triggering automated backup on stop...")
-                                val msg = createBackup()
-                                appendLog("[PocketCraft] Auto Backup: $msg")
-                            }
-                        }
-                        if (shouldRestart) {
-                            isStarting = true
-                            appendLog("[PocketCraft] Starting server again...")
-                            delay(1500)
-                            startServer(isRestart = true)
-                        }
+                        // Note: This branch is unreachable because EVENT_STOPPED is handled
+                        // by the early-return block above. Kept as a no-op safety fallback.
                     }
                     ServerHostService.EVENT_CHUNKY_PROGRESS -> {
                         val percent = intent.getIntExtra(ServerHostService.EXTRA_CHUNKY_PERCENT, -1)

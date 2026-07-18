@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -47,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.ui.components.FlatEmojiIcon
 import com.pocketcraft.server.ui.components.DuoButton
+import com.pocketcraft.server.ui.components.DuoButtonVariant
 import com.pocketcraft.server.ui.components.GameCard
 import com.pocketcraft.server.ui.theme.PocketColors
 import kotlinx.coroutines.launch
@@ -280,18 +280,21 @@ fun BackupsScreen(
             }
         } else {
             items(stateHolder.backups, key = { it.name }) { backup ->
-                GameCard(modifier = Modifier.fillMaxWidth()) {
-                    androidx.compose.foundation.layout.Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                GameCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(0.dp)) {
+        androidx.compose.foundation.layout.Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        // Backup info row
                         androidx.compose.foundation.layout.Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             FlatEmojiIcon("💾", modifier = Modifier.size(28.dp), tint = PocketColors.PrimaryDark)
-                            androidx.compose.foundation.layout.Column {
+                            androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = backup.name,
                                     fontWeight = FontWeight.Bold,
@@ -304,41 +307,38 @@ fun BackupsScreen(
                                 )
                             }
                         }
+                        // Action buttons row
                         androidx.compose.foundation.layout.Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            IconButton(
+                            DuoButton(
+                                text = "Restore",
+                                icon = Icons.Filled.Restore,
                                 onClick = { restoreTarget = backup },
-                                enabled = !stateHolder.isBackingUp && !stateHolder.isRestoringBackup
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Restore,
-                                    contentDescription = "Restore backup",
-                                    tint = PocketColors.PrimaryDark
-                                )
-                            }
-                            IconButton(
-                                onClick = {
-                                    stateHolder.startDownloadBackup(backup) { onMessage(it) }
-                                },
-                                enabled = !stateHolder.isBackingUp && !stateHolder.isRestoringBackup && !stateHolder.isDownloadingBackup
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Download,
-                                    contentDescription = "Download backup to phone",
-                                    tint = PocketColors.PrimaryDark
-                                )
-                            }
-                            IconButton(
+                                enabled = !stateHolder.isBackingUp && !stateHolder.isRestoringBackup,
+                                variant = DuoButtonVariant.Primary,
+                                minHeight = 40.dp,
+                                modifier = Modifier.weight(1f)
+                            )
+                            DuoButton(
+                                text = "Download",
+                                icon = Icons.Filled.Download,
+                                onClick = { stateHolder.startDownloadBackup(backup) { onMessage(it) } },
+                                enabled = !stateHolder.isBackingUp && !stateHolder.isRestoringBackup && !stateHolder.isDownloadingBackup,
+                                variant = DuoButtonVariant.Info,
+                                minHeight = 40.dp,
+                                modifier = Modifier.weight(1f)
+                            )
+                            DuoButton(
+                                text = "Delete",
+                                icon = Icons.Filled.Delete,
                                 onClick = { deleteTarget = backup },
-                                enabled = !stateHolder.isBackingUp && !stateHolder.isRestoringBackup && !stateHolder.isDownloadingBackup
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Delete,
-                                    contentDescription = "Delete backup",
-                                    tint = PocketColors.Offline
-                                )
-                            }
+                                enabled = !stateHolder.isBackingUp && !stateHolder.isRestoringBackup && !stateHolder.isDownloadingBackup,
+                                variant = DuoButtonVariant.Danger,
+                                minHeight = 40.dp,
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
                 }
