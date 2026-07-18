@@ -72,17 +72,42 @@ public class PocketCraftCompanion extends JavaPlugin implements org.bukkit.event
             getLogger().info(sb.toString());
         }, 20L, 20L);
 
-        // Periodic watchdog to force respawn dead dummy bots immediately
+        // Periodic watchdog to force respawn dead dummy bots immediately and keep them in Creative mode
         Bukkit.getScheduler().runTaskTimer(this, () -> {
+            // Fix Spigot 1.21.11 compatibility: clear dummyChunks map in DummyManager
+            // to bypass NoSuchFieldError exception when despawning (which references fields e/f).
+            try {
+                org.bukkit.plugin.Plugin dummyPlayersPlugin = Bukkit.getPluginManager().getPlugin("dummyplayers");
+                if (dummyPlayersPlugin != null) {
+                    Object dummyManager = dummyPlayersPlugin.getClass().getMethod("getDummyManager").invoke(dummyPlayersPlugin);
+                    java.lang.reflect.Field dummyChunksField = dummyManager.getClass().getDeclaredField("dummyChunks");
+                    dummyChunksField.setAccessible(true);
+                    java.util.Map dummyChunks = (java.util.Map) dummyChunksField.get(dummyManager);
+                    if (dummyChunks != null && !dummyChunks.isEmpty()) {
+                        dummyChunks.clear();
+                    }
+                }
+            } catch (Throwable ignored) {}
+
             for (Player p : Bukkit.getOnlinePlayers()) {
-                if (p.getName().startsWith("AFK_") && (p.isDead() || p.getHealth() <= 0.0)) {
-                    try {
-                        getLogger().info("Watchdog detected dead dummy " + p.getName() + ". Force respawning...");
-                        org.bukkit.Location loc = p.getLocation();
-                        p.spigot().respawn();
-                        p.teleport(loc);
-                    } catch (Throwable t) {
-                        getLogger().warning("Failed to watchdog-respawn " + p.getName() + ": " + t.getMessage());
+                if (p.getName().startsWith("AFK_")) {
+                    if (p.getGameMode() != org.bukkit.GameMode.CREATIVE) {
+                        try {
+                            getLogger().info("Watchdog detected dummy " + p.getName() + " in gamemode " + p.getGameMode() + ". Setting to CREATIVE...");
+                            p.setGameMode(org.bukkit.GameMode.CREATIVE);
+                        } catch (Throwable t) {
+                            getLogger().warning("Failed to set gamemode for dummy " + p.getName() + ": " + t.getMessage());
+                        }
+                    }
+                    if (p.isDead() || p.getHealth() <= 0.0) {
+                        try {
+                            getLogger().info("Watchdog detected dead dummy " + p.getName() + ". Force respawning...");
+                            org.bukkit.Location loc = p.getLocation();
+                            p.spigot().respawn();
+                            p.teleport(loc);
+                        } catch (Throwable t) {
+                            getLogger().warning("Failed to watchdog-respawn " + p.getName() + ": " + t.getMessage());
+                        }
                     }
                 }
             }

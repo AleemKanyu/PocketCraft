@@ -45,6 +45,7 @@ import com.pocketcraft.server.service.ConsoleParser
 import com.pocketcraft.server.service.ParsedPlayerPing
 import com.pocketcraft.server.service.DimensionMigrator
 import com.pocketcraft.server.service.ServerFileManager
+import com.pocketcraft.server.service.AutoBackupReceiver
 import com.pocketcraft.server.service.ServerPropertiesHelper
 import com.pocketcraft.server.server.ServerPropertiesWriter
 import com.pocketcraft.server.server.ServerHostService
@@ -463,6 +464,8 @@ class ServerStateHolder(
         get() = afkHelperManager.farms
     val isAfkHelperBusy: Boolean
         get() = afkHelperManager.isBusy
+    var lastAfkEnabledTime by mutableStateOf(0L)
+        private set
 
     private fun attemptTransitionToOnline() {
         if (!isStarting) return
@@ -652,7 +655,13 @@ class ServerStateHolder(
                         stopWatchdogJob = null
 
                         val appPrefs = com.pocketcraft.server.data.preferences.AppPreferences(appContext)
-                        if (appPrefs.autoBackupOnStop && !shouldRestart) {
+                        val runOnStop = appPrefs.autoBackupOnStop && !shouldRestart
+                        val runPendingAuto = appPrefs.pendingAutoBackup && !shouldRestart
+
+                        if (runPendingAuto) {
+                            appendLog("[PocketCraft] Running queued daily automatic backup...")
+                            AutoBackupReceiver.startPendingBackup(appContext)
+                        } else if (runOnStop) {
                             applicationScope.launch {
                                 appendLog("[PocketCraft] Triggering automated backup on stop...")
                                 val msg = createBackup()
@@ -811,8 +820,19 @@ class ServerStateHolder(
     suspend fun addAfkFarm(name: String, x: Int, y: Int, z: Int): String =
         afkHelperManager.addFarm(name = name, x = x, y = y, z = z)
 
-    suspend fun toggleAfkFarm(id: String): String =
-        afkHelperManager.toggleFarm(id)
+    suspend fun toggleAfkFarm(id: String): String {
+        val farm = afkHelperManager.farms.firstOrNull { it.id == id }
+        val wasActive = farm?.isActive == true
+        val result = afkHelperManager.toggleFarm(id)
+        if (farm != null && !wasActive) {
+            val context = appContext
+            val isPremium = com.pocketcraft.server.billing.BillingManager.getInstance(context).isPremium.value
+            if (isPremium) {
+                lastAfkEnabledTime = System.currentTimeMillis()
+            }
+        }
+        return result
+    }
 
     suspend fun deleteAfkFarm(id: String): String =
         afkHelperManager.deleteFarm(id)

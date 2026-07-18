@@ -32,6 +32,16 @@ object AfkDummyPluginSync {
         syncWorld(appContext, worldName, normalizedActiveFarms)
     }
 
+    private fun resolveConfiguredLevelName(serverDir: File): String {
+        val propsFile = File(serverDir, "server.properties")
+        if (!propsFile.exists()) return "world"
+        val props = java.util.Properties()
+        runCatching {
+            propsFile.inputStream().use { props.load(it) }
+        }
+        return props.getProperty("level-name", "world").trim().ifBlank { "world" }
+    }
+
     fun syncWorld(
         context: Context,
         worldName: String,
@@ -73,13 +83,14 @@ object AfkDummyPluginSync {
             }
         }
 
+        val configuredWorldName = resolveConfiguredLevelName(serverDir)
         activeFarms.forEach { farm ->
             mergedEntries += DummyYamlEntry(
                 keyUuid = farm.dummyUuid,
                 uuid = farm.dummyUuid,
                 name = farm.dummyEntityName,
                 ownerUuid = farm.ownerPlayerUuid,
-                world = worldName,
+                world = configuredWorldName,
                 x = farm.x.toDouble(),
                 y = farm.y.toDouble(),
                 z = farm.z.toDouble(),

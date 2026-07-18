@@ -556,6 +556,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean("auto_backup_on_stop", false)
         set(value) = prefs.edit().putBoolean("auto_backup_on_stop", value).apply()
 
+    var pendingAutoBackup: Boolean
+        get() = prefs.getBoolean("pending_auto_backup", false)
+        set(value) = prefs.edit().putBoolean("pending_auto_backup", value).apply()
+
     var autoBackupTimeEnabled: Boolean
         get() = prefs.getBoolean("auto_backup_time_enabled", false)
         set(value) = prefs.edit().putBoolean("auto_backup_time_enabled", value).apply()

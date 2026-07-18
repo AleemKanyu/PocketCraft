@@ -44,6 +44,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Forum
@@ -72,6 +73,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -485,6 +487,20 @@ private fun AfkHelpersSection(
     onMessage: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val billingManager = remember { com.pocketcraft.server.billing.BillingManager.getInstance(context) }
+    val isPremium by billingManager.isPremium.collectAsState()
+
+    var secondsLeft by remember { mutableIntStateOf(0) }
+    LaunchedEffect(stateHolder.lastAfkEnabledTime) {
+        while (true) {
+            val elapsed = System.currentTimeMillis() - stateHolder.lastAfkEnabledTime
+            val left = 10 - (elapsed / 1000).toInt()
+            secondsLeft = if (left in 1..10) left else 0
+            if (secondsLeft <= 0) break
+            kotlinx.coroutines.delay(500)
+        }
+    }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -578,6 +594,34 @@ private fun AfkHelpersSection(
                 }
             }
 
+            if (isPremium && secondsLeft > 0) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = PocketColors.Primary.copy(alpha = 0.12f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, PocketColors.Primary.copy(alpha = 0.3f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Timer,
+                            contentDescription = null,
+                            tint = PocketColors.Primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            "Cooldown active: Please wait $secondsLeft seconds to enable another helper.",
+                            fontSize = 12.sp,
+                            color = PocketColors.TextPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
             if (stateHolder.afkFarms.isEmpty()) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -605,6 +649,7 @@ private fun AfkHelpersSection(
                     AfkHelperRow(
                         stateHolder = stateHolder,
                         farm = farm,
+                        isCooldownActive = isPremium && secondsLeft > 0,
                         onMessage = onMessage
                     )
                 }
@@ -617,6 +662,7 @@ private fun AfkHelpersSection(
 private fun AfkHelperRow(
     stateHolder: ServerStateHolder,
     farm: com.pocketcraft.server.afk.AfkFarmLocation,
+    isCooldownActive: Boolean,
     onMessage: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -749,7 +795,7 @@ private fun AfkHelperRow(
                                 onMessage(stateHolder.toggleAfkFarm(farm.id))
                             }
                         },
-                        enabled = !stateHolder.isAfkHelperBusy,
+                        enabled = !stateHolder.isAfkHelperBusy && !isCooldownActive,
                         modifier = Modifier.weight(1f).height(40.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(

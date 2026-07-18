@@ -218,14 +218,16 @@ class AfkHelperManager(
                 return "${prepared.name} will spawn automatically the next time this world starts."
             }
 
-            ensureDummyPluginSupport(worldServerDir(prepared.worldName))
+            val serverDir = worldServerDir(prepared.worldName)
+            ensureDummyPluginSupport(serverDir)
 
             val forceloadKey = "${prepared.x} ${prepared.z}"
             runCatching { sendRconCommand("forceload add $forceloadKey") }
 
             // Spawn the dummy player directly via console
             // Format: /dummy create <name> <owner_uuid> <world> <x> <y> <z>
-            val command = "dummy create ${prepared.dummyEntityName} ${prepared.ownerPlayerUuid} ${prepared.worldName} ${prepared.x} ${prepared.y} ${prepared.z}"
+            val configuredWorldName = resolveConfiguredLevelName(serverDir)
+            val command = "dummy create ${prepared.dummyEntityName} ${prepared.ownerPlayerUuid} $configuredWorldName ${prepared.x} ${prepared.y} ${prepared.z}"
             val createResponse = runCatching {
                 sendRconCommand(command)
             }.getOrElse { error ->
@@ -341,6 +343,16 @@ class AfkHelperManager(
     private fun worldServerDir(worldName: String): File =
         ServerFileManager.getServerDir(appContext, worldName.ifBlank { "world" })
 
+    private fun resolveConfiguredLevelName(serverDir: File): String {
+        val propsFile = File(serverDir, "server.properties")
+        if (!propsFile.exists()) return "world"
+        val props = java.util.Properties()
+        runCatching {
+            propsFile.inputStream().use { props.load(it) }
+        }
+        return props.getProperty("level-name", "world").trim().ifBlank { "world" }
+    }
+
     private suspend fun syncCurrentWorldPluginFiles() {
         syncWorldPluginFiles(currentWorldName())
     }
@@ -377,6 +389,7 @@ class AfkHelperManager(
             }
         }
 
+        val configuredWorldName = resolveConfiguredLevelName(serverDir)
         activeFarms.forEach { farm ->
             val uuid = farm.dummyUuid.ifBlank { UUID.randomUUID().toString() }
             val createdAt = farm.createdAt.takeIf { it > 0L } ?: System.currentTimeMillis()
@@ -390,7 +403,7 @@ class AfkHelperManager(
                 uuid = uuid,
                 name = farm.dummyEntityName,
                 ownerUuid = farm.ownerPlayerUuid,
-                world = worldName,
+                world = configuredWorldName,
                 x = farm.x.toDouble(),
                 y = farm.y.toDouble(),
                 z = farm.z.toDouble(),

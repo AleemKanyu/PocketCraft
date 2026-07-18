@@ -52,6 +52,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -126,6 +127,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.pocketcraft.server.service.BackupProgressTracker
+import com.pocketcraft.server.ui.components.BackupProgressBottomSheet
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -184,6 +187,9 @@ fun ServerScreen(
     val navigationHistory = remember { mutableStateListOf<PocketTab>() }
     var settingsInitialActiveTab by remember { mutableStateOf<Int?>(null) }
     var settingsInitialAuthTab by remember { mutableStateOf<Int?>(null) }
+    val backupState by BackupProgressTracker.state.collectAsState()
+    val backupProgress by BackupProgressTracker.progress.collectAsState()
+    var showBackupSheet by remember { mutableStateOf(false) }
 
     fun navigateToTab(tab: PocketTab) {
         if (currentTab != tab) {
@@ -731,6 +737,7 @@ fun ServerScreen(
                         }
                     }
                 }
+
                 
                 if (showFloatingChatSheet) {
                     FloatingChatBottomSheet(
@@ -744,6 +751,76 @@ fun ServerScreen(
                         }
                     )
                 }
+            }
+
+            // Backup progress circle — visible on all screens when a backup is running
+            if (backupState == BackupProgressTracker.State.RUNNING) {
+                val trackerInteractionSource = remember { MutableInteractionSource() }
+                val trackerPressed by trackerInteractionSource.collectIsPressedAsState()
+                val trackerOffsetY = if (trackerPressed) 1.5.dp else 0.dp
+                val trackerBorder = if (trackerPressed) 1.5.dp else 3.dp
+
+                val widgetOffsetY by animateDpAsState(
+                    targetValue = trackerOffsetY,
+                    animationSpec = PocketMotion.softDpTween(durationMillis = 150),
+                    label = "backup_widget_press_offset"
+                )
+                val widgetBorder by animateDpAsState(
+                    targetValue = trackerBorder,
+                    animationSpec = PocketMotion.softDpTween(durationMillis = 150),
+                    label = "backup_widget_border"
+                )
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(end = 16.dp, top = topPadding + 16.dp + widgetOffsetY)
+                        .size(56.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        progress = { backupProgress / 100f },
+                        modifier = Modifier.fillMaxSize(),
+                        color = PocketColors.Primary,
+                        trackColor = PocketColors.PrimaryBorder.copy(alpha = 0.25f),
+                        strokeWidth = 3.dp
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .buttonDropShadow(isDark = pocketIsDarkTheme(), shadowColor = PocketColors.Primary.copy(alpha = 0.25f), cornerRadius = 22.dp)
+                            .button3d(
+                                elevation = 6.dp,
+                                borderColor = PocketColors.PrimaryBorder,
+                                depthColor = PocketColors.PrimaryBorderBottom,
+                                depthWidth = widgetBorder
+                            )
+                            .clip(CircleShape)
+                            .background(PocketColors.PrimaryDark)
+                            .clickable(
+                                interactionSource = trackerInteractionSource,
+                                indication = null,
+                                onClick = {
+                                    showBackupSheet = true
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudUpload,
+                            contentDescription = "Backup in Progress",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            if (showBackupSheet) {
+                BackupProgressBottomSheet(
+                    onDismissRequest = { showBackupSheet = false }
+                )
             }
 
             if (showPremiumBottomSheet) {

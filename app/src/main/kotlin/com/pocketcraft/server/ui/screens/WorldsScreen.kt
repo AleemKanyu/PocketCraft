@@ -109,6 +109,7 @@ import com.pocketcraft.server.ui.components.DuoButton
 import com.pocketcraft.server.ui.components.DuoButtonVariant
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CloudUpload
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -1364,59 +1365,58 @@ private fun BackupsManagementCard(
                                     )
                                 }
 
-                                // 2. Download/Export Action
-                                val downloadEnabled = !localActionBusy && !cloudActionBusy
-                                IconButton(
-                                    onClick = {
-                                        if (backup.isLocal) {
-                                            ServerStateHolder.applicationScope.launch(Dispatchers.Main) {
-                                                localActionBusy = true
-                                                actionStatusMessage = "Saving to Downloads..."
-                                                val msg = stateHolder.downloadBackup(backup.localBackup!!)
-                                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                                actionStatusMessage = ""
-                                                localActionBusy = false
+                                // 2. Upload to Cloud — only shown for local-only backups (hidden if already on cloud)
+                                if (backup.isLocal && !backup.isCloud) {
+                                    val uploadEnabled = !localActionBusy && !cloudActionBusy && account != null
+                                    IconButton(
+                                        onClick = {
+                                            if (account == null) {
+                                                Toast.makeText(context, "Connect Google Drive in Settings to enable cloud backups.", Toast.LENGTH_LONG).show()
+                                                return@IconButton
                                             }
-                                        } else {
                                             ServerStateHolder.applicationScope.launch(Dispatchers.Main) {
                                                 cloudActionBusy = true
-                                                actionStatusMessage = "Downloading from cloud..."
-                                                val tempFile = File(context.cacheDir, "drive_download_${System.currentTimeMillis()}.zip")
+                                                cloudUploadProgress = 0
+                                                cloudUploadHint = "Keep PocketCraft open while uploading."
                                                 try {
-                                                    DriveBackupManager.downloadBackup(context, account!!, backup.remoteBackup!!, tempFile)
-                                                    actionStatusMessage = "Saving to Downloads..."
-                                                    val entry = BackupEntry(
-                                                        name = backup.remoteBackup.name,
-                                                        sizeMb = (tempFile.length() / (1024L * 1024L)).coerceAtLeast(0L),
-                                                        date = "",
-                                                        file = tempFile
-                                                    )
-                                                    val msg = stateHolder.downloadBackup(entry)
-                                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                                    actionStatusMessage = "Uploading to Google Drive..."
+                                                    val msg = DriveBackupManager.uploadSpecificBackupFile(
+                                                        context,
+                                                        account!!,
+                                                        backup.localBackup!!.file
+                                                    ) { progress, message ->
+                                                        withContext(Dispatchers.Main) {
+                                                            cloudUploadProgress = progress.coerceIn(0, 100)
+                                                            actionStatusMessage = message
+                                                        }
+                                                    }
+                                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                                    refreshCloudBackups()
                                                 } catch (e: Exception) {
                                                     val cause = e.cause ?: e
                                                     if (cause is com.google.android.gms.auth.UserRecoverableAuthException && cause.intent != null) {
                                                         authRecoveryLauncher.launch(cause.intent!!)
                                                     } else {
-                                                        Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                                        Toast.makeText(context, "Upload failed: ${e.message}", Toast.LENGTH_LONG).show()
                                                     }
                                                 } finally {
-                                                    tempFile.delete()
                                                     actionStatusMessage = ""
                                                     cloudActionBusy = false
+                                                    cloudUploadProgress = 0
+                                                    cloudUploadHint = ""
                                                 }
                                             }
-                                        }
-                                    },
-                                    enabled = downloadEnabled,
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Download,
-                                        contentDescription = "Download",
-                                        modifier = Modifier.size(20.dp),
-                                        tint = if (downloadEnabled) iconColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                                    )
+                                        },
+                                        enabled = uploadEnabled,
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CloudUpload,
+                                            contentDescription = "Upload to Cloud",
+                                            modifier = Modifier.size(20.dp),
+                                            tint = if (uploadEnabled) PocketColors.DownloadBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                        )
+                                    }
                                 }
 
                                 // 3. Delete Action
