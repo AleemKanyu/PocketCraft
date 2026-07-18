@@ -11,7 +11,7 @@ data class AfkFarmLocationEntity(
     val x: Int,
     val y: Int,
     val z: Int,
-    val isActive: Boolean,
+    val isActive: Boolean = false,
     val dummyEntityName: String,
     val dummyUuid: String = "",
     val ownerPlayerName: String = "",

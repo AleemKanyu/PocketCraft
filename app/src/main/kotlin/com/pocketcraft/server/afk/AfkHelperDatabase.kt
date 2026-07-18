@@ -22,7 +22,7 @@ abstract class AfkHelperDatabase : RoomDatabase() {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     AfkHelperDatabase::class.java,
-                    "afk_helper.db"
+                    "pocketcraft_afk_helpers.db"
                 )
                     .fallbackToDestructiveMigration()
                     .build()
