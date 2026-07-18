@@ -1545,6 +1545,11 @@ class ServerHostService : Service() {
         lastNotificationText = ServerStage.RUNNING.notificationText
         lastNotificationUpdateMs = SystemClock.elapsedRealtime()
 
+        // Optimize spawn chunk radius to save CPU and RAM on subsequent starts
+        runCatching {
+            ServerLauncher.sendCommand("gamerule spawnChunkRadius 1")
+        }
+
         autoRecoverAttempts = 0
         autoRecoverWindowStartMs = 0L
         startWidgetUpdateHeartbeat()

@@ -976,23 +976,24 @@ class ServerLauncher(private val context: Context) {
             // Elytra travel discovers chunks far faster than normal movement. Favor a
             // steadier stream over burst throughput so keepalives and movement packets
             // do not queue behind large chunk floods on the phone uplink.
-            val base = if (cellularRelay) 20 else 24
+            val base = if (cellularRelay) 24 else 36
             val viewScale = (7.0 / vd).pow(0.7).coerceIn(0.45, 1.0)
-            return (base * viewScale + 2).toInt().coerceIn(16, 26)
+            return (base * viewScale + 2).toInt().coerceIn(20, 38)
         }
-        val base = if (cellularRelay) 17 else 22
+        val base = if (cellularRelay) 20 else 30
         val viewScale = (7.0 / vd).pow(0.65).coerceIn(0.55, 1.0)
-        return (base * viewScale).toInt().coerceIn(13, 20)
+        return (base * viewScale).toInt().coerceIn(16, 32)
     }
 
     private fun computeRelayChunkConcurrency(
         cellularRelay: Boolean,
         flightModeEnabled: Boolean
     ): Triple<Int, Int, Int> {
+        // Returns Triple(concurrentGenerates, concurrentLoads, concurrentSends)
         return if (flightModeEnabled) {
-            if (cellularRelay) Triple(3, 4, 1) else Triple(4, 5, 1)
+            if (cellularRelay) Triple(3, 5, 4) else Triple(4, 8, 8)
         } else {
-            if (cellularRelay) Triple(3, 4, 1) else Triple(3, 5, 1)
+            if (cellularRelay) Triple(3, 4, 3) else Triple(4, 6, 6)
         }
     }
 
@@ -1002,13 +1003,13 @@ class ServerLauncher(private val context: Context) {
     ): Pair<Int, Int> {
         return if (flightModeEnabled) {
             Pair(
-                (chunkSendRate * 4).coerceIn(40, 78),
-                (chunkSendRate * 5).coerceIn(52, 96)
+                (chunkSendRate * 4).coerceIn(48, 96),
+                (chunkSendRate * 5).coerceIn(64, 128)
             )
         } else {
             Pair(
-                (chunkSendRate * 4).coerceIn(42, 72),
-                (chunkSendRate * 6).coerceIn(56, 90)
+                (chunkSendRate * 4).coerceIn(48, 80),
+                (chunkSendRate * 6).coerceIn(64, 110)
             )
         }
     }
@@ -1159,8 +1160,8 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", concurrentLoads.toString())
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-sends", concurrentSends.toString())
 
-        val cores = Runtime.getRuntime().availableProcessors()
-        val threads = (cores / 2).coerceIn(2, 4) // up to 4 IO threads on 8-core device
+        // Capping to 2 threads prevents CPU core oversaturation, leaving cores open for main thread, GC, and bridge.
+        val threads = 2
 
         updated = removeYamlPathKey(updated, listOf("misc"), "io-threads")
         updated = removeYamlPathKey(updated, listOf("misc"), "worker-threads")

@@ -64,13 +64,13 @@ class RelayManager(private val context: Context) {
         private const val UPSTREAM_YIELD_EVERY_FULL_READS = 2
         private const val LOW_LATENCY_WARMUP_BYTES = 128 * 1024L
         private const val LOW_LATENCY_WARMUP_NS = 4_000_000_000L
-        private const val INITIAL_POOL_SIZE = 5
-        private const val TARGET_POOL_SIZE = 5
-        private const val POOL_REFRESH_FLOOR = 2
+        private const val INITIAL_POOL_SIZE = 3
+        private const val TARGET_POOL_SIZE = 3
+        private const val POOL_REFRESH_FLOOR = 1
         private const val IDLE_REPLENISH_DELAY_MS = 500L
         private const val SOCKET_OPEN_STAGGER_MS = 50L
-        // Heartbeat every 10s instead of 25s — pool is replenished faster after socket drops.
-        private const val TUNNEL_HEARTBEAT_INTERVAL_MS = 10_000L
+        // Heartbeat every 20s instead of 10s — reduces network request traffic while keeping session alive.
+        private const val TUNNEL_HEARTBEAT_INTERVAL_MS = 20_000L
         private const val IDLE_SOCKET_REFRESH_INTERVAL_MS = 5 * 60_000L
         private const val SOCKET_IDLE_TIMEOUT_MS = 8 * 60_000L
         private const val SOCKET_IDLE_TIMEOUT_JITTER_MS = 90_000L
