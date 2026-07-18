@@ -366,7 +366,12 @@ object PlayerDataManager {
         }
 
         return serverDir.listFiles()?.filter { it.isDirectory }?.firstOrNull { dir ->
-            findFile(dir, "level.dat").exists() || findSubFolder(dir, "region").exists()
+            val name = dir.name.lowercase()
+            if (name.endsWith("_nether") || name.endsWith("_the_end") || name == "world_nether" || name == "world_the_end") {
+                false
+            } else {
+                findFile(dir, "level.dat").exists() || findSubFolder(dir, "region").exists()
+            }
         } ?: File(serverDir, configuredLevelName ?: "world")
     }
 
@@ -590,7 +595,15 @@ object PlayerDataManager {
         val propsFile = File(serverDir, "server.properties")
         val configured = runCatching { propsFile.takeIf(File::exists)?.readLines()?.firstOrNull { it.startsWith("level-name=") }?.substringAfter('=')?.trim() }.getOrNull() ?: "world"
         val candidates = mutableListOf(File(serverDir, configured), File(serverDir, "world"), File(serverDir, worldName))
-        serverDir.listFiles()?.filter { it.isDirectory && it.name.lowercase() !in setOf("logs", "plugins", "cache", "config", "libraries", "versions") && findFile(it, "level.dat").exists() }?.forEach { candidates.add(it) }
+        serverDir.listFiles()?.filter {
+            it.isDirectory &&
+            it.name.lowercase() !in setOf("logs", "plugins", "cache", "config", "libraries", "versions") &&
+            !it.name.lowercase().endsWith("_nether") &&
+            !it.name.lowercase().endsWith("_the_end") &&
+            it.name.lowercase() != "world_nether" &&
+            it.name.lowercase() != "world_the_end" &&
+            findFile(it, "level.dat").exists()
+        }?.forEach { candidates.add(it) }
         return candidates.filter { it.exists() }.maxByOrNull { worldDir ->
             val statsDir = findSubFolder(worldDir, "stats")
             if (statsDir.exists() && statsDir.isDirectory) statsDir.listFiles()?.sumOf { it.length() } ?: 0L else 0L

@@ -54,7 +54,7 @@ class RelayManager(private val context: Context) {
         // behind seconds of unsent data on constrained mobile relay routes.
         private const val PLAYER_BRIDGE_BUFFER_SIZE = 8 * 1024
         private const val PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE = 8 * 1024
-        private const val SOCKET_BUFFER_SIZE = 16 * 1024
+        private const val SOCKET_BUFFER_SIZE = 64 * 1024
         private const val BEDROCK_TX_BUFFER_SIZE = 8 * 1024
         private const val BEDROCK_SMALL_FRAME_MAX_BYTES = 3072
         private const val BEDROCK_LARGE_FRAME_BATCH_MAX = 4
@@ -1178,7 +1178,7 @@ class RelayManager(private val context: Context) {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE)
             var totalBytes = 0L
             try {
-                val input = localSocket.getInputStream()
+                val input  = localSocket.getInputStream()
                 val output = relaySocket.getOutputStream()
                 val buffer = ByteArray(PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE)
                 var bytesRead: Int
@@ -1189,7 +1189,7 @@ class RelayManager(private val context: Context) {
 
                     val startTime = System.nanoTime()
                     output.write(buffer, 0, bytesRead)
-                    totalBytes += bytesRead
+                    totalBytes  += bytesRead
 
                     val durationMicros = (System.nanoTime() - startTime) / 1000
                     if (durationMicros > 100_000) {
@@ -1226,9 +1226,10 @@ class RelayManager(private val context: Context) {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = 64 * 1024
-            socket.receiveBufferSize = 64 * 1024
+            socket.sendBufferSize = SOCKET_BUFFER_SIZE
+            socket.receiveBufferSize = SOCKET_BUFFER_SIZE
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
+            socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
         }
     }
 
@@ -1237,11 +1238,10 @@ class RelayManager(private val context: Context) {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            // Small send/receive buffers to prevent upload/download bufferbloat on mobile relays
-            socket.sendBufferSize = 64 * 1024
-            socket.receiveBufferSize = 64 * 1024
+            socket.sendBufferSize = SOCKET_BUFFER_SIZE
+            socket.receiveBufferSize = SOCKET_BUFFER_SIZE
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
-            socket.setPerformancePreferences(0, 1, 0)
+            socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
         }
     }
 
