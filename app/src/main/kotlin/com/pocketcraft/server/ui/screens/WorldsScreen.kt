@@ -1477,6 +1477,45 @@ private fun BackupsManagementCard(
                 modifier = Modifier.padding(bottom = 6.dp)
             )
 
+            // Always Active notice — pinned at top, only shown when not enabled
+            if (!alwaysAliveBackground) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = PocketColors.Primary.copy(alpha = 0.08f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp),
+                    border = BorderStroke(1.dp, PocketColors.Primary.copy(alpha = 0.25f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = PocketColors.Primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "Always Active needs to be enabled for backups to run smoothly.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        DuoButton(
+                            text = "ENABLE",
+                            onClick = { onNavigateToSettings(1) },
+                            minHeight = 32.dp,
+                            fillMaxWidth = false
+                        )
+                    }
+                }
+            }
+
             BackupAutomationToggleCard(
                 title = "Backup on Server Stop",
                 description = "Automatically create a local backup whenever you stop the server.",
@@ -1487,37 +1526,6 @@ private fun BackupsManagementCard(
                     prefs.autoBackupOnStop = newValue
                 }
             )
-            if (autoBackupOnStop) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 8.dp, top = 4.dp, bottom = 4.dp),
-                    border = BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(15.dp).padding(top = 1.dp)
-                        )
-                        Text(
-                            text = "Backup runs when the server stops. The app must be open at that moment, or \"Always Active\" must be enabled in Settings.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
 
             BackupAutomationToggleCard(
                 title = "Scheduled Daily Backup",
@@ -1569,54 +1577,6 @@ private fun BackupsManagementCard(
                         minHeight = 34.dp,
                         modifier = Modifier.width(132.dp)
                     )
-                }
-            }
-
-            if (autoBackupTimeEnabled && !alwaysAliveBackground) {
-
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.22f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 8.dp, top = 4.dp, bottom = 12.dp),
-                    border = BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Requires Always Active option",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                text = "For the scheduled daily backup to run reliably, enable 'Always Alive in Background' in Settings so Android does not suspend the app.",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            DuoButton(
-                                text = "OPEN SETTINGS",
-                                onClick = { onNavigateToSettings(1) },
-                                minHeight = 32.dp,
-                                modifier = Modifier.align(Alignment.Start)
-                            )
-                        }
-                    }
                 }
             }
         }
