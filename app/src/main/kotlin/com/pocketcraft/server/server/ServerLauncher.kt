@@ -244,7 +244,7 @@ class ServerLauncher(private val context: Context) {
         applyRelayReadyPaperGlobalConfig(serverDirFile, onOutput)
         applyRelayReadySpigotConfig(serverDirFile, onOutput)
         applyRelayReadyPaperWorldDefaults(serverDirFile, onOutput)
-        applyRelayReadyFabricConfig(serverDirFile, serverType, onOutput)
+        applyRelayReadyFabricConfig(serverDirFile, serverType, versionId, onOutput)
 
         // Dynamic JVM heap allocation based on per-world UI settings in server.properties
         val worldProps = ServerPropertiesHelper.readProperties(serverDirFile)
@@ -1317,6 +1317,7 @@ class ServerLauncher(private val context: Context) {
     private fun applyRelayReadyFabricConfig(
         serverDir: File,
         serverType: com.pocketcraft.server.data.model.ServerType,
+        versionId: String,
         onOutput: (String) -> Unit
     ) {
         if (serverType != com.pocketcraft.server.data.model.ServerType.FABRIC) return
@@ -1382,13 +1383,20 @@ class ServerLauncher(private val context: Context) {
         }
 
         // --- Carpet Mod Auto-Installation ----------------------------------------
-        // Automatically fetch and install Carpet mod for Fabric servers to enable real player bots
-        val mcVersion = props.getProperty("pocketcraft-mc-version")
-            ?: props.getProperty("version")
-            ?: "1.20.1" // Default fallback version if unspecified
+        // Safely fetch and install Carpet mod for Fabric servers matching the exact versionId.
+        // Must NEVER throw exceptions or block server launch if offline/network fails.
+        val mcVersion = versionId.ifBlank {
+            props.getProperty("pocketcraft-mc-version")
+                ?: props.getProperty("version")
+                ?: "1.20.1"
+        }
         
-        kotlinx.coroutines.runBlocking {
-            CarpetModManager.ensureCarpetInstalled(serverDir, mcVersion, onOutput)
+        runCatching {
+            kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                CarpetModManager.ensureCarpetInstalled(serverDir, mcVersion, onOutput)
+            }
+        }.onFailure { error ->
+            onOutput("[PocketCraft] Note: Carpet mod auto-check skipped: ${error.message}")
         }
     }
 
