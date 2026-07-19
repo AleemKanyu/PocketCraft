@@ -519,6 +519,10 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   port_str};
 
   int argc = (int)(sizeof(argv) / sizeof(argv[0]));
+  if (server_type && strcmp(server_type, "FABRIC") == 0) {
+    // Omit --port <port> for Fabric servers (Fabric's CLI parser rejects --port)
+    argc -= 2;
+  }
   for (int i = 0; i < argc; i++) {
     LOGI("argv[%d] = %s", i, argv[i]);
   }
