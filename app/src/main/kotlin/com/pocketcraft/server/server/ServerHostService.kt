@@ -243,7 +243,7 @@ class ServerHostService : Service() {
             ) {
                 return START_NOT_STICKY
             }
-            stopReason = "user"
+            stopReason = "restart"
             autoRecoverAttempts = 0
             autoRecoverWindowStartMs = 0L
             pendingRestartVersionId = activeVersionId
