@@ -30,8 +30,69 @@ object CarpetModManager {
      * Sanitizes raw version strings (e.g. "1.21.11" -> "1.21.1", "1.20.1-fabric" -> "1.20.1").
      */
     fun cleanMcVersion(rawVersion: String): String {
-        val match = Regex("""\b\d+\.\d+(?:\.\d+)?\b""").find(rawVersion)
-        return match?.value ?: rawVersion.trim()
+        val extracted = Regex("""\b(\d+)\.(\d+)(?:\.(\d+))?\b""").find(rawVersion)
+        if (extracted != null) {
+            val major = extracted.groupValues[1]
+            val minor = extracted.groupValues[2]
+            var patch = extracted.groupValues[3]
+            if (patch.length >= 2 && patch.all { it == patch[0] }) {
+                patch = patch.substring(0, 1)
+            }
+            return if (patch.isNotBlank()) "$major.$minor.$patch" else "$major.$minor"
+        }
+        return rawVersion.trim()
+    }
+
+    private fun resolveModrinthDownloadUrl(projectId: String, cleanMcVersion: String): String? {
+        val versionsToTry = listOfNotNull(
+            cleanMcVersion,
+            cleanMcVersion.substringBeforeLast('.', missingDelimiterValue = cleanMcVersion)
+                .takeIf { it != cleanMcVersion }
+        )
+
+        for (targetVer in versionsToTry) {
+            val url = runCatching {
+                val apiUrl = "https://api.modrinth.com/v2/project/$projectId/version" +
+                    "?game_versions=%5B%22$targetVer%22%5D&loaders=%5B%22fabric%22%5D"
+                val conn = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
+                    setRequestProperty("User-Agent", USER_AGENT)
+                    connectTimeout = CONNECT_TIMEOUT_MS
+                    readTimeout = READ_TIMEOUT_MS
+                    requestMethod = "GET"
+                }
+                if (conn.responseCode != 200) return@runCatching null
+                val json = JSONArray(conn.inputStream.bufferedReader().use { it.readText() })
+                if (json.length() == 0) return@runCatching null
+
+                for (i in 0 until json.length()) {
+                    val versionObj = json.getJSONObject(i)
+                    val gameVersions = versionObj.optJSONArray("game_versions") ?: continue
+                    var versionMatched = false
+                    for (g in 0 until gameVersions.length()) {
+                        if (gameVersions.getString(g) == targetVer) {
+                            versionMatched = true
+                            break
+                        }
+                    }
+                    if (versionMatched) {
+                        val files = versionObj.optJSONArray("files") ?: continue
+                        for (f in 0 until files.length()) {
+                            val file = files.getJSONObject(f)
+                            if (file.optBoolean("primary", false)) {
+                                return@runCatching file.getString("url")
+                            }
+                        }
+                        if (files.length() > 0) {
+                            return@runCatching files.getJSONObject(0).getString("url")
+                        }
+                    }
+                }
+                null
+            }.getOrNull()
+
+            if (url != null) return url
+        }
+        return null
     }
 
     /**
