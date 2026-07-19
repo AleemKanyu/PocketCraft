@@ -205,6 +205,25 @@ object ConsoleParser {
         return emptyMap()
     }
 
+    /**
+     * Parses a Fabric/Vanilla RCON `data get entity` response where the reply is a bare
+     * "has the following entity data: <N>" line without a player-name prefix.
+     * Returns the ping in ms, or -1 if not parseable.
+     */
+    fun parseFabricEntityLatency(rconResponse: String): Int {
+        val clean = stripMinecraftColors(rconResponse).trim()
+        // "has the following entity data: 37"
+        val bareMatch = Regex("""(?:has the following entity data:|entity data:)\s*(\d+)""", RegexOption.IGNORE_CASE).find(clean)
+        if (bareMatch != null) {
+            return bareMatch.groupValues[1].toIntOrNull() ?: -1
+        }
+        // Plain integer response fallback: e.g. "37"
+        val intOnly = clean.trim().toIntOrNull()
+        if (intOnly != null && intOnly >= 0) return intOnly
+        return -1
+    }
+
+
     /** Returns the cleaned console text, stripping ANSI color codes. */
     fun stripAnsi(text: String): String =
         text.replace(Regex("\u001B\\[[;\\d]*m"), "")

@@ -243,7 +243,10 @@ class AfkHelperManager(
                 // 1. Keep chunk force-loaded via /forceload add (already done above)
                 // 2. Summon visual AFK Helper bot at target coordinates
                 val botDisplayName = dummyDisplayName(prepared)
-                val summonCommand = """summon minecraft:armor_stand ${prepared.x} ${prepared.y} ${prepared.z} {CustomName:'"$botDisplayName"',CustomNameVisible:1b,Invulnerable:1b,NoGravity:1b,Tags:["pocketcraft_afk_bot"]}"""
+                // Use a Zombie (same bounding box as a player, supports NoAI/Silent) as the
+                // AFK-helper visual stand-in on Fabric/Vanilla where the Dummy plugin is unavailable.
+                // IsBaby:0b ensures full player-height. NoAI stops pathfinding. Silent suppresses sounds.
+                val summonCommand = """summon minecraft:zombie ${prepared.x} ${prepared.y} ${prepared.z} {CustomName:'{"text":"$botDisplayName"}',CustomNameVisible:1b,Invulnerable:1b,NoAI:1b,Silent:1b,PersistenceRequired:1b,IsBaby:0b,Tags:["pocketcraft_afk_bot"]}"""
                 runCatching { sendRconCommand(summonCommand) }
             } else {
                 runCatching { sendRconCommand("forceload remove $forceloadKey") }
