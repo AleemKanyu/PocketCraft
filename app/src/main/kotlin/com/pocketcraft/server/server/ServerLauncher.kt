@@ -690,8 +690,8 @@ class ServerLauncher(private val context: Context) {
             "-XX:+UseStringDeduplication",
             "-XX:+UseG1GC",
             "-XX:+ParallelRefProcEnabled",
-            // Halved from 100ms: each GC pause directly shows as a ping spike to players.
-            "-XX:MaxGCPauseMillis=80",
+            // 40ms GC pause target ensures garbage collection pauses do not cause ping spikes
+            "-XX:MaxGCPauseMillis=40",
             "-XX:+DisableExplicitGC",
         ).apply {
             addAll(gcFlags)
