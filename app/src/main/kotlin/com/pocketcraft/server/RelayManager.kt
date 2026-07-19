@@ -1191,11 +1191,6 @@ class RelayManager(private val context: Context) {
                     output.write(buffer, 0, bytesRead)
                     output.flush()
                     totalBytes += bytesRead
-
-                    val durationMicros = (System.nanoTime() - startTime) / 1000
-                    if (durationMicros > 100_000) {
-                        android.util.Log.d("RelayManager", "LocalToRelay write delay: ${durationMicros}μs for $bytesRead bytes")
-                    }
                 }
                 runCatching { output.flush() }
                 android.util.Log.d("RelayManager", "LocalToRelay: End of stream. Total upstream: $totalBytes bytes")
