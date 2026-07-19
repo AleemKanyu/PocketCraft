@@ -66,10 +66,12 @@ class AfkHelperManager(
 
     init {
         scope.launch(Dispatchers.IO) {
-            dao.observeAll().collectLatest { entities ->
-                cachedEntities = entities
-                renderCurrentWorld()
-                syncCurrentWorldPluginFiles()
+            runCatching {
+                dao.observeAll().collectLatest { entities ->
+                    cachedEntities = entities
+                    renderCurrentWorld()
+                    syncCurrentWorldPluginFiles()
+                }
             }
         }
     }
@@ -114,7 +116,7 @@ class AfkHelperManager(
 
         val isPremium = com.pocketcraft.server.billing.BillingManager.getInstance(appContext).isPremium.value
         if (!isPremium) {
-            val existingCount = dao.getAll().filter { it.worldName.equals(worldName, ignoreCase = true) }.size
+            val existingCount = runCatching { dao.getAll() }.getOrDefault(emptyList()).filter { it.worldName.equals(worldName, ignoreCase = true) }.size
             if (existingCount >= 1) {
                 return@withContext "Free plan is limited to 1 AFK bot. Upgrade to Pro to unlock unlimited AFK bots!"
             }
@@ -134,7 +136,7 @@ class AfkHelperManager(
             ownerPlayerUuid = defaultOwner?.uuid.orEmpty(),
             createdAt = System.currentTimeMillis()
         )
-        dao.upsert(entity)
+        runCatching { dao.upsert(entity) }
         "Saved $trimmedName to AFK Helpers."
     }
 
@@ -154,7 +156,7 @@ class AfkHelperManager(
         if (entity.isActive) {
             disableFarmInternal(entity)
         }
-        dao.delete(entity)
+        runCatching { dao.delete(entity) }
         liveDummyIds.remove(entity.id)
         restartPendingIds.remove(entity.id)
         refreshNow()
@@ -176,7 +178,7 @@ class AfkHelperManager(
         }
 
         val worldName = currentWorldName()
-        val activeWorldFarms = dao.getAll().filter {
+        val activeWorldFarms = runCatching { dao.getAll() }.getOrDefault(emptyList()).filter {
             it.worldName.equals(worldName, ignoreCase = true) && it.isActive
         }
 

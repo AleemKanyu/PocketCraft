@@ -2552,62 +2552,6 @@ private fun ConsoleCard(
                         tint = PocketColors.ConsoleBright.copy(alpha = 0.85f)
                     )
                 }
-                IconButton(
-                    onClick = {
-                        val logsToUpload = stateHolder.logs
-                        if (logsToUpload.isEmpty()) {
-                            Toast.makeText(context, "No logs to send", Toast.LENGTH_SHORT).show()
-                            return@IconButton
-                        }
-                        if (isUploading) return@IconButton
-                        
-                        isUploading = true
-                        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-                            ?: com.pocketcraft.server.util.MultiProcessAuthSync.readUid(context)
-                            ?: AppPreferences(context).firebaseUserUid
-                            
-                        if (uid == null) {
-                            isUploading = false
-                            Toast.makeText(context, "Error: User not signed in", Toast.LENGTH_SHORT).show()
-                            return@IconButton
-                        }
-                        
-                        val data = mapOf(
-                            "consoleLines" to logsToUpload,
-                            "lastSeen" to com.google.firebase.Timestamp.now()
-                        )
-                        
-                        com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                            .collection("users").document(uid)
-                            .collection("dashboard_status").document("status")
-                            .set(data, com.google.firebase.firestore.SetOptions.merge())
-                            .addOnSuccessListener {
-                                isUploading = false
-                                Toast.makeText(context, "Logs sent to Firestore", Toast.LENGTH_SHORT).show()
-                            }
-                            .addOnFailureListener { e ->
-                                isUploading = false
-                                Toast.makeText(context, "Failed to send logs: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                    },
-                    modifier = Modifier.size(32.dp),
-                    enabled = !isUploading
-                ) {
-                    if (isUploading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                            color = PocketColors.ConsoleBright
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Upload,
-                            contentDescription = "Send logs to Firestore",
-                            modifier = Modifier.size(18.dp),
-                            tint = PocketColors.ConsoleBright.copy(alpha = 0.85f)
-                        )
-                    }
-                }
                 TextButton(onClick = stateHolder::clearLogs) {
                     Text(
                         text = LocalAppStrings.current.clearLog,

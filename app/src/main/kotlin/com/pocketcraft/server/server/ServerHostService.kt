@@ -2243,21 +2243,22 @@ class ServerHostService : Service() {
     }
 
     private suspend fun publishRelayStatus(versionId: String) {
-        val serverDir = ServerFileManager.getServerDir(applicationContext, activeWorldNameOrDefault())
-        val propsFile = File(serverDir, "server.properties")
-        val props = Properties().apply {
+        runCatching {
+            val serverDir = ServerFileManager.getServerDir(applicationContext, activeWorldNameOrDefault())
+            val propsFile = File(serverDir, "server.properties")
+            val props = Properties()
             if (propsFile.exists()) {
-                propsFile.inputStream().use(::load)
+                propsFile.inputStream().use { props.load(it) }
             }
+            val motd = props.getProperty("motd", "A PocketCraft Server").trim()
+            val maxPlayers = props.getProperty("max-players", "10").toIntOrNull() ?: 10
+            relayManager.postServerStatus(
+                motd = motd,
+                players = relayStatusPlayerCount.get().coerceAtLeast(0),
+                maxPlayers = maxPlayers.coerceIn(1, 50),
+                version = versionId
+            )
         }
-        val motd = props.getProperty("motd", "A PocketCraft Server").trim()
-        val maxPlayers = props.getProperty("max-players", "10").toIntOrNull() ?: 10
-        relayManager.postServerStatus(
-            motd = motd,
-            players = relayStatusPlayerCount.get().coerceAtLeast(0),
-            maxPlayers = maxPlayers.coerceIn(1, 50),
-            version = versionId
-        )
     }
 
     private fun pushWidgetUpdate(statusOverride: String? = null) {
@@ -2408,154 +2409,15 @@ class ServerHostService : Service() {
     }
 
     private fun startDashboardStatusHeartbeat(versionId: String) {
-        // Disabled: Web dashboard feature removed/manual logs only
+        // Disabled
     }
 
     private fun triggerDashboardStatusUpdate() {
-        val versionId = currentVersionId ?: return
-        serviceScope.launch(Dispatchers.IO) {
-            updateDashboardStatus(versionId)
-        }
+        // Disabled: avoid unnecessary status payload construction
     }
 
     private suspend fun updateDashboardStatus(versionId: String) {
-        val prefs = com.pocketcraft.server.data.preferences.AppPreferences(this)
-        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-            ?: com.pocketcraft.server.util.MultiProcessAuthSync.readUid(this)
-            ?: prefs.firebaseUserUid
-            ?: return
-        
-        val serverRunning = serverReadyHandled.get()
-        val processAlive = serverProcess?.isAlive == true ||
-            com.pocketcraft.server.server.ServerLauncher.hasActiveExternalProcess() ||
-            isLocalServerPortOpen(currentServerPort)
-            
-        val serverState = when {
-            serverRunning -> "running"
-            isLaunching -> "starting"
-            else -> "stopped"
-        }
-
-        if (serverState == "starting") {
-            if (bootStartedAt == 0L) {
-                bootStartedAt = System.currentTimeMillis()
-            }
-        } else {
-            bootStartedAt = 0L
-        }
-
-        val progressPercent = if (serverRunning) {
-            100
-        } else if (serverState == "starting") {
-            val elapsedMs = (System.currentTimeMillis() - bootStartedAt).coerceAtLeast(0L)
-            when {
-                elapsedMs < 8_000L -> ((elapsedMs / 8_000f) * 20f)
-                elapsedMs < 20_000L -> 20f + (((elapsedMs - 8_000L) / 12_000f) * 32f)
-                elapsedMs < 35_000L -> 52f + (((elapsedMs - 20_000L) / 15_000f) * 26f)
-                elapsedMs < 55_000L -> 78f + (((elapsedMs - 35_000L) / 20_000f) * 20f)
-                else -> 98f
-            }.toInt().coerceIn(0, 98)
-        } else {
-            0
-        }
-        val bootProgress = if (serverState == "starting") {
-            lastNotificationText.ifBlank { ServerStage.STARTING_SERVER.notificationText }
-        } else {
-            ""
-        }
-        
-        val playersOnline = synchronized(currentPlayersList) {
-            currentPlayersList.map { player ->
-                mapOf(
-                    "name" to player.name,
-                    "uuid" to player.uuid,
-                    "ping" to player.pingMs,
-                    "pingText" to player.pingText()
-                )
-            }
-        }
-        
-        val startedAt = serverStartTimeMillis
-        val uptimeSeconds = if (startedAt > 0L && serverRunning) {
-            ((System.currentTimeMillis() - startedAt) / 1000L).coerceAtLeast(0L)
-        } else {
-            0L
-        }
-        
-        val currentTps = if (serverRunning) {
-            val tpsVal = currentServerTps
-            if (tpsVal > 0f) tpsVal.toDouble() else 20.0
-        } else {
-            null
-        }
-        
-        val dbDao = com.pocketcraft.server.afk.AfkHelperDatabase.getInstance(this).afkFarmLocationDao()
-        val currentWorld = currentWorldName ?: "world"
-        val rawBots = dbDao.getAll().filter { it.worldName.equals(currentWorld, ignoreCase = true) }
-        val afkBotEnabled = rawBots.any { it.isActive }
-        val afkBotsList = rawBots.map { bot ->
-            mapOf(
-                "id" to bot.id,
-                "name" to bot.name,
-                "dummyName" to bot.dummyEntityName,
-                "x" to bot.x,
-                "y" to bot.y,
-                "z" to bot.z,
-                "world" to bot.worldName,
-                "active" to bot.isActive,
-                "owner" to bot.ownerPlayerName,
-                "ownerUuid" to bot.ownerPlayerUuid
-            )
-        }
-            
-        val subdomain = prefs.customSubdomain
-        val subdomainRegion = prefs.customSubdomainRegion
-        val relayAddress = getPersistedPublicAddress(this, versionId) ?: ""
-        
-        val whitelist = readWhitelistNames(this, currentWorld)
-        val ops = readOpsNames(this, currentWorld)
-        val consoleLines = synchronized(logBuffer) {
-            logBuffer.toList().takeLast(50)
-        }
-        val allPlayers = getRegisteredPlayers(currentWorld)
-
-        val statusDoc = mapOf(
-            "serverRunning" to serverRunning,
-            "serverState" to serverState,
-            "bootProgress" to bootProgress,
-            "bootProgressPercent" to progressPercent,
-            "playersOnline" to playersOnline,
-            "allPlayers" to allPlayers,
-            "uptimeSeconds" to uptimeSeconds,
-            "tps" to currentTps,
-            "afkBotEnabled" to afkBotEnabled,
-            "afkBots" to afkBotsList,
-            "subdomain" to subdomain,
-            "subdomainRegion" to subdomainRegion,
-            "relayAddress" to relayAddress,
-            "whitelist" to whitelist,
-            "ops" to ops,
-            "consoleLines" to consoleLines,
-            "lastSeen" to com.google.firebase.Timestamp.now(),
-            "usedRam" to com.pocketcraft.server.util.RamUtils.getUsedRamMb(this),
-            "totalRam" to com.pocketcraft.server.util.RamUtils.getTotalRamMb(this),
-            "currentWorld" to activeWorldNameOrDefault(),
-            "worlds" to listWorlds(),
-            "properties" to readServerProperties(currentWorld),
-            "secret" to (com.pocketcraft.server.util.MultiProcessAuthSync.readSecret(this) ?: prefs.dashboardSecret ?: ""),
-            "localIp" to (com.pocketcraft.server.server.ServerAddressResolver.getLocalIpAddress() ?: ""),
-            "serverPort" to currentServerPort,
-            "isPremium" to (prefs.isPremiumUser || prefs.debugPremiumOverride)
-        )
-
-        try {
-            // Disabled: Web dashboard status is disabled/removed. Avoid hitting Firestore write quota limits.
-            // FirebaseFirestore.getInstance().collection("users").document(uid)
-            //     .collection("dashboard_status").document("status")
-            //     .set(statusDoc, SetOptions.merge())
-        } catch (e: Exception) {
-            android.util.Log.e("ServerHostService", "Failed to update dashboard status: ${e.message}")
-        }
+        // Web dashboard status is disabled/removed. Immediate no-op to prevent OutOfMemoryError.
     }
 
     private fun listWorlds(): List<String> {

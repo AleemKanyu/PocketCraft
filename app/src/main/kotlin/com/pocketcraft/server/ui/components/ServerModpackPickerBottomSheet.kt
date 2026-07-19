@@ -141,9 +141,11 @@ fun ServerModpackPickerBottomSheet(
                         )
                         .clickable {
                             launchedDownload = true
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
-                            )
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
+                                )
+                            }
                         }
                         .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center

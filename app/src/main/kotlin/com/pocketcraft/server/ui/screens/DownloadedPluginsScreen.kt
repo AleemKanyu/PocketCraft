@@ -432,7 +432,9 @@ fun DownloadedPluginsScreen(
                             return@DuoButton
                         }
                         scope.launch {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(cleanUrl)))
+                            runCatching {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(cleanUrl)))
+                            }
                             urlInput = ""
                             addSheetState.hide()
                             showAddDialog = false

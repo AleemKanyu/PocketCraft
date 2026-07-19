@@ -35,6 +35,19 @@ open class PocketCraftApp : Application(), Configuration.Provider {
         super.onCreate()
         AppPreferences.init(this)
 
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            val stackTrace = Log.getStackTraceString(throwable)
+            if (stackTrace.contains("LegacyCursorAnchorInfoController") || 
+                stackTrace.contains("updateCursorAnchorInfo") ||
+                (throwable is NullPointerException && stackTrace.contains("androidx.compose.foundation.text"))) {
+                Log.e("PocketCraftApp", "Caught Compose IME cursor framework NullPointerException, preventing crash.", throwable)
+                runCatching { Firebase.crashlytics.recordException(throwable) }
+            } else {
+                defaultHandler?.uncaughtException(thread, throwable)
+            }
+        }
+
         val processName = currentProcessName()
         val isMainProcess = processName == packageName
         val isServerProcess = processName == "$packageName:server"

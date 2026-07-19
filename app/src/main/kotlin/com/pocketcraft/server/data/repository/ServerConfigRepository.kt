@@ -268,12 +268,16 @@ class ServerConfigRepository @Inject constructor(
     }
 
     private fun parseConfig(file: File, fallbackConfig: ServerConfig? = null): ServerConfig {
-        val props = file.readLines()
-            .filter { it.contains("=") && !it.startsWith("#") }
-            .associate {
-                val idx = it.indexOf('=')
-                it.substring(0, idx).trim() to it.substring(idx + 1).trim()
+        if (!file.exists()) return fallbackConfig ?: ServerConfig()
+        val props = runCatching {
+            file.useLines { lines ->
+                lines.filter { it.contains("=") && !it.startsWith("#") }
+                    .associate { line ->
+                        val idx = line.indexOf('=')
+                        line.substring(0, idx).trim() to line.substring(idx + 1).trim()
+                    }
             }
+        }.getOrElse { emptyMap() }
         val fallbackName = if (file.name == "server.properties") {
             file.parentFile?.name?.takeIf { it != "worlds" && it != "servers" } ?: "world"
         } else {

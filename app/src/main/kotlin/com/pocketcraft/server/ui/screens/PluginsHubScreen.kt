@@ -713,7 +713,9 @@ fun PluginsHubScreen(
                             scope.launch {
                                 val cleanUrl = urlInput.trim()
                                 if (cleanUrl.isNotBlank()) {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(cleanUrl)))
+                                    runCatching {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(cleanUrl)))
+                                    }
                                 }
                                 onMessage("Download the file in your browser, then use Upload from device.")
                             }

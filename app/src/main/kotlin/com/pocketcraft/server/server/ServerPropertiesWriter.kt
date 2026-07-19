@@ -209,7 +209,21 @@ object ServerPropertiesWriter {
             }
         }
         if (file.exists()) {
-            file.inputStream().use { input -> props.load(input) }
+            runCatching {
+                file.inputStream().use { input -> props.load(input) }
+            }.onFailure { err ->
+                Log.e(TAG, "Failed to parse properties from ${file.name}: ${err.message}. Performing line-by-line fallback recovery.", err)
+                runCatching {
+                    file.useLines { lines ->
+                        lines.filter { it.contains("=") && !it.startsWith("#") }.forEach { line ->
+                            val idx = line.indexOf('=')
+                            val k = line.substring(0, idx).trim()
+                            val v = line.substring(idx + 1).trim()
+                            if (k.isNotEmpty()) props[k] = v
+                        }
+                    }
+                }
+            }
         }
         return props
     }

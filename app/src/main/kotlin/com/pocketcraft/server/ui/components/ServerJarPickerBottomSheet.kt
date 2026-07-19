@@ -177,9 +177,11 @@ fun ServerJarPickerBottomSheet(
                         )
                         .then(
                             if (!isResolving) Modifier.clickable {
-                                context.startActivity(
-                                    Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
-                                )
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
+                                    )
+                                }
                             } else Modifier
                         )
                         .padding(vertical = 15.dp),

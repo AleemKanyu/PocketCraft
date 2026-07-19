@@ -5517,8 +5517,9 @@ class ServerStateHolder(
     }
 
     private fun flattenWorldStructure(specificWorld: String? = null) {
+        val currentWorlds = runCatching { worlds.toList() }.getOrDefault(emptyList())
         val worldsToFix = if (specificWorld != null) listOf(specificWorld) else {
-            (worlds.map { it.name } + activeWorld).filter { it.isNotBlank() }.distinct()
+            (currentWorlds.map { it.name } + activeWorld).filter { it.isNotBlank() }.distinct()
         }
 
         worldsToFix.forEach { worldName ->

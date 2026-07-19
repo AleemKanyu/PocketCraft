@@ -36,76 +36,7 @@ class DashboardCommandListener(
     private var registration: ListenerRegistration? = null
 
     fun start() {
-        val prefs = AppPreferences(context)
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
-            ?: com.pocketcraft.server.util.MultiProcessAuthSync.readUid(context)
-            ?: prefs.firebaseUserUid
-            ?: return
-
-        scope.launch(Dispatchers.IO) {
-            try {
-                val snapshot = db.collection("users").document(uid).get().await()
-                val secret = (snapshot.getString("dashboardSecret")
-                    ?: com.pocketcraft.server.util.MultiProcessAuthSync.readSecret(context)
-                    ?: prefs.dashboardSecret).orEmpty()
-                
-                withContext(Dispatchers.Main) {
-                    Log.d("DashboardCommandListener", "Starting listener for user: $uid with secret: $secret")
-                    
-                    registration?.remove()
-                    registration = db.collection("users").document(uid).collection("dashboard_commands")
-                        .whereEqualTo("status", "pending")
-                        .addSnapshotListener { snapshots, error ->
-                            if (error != null) {
-                                Log.e("DashboardCommandListener", "Error listening to dashboard commands", error)
-                                return@addSnapshotListener
-                            }
-                            if (snapshots == null || snapshots.isEmpty) return@addSnapshotListener
-
-                            val sortedDocs = snapshots.documents.sortedBy { doc ->
-                                doc.getTimestamp("createdAt")
-                            }
-                            for (doc in sortedDocs) {
-                                val commandId = doc.id
-                                val type = doc.getString("type") ?: continue
-                                val docSecret = doc.getString("secret").orEmpty()
-                                val payload = doc.get("payload") as? Map<String, Any> ?: emptyMap()
-
-                                if (docSecret != secret) {
-                                    // Expire stale commands with wrong/empty secrets so they don't pile up
-                                    Log.w("DashboardCommandListener", "Expiring stale command $commandId (secret mismatch)")
-                                    db.collection("users").document(uid).collection("dashboard_commands")
-                                        .document(commandId)
-                                        .update("status", "expired")
-                                    continue
-                                }
-
-                                if (!shouldHandleCommand(type)) {
-                                    continue
-                                }
-
-                                Log.d("DashboardCommandListener", "Handling command $commandId type=$type")
-
-                                // Immediately mark as acked
-                                db.collection("users").document(uid).collection("dashboard_commands")
-                                    .document(commandId)
-                                    .update("status", "acked")
-
-                                scope.launch(Dispatchers.IO) {
-                                    try {
-                                        handleCommand(type, payload, uid, commandId)
-                                    } catch (e: Exception) {
-                                        Log.e("DashboardCommandListener", "Error processing command $commandId", e)
-                                        updateCommandResult(uid, commandId, status = "failed", errorMsg = e.message)
-                                    }
-                                }
-                            }
-                        }
-                }
-            } catch (e: Exception) {
-                Log.e("DashboardCommandListener", "Failed to fetch dashboardSecret: ${e.message}")
-            }
-        }
+        // Web Dashboard feature removed/discontinued. Listener disabled.
     }
 
     fun stop() {

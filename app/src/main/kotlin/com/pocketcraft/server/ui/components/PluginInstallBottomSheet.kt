@@ -149,7 +149,9 @@ fun PluginInstallBottomSheet(
                                 )
                                 .clickable {
                                     activeFilePickerTarget = null
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(itemPageUrl)))
+                                    runCatching {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(itemPageUrl)))
+                                    }
                                 }
                                 .padding(vertical = 15.dp),
                             contentAlignment = Alignment.Center
@@ -281,7 +283,9 @@ fun PluginInstallBottomSheet(
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Button(
                                         onClick = {
-                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(dep.pageUrl)))
+                                            runCatching {
+                                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(dep.pageUrl)))
+                                            }
                                         },
                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                                         shape = RoundedCornerShape(8.dp),
