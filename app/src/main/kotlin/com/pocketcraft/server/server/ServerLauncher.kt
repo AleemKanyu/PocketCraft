@@ -1338,15 +1338,14 @@ class ServerLauncher(private val context: Context) {
             }
         }
 
-        setLauncherProp("serverWorkers", "2")
-        setLauncherProp("serverIoThreads", "2")
-        // Disable Fabric's auto-open GUI – it tries to open a Swing window on Android.
+        // Disable Fabric's auto-open GUI — it tries to open a Swing window on Android.
+        // gui=false is the only real property the Fabric server launcher reads here.
         setLauncherProp("gui", "false")
 
         val updatedLauncher = launcherLines.joinToString("\n").trimEnd() + "\n"
         if (updatedLauncher != originalLauncher) {
             runCatching { launcherProps.writeText(updatedLauncher) }
-            onOutput("[PocketCraft] Fabric launcher config tuned: serverWorkers=2, serverIoThreads=2, gui=false")
+            onOutput("[PocketCraft] Fabric launcher config: gui=false applied.")
         }
 
         // --- server.properties extras (Fabric / Vanilla only) -------------------

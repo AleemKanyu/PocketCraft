@@ -243,10 +243,12 @@ class AfkHelperManager(
                 // 1. Keep chunk force-loaded via /forceload add (already done above)
                 // 2. Summon visual AFK Helper bot at target coordinates
                 val botDisplayName = dummyDisplayName(prepared)
-                // Use a Zombie (same bounding box as a player, supports NoAI/Silent) as the
-                // AFK-helper visual stand-in on Fabric/Vanilla where the Dummy plugin is unavailable.
-                // IsBaby:0b ensures full player-height. NoAI stops pathfinding. Silent suppresses sounds.
-                val summonCommand = """summon minecraft:zombie ${prepared.x} ${prepared.y} ${prepared.z} {CustomName:'{"text":"$botDisplayName"}',CustomNameVisible:1b,Invulnerable:1b,NoAI:1b,Silent:1b,PersistenceRequired:1b,IsBaby:0b,Tags:["pocketcraft_afk_bot"]}"""
+                // Summon a full-size Zombie as the AFK-helper stand-in on Fabric.
+                // Use legacy Minecraft plain-text name format (double-quoted string inside
+                // single-quoted NBT tag) — JSON component format via RCON requires extra
+                // escaping that differs between server versions.
+                val safeName = botDisplayName.replace("'", "").replace("\"", "")
+                val summonCommand = "summon minecraft:zombie ${prepared.x} ${prepared.y} ${prepared.z} {CustomName:'\"$safeName\"',CustomNameVisible:1b,Invulnerable:1b,NoAI:1b,Silent:1b,PersistenceRequired:1b,IsBaby:0b,Tags:[\"pocketcraft_afk_bot\"]}"
                 runCatching { sendRconCommand(summonCommand) }
             } else {
                 runCatching { sendRconCommand("forceload remove $forceloadKey") }
@@ -294,9 +296,13 @@ class AfkHelperManager(
                 runCatching { sendRconCommand("kick ${dummyDisplayName(disabled)}") }
                 runCatching { sendRconCommand("kill ${dummySelector(disabled)}") }
                 
-                // Fallback cleanup for Fabric / Purpur / Vanilla
-                val botTagSelector = """@e[tag=pocketcraft_afk_bot,name="${escapeSelectorName(dummyDisplayName(disabled))}"]"""
+                // Fallback cleanup for Fabric / Purpur / Vanilla tagged bots.
+                // Try specific name first, then broad tag-only kill to catch any that
+                // had name-matching issues (e.g. from old JSON-format names).
+                val botTagSelector = "@e[tag=pocketcraft_afk_bot,limit=1]"
                 runCatching { sendRconCommand("kill $botTagSelector") }
+                // Belt-and-suspenders: kill ALL tagged AFK bots in case multiple got spawned
+                runCatching { sendRconCommand("kill @e[tag=pocketcraft_afk_bot]") }
                 runCatching { sendRconCommand("forceload remove ${disabled.x} ${disabled.z}") }
                 
                 delay(500)

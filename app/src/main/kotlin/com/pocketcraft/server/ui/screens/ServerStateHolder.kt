@@ -5462,61 +5462,67 @@ class ServerStateHolder(
 
     private suspend fun applyPingUpdatesFromRcon() {
         val type = config.serverType
-        // Fabric and Vanilla use `data get entity <player> latency`.
-        // Paper/Purpur have /ping command. All server types are handled below.
-        val useEntityLatency = type == com.pocketcraft.server.data.model.ServerType.FABRIC
+        val isFabric = type == com.pocketcraft.server.data.model.ServerType.FABRIC
 
         val players = withContext(Dispatchers.Main) { onlinePlayers.toList() }
         if (players.isEmpty()) return
 
+        if (isFabric) {
+            // Fabric/Vanilla don't expose player latency via commands or NBT.
+            // Measure RCON round-trip time as a real server-responsiveness proxy.
+            // Three samples → median to filter GC pause outliers.
+            val samples = mutableListOf<Int>()
+            repeat(3) {
+                val t0 = System.currentTimeMillis()
+                val resp = runCatching { sendRconCommand("list") }.getOrDefault("")
+                val rtt = (System.currentTimeMillis() - t0).toInt()
+                if (resp.isNotBlank() && !resp.startsWith("[RCON] Error") && !resp.startsWith("[RCON] Connection")) {
+                    samples.add(rtt)
+                }
+                delay(50)
+            }
+            if (samples.isEmpty()) return
+            samples.sort()
+            val medianRtt = samples[samples.size / 2]
+            withContext(Dispatchers.Main) {
+                val sample = ParsedPlayerPing(pingMs = medianRtt)
+                onlinePlayers.replaceAll { p ->
+                    val updated = p.copy(pingMs = sanitizeWifiPingSample(p, sample, p.ip))
+                    val sessionIdx = sessionPlayers.indexOfFirst {
+                        canonicalPlayerName(it.name) == canonicalPlayerName(p.name)
+                    }
+                    if (sessionIdx >= 0) sessionPlayers[sessionIdx] = updated
+                    updated
+                }
+            }
+            return
+        }
+
+        // Paper / Purpur: query each player individually via /ping command.
         for (player in players) {
             runCatching {
-                if (useEntityLatency) {
-                    // Fabric / Vanilla: `data get entity @a[name=<player>,limit=1] latency`
-                    // The RCON reply is a bare: "has the following entity data: 37"
-                    // (no player name prefix) — use parseFabricEntityLatency.
-                    val resp = sendRconCommand("data get entity @a[name=${escapeSelectorName(player.name)},limit=1] latency")
-                    if (resp.isBlank() || resp.startsWith("[RCON] Error") || resp.startsWith("[RCON] Connection")) return@runCatching
-                    val ping = ConsoleParser.parseFabricEntityLatency(resp)
-                    if (ping < 0) return@runCatching
-                    withContext(Dispatchers.Main) {
-                        val sample = ParsedPlayerPing(pingMs = ping)
-                        onlinePlayers.replaceAll { p ->
-                            if (canonicalPlayerName(p.name) == canonicalPlayerName(player.name)) {
-                                val updated = p.copy(pingMs = sanitizeWifiPingSample(p, sample, p.ip))
-                                val sessionIdx = sessionPlayers.indexOfFirst {
-                                    canonicalPlayerName(it.name) == canonicalPlayerName(p.name)
-                                }
-                                if (sessionIdx >= 0) sessionPlayers[sessionIdx] = updated
-                                updated
-                            } else p
-                        }
-                    }
-                } else {
-                    // Paper / Purpur: try /ping first, fallback to entity data.
-                    var rconResponse = sendRconCommand("ping ${escapeSelectorName(player.name)}")
-                    if (rconResponse.isBlank() || rconResponse.contains("Unknown", ignoreCase = true) || rconResponse.contains("Incomplete", ignoreCase = true) || rconResponse.contains("Could not", ignoreCase = true)) {
-                        rconResponse = sendRconCommand("data get entity ${escapeSelectorName(player.name)} latency")
-                    }
-                    if (rconResponse.isBlank() || rconResponse.startsWith("[RCON] Error") || rconResponse.startsWith("[RCON] Connection")) return@runCatching
-                    val pings = ConsoleParser.parsePing(rconResponse)
-                    if (pings.isEmpty()) return@runCatching
-                    withContext(Dispatchers.Main) {
-                        onlinePlayers.replaceAll { p ->
-                            val newPing = pings[p.name] ?: pings[p.name.lowercase()]
-                            if (newPing != null) {
-                                val nextIp = newPing.ip.ifBlank { p.ip }
-                                val updated = p.copy(
-                                    pingMs = sanitizeWifiPingSample(p, newPing, nextIp),
-                                    ip = nextIp
-                                )
-                                val sessionIdx = sessionPlayers.indexOfFirst {
-                                    canonicalPlayerName(it.name) == canonicalPlayerName(p.name)
-                                }
-                                if (sessionIdx >= 0) sessionPlayers[sessionIdx] = updated
-                                updated
-                            } else p
-                        }
+                var rconResponse = sendRconCommand("ping ${escapeSelectorName(player.name)}")
+                if (rconResponse.isBlank() || rconResponse.contains("Unknown", ignoreCase = true) || rconResponse.contains("Incomplete", ignoreCase = true) || rconResponse.contains("Could not", ignoreCase = true)) {
+                    rconResponse = sendRconCommand("data get entity ${escapeSelectorName(player.name)} latency")
+                }
+                if (rconResponse.isBlank() || rconResponse.startsWith("[RCON] Error") || rconResponse.startsWith("[RCON] Connection")) return@runCatching
+                val pings = ConsoleParser.parsePing(rconResponse)
+                if (pings.isEmpty()) return@runCatching
+                withContext(Dispatchers.Main) {
+                    onlinePlayers.replaceAll { p ->
+                        val newPing = pings[p.name] ?: pings[p.name.lowercase()]
+                        if (newPing != null) {
+                            val nextIp = newPing.ip.ifBlank { p.ip }
+                            val updated = p.copy(
+                                pingMs = sanitizeWifiPingSample(p, newPing, nextIp),
+                                ip = nextIp
+                            )
+                            val sessionIdx = sessionPlayers.indexOfFirst {
+                                canonicalPlayerName(it.name) == canonicalPlayerName(p.name)
+                            }
+                            if (sessionIdx >= 0) sessionPlayers[sessionIdx] = updated
+                            updated
+                        } else p
                     }
                 }
             }.onFailure { error ->
@@ -5525,6 +5531,7 @@ class ServerStateHolder(
             delay(100)
         }
     }
+
 
     private fun stopPeriodicLocationPolling() {
         periodicLocationJob?.cancel()
