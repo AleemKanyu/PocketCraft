@@ -222,48 +222,6 @@ object CarpetModManager {
     // Private helpers
     // -------------------------------------------------------------------------
 
-    private fun resolveModrinthDownloadUrl(projectId: String, cleanMcVersion: String): String? {
-        return runCatching {
-            val apiUrl = "https://api.modrinth.com/v2/project/$projectId/version" +
-                "?game_versions=%5B%22$cleanMcVersion%22%5D&loaders=%5B%22fabric%22%5D"
-            val conn = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
-                setRequestProperty("User-Agent", USER_AGENT)
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
-                requestMethod = "GET"
-            }
-            if (conn.responseCode != 200) return@runCatching null
-            val json = JSONArray(conn.inputStream.bufferedReader().use { it.readText() })
-            if (json.length() == 0) return@runCatching null
-
-            // Strict version matching: find a release that explicitly lists cleanMcVersion
-            for (i in 0 until json.length()) {
-                val versionObj = json.getJSONObject(i)
-                val gameVersions = versionObj.optJSONArray("game_versions") ?: continue
-                var versionMatched = false
-                for (g in 0 until gameVersions.length()) {
-                    if (gameVersions.getString(g) == cleanMcVersion) {
-                        versionMatched = true
-                        break
-                    }
-                }
-                if (versionMatched) {
-                    val files = versionObj.optJSONArray("files") ?: continue
-                    for (f in 0 until files.length()) {
-                        val file = files.getJSONObject(f)
-                        if (file.optBoolean("primary", false)) {
-                            return@runCatching file.getString("url")
-                        }
-                    }
-                    if (files.length() > 0) {
-                        return@runCatching files.getJSONObject(0).getString("url")
-                    }
-                }
-            }
-            null
-        }.getOrNull()
-    }
-
     private fun downloadFile(url: String, dest: File, onOutput: (String) -> Unit): Boolean {
         return runCatching {
             val conn = (URL(url).openConnection() as HttpURLConnection).apply {
