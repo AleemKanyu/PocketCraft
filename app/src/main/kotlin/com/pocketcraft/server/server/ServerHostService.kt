@@ -2049,7 +2049,13 @@ class ServerHostService : Service() {
             miuiSocketCheckSeen = false
             return
         }
-        // ── end MIUI detection ──────────────────────────────────────────────────
+        if (line.contains("MixinApplyError", ignoreCase = true) && line.contains("carpet", ignoreCase = true)) {
+            val serverDir = com.pocketcraft.server.service.ServerFileManager.getServerDir(applicationContext, activeWorldNameOrDefault())
+            val modsDir = File(serverDir, "mods")
+            CarpetModManager.purgeAllCarpetJars(modsDir) { msg ->
+                sendEvent(versionId, EVENT_OUTPUT, msg)
+            }
+        }
         addLogLine(line)
         sendEvent(versionId, EVENT_OUTPUT, line)
         if (isBacklog) return
