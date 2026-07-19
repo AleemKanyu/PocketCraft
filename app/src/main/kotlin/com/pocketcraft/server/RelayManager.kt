@@ -52,7 +52,7 @@ class RelayManager(private val context: Context) {
         const val PHONE_TUNNEL_PORT = 9000
         // Bound kernel queues so chunks backpressure Paper before keepalives sit
         // behind seconds of unsent data on constrained mobile relay routes.
-        private const val SOCKET_BUFFER_SIZE = 256 * 1024
+        private const val SOCKET_BUFFER_SIZE = 64 * 1024
         private const val PLAYER_BRIDGE_BUFFER_SIZE = 8 * 1024
         private const val PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE = 8 * 1024
         private const val BEDROCK_TX_BUFFER_SIZE = 8 * 1024
@@ -1179,7 +1179,8 @@ class RelayManager(private val context: Context) {
             var totalBytes = 0L
             try {
                 val input  = localSocket.getInputStream()
-                val output = relaySocket.getOutputStream()
+                val rawOutput = relaySocket.getOutputStream()
+                val output = java.io.BufferedOutputStream(rawOutput, 16 * 1024)
                 val buffer = ByteArray(PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE)
                 var bytesRead: Int
 
@@ -1189,13 +1190,18 @@ class RelayManager(private val context: Context) {
 
                     val startTime = System.nanoTime()
                     output.write(buffer, 0, bytesRead)
-                    totalBytes  += bytesRead
+                    // If less than full buffer read, flush immediately to avoid latency on frame boundaries
+                    if (bytesRead < buffer.size) {
+                        output.flush()
+                    }
+                    totalBytes += bytesRead
 
                     val durationMicros = (System.nanoTime() - startTime) / 1000
                     if (durationMicros > 100_000) {
                         android.util.Log.d("RelayManager", "LocalToRelay write delay: ${durationMicros}μs for $bytesRead bytes")
                     }
                 }
+                runCatching { output.flush() }
                 android.util.Log.d("RelayManager", "LocalToRelay: End of stream. Total upstream: $totalBytes bytes")
             } catch (e: Exception) {
                 android.util.Log.e("RelayManager", "LocalToRelay error: ${e.message}")
@@ -1226,10 +1232,10 @@ class RelayManager(private val context: Context) {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = SOCKET_BUFFER_SIZE
-            socket.receiveBufferSize = SOCKET_BUFFER_SIZE
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
+            // Do NOT set sendBufferSize/receiveBufferSize — let Linux TCP auto-tune.
+            // Artificial limits throttle chunk bursts and inflate ping under load.
         }
     }
 
@@ -1238,10 +1244,10 @@ class RelayManager(private val context: Context) {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = SOCKET_BUFFER_SIZE
-            socket.receiveBufferSize = SOCKET_BUFFER_SIZE
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
+            // Do NOT set sendBufferSize/receiveBufferSize — let Linux TCP auto-tune.
+            // Artificial limits throttle chunk bursts and inflate ping under load.
         }
     }
 

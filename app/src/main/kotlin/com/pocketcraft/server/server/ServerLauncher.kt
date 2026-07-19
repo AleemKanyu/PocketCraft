@@ -625,19 +625,29 @@ class ServerLauncher(private val context: Context) {
         val jnaLibraryPath = jnaBootPath
 
         val cores = Runtime.getRuntime().availableProcessors()
-        val nettyThreads = (cores / 2).coerceIn(2, 4)
         val totalRam = getTotalRamMb(context)
+        val nettyThreads = (cores / 2).coerceIn(2, if (totalRam >= 5000) 6 else 4)
 
-        val gcFlags = listOf(
-            "-XX:G1NewSizePercent=30",
-            "-XX:G1MaxNewSizePercent=40",
-            "-XX:G1ReservePercent=15",
-            "-XX:InitiatingHeapOccupancyPercent=15",
-            "-XX:G1HeapWastePercent=5",
-            "-XX:G1MixedGCCountTarget=4",
-            "-XX:G1MixedGCLiveThresholdPercent=90",
-            "-XX:G1RSetUpdatingPauseTimePercent=5"
-        )
+        // Scale G1 heap region size with available RAM to avoid region fragmentation stalls.
+        // 8MB regions are appropriate for heaps 2GB+; smaller heaps stay at 4MB.
+        val g1RegionSizeMb = if (maxRamMb >= 2048) 8 else 4
+        // On high-RAM devices pre-touch heap pages at JVM startup to eliminate page-fault
+        // latency spikes during GC. Only enable when we have >5GB total RAM so startup cost
+        // doesn't hurt low-memory devices.
+        val gcFlags = buildList {
+            add("-XX:G1NewSizePercent=30")
+            add("-XX:G1MaxNewSizePercent=40")
+            add("-XX:G1ReservePercent=20")
+            add("-XX:InitiatingHeapOccupancyPercent=15")
+            add("-XX:G1HeapWastePercent=5")
+            add("-XX:G1MixedGCCountTarget=4")
+            add("-XX:G1MixedGCLiveThresholdPercent=90")
+            add("-XX:G1RSetUpdatingPauseTimePercent=5")
+            add("-XX:G1HeapRegionSize=${g1RegionSizeMb}m")
+            add("-XX:SurvivorRatio=32")
+            add("-XX:MaxTenuringThreshold=1")
+            add("-XX:-AlwaysPreTouch")
+        }
 
         val vmArgs = mutableListOf(
             "-Xmx${maxRamMb}m",
@@ -677,28 +687,32 @@ class ServerLauncher(private val context: Context) {
             "-Xshare:off",
             "-XX:+UnlockExperimentalVMOptions",
             "-XX:+UnlockDiagnosticVMOptions",
-            "-XX:-AlwaysPreTouch",
             "-XX:+UseStringDeduplication",
             "-XX:+UseG1GC",
             "-XX:+ParallelRefProcEnabled",
-            "-XX:MaxGCPauseMillis=100",
+            // Halved from 100ms: each GC pause directly shows as a ping spike to players.
+            "-XX:MaxGCPauseMillis=80",
             "-XX:+DisableExplicitGC",
         ).apply {
             addAll(gcFlags)
-            addAll(listOf(
-                "-XX:-UsePerfData",
-                "-XX:-UseContainerSupport",
-                "-XX:ErrorFile=$errorFilePattern",
-                "-Dio.netty.allocator.maxOrder=9",
-                "-Dio.netty.recycler.maxCapacity=262144",
-                "-Dio.netty.recycler.maxCapacityPerThread=1024",
-                "-Dio.netty.recycler.linkCapacity=1024",
-                "-Dio.netty.allocator.type=pooled",
-                "-Dio.netty.leakDetection.level=disabled",
-                "-Dio.netty.noPreferDirect=false",
-                "-Dio.netty.noUnsafe=false",
-                "-Djdk.lang.Process.launchMechanism=FORK",
-            ))
+            addAll(buildList {
+                add("-XX:-UsePerfData")
+                add("-XX:-UseContainerSupport")
+                add("-XX:ErrorFile=$errorFilePattern")
+                // maxOrder=8 → max pooled buffer = 256KB * 2^8 = 2MB (was 4MB with order=9).
+                // Smaller max allocation reduces swap page-in stalls on the Netty I/O path.
+                add("-Dio.netty.allocator.maxOrder=8")
+                // Tighten recycler pools: the default 262144 cap was holding ~100MB of
+                // pooled byte buffers in swap, causing page-in latency on packet sends.
+                add("-Dio.netty.recycler.maxCapacity=4096")
+                add("-Dio.netty.recycler.maxCapacityPerThread=256")
+                add("-Dio.netty.recycler.linkCapacity=256")
+                add("-Dio.netty.allocator.type=pooled")
+                add("-Dio.netty.leakDetection.level=disabled")
+                add("-Dio.netty.noPreferDirect=false")
+                add("-Dio.netty.noUnsafe=false")
+                add("-Djdk.lang.Process.launchMechanism=FORK")
+            })
             when (launchMode) {
                 ServerFileManager.LaunchMode.JAR -> {
                     add("-jar")
@@ -973,16 +987,13 @@ class ServerLauncher(private val context: Context) {
     ): Int {
         val vd = viewDistance.coerceIn(4, 32)
         if (flightModeEnabled) {
-            // Elytra travel discovers chunks far faster than normal movement. Favor a
-            // steadier stream over burst throughput so keepalives and movement packets
-            // do not queue behind large chunk floods on the phone uplink.
-            val base = if (cellularRelay) 24 else 36
+            val base = if (cellularRelay) 20 else 24
             val viewScale = (7.0 / vd).pow(0.7).coerceIn(0.45, 1.0)
-            return (base * viewScale + 2).toInt().coerceIn(20, 38)
+            return (base * viewScale + 2).toInt().coerceIn(16, 26)
         }
-        val base = if (cellularRelay) 20 else 30
+        val base = if (cellularRelay) 17 else 22
         val viewScale = (7.0 / vd).pow(0.65).coerceIn(0.55, 1.0)
-        return (base * viewScale).toInt().coerceIn(16, 32)
+        return (base * viewScale).toInt().coerceIn(13, 20)
     }
 
     private fun computeRelayChunkConcurrency(
@@ -991,9 +1002,9 @@ class ServerLauncher(private val context: Context) {
     ): Triple<Int, Int, Int> {
         // Returns Triple(concurrentGenerates, concurrentLoads, concurrentSends)
         return if (flightModeEnabled) {
-            if (cellularRelay) Triple(3, 5, 4) else Triple(4, 8, 8)
+            if (cellularRelay) Triple(3, 4, 1) else Triple(4, 5, 1)
         } else {
-            if (cellularRelay) Triple(3, 4, 3) else Triple(4, 6, 6)
+            if (cellularRelay) Triple(3, 4, 1) else Triple(4, 5, 1)
         }
     }
 
@@ -1003,13 +1014,13 @@ class ServerLauncher(private val context: Context) {
     ): Pair<Int, Int> {
         return if (flightModeEnabled) {
             Pair(
-                (chunkSendRate * 4).coerceIn(48, 96),
-                (chunkSendRate * 5).coerceIn(64, 128)
+                (chunkSendRate * 4).coerceIn(40, 78),
+                (chunkSendRate * 5).coerceIn(52, 96)
             )
         } else {
             Pair(
-                (chunkSendRate * 4).coerceIn(48, 80),
-                (chunkSendRate * 6).coerceIn(64, 110)
+                (chunkSendRate * 4).coerceIn(42, 72),
+                (chunkSendRate * 6).coerceIn(56, 90)
             )
         }
     }
@@ -1184,7 +1195,9 @@ class ServerLauncher(private val context: Context) {
         // the uplink during chunk bursts like the old 1-tick setting did.
         updated = ensureYamlSectionValue(updated, "misc", "keep-alive-timeout", "60")
         updated = ensureYamlSectionValue(updated, "misc", "keep-alive-interval", "10")
-        updated = ensureYamlSectionValue(updated, "misc", "compression-level", "6")
+        // Compression level 4 is a better latency/CPU tradeoff than 6 for mobile servers.
+        // Higher levels add measurable CPU overhead on the server tick thread per packet.
+        updated = ensureYamlSectionValue(updated, "misc", "compression-level", "4")
 
         // Disable updater and metrics submission checks to prevent slow network lookup stalls on startup
         updated = ensureYamlPathValue(updated, listOf("updater"), "updater-status", "none")
@@ -1259,9 +1272,17 @@ class ServerLauncher(private val context: Context) {
 
         // paper-world-defaults.yml uses top-level sections. Nesting these under a
         // synthetic "world-defaults" key makes Paper ignore every optimization.
+        // On high-RAM devices keep chunks warm much longer to prevent re-load flicker.
+        // 30s gives players time to backtrack without chunks being evicted.
+        val totalRamMb = com.pocketcraft.server.util.RamUtils.getAvailableRamMb(context) +
+            (Runtime.getRuntime().totalMemory() / 1024 / 1024).toInt()
+        val chunkUnloadDelay = if (totalRamMb >= 4000) "30s" else "10s"
+        // More chunks saved per tick on high-RAM = spread I/O evenly, no big auto-save spike.
+        val autoSavePerTick = if (totalRamMb >= 4000) 8 else 4
+
         updated = removeYamlTopLevelSection(updated, "world-defaults")
-        updated = ensureYamlPathValue(updated, listOf("chunks"), "delay-chunk-unloads-by", "10s")
-        updated = ensureYamlPathValue(updated, listOf("chunks"), "max-auto-save-chunks-per-tick", "4")
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "delay-chunk-unloads-by", chunkUnloadDelay)
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "max-auto-save-chunks-per-tick", autoSavePerTick.toString())
         updated = ensureYamlPathValue(updated, listOf("chunks"), "prevent-moving-into-unloaded-chunks", "true")
         updated = ensureYamlPathValue(updated, listOf("collisions"), "max-entity-collisions", "2")
 

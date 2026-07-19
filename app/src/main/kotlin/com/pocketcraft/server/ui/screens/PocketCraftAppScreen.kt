@@ -1225,11 +1225,11 @@ fun PocketCraftApp(
         }
     }
 
-    if (stateHolder.isBackingUp || stateHolder.isRestoringBackup) {
-        val isBackingUp = stateHolder.isBackingUp
-        val progress = if (isBackingUp) stateHolder.backupProgressPercent else stateHolder.restoreProgressPercent
-        val statusMessage = if (isBackingUp) stateHolder.backupStatusMessage else stateHolder.restoreStatusMessage
-        val title = if (isBackingUp) "Creating Backup" else "Restoring World"
+    if (stateHolder.isRestoringBackup) {
+        val isBackingUp = false
+        val progress = stateHolder.restoreProgressPercent
+        val statusMessage = stateHolder.restoreStatusMessage
+        val title = "Restoring World"
         
         val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
             targetValue = (progress / 100f).coerceIn(0f, 1f),

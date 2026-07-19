@@ -1063,7 +1063,7 @@ private fun BackupsManagementCard(
                     text = if (localActionBusy) "BACKING UP..." else "BACKUP TO DEVICE",
                     enabled = !localActionBusy && !cloudActionBusy && stateHolder.status == ServerStatus.OFFLINE,
                     onClick = {
-                        ServerStateHolder.applicationScope.launch(Dispatchers.Main) {
+                        ServerStateHolder.manualBackupJob = ServerStateHolder.applicationScope.launch(Dispatchers.Main) {
                             localActionBusy = true
                             actionStatusMessage = "Creating device backup..."
                             val msg = stateHolder.createBackup()
@@ -1082,7 +1082,7 @@ private fun BackupsManagementCard(
                         text = if (cloudActionBusy) "UPLOADING..." else "BACKUP TO CLOUD",
                         enabled = !cloudActionBusy && !localActionBusy && stateHolder.status == ServerStatus.OFFLINE,
                         onClick = {
-                            ServerStateHolder.applicationScope.launch(Dispatchers.Main) {
+                            ServerStateHolder.manualBackupJob = ServerStateHolder.applicationScope.launch(Dispatchers.Main) {
                                 val driveAccount = account
                                 if (driveAccount == null) {
                                     Toast.makeText(context, "Connect Google Drive first.", Toast.LENGTH_LONG).show()

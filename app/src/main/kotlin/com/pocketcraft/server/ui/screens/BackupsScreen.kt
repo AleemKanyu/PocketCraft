@@ -126,6 +126,13 @@ fun BackupsScreen(
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
+                        DuoButton(
+                            text = "STOP BACKUP",
+                            variant = DuoButtonVariant.Danger,
+                            onClick = { stateHolder.cancelManualBackup() },
+                            minHeight = 36.dp,
+                            fillMaxWidth = true
+                        )
                     }
                 }
             }

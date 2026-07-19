@@ -135,7 +135,28 @@ class ServerStateHolder(
         val isDownloadingBackupState = mutableStateOf(false)
         val downloadBackupProgressPercentState = mutableStateOf(0)
         val downloadBackupStatusMessageState = mutableStateOf("")
+
+        var manualBackupJob: kotlinx.coroutines.Job? = null
+        val manualBackupStateState = mutableStateOf(com.pocketcraft.server.service.BackupProgressTracker.State.IDLE)
     }
+
+    var manualBackupState: com.pocketcraft.server.service.BackupProgressTracker.State
+        get() = manualBackupStateState.value
+        set(value) { manualBackupStateState.value = value }
+
+    fun cancelManualBackup() {
+        manualBackupJob?.cancel()
+        manualBackupJob = null
+        isBackingUp = false
+        backupProgressPercent = 0
+        backupStatusMessage = ""
+        manualBackupState = com.pocketcraft.server.service.BackupProgressTracker.State.FAILED
+    }
+
+    fun resetManualBackupState() {
+        manualBackupState = com.pocketcraft.server.service.BackupProgressTracker.State.IDLE
+    }
+
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     var activeWorld: String = initialWorld.ifBlank { "world" }
@@ -685,10 +706,87 @@ class ServerStateHolder(
         consoleVisibleAfterStart = false
         refreshAll()
         ensureBedrockBridgeProvisioned()
+        performOneTimeEmergencyRecovery()
         
         scope.launch {
             AppPreferencesStore.isFirstBootCompleteFlow(appContext).collect { complete ->
                 firstBootComplete = complete
+            }
+        }
+    }
+
+    private fun performOneTimeEmergencyRecovery() {
+        scope.launch(Dispatchers.IO) {
+            val marker = File(appContext.filesDir, ".emergency_playerdata_recovery_done")
+            if (marker.exists()) return@launch
+
+            android.util.Log.i("PocketCraft", "Running emergency playerdata recovery...")
+            val backupDir = File("/sdcard/Download/PocketCraftWorldBackups/Mainworld")
+            if (!backupDir.exists()) {
+                android.util.Log.w("PocketCraft", "Emergency recovery: Backup dir not found")
+                return@launch
+            }
+
+            val backupFiles = backupDir.listFiles()?.filter { it.name.endsWith(".zip") }
+                ?.sortedByDescending { it.lastModified() }
+            if (backupFiles.isNullOrEmpty()) {
+                android.util.Log.w("PocketCraft", "Emergency recovery: No backup zips found")
+                return@launch
+            }
+
+            // Find the 20260718-202719 backup or fall back to the most recent zip
+            val targetZip = backupFiles.firstOrNull { it.name.contains("20260718-202719") }
+                ?: backupFiles.first()
+
+            android.util.Log.i("PocketCraft", "Emergency recovery: Extracting playerdata from zip: ${targetZip.absolutePath}")
+            val targetServerDir = ServerFileManager.getServerDir(appContext, "Mainworld")
+            val baseWorldDir = File(targetServerDir, "Mainworld")
+
+            val pdDir = File(baseWorldDir, "playerdata")
+            val statsDir = File(baseWorldDir, "stats")
+            val advDir = File(baseWorldDir, "advancements")
+
+            pdDir.mkdirs()
+            statsDir.mkdirs()
+            advDir.mkdirs()
+
+            runCatching {
+                java.util.zip.ZipFile(targetZip).use { zip ->
+                    val entries = zip.entries()
+                    while (entries.hasMoreElements()) {
+                        val entry = entries.nextElement()
+                        if (entry.isDirectory) continue
+
+                        val name = entry.name
+                        val isPd = name.startsWith("world/playerdata/") || name.startsWith("Mainworld/playerdata/")
+                        val isStats = name.startsWith("world/stats/") || name.startsWith("Mainworld/stats/")
+                        val isAdv = name.startsWith("world/advancements/") || name.startsWith("Mainworld/advancements/")
+
+                        if (isPd || isStats || isAdv) {
+                            val fileName = name.substringAfterLast('/')
+                            if (fileName.isBlank()) continue
+
+                            val destFolder = when {
+                                isPd -> pdDir
+                                isStats -> statsDir
+                                else -> advDir
+                            }
+
+                            val destFile = File(destFolder, fileName)
+                            // Extract file
+                            zip.getInputStream(entry).use { input ->
+                                destFile.outputStream().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                        }
+                    }
+                }
+                marker.createNewFile()
+                android.util.Log.i("PocketCraft", "Emergency playerdata recovery completed successfully!")
+                refreshAll()
+            }.onFailure {
+                android.util.Log.e("PocketCraft", "Emergency recovery failed: ${it.message}", it)
             }
         }
     }
@@ -2500,6 +2598,7 @@ class ServerStateHolder(
 
             withContext(Dispatchers.Main) {
                 isBackingUp = true
+                manualBackupState = com.pocketcraft.server.service.BackupProgressTracker.State.RUNNING
                 backupProgressPercent = 0
                 backupStatusMessage = "Preparing backup..."
             }
@@ -2517,6 +2616,7 @@ class ServerStateHolder(
             if (fileEntries.isEmpty()) {
                 withContext(Dispatchers.Main) {
                     isBackingUp = false
+                    manualBackupState = com.pocketcraft.server.service.BackupProgressTracker.State.IDLE
                     backupProgressPercent = 0
                     backupStatusMessage = ""
                 }
@@ -2533,6 +2633,7 @@ class ServerStateHolder(
                 var lastUpdateMillis = 0L
                 var lastProgressPercent = -1
                 entries.forEach { entry ->
+                    if (!isActive) throw kotlinx.coroutines.CancellationException("Backup cancelled")
                     val progress = (10 + ((processedFiles * 85) / fileEntries.size.coerceAtLeast(1))).coerceIn(10, 95)
                     val now = System.currentTimeMillis()
                     if (now - lastUpdateMillis >= 150L || progress != lastProgressPercent) {
@@ -2578,6 +2679,7 @@ class ServerStateHolder(
                 backupProgressPercent = 100
                 backupStatusMessage = "Backup complete!"
                 backupSaveLocation = saveLocation
+                manualBackupState = com.pocketcraft.server.service.BackupProgressTracker.State.COMPLETED
                 isBackingUp = false
                 refreshAll()
             }
@@ -2587,12 +2689,14 @@ class ServerStateHolder(
             return@withContext "Backup created: $backupName\nIncluded: $includedText\nSaved to Downloads folder"
         } catch (e: Exception) {
             android.util.Log.e("ServerBackup", "Backup failed", e)
+            val isCancelled = e is kotlinx.coroutines.CancellationException
             withContext(Dispatchers.Main) {
                 backupProgressPercent = 0
-                backupStatusMessage = "Backup failed: ${e.javaClass.simpleName}"
+                backupStatusMessage = if (isCancelled) "Backup cancelled." else "Backup failed: ${e.javaClass.simpleName}"
+                manualBackupState = com.pocketcraft.server.service.BackupProgressTracker.State.FAILED
                 isBackingUp = false
             }
-            return@withContext "Backup failed: ${e.message ?: e.javaClass.simpleName}"
+            return@withContext if (isCancelled) "Backup cancelled." else "Backup failed: ${e.message ?: e.javaClass.simpleName}"
         }
     }
 
@@ -3398,6 +3502,18 @@ class ServerStateHolder(
             resetWorldDirectory(File(targetServerDir, "${base}_nether"), targetServerDir, recoveryRoot, deletePlayerData, deleteDatapacks)
                 .also { deletedAnything = deletedAnything || it }
             resetWorldDirectory(File(targetServerDir, "${base}_the_end"), targetServerDir, recoveryRoot, deletePlayerData, deleteDatapacks)
+                .also { deletedAnything = deletedAnything || it }
+        }
+
+        // Also clear the legacy default "world" folder if it still exists alongside the slot-named folder.
+        // Without this, the migration in ensureWorldDirectories would restore the old world on the next
+        // server boot, silently discarding the user's intended fresh seed-based generation.
+        if (activeWorldCopy != "world") {
+            resetWorldDirectory(File(targetServerDir, "world"), targetServerDir, recoveryRoot, deletePlayerData, deleteDatapacks)
+                .also { deletedAnything = deletedAnything || it }
+            resetWorldDirectory(File(targetServerDir, "world_nether"), targetServerDir, recoveryRoot, deletePlayerData, deleteDatapacks)
+                .also { deletedAnything = deletedAnything || it }
+            resetWorldDirectory(File(targetServerDir, "world_the_end"), targetServerDir, recoveryRoot, deletePlayerData, deleteDatapacks)
                 .also { deletedAnything = deletedAnything || it }
         }
 
@@ -4556,12 +4672,82 @@ class ServerStateHolder(
         if (flatLayoutExists) {
             base.mkdirs()
             migrateFlatLayoutToNested(targetServerDir, base)
-        } else if (!base.exists()) {
+        }
+
+        // Migration marker check: prevents repeating migration on subsequent boots
+        val migrationMarker = File(targetServerDir, ".migration_done")
+        if (migrationMarker.exists()) {
+            return
+        }
+
+        // Migrate old nested default 'world' folder to the slot-named folder if it has real data
+        val oldNestedDir = File(targetServerDir, "world")
+        val oldNestedHasData = File(oldNestedDir, "level.dat").exists() || File(oldNestedDir, "region").isDirectory
+        val targetName = sanitizeWorldName(worldName)
+
+        if (oldNestedHasData && targetName != "world") {
+            val baseHasData = File(base, "level.dat").exists() || File(base, "region").isDirectory
+            var shouldOverwriteBase = !baseHasData
+            
+            if (baseHasData) {
+                // If both exist, prioritize the old folder if the new one looks freshly generated (no playerdata/stats)
+                val oldPlayerCount = File(oldNestedDir, "playerdata").listFiles()?.size ?: 0
+                val newPlayerCount = File(base, "playerdata").listFiles()?.size ?: 0
+                val oldStatsCount = File(oldNestedDir, "stats").listFiles()?.size ?: 0
+                val newStatsCount = File(base, "stats").listFiles()?.size ?: 0
+
+                // Also compare region chunks — a freshly-generated world has very few
+                val oldRegionCount = File(oldNestedDir, "region").listFiles()?.size ?: 0
+                val newRegionCount = File(base, "region").listFiles()?.size ?: 0
+
+                // Prefer the old folder if it has significantly more players, stats, or region chunks.
+                // Using > (not == 0) so even 1 fresh dat in the new folder doesn't block migration.
+                if (oldPlayerCount > newPlayerCount || oldStatsCount > newStatsCount ||
+                    (oldRegionCount > 0 && oldRegionCount > newRegionCount)) {
+                    shouldOverwriteBase = true
+                }
+            }
+
+            if (shouldOverwriteBase) {
+                android.util.Log.w("PocketCraft", "Migrating old default nested 'world' folder to '$targetName'")
+                if (base.exists()) {
+                    base.deleteRecursively()
+                }
+                oldNestedDir.renameTo(base)
+
+                // Nether dimension folder migration
+                val oldNether = File(targetServerDir, "world_nether")
+                val newNether = File(targetServerDir, "${targetName}_nether")
+                if (oldNether.exists() && oldNether.isDirectory) {
+                    if (newNether.exists()) newNether.deleteRecursively()
+                    oldNether.renameTo(newNether)
+                }
+
+                // End dimension folder migration
+                val oldEnd = File(targetServerDir, "world_the_end")
+                val newEnd = File(targetServerDir, "${targetName}_the_end")
+                if (oldEnd.exists() && oldEnd.isDirectory) {
+                    if (newEnd.exists()) newEnd.deleteRecursively()
+                    oldEnd.renameTo(newEnd)
+                }
+            }
+        }
+
+        if (!base.exists()) {
             base.mkdirs()
         }
         pluginProfileDir(worldName).mkdirs()
         modsProfileDir(worldName).mkdirs()
         resourcePacksProfileDir(worldName).mkdirs()
+
+        // Mark migration as completed so it never runs again for this worldName
+        runCatching {
+            val marker = File(targetServerDir, ".migration_done")
+            if (!marker.exists()) {
+                marker.createNewFile()
+                android.util.Log.i("PocketCraft", "Migration marker written for worldName: $worldName")
+            }
+        }
     }
 
     private fun migrateFlatLayoutToNested(serverDir: File, nestedDir: File) {

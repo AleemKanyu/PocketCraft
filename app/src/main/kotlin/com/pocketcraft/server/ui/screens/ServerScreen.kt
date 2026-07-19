@@ -754,7 +754,10 @@ fun ServerScreen(
             }
 
             // Backup progress circle — visible on all screens when a backup is running
-            if (backupState == BackupProgressTracker.State.RUNNING) {
+            val isManualRunning = stateHolder.isBackingUp
+            val isRunning = backupState == BackupProgressTracker.State.RUNNING || isManualRunning
+            if (isRunning) {
+                val progressPercent = if (isManualRunning) stateHolder.backupProgressPercent else backupProgress
                 val trackerInteractionSource = remember { MutableInteractionSource() }
                 val trackerPressed by trackerInteractionSource.collectIsPressedAsState()
                 val trackerOffsetY = if (trackerPressed) 1.5.dp else 0.dp
@@ -779,7 +782,7 @@ fun ServerScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
-                        progress = { backupProgress / 100f },
+                        progress = { progressPercent / 100f },
                         modifier = Modifier.fillMaxSize(),
                         color = PocketColors.Primary,
                         trackColor = PocketColors.PrimaryBorder.copy(alpha = 0.25f),
@@ -819,6 +822,7 @@ fun ServerScreen(
 
             if (showBackupSheet) {
                 BackupProgressBottomSheet(
+                    stateHolder = stateHolder,
                     onDismissRequest = { showBackupSheet = false }
                 )
             }

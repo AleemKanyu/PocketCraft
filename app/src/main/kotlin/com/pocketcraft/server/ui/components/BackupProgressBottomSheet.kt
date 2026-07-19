@@ -18,6 +18,7 @@ import com.pocketcraft.server.service.BackupForegroundService
 import com.pocketcraft.server.service.BackupProgressTracker
 import com.pocketcraft.server.ui.theme.Monocraft
 import com.pocketcraft.server.ui.theme.PocketColors
+import com.pocketcraft.server.ui.screens.ServerStateHolder
 import kotlinx.coroutines.launch
 
 import androidx.compose.material.icons.Icons
@@ -28,25 +29,40 @@ import androidx.compose.material.icons.filled.Error
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BackupProgressBottomSheet(
+    stateHolder: ServerStateHolder,
     onDismissRequest: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val backupState by BackupProgressTracker.state.collectAsState()
-    val progress by BackupProgressTracker.progress.collectAsState()
-    val statusText by BackupProgressTracker.statusText.collectAsState()
+    val autoBackupState by BackupProgressTracker.state.collectAsState()
+    val autoProgress by BackupProgressTracker.progress.collectAsState()
+    val autoStatusText by BackupProgressTracker.statusText.collectAsState()
+
+    val isManual = stateHolder.isBackingUp || stateHolder.manualBackupState != BackupProgressTracker.State.IDLE
+
+    val backupState = if (isManual) stateHolder.manualBackupState else autoBackupState
+    val progress = if (isManual) stateHolder.backupProgressPercent else autoProgress
+    val statusText = if (isManual) stateHolder.backupStatusMessage else autoStatusText
 
     fun dismissWithAnimation() {
         scope.launch {
             sheetState.hide()
             onDismissRequest()
+            if (isManual) {
+                stateHolder.resetManualBackupState()
+            }
         }
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
+        onDismissRequest = {
+            onDismissRequest()
+            if (isManual) {
+                stateHolder.resetManualBackupState()
+            }
+        },
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -78,7 +94,7 @@ fun BackupProgressBottomSheet(
                 text = when (backupState) {
                     BackupProgressTracker.State.COMPLETED -> "Backup Completed"
                     BackupProgressTracker.State.FAILED -> "Backup Stopped/Failed"
-                    else -> "Automatic Backup"
+                    else -> if (isManual) "Creating Backup" else "Automatic Backup"
                 },
                 fontFamily = Monocraft,
                 fontWeight = FontWeight.ExtraBold,
@@ -115,7 +131,11 @@ fun BackupProgressBottomSheet(
                     text = "STOP BACKUP",
                     variant = DuoButtonVariant.Danger,
                     onClick = {
-                        BackupForegroundService.stop(context)
+                        if (isManual) {
+                            stateHolder.cancelManualBackup()
+                        } else {
+                            BackupForegroundService.stop(context)
+                        }
                     },
                     modifier = Modifier.fillMaxWidth()
                 )

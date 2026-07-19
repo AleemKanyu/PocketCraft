@@ -1146,9 +1146,13 @@ fun SettingsScreen(
                         GameCard(modifier = Modifier.fillMaxWidth()) {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("Clear App Storage", fontWeight = FontWeight.Bold)
-                                Text("Delete temporary cache, server logs, and inactive temporary files.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    "Delete temporary files, server logs, old backups, and world recovery archives. World data is never touched.",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                                 DuoButton(
-                                    text = "CLEAR STORAGE",
+                                    text = "MANAGE STORAGE",
                                     onClick = {
                                         deletableItems = scanDeletableItems(context)
                                         selectedItemsForDeletion = emptySet()
@@ -3374,7 +3378,8 @@ data class DeletableItem(
 
 private fun scanDeletableItems(context: Context): List<DeletableItem> {
     val items = mutableListOf<DeletableItem>()
-    
+    val filesDir = context.filesDir
+
     // 1. App Cache
     val cacheDir = context.cacheDir
     val cacheSize = getDirectorySize(cacheDir)
@@ -3388,9 +3393,9 @@ private fun scanDeletableItems(context: Context): List<DeletableItem> {
             files = listOf(cacheDir)
         ))
     }
-    
+
     // 2. Server Temporary Runtime Files
-    val runtimeTmpDir = File(context.filesDir, "runtime-tmp")
+    val runtimeTmpDir = File(filesDir, "runtime-tmp")
     val runtimeTmpSize = getDirectorySize(runtimeTmpDir)
     if (runtimeTmpSize > 0) {
         items.add(DeletableItem(
@@ -3405,7 +3410,6 @@ private fun scanDeletableItems(context: Context): List<DeletableItem> {
 
     // 3. Server Logs
     val logFiles = mutableListOf<File>()
-    val filesDir = context.filesDir
     findLogFiles(filesDir, logFiles)
     val logsSize = logFiles.sumOf { it.length() }
     if (logsSize > 0) {
@@ -3434,19 +3438,77 @@ private fun scanDeletableItems(context: Context): List<DeletableItem> {
         ))
     }
 
-    return items
+    // 5. Reset Recovery Archives
+    // Every "Reset World" saves the old world into reset_recovery/<worldName>/<timestamp>/.
+    // These accumulate permanently and are the largest hidden storage consumer.
+    val resetRecoveryRoot = File(filesDir, "reset_recovery")
+    val resetRecoverySize = getDirectorySize(resetRecoveryRoot)
+    if (resetRecoverySize > 0) {
+        items.add(DeletableItem(
+            id = "reset-recovery",
+            name = "World Reset Archives",
+            description = "Old world backups saved when you reset a world. Safe to delete if you no longer need them.",
+            sizeBytes = resetRecoverySize,
+            sizeLabel = formatSize(resetRecoverySize),
+            files = listOf(resetRecoveryRoot)
+        ))
+    }
+
+    // 6. Local World Backups
+    // Auto-backups and manual backups inside each world's /backups/ directory.
+    val worldsRoot = File(filesDir, "servers/worlds")
+    val backupDirs = mutableListOf<File>()
+    worldsRoot.listFiles()?.filter { it.isDirectory }?.forEach { worldDir ->
+        val backupsDir = File(worldDir, "backups")
+        if (backupsDir.exists() && backupsDir.isDirectory) {
+            backupDirs.add(backupsDir)
+        }
+    }
+    val backupsSize = backupDirs.sumOf { getDirectorySize(it) }
+    if (backupsSize > 0) {
+        items.add(DeletableItem(
+            id = "local-backups",
+            name = "Local World Backups",
+            description = "Auto-backup and manual backup archives stored on this device. Drive backups are unaffected.",
+            sizeBytes = backupsSize,
+            sizeLabel = formatSize(backupsSize),
+            files = backupDirs
+        ))
+    }
+
+    // 7. Lib Shims (native library compatibility layer, re-extracted on next server launch)
+    val libShimsDir = File(filesDir, "lib-shims")
+    val libShimsSize = getDirectorySize(libShimsDir)
+    if (libShimsSize > 0) {
+        items.add(DeletableItem(
+            id = "lib-shims",
+            name = "Native Library Cache",
+            description = "Extracted native compatibility libraries. Automatically re-created on next server launch.",
+            sizeBytes = libShimsSize,
+            sizeLabel = formatSize(libShimsSize),
+            files = listOf(libShimsDir)
+        ))
+    }
+
+    // Sort by size descending so the biggest offenders appear first
+    return items.sortedByDescending { it.sizeBytes }
 }
 
 private fun deleteDeletableItem(item: DeletableItem) {
-    if (item.id == "cache" || item.id == "runtime-tmp") {
-        item.files.forEach { parentDir ->
-            parentDir.listFiles()?.forEach { file ->
-                file.deleteRecursively()
+    when (item.id) {
+        "cache", "runtime-tmp" -> {
+            // Clear contents but keep the directory itself
+            item.files.forEach { parentDir ->
+                parentDir.listFiles()?.forEach { file -> file.deleteRecursively() }
             }
         }
-    } else {
-        item.files.forEach { file ->
-            file.delete()
+        "reset-recovery", "local-backups", "lib-shims" -> {
+            // Delete entire subdirectories recursively
+            item.files.forEach { dir -> dir.deleteRecursively() }
+        }
+        else -> {
+            // Individual files (logs, crash reports)
+            item.files.forEach { file -> file.delete() }
         }
     }
 }
