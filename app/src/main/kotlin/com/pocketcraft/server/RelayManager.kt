@@ -1188,12 +1188,8 @@ class RelayManager(private val context: Context) {
                     bytesRead = try { input.read(buffer) } catch (e: Exception) { -1 }
                     if (bytesRead <= 0) break
 
-                    val startTime = System.nanoTime()
                     output.write(buffer, 0, bytesRead)
-                    // If less than full buffer read, flush immediately to avoid latency on frame boundaries
-                    if (bytesRead < buffer.size) {
-                        output.flush()
-                    }
+                    output.flush()
                     totalBytes += bytesRead
 
                     val durationMicros = (System.nanoTime() - startTime) / 1000
