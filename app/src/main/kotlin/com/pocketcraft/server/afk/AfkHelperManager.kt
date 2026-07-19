@@ -237,7 +237,17 @@ class AfkHelperManager(
                 ""
             }
 
-            runCatching { sendRconCommand("forceload remove $forceloadKey") }
+            val isUnknownCommand = createResponse.contains("Unknown", ignoreCase = true) || createResponse.contains("Incomplete", ignoreCase = true) || createResponse.isBlank()
+            if (isUnknownCommand) {
+                // Fabric / Purpur / Vanilla fallback:
+                // 1. Keep chunk force-loaded via /forceload add (already done above)
+                // 2. Summon visual AFK Helper bot at target coordinates
+                val botDisplayName = dummyDisplayName(prepared)
+                val summonCommand = """summon minecraft:armor_stand ${prepared.x} ${prepared.y} ${prepared.z} {CustomName:'"$botDisplayName"',CustomNameVisible:1b,Invulnerable:1b,NoGravity:1b,Tags:["pocketcraft_afk_bot"]}"""
+                runCatching { sendRconCommand(summonCommand) }
+            } else {
+                runCatching { sendRconCommand("forceload remove $forceloadKey") }
+            }
 
             delay(750)
             val synced = readDummyRecordByName(prepared.worldName, prepared.dummyEntityName)?.let { record ->
@@ -280,6 +290,12 @@ class AfkHelperManager(
                 }
                 runCatching { sendRconCommand("kick ${dummyDisplayName(disabled)}") }
                 runCatching { sendRconCommand("kill ${dummySelector(disabled)}") }
+                
+                // Fallback cleanup for Fabric / Purpur / Vanilla
+                val botTagSelector = """@e[tag=pocketcraft_afk_bot,name="${escapeSelectorName(dummyDisplayName(disabled))}"]"""
+                runCatching { sendRconCommand("kill $botTagSelector") }
+                runCatching { sendRconCommand("forceload remove ${disabled.x} ${disabled.z}") }
+                
                 delay(500)
                 refreshNow()
             } else {
@@ -479,10 +495,21 @@ class AfkHelperManager(
     }
 
     private suspend fun isDummyLive(entity: AfkFarmLocationEntity): Boolean {
-        val response = runCatching {
+        var response = runCatching {
             sendRconCommand("data get entity ${dummySelector(entity)} Pos")
         }.getOrDefault("")
-        return NBTParser.parsePosition(response) != null
+        if (NBTParser.parsePosition(response) != null) return true
+
+        val botTagSelector = """@e[tag=pocketcraft_afk_bot,name="${escapeSelectorName(dummyDisplayName(entity))}",limit=1]"""
+        response = runCatching {
+            sendRconCommand("data get entity $botTagSelector Pos")
+        }.getOrDefault("")
+        if (NBTParser.parsePosition(response) != null) return true
+
+        val forceloadQuery = runCatching {
+            sendRconCommand("forceload query ${entity.x} ${entity.z}")
+        }.getOrDefault("")
+        return forceloadQuery.contains("marked for force loading", ignoreCase = true) || forceloadQuery.contains("force loaded", ignoreCase = true)
     }
 
     private suspend fun hotReloadDummyPlugin(entity: AfkFarmLocationEntity) {
