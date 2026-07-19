@@ -329,6 +329,7 @@ class ServerLauncher(private val context: Context) {
                         minRamMb = minRamMb,
                         maxRamMb = maxRamMb,
                         worldName = worldName,
+                        serverType = serverType,
                         onOutput = onOutput,
                         onError = onError
                     )
@@ -601,6 +602,7 @@ class ServerLauncher(private val context: Context) {
         minRamMb: Int,
         maxRamMb: Int,
         worldName: String,
+        serverType: com.pocketcraft.server.data.model.ServerType = com.pocketcraft.server.data.model.ServerType.PAPER,
         onOutput: (String) -> Unit,
         onError: (String) -> Unit,
         isRetry: Boolean = false
@@ -719,8 +721,10 @@ class ServerLauncher(private val context: Context) {
                     add("-jar")
                     add(launchTargetPath)
                     add("nogui")
-                    add("--port")
-                    add(resolveServerPort(worldName).toString())
+                    if (serverType != com.pocketcraft.server.data.model.ServerType.FABRIC) {
+                        add("--port")
+                        add(resolveServerPort(worldName).toString())
+                    }
                 }
                 ServerFileManager.LaunchMode.ARG_FILE -> {
                     add("@$launchTargetPath")
