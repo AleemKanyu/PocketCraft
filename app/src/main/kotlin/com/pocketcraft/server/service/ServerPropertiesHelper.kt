@@ -85,6 +85,18 @@ object ServerPropertiesHelper {
             props["pocketcraft-join-message-url"] = POCKETCRAFT_JOIN_MESSAGE_URL
             needsPersist = true
         }
+        if (props.getProperty("sync-chunk-writes") != "false") {
+            props["sync-chunk-writes"] = "false"
+            needsPersist = true
+        }
+        if (props.getProperty("max-tick-time") == null) {
+            props["max-tick-time"] = "60000"
+            needsPersist = true
+        }
+        if (props.getProperty("network-compression-threshold") == null) {
+            props["network-compression-threshold"] = RELAY_READY_COMPRESSION_THRESHOLD.toString()
+            needsPersist = true
+        }
         if (props.getProperty("enable-rcon") != "true" || 
             props.getProperty("rcon.port") != "25575" || 
             props.getProperty("rcon.password") != "pocketcraft-internal-rcon") {

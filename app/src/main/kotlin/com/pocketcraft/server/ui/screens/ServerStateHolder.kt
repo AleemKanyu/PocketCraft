@@ -5477,8 +5477,11 @@ class ServerStateHolder(
 
         for (player in players) {
             runCatching {
-                val rconResponse = sendRconCommand("ping ${escapeSelectorName(player.name)}")
-                if (rconResponse.isBlank() || rconResponse.startsWith("[RCON]")) return@runCatching
+                var rconResponse = sendRconCommand("ping ${escapeSelectorName(player.name)}")
+                if (rconResponse.isBlank() || rconResponse.contains("Unknown", ignoreCase = true) || rconResponse.contains("Incomplete", ignoreCase = true) || rconResponse.contains("Could not", ignoreCase = true)) {
+                    rconResponse = sendRconCommand("data get entity ${escapeSelectorName(player.name)} latency")
+                }
+                if (rconResponse.isBlank() || rconResponse.startsWith("[RCON] Error") || rconResponse.startsWith("[RCON] Connection")) return@runCatching
                 val pings = ConsoleParser.parsePing(rconResponse)
                 if (pings.isEmpty()) return@runCatching
                 withContext(Dispatchers.Main) {

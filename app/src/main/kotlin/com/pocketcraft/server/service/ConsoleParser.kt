@@ -191,6 +191,17 @@ object ConsoleParser {
             }
         }
 
+        // Generic / Fabric / Vanilla entity data response:
+        // e.g. "Steve has the following entity data: 42" or "Steve: 42"
+        val genericMatch = Regex("""^(\S+)\s+(?:has the following entity data:|has a ping of|has ping|latency is)\s*:?\s*(\d+)""", RegexOption.IGNORE_CASE).find(cleanLine)
+        if (genericMatch != null) {
+            val name = genericMatch.groupValues[1].trim()
+            val ping = genericMatch.groupValues[2].toIntOrNull() ?: -1
+            if (name.isNotBlank() && ping >= 0) {
+                return mapOf(name to ParsedPlayerPing(pingMs = ping))
+            }
+        }
+
         return emptyMap()
     }
 
