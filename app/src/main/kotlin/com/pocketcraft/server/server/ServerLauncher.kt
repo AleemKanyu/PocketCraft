@@ -688,15 +688,15 @@ class ServerLauncher(private val context: Context) {
             "-Djdk.attach.allowAttachSelf=true",
             "-Djna.nosys=true",
             "-Xshare:off",
-            "-XX:+UnlockExperimentalVMOptions",
-            "-XX:+UnlockDiagnosticVMOptions",
-            "-XX:+UseStringDeduplication",
-            "-XX:+UseG1GC",
-            "-XX:+ParallelRefProcEnabled",
-            // 40ms GC pause target ensures garbage collection pauses do not cause ping spikes
             "-XX:MaxGCPauseMillis=40",
             "-XX:+DisableExplicitGC",
         ).apply {
+            if (serverType == com.pocketcraft.server.data.model.ServerType.FABRIC) {
+                add("-Dfabric.chunkSystem.workerThreads=4")
+                add("-Dfabric.chunkSystem.ioThreads=4")
+                add("-Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false")
+                add("-Dfabric.log.disableAnsi=true")
+            }
             addAll(gcFlags)
             addAll(buildList {
                 add("-XX:-UsePerfData")

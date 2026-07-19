@@ -191,6 +191,17 @@ object ConsoleParser {
             }
         }
 
+        // Carpet / Fabric mod ping responses:
+        // e.g. "Steve's ping is 24 ms" or "Steve's ping is 24ms" or "Steve: 24ms"
+        val carpetMatch = Regex("""^(\S+)(?:'s ping is|'s latency is|'s ping:)\s*(\d+)\s*(?:ms)?""", RegexOption.IGNORE_CASE).find(cleanLine)
+        if (carpetMatch != null) {
+            val name = carpetMatch.groupValues[1].trim()
+            val ping = carpetMatch.groupValues[2].toIntOrNull() ?: -1
+            if (name.isNotBlank() && ping >= 0) {
+                return mapOf(name to ParsedPlayerPing(pingMs = ping))
+            }
+        }
+
         // Generic / Fabric / Vanilla entity data response:
         // e.g. "Steve has the following entity data: 42" or "Steve: 42"
         val genericMatch = Regex("""^(\S+)\s+(?:has the following entity data:|has a ping of|has ping|latency is)\s*:?\s*(\d+)""", RegexOption.IGNORE_CASE).find(cleanLine)

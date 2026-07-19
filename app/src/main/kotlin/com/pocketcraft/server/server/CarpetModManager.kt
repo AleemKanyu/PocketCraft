@@ -79,6 +79,9 @@ object CarpetModManager {
         // Remove old/incompatible Carpet jars first
         removeIncompatibleCarpetJars(modsDir, cleanVer, onOutput)
 
+        // Ensure Fabric API is installed alongside Carpet mod (Carpet depends on Fabric API)
+        ensureFabricApiInstalled(modsDir, cleanVer, onOutput)
+
         // Already installed for this clean version?
         if (carpetJarExists(modsDir, cleanVer)) {
             onOutput("[PocketCraft] Carpet mod (MC $cleanVer) is already installed.")
@@ -87,7 +90,7 @@ object CarpetModManager {
 
         onOutput("[PocketCraft] Checking Modrinth for Carpet mod compatible with MC $cleanVer…")
 
-        val downloadUrl = resolveCarpetDownloadUrl(cleanVer)
+        val downloadUrl = resolveModrinthDownloadUrl("carpet", cleanVer)
         if (downloadUrl == null) {
             onOutput("[PocketCraft] Note: No exact Carpet mod match found for MC $cleanVer on Modrinth. AFK bots will use fallback zombies.")
             return@withContext false
@@ -104,6 +107,25 @@ object CarpetModManager {
             onOutput("[PocketCraft] ⚠ Carpet mod download failed. AFK bots will use fallback zombies.")
         }
         success
+    }
+
+    /**
+     * Downloads Fabric API if missing from [modsDir] for [cleanMcVersion].
+     */
+    private fun ensureFabricApiInstalled(modsDir: File, cleanMcVersion: String, onOutput: (String) -> Unit) {
+        val hasFabricApi = modsDir.listFiles()?.any {
+            it.name.contains("fabric-api", ignoreCase = true) && it.extension == "jar"
+        } == true
+        if (hasFabricApi) return
+
+        onOutput("[PocketCraft] Checking Modrinth for Fabric API for MC $cleanMcVersion…")
+        val apiUrlUrl = resolveModrinthDownloadUrl("fabric-api", cleanMcVersion) ?: return
+        val fileName = apiUrlUrl.substringAfterLast('/')
+        val targetFile = File(modsDir, fileName)
+        onOutput("[PocketCraft] Downloading Fabric API for MC $cleanMcVersion: $fileName …")
+        if (downloadFile(apiUrlUrl, targetFile, onOutput)) {
+            onOutput("[PocketCraft] ✅ Fabric API installed: ${targetFile.name}")
+        }
     }
 
     /**
@@ -139,9 +161,9 @@ object CarpetModManager {
     // Private helpers
     // -------------------------------------------------------------------------
 
-    private fun resolveCarpetDownloadUrl(cleanMcVersion: String): String? {
+    private fun resolveModrinthDownloadUrl(projectId: String, cleanMcVersion: String): String? {
         return runCatching {
-            val apiUrl = "https://api.modrinth.com/v2/project/$MODRINTH_PROJECT_ID/version" +
+            val apiUrl = "https://api.modrinth.com/v2/project/$projectId/version" +
                 "?game_versions=%5B%22$cleanMcVersion%22%5D&loaders=%5B%22fabric%22%5D"
             val conn = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
                 setRequestProperty("User-Agent", USER_AGENT)
