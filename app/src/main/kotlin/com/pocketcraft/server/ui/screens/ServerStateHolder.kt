@@ -851,7 +851,7 @@ class ServerStateHolder(
         get() = isStarting || isRunning || isStopping
 
     val isRestarting: Boolean
-        get() = isStopping && pendingRestart
+        get() = isRestartingCycle || (isStopping && pendingRestart)
 
     val healthPercent: Float
         get() = when (status) {
@@ -1709,6 +1709,10 @@ class ServerStateHolder(
 
     private fun applyPersistedRuntimeState(state: PersistedRuntimeState) {
         if (isStopping) {
+            if (isRestartingCycle || pendingRestart) {
+                // Keep RESTARTING status active; do not override with OFFLINE during restart transition
+                return
+            }
             // Fallback: if service/runtime are already offline, unblock UI even if a stop event was missed.
             if (!state.isRunning && !state.isStarting) {
                 isStopping = false
