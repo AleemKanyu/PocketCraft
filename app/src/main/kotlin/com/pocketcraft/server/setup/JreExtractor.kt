@@ -19,6 +19,14 @@ object JreExtractor {
         val displayName: String
     )
 
+    val RUNTIME_JAVA_26 = RuntimeSpec(
+        id = "java26",
+        assetDir = "jre-26",
+        extractedDirName = "jre-26",
+        markerName = "jre_v26_extracted",
+        displayName = "Java 26"
+    )
+
     private val RUNTIME_JAVA_21 = RuntimeSpec(
         id = "java21",
         assetDir = "jre-runtime",
@@ -28,19 +36,21 @@ object JreExtractor {
     )
 
     /** Last-resort fallback used in internal error paths. */
-    private val DEFAULT_RUNTIME = RUNTIME_JAVA_21
+    private val DEFAULT_RUNTIME = RUNTIME_JAVA_26
 
     /** Returns the best available runtime for the current device ABI. */
     fun defaultRuntimeForDevice(): RuntimeSpec {
-        return RUNTIME_JAVA_21
+        return RUNTIME_JAVA_26
     }
 
     fun runtimeForVersion(versionId: String): RuntimeSpec {
-        return RUNTIME_JAVA_21
+        return RUNTIME_JAVA_26
     }
 
     fun findExtractedRuntime(context: Context): RuntimeSpec? {
-        return if (isExtracted(context, RUNTIME_JAVA_21)) RUNTIME_JAVA_21 else null
+        return if (isExtracted(context, RUNTIME_JAVA_26)) RUNTIME_JAVA_26
+        else if (isExtracted(context, RUNTIME_JAVA_21)) RUNTIME_JAVA_21
+        else null
     }
 
     private fun normalizeAndroidPath(path: String): String {
@@ -159,14 +169,15 @@ object JreExtractor {
     }
 
     private fun hasRequiredRuntimeFiles(jreDir: File): Boolean {
+        val modules = File(jreDir, "lib/modules")
         val libjli = File(jreDir, "lib/libjli.so")
         val libjvm = File(jreDir, "lib/server/libjvm.so")
         val jvmCfg = File(jreDir, "lib/jvm.cfg")
-        return libjli.exists() && libjvm.exists() && jvmCfg.exists()
+        return (modules.exists() || (libjli.exists() && jvmCfg.exists()))
     }
 
     fun launchCandidatesForVersion(versionId: String): List<RuntimeSpec> {
-        return listOf(RUNTIME_JAVA_21)
+        return listOf(RUNTIME_JAVA_26, RUNTIME_JAVA_21)
     }
 
     private fun resetRuntime(context: Context, runtime: RuntimeSpec) {

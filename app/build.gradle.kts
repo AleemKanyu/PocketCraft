@@ -96,7 +96,7 @@ android {
             }
         }
 
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     externalNativeBuild {
@@ -113,6 +113,7 @@ android {
     sourceSets {
         getByName("main") {
             assets.setSrcDirs(listOf("src/main/assets"))
+            jniLibs.setSrcDirs(listOf("src/main/jniLibs"))
         }
     }
 
@@ -174,6 +175,7 @@ android {
                 "**/libjava*",
                 "**/libjawt*",
                 "**/libjdwp*",
+                "**/libjimage*",
                 "**/libjimg*",
                 "**/libjli*",
                 "**/libjnid*",
