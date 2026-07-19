@@ -1380,7 +1380,18 @@ class ServerLauncher(private val context: Context) {
             ServerPropertiesHelper.saveProperties(serverDir, props)
             onOutput("[PocketCraft] Fabric/Vanilla relay server.properties tuned (tick watchdog, rate-limit, op-level).")
         }
+
+        // --- Carpet Mod Auto-Installation ----------------------------------------
+        // Automatically fetch and install Carpet mod for Fabric servers to enable real player bots
+        val mcVersion = props.getProperty("pocketcraft-mc-version")
+            ?: props.getProperty("version")
+            ?: "1.20.1" // Default fallback version if unspecified
+        
+        kotlinx.coroutines.runBlocking {
+            CarpetModManager.ensureCarpetInstalled(serverDir, mcVersion, onOutput)
+        }
     }
+
 
 
     private fun ensureYamlSectionValue(

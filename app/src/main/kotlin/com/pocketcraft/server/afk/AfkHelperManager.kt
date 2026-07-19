@@ -239,17 +239,18 @@ class AfkHelperManager(
 
             val isUnknownCommand = createResponse.contains("Unknown", ignoreCase = true) || createResponse.contains("Incomplete", ignoreCase = true) || createResponse.isBlank()
             if (isUnknownCommand) {
-                // Fabric / Purpur / Vanilla fallback:
-                // 1. Keep chunk force-loaded via /forceload add (already done above)
-                // 2. Summon visual AFK Helper bot at target coordinates
+                // Try Carpet mod fake-player bot spawn command (/player <name> spawn at x y z)
                 val botDisplayName = dummyDisplayName(prepared)
-                // Summon a full-size Zombie as the AFK-helper stand-in on Fabric.
-                // Use legacy Minecraft plain-text name format (double-quoted string inside
-                // single-quoted NBT tag) — JSON component format via RCON requires extra
-                // escaping that differs between server versions.
                 val safeName = botDisplayName.replace("'", "").replace("\"", "")
-                val summonCommand = "summon minecraft:zombie ${prepared.x} ${prepared.y} ${prepared.z} {CustomName:'\"$safeName\"',CustomNameVisible:1b,Invulnerable:1b,NoAI:1b,Silent:1b,PersistenceRequired:1b,IsBaby:0b,Tags:[\"pocketcraft_afk_bot\"]}"
-                runCatching { sendRconCommand(summonCommand) }
+                val carpetSpawnCmd = com.pocketcraft.server.server.CarpetModManager.buildSpawnCommand(safeName, prepared.x, prepared.y, prepared.z)
+                val carpetResp = runCatching { sendRconCommand(carpetSpawnCmd) }.getOrDefault("")
+                val carpetSuccess = com.pocketcraft.server.server.CarpetModManager.isCarpetPlayerCommandAvailable(carpetResp)
+
+                if (!carpetSuccess) {
+                    // Fallback if Carpet mod is not loaded: summon Zombie placeholder
+                    val summonCommand = "summon minecraft:zombie ${prepared.x} ${prepared.y} ${prepared.z} {CustomName:'\"$safeName\"',CustomNameVisible:1b,Invulnerable:1b,NoAI:1b,Silent:1b,PersistenceRequired:1b,IsBaby:0b,Tags:[\"pocketcraft_afk_bot\"]}"
+                    runCatching { sendRconCommand(summonCommand) }
+                }
             } else {
                 runCatching { sendRconCommand("forceload remove $forceloadKey") }
             }
@@ -289,19 +290,24 @@ class AfkHelperManager(
             syncWorldPluginFiles(disabled.worldName)
 
             if (isServerRunningProvider() && disabled.worldName.equals(currentWorldName(), ignoreCase = true)) {
+                val botDisplayName = dummyDisplayName(disabled)
+                val safeName = botDisplayName.replace("'", "").replace("\"", "")
+                
+                // 1. Try Bukkit /dummy remove
                 val command = "dummy remove ${disabled.dummyEntityName} ${disabled.ownerPlayerUuid}"
-                runCatching {
-                    sendRconCommand(command)
-                }
-                runCatching { sendRconCommand("kick ${dummyDisplayName(disabled)}") }
+                runCatching { sendRconCommand(command) }
+                
+                // 2. Try Carpet mod /player <name> kill
+                val carpetKillCmd = com.pocketcraft.server.server.CarpetModManager.buildKillCommand(safeName)
+                runCatching { sendRconCommand(carpetKillCmd) }
+
+                // 3. Clean up kicks/kills for other formats
+                runCatching { sendRconCommand("kick $safeName") }
                 runCatching { sendRconCommand("kill ${dummySelector(disabled)}") }
                 
                 // Fallback cleanup for Fabric / Purpur / Vanilla tagged bots.
-                // Try specific name first, then broad tag-only kill to catch any that
-                // had name-matching issues (e.g. from old JSON-format names).
                 val botTagSelector = "@e[tag=pocketcraft_afk_bot,limit=1]"
                 runCatching { sendRconCommand("kill $botTagSelector") }
-                // Belt-and-suspenders: kill ALL tagged AFK bots in case multiple got spawned
                 runCatching { sendRconCommand("kill @e[tag=pocketcraft_afk_bot]") }
                 runCatching { sendRconCommand("forceload remove ${disabled.x} ${disabled.z}") }
                 
