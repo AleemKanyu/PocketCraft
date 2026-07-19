@@ -1237,7 +1237,7 @@ class ServerStateHolder(
         stopPeriodicLocationPolling()
         startStopWatchdog()
         runCatching {
-            ServerHostService.stop(appContext)
+            ServerHostService.restart(appContext)
         }.onFailure { error ->
             pendingRestart = false
             isStopping = false
@@ -1250,8 +1250,8 @@ class ServerStateHolder(
 
         restartFallbackJob?.cancel()
         restartFallbackJob = scope.launch {
-            delay(restartFallbackDelayMs)
-            if (!pendingRestart) return@launch
+            delay(3500L)
+            if (!pendingRestart && !isRestartingCycle) return@launch
             if (isRunning || isStarting) return@launch
             if (isServerProcessAlive()) return@launch
 
