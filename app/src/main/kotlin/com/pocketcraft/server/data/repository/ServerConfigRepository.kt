@@ -453,6 +453,16 @@ class ServerConfigRepository @Inject constructor(
     }
 
     private fun detectServerVersion(): String {
+        val props = ServerPropertiesHelper.readProperties(serverDir)
+        val rawType = props.getProperty("pocketcraft-server-type")
+        val gameVer = props.getProperty("pocketcraft-game-version").orEmpty()
+        
+        if (!rawType.isNullOrBlank()) {
+            val serverType = ServerType.fromString(rawType)
+            val typeLabel = serverType.name.lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+            return if (gameVer.isNotBlank()) "$typeLabel $gameVer" else typeLabel
+        }
+
         val serversDir = File(context.filesDir, "servers")
         val jarName = serversDir.walkTopDown()
             .filter { it.isFile && it.extension == "jar" }
@@ -465,7 +475,7 @@ class ServerConfigRepository @Inject constructor(
             ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
             ?: "Paper"
         val version = typeAndVersion.getOrNull(1).orEmpty().ifBlank { "" }
-        return "$typeLabel $version"
+        return "$typeLabel $version".trim()
     }
 
     private fun readTotalPlaytime(worldName: String): Pair<Long, Int> {

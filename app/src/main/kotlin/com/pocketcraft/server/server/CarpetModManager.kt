@@ -205,8 +205,13 @@ object CarpetModManager {
     // Carpet RCON command helpers
     // -------------------------------------------------------------------------
 
-    fun buildSpawnCommand(name: String, x: Int, y: Int, z: Int, dimension: String = "minecraft:overworld"): String =
-        "player $name spawn at $x $y $z in $dimension survival"
+    fun buildSpawnCommand(name: String, x: Int, y: Int, z: Int, dimension: String = ""): String {
+        return if (dimension.isNotBlank()) {
+            "player $name spawn at $x $y $z in $dimension"
+        } else {
+            "player $name spawn at $x $y $z"
+        }
+    }
 
     fun buildKillCommand(name: String): String = "player $name kill"
 
