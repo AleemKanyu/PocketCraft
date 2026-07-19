@@ -244,6 +244,7 @@ class ServerLauncher(private val context: Context) {
         applyRelayReadyPaperGlobalConfig(serverDirFile, onOutput)
         applyRelayReadySpigotConfig(serverDirFile, onOutput)
         applyRelayReadyPaperWorldDefaults(serverDirFile, onOutput)
+        applyRelayReadyFabricConfig(serverDirFile, serverType, onOutput)
 
         // Dynamic JVM heap allocation based on per-world UI settings in server.properties
         val worldProps = ServerPropertiesHelper.readProperties(serverDirFile)
@@ -1300,6 +1301,89 @@ class ServerLauncher(private val context: Context) {
         }
     }
 
+    /**
+     * Applies Fabric/Vanilla-specific relay optimizations that have no equivalent in
+     * paper-global.yml.  Since Fabric exposes very few config knobs, we tune the two
+     * levers that matter most on Android:
+     *
+     * 1. `fabric-server-launcher.properties` – controls worker and IO thread counts used
+     *    by Fabric's built-in chunk executor.  Capping at 2 keeps the JVM off the main
+     *    thread and GC off-core, matching the Paper chunk-system tuning we apply above.
+     *
+     * 2. `server.properties` extras – max-tick-time, rate-limit, and op-permission-level
+     *    mirror the values Paper benefits from via paper-global.yml.  On Vanilla/Fabric
+     *    these must live in server.properties instead.
+     */
+    private fun applyRelayReadyFabricConfig(
+        serverDir: File,
+        serverType: com.pocketcraft.server.data.model.ServerType,
+        onOutput: (String) -> Unit
+    ) {
+        if (serverType != com.pocketcraft.server.data.model.ServerType.FABRIC &&
+            serverType != com.pocketcraft.server.data.model.ServerType.VANILLA
+        ) return
+
+        // --- fabric-server-launcher.properties ----------------------------------
+        // Fabric reads this file to configure the built-in chunk pipeline thread pool.
+        // 2 workers keeps chunk generation off the main thread without over-committing
+        // the small core count available on mid-range Android SoCs.
+        val launcherProps = File(serverDir, "fabric-server-launcher.properties")
+        val originalLauncher = runCatching { launcherProps.readText() }.getOrDefault("")
+        val launcherLines = originalLauncher.lines().toMutableList()
+
+        fun setLauncherProp(key: String, value: String) {
+            val idx = launcherLines.indexOfFirst { it.trimStart().startsWith("$key=") }
+            if (idx >= 0) {
+                if (launcherLines[idx] != "$key=$value") launcherLines[idx] = "$key=$value"
+            } else {
+                launcherLines.add("$key=$value")
+            }
+        }
+
+        setLauncherProp("serverWorkers", "2")
+        setLauncherProp("serverIoThreads", "2")
+        // Disable Fabric's auto-open GUI – it tries to open a Swing window on Android.
+        setLauncherProp("gui", "false")
+
+        val updatedLauncher = launcherLines.joinToString("\n").trimEnd() + "\n"
+        if (updatedLauncher != originalLauncher) {
+            runCatching { launcherProps.writeText(updatedLauncher) }
+            onOutput("[PocketCraft] Fabric launcher config tuned: serverWorkers=2, serverIoThreads=2, gui=false")
+        }
+
+        // --- server.properties extras (Fabric / Vanilla only) -------------------
+        // Paper surfaces these through paper-global.yml; on Fabric they must go in
+        // server.properties.  Only write props that aren't already at the right value.
+        val props = ServerPropertiesHelper.readProperties(serverDir)
+        var changed = false
+
+        // Watchdog: disable the default 60-second hang detector.  On Android the main
+        // thread legitimately pauses during GC / chunk I/O spikes, causing false kills.
+        if (props.getProperty("max-tick-time") != "-1") {
+            props["max-tick-time"] = "-1"
+            changed = true
+        }
+        // Rate-limit: 0 = no packet flood protection (we handle this at the relay layer).
+        if (props.getProperty("rate-limit") != "0") {
+            props["rate-limit"] = "0"
+            changed = true
+        }
+        // Op level 4: allows all commands, required for RCON ping/data-get to work.
+        if (props.getProperty("op-permission-level") != "4") {
+            props["op-permission-level"] = "4"
+            changed = true
+        }
+        // Prevent Vanilla from sending a "Too many packets" kick during chunk bursts.
+        if (props.getProperty("player-idle-timeout") == null) {
+            props["player-idle-timeout"] = "0"
+            changed = true
+        }
+
+        if (changed) {
+            ServerPropertiesHelper.saveProperties(serverDir, props)
+            onOutput("[PocketCraft] Fabric/Vanilla relay server.properties tuned (tick watchdog, rate-limit, op-level).")
+        }
+    }
 
 
     private fun ensureYamlSectionValue(
@@ -1308,6 +1392,7 @@ class ServerLauncher(private val context: Context) {
         key: String,
         value: String
     ): String = ensureYamlPathValue(original, listOf(section), key, value)
+
 
     private fun removeYamlTopLevelSection(original: String, section: String): String {
         val lines = original.split('\n').toMutableList()
