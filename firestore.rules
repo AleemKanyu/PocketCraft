@@ -13,21 +13,23 @@ service cloud.firestore {
     match /user_settings/{userId} {
       allow read, write: if isOwner(userId);
     }
+
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isOwner(userId);
+      // Deny high-frequency periodic heartbeat updates from older app builds
+      allow write: if isOwner(userId)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastHeartbeat', 'offlineHeartbeat', 'periodicStatus', 'heartbeatAt']));
     }
+
+    // Web dashboard feature was removed in v1.6.0.
+    // Disallowing reads/writes here immediately cuts off background listener loops in older app builds with PERMISSION_DENIED.
     match /users/{userId}/dashboard_commands/{commandId} {
-      allow read, write: if isOwner(userId) || (
-        (resource != null && resource.data.secret == get(/databases/$(database)/documents/users/$(userId)).data.dashboardSecret)
-        || (request != null && request.resource != null && request.resource.data.secret == get(/databases/$(database)/documents/users/$(userId)).data.dashboardSecret)
-      );
+      allow read, write: if false;
     }
     match /users/{userId}/dashboard_status/{statusId} {
-      allow read, write: if isOwner(userId) || (
-        (resource != null && resource.data.secret == get(/databases/$(database)/documents/users/$(userId)).data.dashboardSecret)
-        || (request != null && request.resource != null && request.resource.data.secret == get(/databases/$(database)/documents/users/$(userId)).data.dashboardSecret)
-      );
+      allow read, write: if false;
     }
+
     match /subdomains/{subdomain} {
       allow read: if true;
       allow create: if signedIn()
@@ -41,6 +43,7 @@ service cloud.firestore {
         );
       allow update, delete: if signedIn() && resource.data.ownerId == request.auth.uid;
     }
+
     match /featureRequests/{requestId} {
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
@@ -48,32 +51,40 @@ service cloud.firestore {
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
+
     match /beta_feedback/{document} {
       allow create: if true;
       allow read, update, delete: if false;
     }
+
     match /tickets/{ticketId} {
       allow create: if true;
       allow read, update, delete: if false;
     }
+
     match /social_prompts/{userId} {
-      allow read, write: if true;
+      allow read, write: if isOwner(userId);
     }
+
     match /broadcasts/{broadcastId} {
       allow read: if true;
       allow write: if false;
     }
+
     match /broadcast_responses/{responseId} {
       allow read, write: if signedIn();
     }
+
     match /broadcast_results/{resultId} {
       allow read: if true;
       allow write: if signedIn();
     }
+
     match /remote_commands/{commandId} {
       allow read: if signedIn();
       allow write: if false;
     }
+
     match /{document=**} {
       allow read: if true;
       allow write: if false;
