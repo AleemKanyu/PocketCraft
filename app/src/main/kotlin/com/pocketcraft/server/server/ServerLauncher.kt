@@ -1319,9 +1319,7 @@ class ServerLauncher(private val context: Context) {
         serverType: com.pocketcraft.server.data.model.ServerType,
         onOutput: (String) -> Unit
     ) {
-        if (serverType != com.pocketcraft.server.data.model.ServerType.FABRIC &&
-            serverType != com.pocketcraft.server.data.model.ServerType.VANILLA
-        ) return
+        if (serverType != com.pocketcraft.server.data.model.ServerType.FABRIC) return
 
         // --- fabric-server-launcher.properties ----------------------------------
         // Fabric reads this file to configure the built-in chunk pipeline thread pool.

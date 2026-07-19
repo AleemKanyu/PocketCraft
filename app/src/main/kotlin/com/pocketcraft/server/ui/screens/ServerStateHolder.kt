@@ -5464,8 +5464,7 @@ class ServerStateHolder(
         val type = config.serverType
         // Fabric and Vanilla use `data get entity <player> latency`.
         // Paper/Purpur have /ping command. All server types are handled below.
-        val useEntityLatency = type == com.pocketcraft.server.data.model.ServerType.FABRIC ||
-            type == com.pocketcraft.server.data.model.ServerType.VANILLA
+        val useEntityLatency = type == com.pocketcraft.server.data.model.ServerType.FABRIC
 
         val players = withContext(Dispatchers.Main) { onlinePlayers.toList() }
         if (players.isEmpty()) return
