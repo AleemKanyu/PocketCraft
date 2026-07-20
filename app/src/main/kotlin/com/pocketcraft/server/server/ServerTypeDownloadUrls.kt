@@ -55,25 +55,30 @@ object ServerTypeDownloadUrls {
                 ServerType.MODPACK -> "https://modrinth.com/modpacks"
 
                 ServerType.FABRIC -> {
-                    // 1. Fetch the latest stable loader version for this MC version
-                    val loaderJson = URL(
-                        "https://meta.fabricmc.net/v2/versions/loader/$version"
-                    ).openStream().bufferedReader().use { it.readText() }
-                    val loaderArr = org.json.JSONArray(loaderJson)
-                    // Prefer stable; fall back to first available
+                    val cleanVersion = CarpetModManager.cleanMcVersion(version)
+                    val versionsToTry = listOfNotNull(
+                        cleanVersion,
+                        cleanVersion.substringBeforeLast('.', missingDelimiterValue = cleanVersion).takeIf { it != cleanVersion }
+                    )
+
                     var loaderVersion: String? = null
-                    for (i in 0 until loaderArr.length()) {
-                        val obj = loaderArr.getJSONObject(i)
-                        val lv = obj.optJSONObject("loader")?.optString("version") ?: continue
-                        val stable = obj.optJSONObject("loader")?.optBoolean("stable", false) ?: false
-                        if (loaderVersion == null) loaderVersion = lv   // first = latest
-                        if (stable) { loaderVersion = lv; break }       // prefer stable
+                    for (v in versionsToTry) {
+                        val loaderJson = runCatching {
+                            URL("https://meta.fabricmc.net/v2/versions/loader/$v").openStream().bufferedReader().use { it.readText() }
+                        }.getOrNull() ?: continue
+                        val loaderArr = org.json.JSONArray(loaderJson)
+                        for (i in 0 until loaderArr.length()) {
+                            val obj = loaderArr.getJSONObject(i)
+                            val lv = obj.optJSONObject("loader")?.optString("version") ?: continue
+                            val stable = obj.optJSONObject("loader")?.optBoolean("stable", false) ?: false
+                            if (loaderVersion == null) loaderVersion = lv
+                            if (stable) { loaderVersion = lv; break }
+                        }
+                        if (loaderVersion != null) break
                     }
 
                     // 2. Fetch the latest stable installer version
-                    val installerJson = URL(
-                        "https://meta.fabricmc.net/v2/versions/installer"
-                    ).openStream().bufferedReader().use { it.readText() }
+                    val installerJson = URL("https://meta.fabricmc.net/v2/versions/installer").openStream().bufferedReader().use { it.readText() }
                     val installerArr = org.json.JSONArray(installerJson)
                     var installerVersion: String? = null
                     for (i in 0 until installerArr.length()) {
@@ -84,46 +89,27 @@ object ServerTypeDownloadUrls {
                         if (stable) { installerVersion = iv; break }
                     }
 
-                    // 3. Build direct server JAR URL — browser triggers an immediate download
-                    fabricServerJarUrl(version, loaderVersion, installerVersion)
+                    fabricServerJarUrl(cleanVersion, loaderVersion ?: "0.16.10", installerVersion ?: "1.0.1")
                 }
-
-
             }
         } catch (e: Exception) {
-            // Safe generic fallbacks
+            val cleanVersion = CarpetModManager.cleanMcVersion(version)
             when (serverType) {
                 ServerType.PAPER   -> "https://papermc.io/downloads/paper"
                 ServerType.PURPUR  -> "https://purpurmc.org/downloads"
-                ServerType.FABRIC  -> fabricServerJarUrl(version, loaderVersion = null, installerVersion = null)
+                ServerType.FABRIC  -> fabricServerJarUrl(cleanVersion, "0.16.10", "1.0.1")
                 ServerType.MODPACK -> "https://modrinth.com/modpacks"
             }
         }
     }
 
-
-
-    /**
-     * Constructs the direct server JAR download URL from Fabric's meta API.
-     *
-     * Format:
-     *   https://meta.fabricmc.net/v2/versions/loader/{mc}/{loader}/{installer}/server/jar
-     *
-     * Opening this in a browser immediately downloads the ready-to-run server JAR —
-     * no website navigation, no manual steps. Unlike Forge, this IS the server JAR itself
-     * (not a desktop installer), so users can import it directly into PocketCraft.
-     *
-     * When loader/installer versions are null (quick-call fallback), redirects to the
-     * Fabric installer page as a safe fallback.
-     */
     private fun fabricServerJarUrl(
         mcVersion: String,
         loaderVersion: String?,
         installerVersion: String?
     ): String {
-        if (loaderVersion == null || installerVersion == null) {
-            return "https://fabricmc.net/use/server/"
-        }
-        return "https://meta.fabricmc.net/v2/versions/loader/$mcVersion/$loaderVersion/$installerVersion/server/jar"
+        val lv = loaderVersion ?: "0.16.10"
+        val iv = installerVersion ?: "1.0.1"
+        return "https://meta.fabricmc.net/v2/versions/loader/$mcVersion/$lv/$iv/server/jar"
     }
 }

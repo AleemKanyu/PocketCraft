@@ -236,7 +236,7 @@ private fun appThemeScheme(context: Context): WidgetColorScheme {
     ThemePreferenceStore.loadCustomColors(context)
     val palette = when (ThemePreferenceStore.loadMobThemeSnapshot(context)) {
         MobTheme.SKELETON -> SkeletonTheme
-        MobTheme.CREEPER -> if (ThemePreferenceStore.resolveDarkMode(context)) CreeperDarkTheme else CreeperLightTheme
+        MobTheme.CREEPER -> CreeperLightTheme
         MobTheme.SIMPLE_WHITE -> SimpleWhiteTheme
         MobTheme.SIMPLE_DARK -> SimpleDarkTheme
         MobTheme.CUSTOM -> CustomThemePalette

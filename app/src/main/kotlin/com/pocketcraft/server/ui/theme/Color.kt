@@ -359,7 +359,7 @@ object PocketColors {
     val currentPalette: ThemePalette
         get() = when (activeMobTheme) {
             MobTheme.SKELETON -> SkeletonTheme
-            MobTheme.CREEPER -> if (isDark) CreeperDarkTheme else CreeperLightTheme
+            MobTheme.CREEPER -> CreeperLightTheme
             MobTheme.SIMPLE_WHITE -> SimpleWhiteTheme
             MobTheme.SIMPLE_DARK -> SimpleDarkTheme
             MobTheme.CUSTOM -> CustomThemePalette
@@ -429,7 +429,7 @@ object PocketColors {
     val TextSecondary: Color get() = currentPalette.textSecondary
     val TextMuted: Color get() = currentPalette.textMuted
     val TextSection: Color get() = currentPalette.textSection
-    val TextDark: Color get() = if (activeMobTheme == MobTheme.CREEPER && !isDark) CreeperDarkTheme.textPrimary else currentPalette.textPrimary
+    val TextDark: Color get() = currentPalette.textPrimary
     val TextLight: Color get() = TextSecondary
     val TextMutedLight: Color get() = TextMuted
 
