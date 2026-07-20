@@ -491,7 +491,7 @@ private fun AfkHelpersSection(
     val billingManager = remember { com.pocketcraft.server.billing.BillingManager.getInstance(context) }
     val isPremium by billingManager.isPremium.collectAsState()
 
-    val isPaperOrPurpur = stateHolder.serverType == com.pocketcraft.server.data.model.ServerType.PAPER || stateHolder.serverType == com.pocketcraft.server.data.model.ServerType.PURPUR
+    val isPaperOrPurpur = stateHolder.config.serverType == com.pocketcraft.server.data.model.ServerType.PAPER || stateHolder.config.serverType == com.pocketcraft.server.data.model.ServerType.PURPUR
 
     if (!isPaperOrPurpur) {
         Surface(
@@ -513,7 +513,7 @@ private fun AfkHelpersSection(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Default.Info,
+                        imageVector = Icons.Default.ErrorOutline,
                         contentDescription = null,
                         tint = PocketColors.Warning,
                         modifier = Modifier.size(22.dp)

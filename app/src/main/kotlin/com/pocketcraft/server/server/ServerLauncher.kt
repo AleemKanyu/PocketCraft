@@ -692,7 +692,9 @@ class ServerLauncher(private val context: Context) {
             "-XX:+DisableExplicitGC",
         ).apply {
             if (serverType == com.pocketcraft.server.data.model.ServerType.FABRIC) {
-                val cleanMcVer = CarpetModManager.cleanMcVersion(versionId)
+                val gameVerProps = ServerPropertiesHelper.readProperties(File(serverDir))
+                val rawVer = gameVerProps.getProperty("pocketcraft-game-version", "1.21.1")
+                val cleanMcVer = CarpetModManager.cleanMcVersion(rawVer)
                 add("-Dfabric.gameVersion=$cleanMcVer")
                 add("-Dfabric.chunkSystem.workerThreads=4")
                 add("-Dfabric.chunkSystem.ioThreads=4")
