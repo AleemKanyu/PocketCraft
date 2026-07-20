@@ -1175,6 +1175,67 @@ class ServerHostService : Service() {
                 putExtra(EXTRA_LINE, line)
             }
         )
+        appendLineToFirestoreLogs(line)
+    }
+
+    private val firestoreLogQueue = java.util.concurrent.ConcurrentLinkedQueue<String>()
+    private var firestoreLogFlusherJob: Job? = null
+
+    private fun appendLineToFirestoreLogs(line: String) {
+        if (line.isBlank()) return
+        firestoreLogQueue.add(line)
+
+        if (firestoreLogFlusherJob?.isActive != true) {
+            firestoreLogFlusherJob = serviceScope.launch(Dispatchers.IO) {
+                while (isActive) {
+                    delay(2000)
+                    flushLogsToFirestore()
+                }
+            }
+        }
+    }
+
+    private suspend fun flushLogsToFirestore() {
+        if (firestoreLogQueue.isEmpty()) return
+        val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser ?: return
+        val uid = currentUser.uid
+
+        val batchLines = mutableListOf<String>()
+        while (batchLines.size < 50) {
+            val nextLine = firestoreLogQueue.poll() ?: break
+            batchLines.add(nextLine)
+        }
+        if (batchLines.isEmpty()) return
+
+        val db = FirebaseFirestore.getInstance()
+
+        // 1. Update rolling dashboard_logs document (last 200 lines) for real-time web dashboard
+        runCatching {
+            val currentDocRef = db.collection("users").document(uid).collection("dashboard_logs").document("current")
+            db.runTransaction { transaction ->
+                val snapshot = transaction.get(currentDocRef)
+                val existingLines = (snapshot.get("lines") as? List<*>)?.mapNotNull { it as? String }.orEmpty()
+                val newLines = (existingLines + batchLines).takeLast(200)
+                transaction.set(currentDocRef, mapOf(
+                    "lines" to newLines,
+                    "updatedAt" to Timestamp.now()
+                ), SetOptions.merge())
+            }.await()
+        }.onFailure { error ->
+            android.util.Log.w("ServerHostService", "Failed to flush rolling logs to Firestore: ${error.message}")
+        }
+
+        // 2. Write to server_logs history collection
+        runCatching {
+            val logDocRef = db.collection("users").document(uid).collection("server_logs").document("log_${System.currentTimeMillis()}")
+            logDocRef.set(mapOf(
+                "lines" to batchLines,
+                "timestamp" to Timestamp.now(),
+                "worldName" to (currentWorldName ?: "world")
+            )).await()
+        }.onFailure { error ->
+            android.util.Log.w("ServerHostService", "Failed to write server_logs doc to Firestore: ${error.message}")
+        }
     }
 
     private fun startLogcatBridge(versionId: String) {
