@@ -491,6 +491,53 @@ private fun AfkHelpersSection(
     val billingManager = remember { com.pocketcraft.server.billing.BillingManager.getInstance(context) }
     val isPremium by billingManager.isPremium.collectAsState()
 
+    val isPaperOrPurpur = stateHolder.serverType == com.pocketcraft.server.data.model.ServerType.PAPER || stateHolder.serverType == com.pocketcraft.server.data.model.ServerType.PURPUR
+
+    if (!isPaperOrPurpur) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = PocketColors.SurfaceCard.copy(alpha = 0.94f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, PocketColors.CardBorder.copy(alpha = 0.5f))
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(PocketColors.Warning.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = null,
+                        tint = PocketColors.Warning,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        "AFK Bots Unavailable",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp,
+                        color = PocketColors.TextPrimary
+                    )
+                    Text(
+                        "AFK helper bots currently work on Paper and Purpur server types only. Switch server type in settings to use AFK bots.",
+                        fontSize = 12.sp,
+                        color = PocketColors.TextSecondary,
+                        lineHeight = 17.sp
+                    )
+                }
+            }
+        }
+        return
+    }
+
     var secondsLeft by remember { mutableIntStateOf(0) }
     LaunchedEffect(stateHolder.lastAfkEnabledTime) {
         while (true) {

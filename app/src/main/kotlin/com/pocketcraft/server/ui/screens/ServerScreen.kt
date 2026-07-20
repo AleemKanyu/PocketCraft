@@ -1283,8 +1283,36 @@ fun ServerFailureDialog(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            val logContent = buildString {
+                                appendLine("=== PocketCraft Server Failure Log ===")
+                                appendLine("Reason: $reason")
+                                if (details.isNotBlank()) appendLine("Details: $details")
+                                appendLine("Stage: ${if (duringStartup) "Startup" else "Runtime"}")
+                                appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (Android ${android.os.Build.VERSION.RELEASE})")
+                                appendLine("\n--- Console Output (${logs.size} lines) ---")
+                                logs.takeLast(100).forEach { appendLine(it) }
+                            }
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            val clip = android.content.ClipData.newPlainText("PocketCraft Server Failure Log", logContent)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "Server logs copied to clipboard!", Toast.LENGTH_LONG).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(15.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.2.dp, PocketColors.Primary.copy(alpha = if (isDarkTheme) 0.58f else 0.42f)),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = PocketColors.Primary
+                        )
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Copy Logs", modifier = Modifier.padding(vertical = 2.dp), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    }
+
                     androidx.compose.material3.OutlinedButton(
                         onClick = {
                             runCatching {
@@ -1300,9 +1328,9 @@ fun ServerFailureDialog(
                             contentColor = if (isDarkTheme) Color(0xFFAEBBFF) else Color(0xFF5865F2)
                         )
                     ) {
-                        Icon(Icons.Default.Forum, contentDescription = null, modifier = Modifier.size(17.dp))
-                        Spacer(Modifier.width(7.dp))
-                        Text("Discord", modifier = Modifier.padding(vertical = 2.dp), fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+                        Icon(Icons.Default.Forum, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Discord", modifier = Modifier.padding(vertical = 2.dp), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     }
 
                     if (ticketNumber == null) {
