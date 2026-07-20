@@ -1179,16 +1179,24 @@ class ServerHostService : Service() {
     }
 
     private val firestoreLogQueue = java.util.concurrent.ConcurrentLinkedQueue<String>()
+    private val firestoreRecentLines = java.util.Collections.synchronizedList(mutableListOf<String>())
     private var firestoreLogFlusherJob: Job? = null
+    @Volatile private var firestoreQuotaExceededUntil = 0L
 
     private fun appendLineToFirestoreLogs(line: String) {
         if (line.isBlank()) return
         firestoreLogQueue.add(line)
+        synchronized(firestoreRecentLines) {
+            firestoreRecentLines.add(line)
+            if (firestoreRecentLines.size > 150) {
+                firestoreRecentLines.removeAt(0)
+            }
+        }
 
         if (firestoreLogFlusherJob?.isActive != true) {
             firestoreLogFlusherJob = serviceScope.launch(Dispatchers.IO) {
                 while (isActive) {
-                    delay(2000)
+                    delay(10000) // Flush every 10 seconds to respect Firestore write quotas
                     flushLogsToFirestore()
                 }
             }
@@ -1197,44 +1205,40 @@ class ServerHostService : Service() {
 
     private suspend fun flushLogsToFirestore() {
         if (firestoreLogQueue.isEmpty()) return
-        val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser ?: return
+        if (System.currentTimeMillis() < firestoreQuotaExceededUntil) {
+            firestoreLogQueue.clear() // Drop queue while quota circuit-breaker is open
+            return
+        }
+
+        val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser ?: run {
+            firestoreLogQueue.clear()
+            return
+        }
         val uid = currentUser.uid
 
-        val batchLines = mutableListOf<String>()
-        while (batchLines.size < 50) {
-            val nextLine = firestoreLogQueue.poll() ?: break
-            batchLines.add(nextLine)
-        }
-        if (batchLines.isEmpty()) return
+        // Clear queued items since we write the rolling window snapshot
+        firestoreLogQueue.clear()
 
-        val db = FirebaseFirestore.getInstance()
+        val snapshotLines = synchronized(firestoreRecentLines) { firestoreRecentLines.toList() }
+        if (snapshotLines.isEmpty()) return
 
-        // 1. Update rolling dashboard_logs document (last 200 lines) for real-time web dashboard
-        runCatching {
+        try {
+            val db = FirebaseFirestore.getInstance()
             val currentDocRef = db.collection("users").document(uid).collection("dashboard_logs").document("current")
-            db.runTransaction { transaction ->
-                val snapshot = transaction.get(currentDocRef)
-                val existingLines = (snapshot.get("lines") as? List<*>)?.mapNotNull { it as? String }.orEmpty()
-                val newLines = (existingLines + batchLines).takeLast(200)
-                transaction.set(currentDocRef, mapOf(
-                    "lines" to newLines,
-                    "updatedAt" to Timestamp.now()
-                ), SetOptions.merge())
-            }.await()
-        }.onFailure { error ->
-            android.util.Log.w("ServerHostService", "Failed to flush rolling logs to Firestore: ${error.message}")
-        }
-
-        // 2. Write to server_logs history collection
-        runCatching {
-            val logDocRef = db.collection("users").document(uid).collection("server_logs").document("log_${System.currentTimeMillis()}")
-            logDocRef.set(mapOf(
-                "lines" to batchLines,
-                "timestamp" to Timestamp.now(),
+            val payload = mapOf(
+                "lines" to snapshotLines,
+                "updatedAt" to Timestamp.now(),
                 "worldName" to (currentWorldName ?: "world")
-            )).await()
-        }.onFailure { error ->
-            android.util.Log.w("ServerHostService", "Failed to write server_logs doc to Firestore: ${error.message}")
+            )
+            currentDocRef.set(payload, SetOptions.merge()).await()
+        } catch (e: Exception) {
+            val msg = e.message.orEmpty()
+            if (msg.contains("RESOURCE_EXHAUSTED") || msg.contains("Quota exceeded")) {
+                android.util.Log.w("ServerHostService", "Firestore quota exceeded. Pausing log uploads for 60 seconds.")
+                firestoreQuotaExceededUntil = System.currentTimeMillis() + 60_000L
+            } else {
+                android.util.Log.w("ServerHostService", "Failed to sync dashboard logs: ${e.message}")
+            }
         }
     }
 
