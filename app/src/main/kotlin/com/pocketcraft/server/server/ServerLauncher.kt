@@ -1704,23 +1704,20 @@ class ServerLauncher(private val context: Context) {
         // Return cached result if available.
         noexecCacheResult?.let { return it }
 
-        // Strategy: write a minimal shell script to files/, mark it executable,
-        // then try to exec it via /system/bin/sh. If sh reports "Permission denied",
-        // the directory is noexec. This is more reliable than parsing /proc/self/mountinfo
-        // because Samsung Knox uses bind mounts that inherit noexec without listing it.
         val result = runCatching {
-            val probe = java.io.File(normalizeAndroidPath(context.filesDir.absolutePath), ".noexec_probe")
-            probe.writeText("#!/system/bin/sh\nexit 0\n")
-            runCatching { android.system.Os.chmod(probe.absolutePath, 0x1ED) } // 0755
-            val p = ProcessBuilder("/system/bin/sh", "-c",
-                "'${probe.absolutePath}' 2>&1; echo \"rc:\$?\""
-            ).redirectErrorStream(true).start()
-            val out = p.inputStream.bufferedReader().readText()
-            val timedOut = !p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
-            if (timedOut) p.destroyForcibly()
-            probe.delete()
-            // If output contains "Permission denied" or rc is non-zero due to exec failure, it's noexec.
-            out.contains("Permission denied") || out.contains("cannot execute") || timedOut
+            val javaBin = File(context.filesDir, "jre-runtime/bin/java")
+            if (javaBin.exists()) {
+                android.system.Os.chmod(javaBin.absolutePath, 0x1ED)
+                val jreLibDir = File(javaBin.parentFile.parentFile, "lib")
+                val pb = ProcessBuilder(javaBin.absolutePath, "-version").redirectErrorStream(true)
+                pb.environment()["LD_LIBRARY_PATH"] = "$jreLibDir/server:$jreLibDir:$jreLibDir/jli"
+                val p = pb.start()
+                val finished = p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+                if (!finished) p.destroyForcibly()
+                !finished || p.exitValue() != 0
+            } else {
+                false
+            }
         }.getOrDefault(false)
 
         noexecCacheResult = result
@@ -1761,14 +1758,18 @@ class ServerLauncher(private val context: Context) {
         // 2. If the canonical path exists, probe it directly.
         if (canonical.exists()) {
             val isSafe = runCatching {
-                android.system.Os.chmod(canonical.absolutePath, 0x1ED) // 0755
-                val p = ProcessBuilder("/system/bin/sh", "-c",
-                    "'${canonical.absolutePath}' -Xshare:off -version 2>&1"
-                ).redirectErrorStream(true).start()
+                canonical.parentFile?.parentFile?.walkTopDown()?.forEach { file ->
+                    android.system.Os.chmod(file.absolutePath, 0x1ED)
+                }
+                val jreLibDir = File(canonical.parentFile.parentFile, "lib")
+                val pb = ProcessBuilder(canonical.absolutePath, "-Xshare:off", "-version")
+                    .redirectErrorStream(true)
+                pb.environment()["LD_LIBRARY_PATH"] = "$jreLibDir/server:$jreLibDir:$jreLibDir/jli"
+                val p = pb.start()
                 val out = p.inputStream.bufferedReader().readText()
-                val finished = p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+                val finished = p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
                 if (!finished) p.destroyForcibly()
-                finished && p.exitValue() == 0 && out.contains("version", ignoreCase = true)
+                finished && (p.exitValue() == 0 || out.contains("version", ignoreCase = true))
             }.getOrDefault(false)
 
             if (isSafe) {
@@ -1776,7 +1777,7 @@ class ServerLauncher(private val context: Context) {
                 allStorageNoexecDetected = false
                 return canonical
             } else {
-                android.util.Log.w("ServerLauncher", "Canonical java binary failed execution probe (permission or ELF error). Triggering fallback.")
+                android.util.Log.w("ServerLauncher", "Canonical java binary failed execution probe. Triggering fallback.")
             }
         } else {
             // If the canonical path doesn't exist yet, we check the general noexec status.
@@ -1830,13 +1831,15 @@ class ServerLauncher(private val context: Context) {
 
             // Verify the copy is actually executable (probe with a quick exec test).
             val execSafe = runCatching {
-                val p = ProcessBuilder("/system/bin/sh", "-c",
-                    "'${copy.absolutePath}' -Xshare:off -version 2>&1 | head -c 256; echo \"rc:\$?\""
-                ).redirectErrorStream(true).start()
+                val jreLibDir = File(canonical.parentFile.parentFile, "lib")
+                val pb = ProcessBuilder(copy.absolutePath, "-Xshare:off", "-version")
+                    .redirectErrorStream(true)
+                pb.environment()["LD_LIBRARY_PATH"] = "$jreLibDir/server:$jreLibDir:$jreLibDir/jli"
+                val p = pb.start()
                 val out = p.inputStream.bufferedReader().readText()
-                p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
-                // Success if we get java version output; fail if Permission denied
-                !out.contains("Permission denied") && !out.contains("cannot execute")
+                val finished = p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+                if (!finished) p.destroyForcibly()
+                finished && (p.exitValue() == 0 || out.contains("version", ignoreCase = true))
             }.getOrDefault(false)
 
             if (execSafe) {
