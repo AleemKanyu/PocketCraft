@@ -173,12 +173,16 @@ class ServerHostService : Service() {
         }
 
         if (!isForegroundServiceStarted) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(NOTIFICATION_ID, createForegroundNotification(initialText), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-            } else {
-                startForeground(NOTIFICATION_ID, createForegroundNotification(initialText))
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    startForeground(NOTIFICATION_ID, createForegroundNotification(initialText), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                } else {
+                    startForeground(NOTIFICATION_ID, createForegroundNotification(initialText))
+                }
+                isForegroundServiceStarted = true
+            } catch (e: Exception) {
+                android.util.Log.e("ServerHostService", "startForeground failed: ${e.message}")
             }
-            isForegroundServiceStarted = true
         } else {
             updateNotification(initialText, force = true)
         }
@@ -352,12 +356,16 @@ class ServerHostService : Service() {
         startDashboardStatusHeartbeat(versionId)
         sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] Starting server...")
         if (!isForegroundServiceStarted) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-            } else {
-                startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText))
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                } else {
+                    startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.STARTING_SERVER.notificationText))
+                }
+                isForegroundServiceStarted = true
+            } catch (e: Exception) {
+                android.util.Log.e("ServerHostService", "startForeground failed: ${e.message}")
             }
-            isForegroundServiceStarted = true
         } else {
             updateNotification(ServerStage.STARTING_SERVER.notificationText, force = true)
         }
@@ -371,11 +379,7 @@ class ServerHostService : Service() {
             startLogcatBridge(versionId)
         }
 
-        // Clear old log if starting fresh so we don't read "Done" from previous session
-        val latestLogFile = java.io.File(com.pocketcraft.server.service.ServerFileManager.getServerDir(applicationContext, worldName), "logs/latest.log")
-        if (latestLogFile.exists()) {
-            runCatching { latestLogFile.delete() }
-        }
+
 
         startServerLogTail(versionId)
         val serverPort = resolveServerPort(worldName)
@@ -1909,11 +1913,7 @@ class ServerHostService : Service() {
             return attachToExistingServer(versionId, worldName, serverPort, "service resume")
         }
 
-        // If we reach here, we are starting fresh. Clear old log and start tailing.
-        val latestLogFile = java.io.File(com.pocketcraft.server.service.ServerFileManager.getServerDir(applicationContext, worldName), "logs/latest.log")
-        if (latestLogFile.exists()) {
-            runCatching { latestLogFile.delete() }
-        }
+
         startServerLogTail(versionId)
 
         startPortProbe(versionId, serverPort)

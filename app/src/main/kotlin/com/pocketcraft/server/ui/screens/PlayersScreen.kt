@@ -52,7 +52,9 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.VideogameAsset
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shield
@@ -642,7 +644,7 @@ private fun AfkHelpersSection(
                 }
             }
 
-            if (isPremium && secondsLeft > 0) {
+            if (secondsLeft > 0) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -661,7 +663,7 @@ private fun AfkHelpersSection(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            "Cooldown active: Please wait $secondsLeft seconds to enable another helper.",
+                            "Cooldown active: Please wait $secondsLeft seconds before toggling helper state again.",
                             fontSize = 12.sp,
                             color = PocketColors.TextPrimary,
                             fontWeight = FontWeight.Bold
@@ -693,11 +695,11 @@ private fun AfkHelpersSection(
                     }
                 }
             } else {
-                stateHolder.afkFarms.forEach { farm ->
+                stateHolder.afkFarms.toList().forEach { farm ->
                     AfkHelperRow(
                         stateHolder = stateHolder,
                         farm = farm,
-                        isCooldownActive = isPremium && secondsLeft > 0,
+                        isCooldownActive = secondsLeft > 0,
                         onMessage = onMessage
                     )
                 }
@@ -714,6 +716,7 @@ private fun AfkHelperRow(
     onMessage: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    var showEditDialog by remember { mutableStateOf(false) }
     val statusColor = when {
         farm.isLive -> PocketColors.Online
         farm.isActive -> PocketColors.Primary
@@ -861,6 +864,22 @@ private fun AfkHelperRow(
                 }
 
                 IconButton(
+                    onClick = { showEditDialog = true },
+                    enabled = !stateHolder.isAfkHelperBusy,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(PocketColors.Primary.copy(alpha = 0.12f))
+                ) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Edit AFK bot settings",
+                        tint = PocketColors.Primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                IconButton(
                     onClick = {
                         scope.launch {
                             onMessage(stateHolder.deleteAfkFarm(farm.id))
@@ -880,6 +899,15 @@ private fun AfkHelperRow(
                     )
                 }
             }
+        }
+
+        if (showEditDialog) {
+            EditAfkFarmDialog(
+                stateHolder = stateHolder,
+                farm = farm,
+                onDismiss = { showEditDialog = false },
+                onSaved = { msg -> onMessage(msg) }
+            )
         }
     }
 }
@@ -1086,6 +1114,197 @@ private fun AddAfkFarmDialog(
                     clipboard.setPrimaryClip(clip)
                     
                     Toast.makeText(context, "Copied IP for ${player.name} (${player.ip}) and loaded location.", Toast.LENGTH_LONG).show()
+                    showPlayerSelectionSheet = false
+                }
+            }
+        )
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun EditAfkFarmDialog(
+    stateHolder: ServerStateHolder,
+    farm: com.pocketcraft.server.afk.AfkFarmLocation,
+    onDismiss: () -> Unit,
+    onSaved: (String) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var name by remember(farm.id) { mutableStateOf(farm.name) }
+    var x by remember(farm.id) { mutableStateOf(farm.x.toString()) }
+    var y by remember(farm.id) { mutableStateOf(farm.y.toString()) }
+    var z by remember(farm.id) { mutableStateOf(farm.z.toString()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    var showPlayerSelectionSheet by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        dragHandle = null,
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 20.dp, vertical = 10.dp)
+                .navigationBarsPadding()
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                "Edit Bot Settings",
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 22.sp
+            )
+            Text(
+                "Update coordinates or farm name for ${farm.dummyEntityName}.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedTextField(
+                value = name,
+                onValueChange = {
+                    name = it
+                    error = null
+                },
+                label = { Text("Bot / Farm name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = duoTextFieldShape(),
+                colors = duoOutlinedTextFieldColors()
+            )
+            OutlinedTextField(
+                value = x,
+                onValueChange = {
+                    x = it
+                    error = null
+                },
+                label = { Text("X") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                shape = duoTextFieldShape(),
+                colors = duoOutlinedTextFieldColors()
+            )
+            OutlinedTextField(
+                value = y,
+                onValueChange = {
+                    y = it
+                    error = null
+                },
+                label = { Text("Y") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                shape = duoTextFieldShape(),
+                colors = duoOutlinedTextFieldColors()
+            )
+            OutlinedTextField(
+                value = z,
+                onValueChange = {
+                    z = it
+                    error = null
+                },
+                label = { Text("Z") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                shape = duoTextFieldShape(),
+                colors = duoOutlinedTextFieldColors()
+            )
+            OutlinedButton(
+                onClick = {
+                    val players = stateHolder.onlinePlayers
+                    if (players.isEmpty()) {
+                        Toast.makeText(
+                            context,
+                            "No online player is available right now.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        showPlayerSelectionSheet = true
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Use Current Online Player Location", fontWeight = FontWeight.Bold)
+            }
+            if (!error.isNullOrBlank()) {
+                Text(
+                    error!!,
+                    color = Color(0xFFFF7A7A),
+                    fontSize = 12.sp
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    val parsedX = x.toIntOrNull()
+                    val parsedY = y.toIntOrNull()
+                    val parsedZ = z.toIntOrNull()
+                    if (name.trim().isBlank() || parsedX == null || parsedY == null || parsedZ == null) {
+                        error = "Fill in a name and valid whole-number coordinates."
+                        return@Button
+                    }
+
+                    saving = true
+                    scope.launch {
+                        val message = stateHolder.updateAfkFarm(
+                            id = farm.id,
+                            name = name.trim(),
+                            x = parsedX,
+                            y = parsedY,
+                            z = parsedZ
+                        )
+                        saving = false
+                        error = null
+                        sheetState.hide()
+                        onSaved(message)
+                    }
+                },
+                enabled = !saving,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = PocketColors.Primary,
+                    contentColor = Color.Black,
+                    disabledContainerColor = PocketColors.Primary.copy(0.5f)
+                )
+            ) {
+                Text(if (saving) "Saving..." else "Save Bot Settings", fontWeight = FontWeight.Bold)
+            }
+            TextButton(
+                onClick = {
+                    scope.launch {
+                        sheetState.hide()
+                        onDismiss()
+                    }
+                },
+                enabled = !saving,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Cancel")
+            }
+        }
+    }
+
+    if (showPlayerSelectionSheet) {
+        OnlinePlayerSelectionSheet(
+            stateHolder = stateHolder,
+            onDismiss = { showPlayerSelectionSheet = false },
+            onPlayerSelected = { player ->
+                scope.launch {
+                    val location = stateHolder.suggestAfkFarmLocation(player.name)
+                    if (location != null) {
+                        x = location.first.toString()
+                        y = location.second.toString()
+                        z = location.third.toString()
+                    }
                     showPlayerSelectionSheet = false
                 }
             }

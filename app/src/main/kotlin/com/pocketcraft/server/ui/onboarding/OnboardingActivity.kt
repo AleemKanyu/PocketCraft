@@ -82,6 +82,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.ui.text.buildAnnotatedString
@@ -146,6 +148,7 @@ import com.pocketcraft.server.ui.theme.card3d
 import com.pocketcraft.server.ui.theme.pocketIsDarkTheme
 import com.pocketcraft.server.ui.util.playAppHaptic
 import com.pocketcraft.server.ui.util.ThemePreferenceStore
+import com.pocketcraft.server.ui.util.MobTheme
 import com.pocketcraft.server.util.AppStrings
 import com.pocketcraft.server.util.LocalAppStrings
 import com.pocketcraft.server.util.appStringsFor
@@ -299,10 +302,13 @@ class OnboardingActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
         val initialThemePreference = ThemePreferenceStore.load(this)
+        val initialMobTheme = ThemePreferenceStore.loadMobTheme(this)
 
         setContent {
-            val darkTheme = initialThemePreference.resolve(systemDark = isSystemInDarkTheme())
-            PocketCraftTheme(darkTheme = darkTheme) {
+            var themePreference by remember { mutableStateOf(initialThemePreference) }
+            var mobTheme by remember { mutableStateOf(initialMobTheme) }
+            val darkTheme = themePreference.resolve(systemDark = isSystemInDarkTheme())
+            PocketCraftTheme(darkTheme = darkTheme, mobTheme = mobTheme) {
                 SideEffect {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                         window.decorView.isForceDarkAllowed = false
@@ -315,7 +321,21 @@ class OnboardingActivity : ComponentActivity() {
                         isAppearanceLightNavigationBars = PocketColors.BgApp.luminance() >= 0.5f
                     }
                 }
-                OnboardingScreen(onComplete = { completeOnboarding() })
+                OnboardingScreen(
+                    currentMobTheme = mobTheme,
+                    onMobThemeChange = { newTheme ->
+                        mobTheme = newTheme
+                        ThemePreferenceStore.saveMobTheme(this@OnboardingActivity, newTheme)
+                        val newPref = when (newTheme) {
+                            MobTheme.SIMPLE_DARK -> com.pocketcraft.server.ui.util.ThemePreference.DARK
+                            MobTheme.SIMPLE_WHITE -> com.pocketcraft.server.ui.util.ThemePreference.LIGHT
+                            else -> themePreference
+                        }
+                        themePreference = newPref
+                        ThemePreferenceStore.save(this@OnboardingActivity, newPref)
+                    },
+                    onComplete = { completeOnboarding() }
+                )
             }
         }
     }
@@ -336,7 +356,11 @@ class OnboardingActivity : ComponentActivity() {
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun OnboardingScreen(onComplete: () -> Unit) {
+private fun OnboardingScreen(
+    currentMobTheme: MobTheme,
+    onMobThemeChange: (MobTheme) -> Unit,
+    onComplete: () -> Unit
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val preferences = remember { AppPreferences(context) }
@@ -452,7 +476,9 @@ private fun OnboardingScreen(onComplete: () -> Unit) {
                 TopHeader(
                     progress = progress,
                     step = currentStep + 1,
-                    total = steps.size
+                    total = steps.size,
+                    currentMobTheme = currentMobTheme,
+                    onMobThemeChange = onMobThemeChange
                 )
 
                 OnboardingPhoneFrame(
@@ -1026,7 +1052,13 @@ private fun isNotificationPermissionGranted(context: Context): Boolean {
 }
 
 @Composable
-private fun TopHeader(progress: Float, step: Int, total: Int) {
+private fun TopHeader(
+    progress: Float,
+    step: Int,
+    total: Int,
+    currentMobTheme: MobTheme,
+    onMobThemeChange: (MobTheme) -> Unit
+) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1047,6 +1079,52 @@ private fun TopHeader(progress: Float, step: Int, total: Int) {
                     fontSize = 12.sp,
                     color = onboardingTextMuted()
                 )
+            }
+
+            Box {
+                var showThemeMenu by remember { mutableStateOf(false) }
+                Surface(
+                    onClick = { showThemeMenu = true },
+                    shape = RoundedCornerShape(12.dp),
+                    color = onboardingSurfaceSoftColor(),
+                    border = BorderStroke(1.dp, onboardingBorderColor())
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text("🎨", fontSize = 14.sp)
+                        Text(
+                            text = currentMobTheme.themeName,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = onboardingTextPrimary()
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = showThemeMenu,
+                    onDismissRequest = { showThemeMenu = false },
+                    modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+                ) {
+                    MobTheme.entries.filter { it != MobTheme.CUSTOM }.forEach { theme ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = theme.themeName,
+                                    fontWeight = if (theme == currentMobTheme) FontWeight.ExtraBold else FontWeight.Medium,
+                                    fontSize = 13.sp
+                                )
+                            },
+                            onClick = {
+                                showThemeMenu = false
+                                onMobThemeChange(theme)
+                            }
+                        )
+                    }
+                }
             }
         }
 

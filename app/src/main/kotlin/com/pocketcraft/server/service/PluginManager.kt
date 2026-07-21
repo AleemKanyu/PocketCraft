@@ -339,6 +339,7 @@ object PluginManager {
         updated = ensureTopLevelYamlValue(updated, "show-cooldown", "disabled")
         updated = ensureTopLevelYamlValue(updated, "pending-authentication-timeout", "30")
         updated = ensureTopLevelYamlValue(updated, "above-bedrock-nether-building", "true")
+        updated = ensureTopLevelYamlValue(updated, "wait-for-chunks-on-portals", "true")
         updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "validate-bedrock-login", "false")
         updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "mtu", "1200")
         updated = ensureYamlSectionValue(updated, "advanced", "floodgate-key-file", floodgateKeyPath)

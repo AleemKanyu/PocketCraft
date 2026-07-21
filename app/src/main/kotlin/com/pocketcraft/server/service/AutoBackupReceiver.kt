@@ -103,12 +103,16 @@ object AutoBackupScheduler {
             if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pi)
-        } else {
-            alarmManager.set(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pi)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pi)
+            } else {
+                alarmManager.set(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pi)
+            }
+            Log.i("AutoBackupScheduler", "Daily backup alarm set for $hour:$minute")
+        } catch (e: Exception) {
+            Log.e("AutoBackupScheduler", "Failed to schedule daily backup alarm: ${e.message}")
         }
-        Log.i("AutoBackupScheduler", "Daily backup alarm set for $hour:$minute")
     }
 
     fun cancelDailyBackup(context: Context) {

@@ -366,6 +366,10 @@ private val sectionKeysPlayers = listOf(
 )
 
 private val sectionKeysNetwork = listOf(
+    "resource-pack",
+    "require-resource-pack",
+    "resource-pack-sha1",
+    "resource-pack-prompt",
     "enable-rcon",
     "rcon.port",
     "rcon.password",

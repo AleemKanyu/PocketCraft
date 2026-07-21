@@ -21,7 +21,6 @@
 
     <application
         android:name=".PocketCraftApplication"
-        android:extractNativeLibs="true"
         android:allowNativeHeapPointerTagging="false"
         android:memtagMode="off"
         android:networkSecurityConfig="@xml/network_security_config"

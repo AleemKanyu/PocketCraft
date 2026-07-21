@@ -310,17 +310,20 @@ object WorldImporter {
             val nestedNetherInRoot = File(targetRoot, "DIM-1")
             if (nestedNetherInRoot.exists() && nestedNetherInRoot.isDirectory) {
                 if (!netherDir.exists()) netherDir.mkdirs()
+                mergeDirectoryContents(nestedNetherInRoot, netherDir)
                 val targetNested = File(netherDir, "DIM-1")
-                nestedNetherInRoot.renameTo(targetNested)
+                mergeDirectoryContents(nestedNetherInRoot, targetNested)
+                nestedNetherInRoot.deleteRecursively()
             }
 
             val nestedEndInRoot = File(targetRoot, "DIM1")
             if (nestedEndInRoot.exists() && nestedEndInRoot.isDirectory) {
                 if (!endDir.exists()) endDir.mkdirs()
+                mergeDirectoryContents(nestedEndInRoot, endDir)
                 val targetNested = File(endDir, "DIM1")
-                nestedEndInRoot.renameTo(targetNested)
+                mergeDirectoryContents(nestedEndInRoot, targetNested)
+                nestedEndInRoot.deleteRecursively()
             }
-
         }
 
         ensureRestoredServerProperties(serverDir, targetWorld)

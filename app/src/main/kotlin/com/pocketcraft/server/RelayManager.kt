@@ -203,7 +203,22 @@ class RelayManager(private val context: Context) {
      */
     suspend fun register(): RelayAddress = withContext(Dispatchers.IO) {
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
-        val preferredRelayHost = prefs.relayHost
+        val isUserOverridden = prefs.relayHostUserOverridden
+        val currentPreferredHost = prefs.relayHost
+        val preferredRelayHost = if (!isUserOverridden) {
+            val measured = com.pocketcraft.server.config.RelayLatencySelector.measureRelayLatency(currentPreferredHost)
+            if (measured > 180L) {
+                val fastest = com.pocketcraft.server.config.RelayLatencySelector.pickFastestRelay(
+                    com.pocketcraft.server.config.RelayServers.defaultRegions()
+                )
+                android.util.Log.i("RelayManager", "Preferred host $currentPreferredHost latency high (${measured}ms > 180ms). Auto-selected low-latency relay ${fastest.host}")
+                fastest.host
+            } else {
+                currentPreferredHost
+            }
+        } else {
+            currentPreferredHost
+        }
         val fallbackRelayHost = when (preferredRelayHost) {
             RelayServers.MUMBAI.host -> RelayServers.EUROPE.host
             RelayServers.AMERICA.host -> RelayServers.EUROPE.host
@@ -1178,9 +1193,10 @@ class RelayManager(private val context: Context) {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE)
             var totalBytes = 0L
             try {
-                val input  = localSocket.getInputStream()
-                val rawOutput = relaySocket.getOutputStream()
-                val output = java.io.BufferedOutputStream(rawOutput, 16 * 1024)
+                configureRelaySocket(relaySocket)
+                configureLocalSocket(localSocket)
+                val input = localSocket.getInputStream()
+                val output = relaySocket.getOutputStream()
                 val buffer = ByteArray(PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE)
                 var bytesRead: Int
 
@@ -1189,10 +1205,8 @@ class RelayManager(private val context: Context) {
                     if (bytesRead <= 0) break
 
                     output.write(buffer, 0, bytesRead)
-                    output.flush()
                     totalBytes += bytesRead
                 }
-                runCatching { output.flush() }
                 android.util.Log.d("RelayManager", "LocalToRelay: End of stream. Total upstream: $totalBytes bytes")
             } catch (e: Exception) {
                 android.util.Log.e("RelayManager", "LocalToRelay error: ${e.message}")

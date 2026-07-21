@@ -241,6 +241,7 @@ class ServerLauncher(private val context: Context) {
         chmodJreRuntime(context, resolvedRuntime)
         val totalRam = getTotalRamMb(context)
         applyRelayReadyRuntimeProfile(serverDirFile, onOutput)
+        applyRelayReadyBukkitConfig(serverDirFile, onOutput)
         applyRelayReadyPaperGlobalConfig(serverDirFile, onOutput)
         applyRelayReadySpigotConfig(serverDirFile, onOutput)
         applyRelayReadyPaperWorldDefaults(serverDirFile, onOutput)
@@ -279,8 +280,11 @@ class ServerLauncher(private val context: Context) {
             // to avoid immediate startup OOM kills by the OS when launching.
             else -> 512
         }
-        val maxRamMb = requestedMaxRamMb.coerceIn(deviceProfile.minHeapFloorMb, maxAllowedRam)
-        val minRamMb = maxRamMb // Set initial heap equal to max heap to prevent runtime dynamic resizing pauses
+        val availRamCap = (availRam * 0.85f).toInt().coerceAtLeast(deviceProfile.minHeapFloorMb)
+        val maxRamMb = requestedMaxRamMb
+            .coerceAtMost(availRamCap)
+            .coerceIn(deviceProfile.minHeapFloorMb, maxAllowedRam)
+        val minRamMb = requestedMinRamMb.coerceIn(deviceProfile.minHeapFloorMb, maxRamMb)
 
         deviceProfile.reason?.let { reason ->
             onOutput("[PocketCraft] Stability mode enabled: $reason")
@@ -367,6 +371,7 @@ class ServerLauncher(private val context: Context) {
                             minRamMb = minRamMb,
                             maxRamMb = maxRamMb,
                             worldName = worldName,
+                            serverType = serverType,
                             onOutput = onOutput,
                             onError = onError
                         )
@@ -696,8 +701,8 @@ class ServerLauncher(private val context: Context) {
                 val rawVer = gameVerProps.getProperty("pocketcraft-game-version", "1.21.1")
                 val cleanMcVer = CarpetModManager.cleanMcVersion(rawVer)
                 add("-Dfabric.gameVersion=$cleanMcVer")
-                add("-Dfabric.chunkSystem.workerThreads=4")
-                add("-Dfabric.chunkSystem.ioThreads=4")
+                add("-Dfabric.chunkSystem.workerThreads=2")
+                add("-Dfabric.chunkSystem.ioThreads=2")
                 add("-Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false")
                 add("-Dfabric.log.disableAnsi=true")
             }
@@ -1010,6 +1015,8 @@ class ServerLauncher(private val context: Context) {
         flightModeEnabled: Boolean
     ): Triple<Int, Int, Int> {
         // Returns Triple(concurrentGenerates, concurrentLoads, concurrentSends)
+        // Keep concurrentSends = 1 so chunk sends are serialized, preventing keepalive/ping
+        // packets from queuing behind parallel chunk bursts.
         return if (flightModeEnabled) {
             if (cellularRelay) Triple(3, 4, 1) else Triple(4, 5, 1)
         } else {
@@ -1086,8 +1093,8 @@ class ServerLauncher(private val context: Context) {
             props["allow-flight"] = "true"
             changed = true
         }
-        if (props.getProperty("use-native-transport") != "false") {
-            props["use-native-transport"] = "false"
+        if (props.getProperty("use-native-transport") != "true") {
+            props["use-native-transport"] = "true"
             changed = true
         }
 
@@ -1135,6 +1142,26 @@ class ServerLauncher(private val context: Context) {
             flightModeEnabled = flightModeEnabled
         )
         onOutput("[PocketCraft] Relay chunk send budget: $chunkBudget/s (view=$viewDistance, reserves uplink for ping)")
+    }
+
+    private fun applyRelayReadyBukkitConfig(
+        serverDir: File,
+        onOutput: (String) -> Unit
+    ) {
+        val bukkitFile = File(serverDir, "bukkit.yml")
+        val original = runCatching { bukkitFile.readText() }.getOrDefault("")
+        val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
+        val netherEnabled = props.getProperty("allow-nether", "true").toBoolean()
+
+        var updated = original
+        updated = ensureYamlPathValue(updated, listOf("settings"), "allow-end", "true")
+        updated = ensureYamlPathValue(updated, listOf("settings"), "allow-nether", netherEnabled.toString())
+        updated = ensureYamlPathValue(updated, listOf("settings"), "warn-on-overload", "false")
+
+        if (updated != original) {
+            bukkitFile.writeText(updated)
+            onOutput("[PocketCraft] Bukkit configuration updated: allow-end=true, allow-nether=$netherEnabled.")
+        }
     }
 
     private fun applyRelayReadyPaperGlobalConfig(
@@ -1199,11 +1226,10 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlPathValue(updated, listOf("timings"), "server-name-privacy", "true")
 
         // Keep-alive: extend timeout so high-latency relay players aren't kicked.
-        // Use a moderate 10-tick interval (500ms): lower than the Paper default so idle
-        // ping reporting has less scheduling jitter, but not so low that keepalives flood
-        // the uplink during chunk bursts like the old 1-tick setting did.
+        // Use a 5-tick interval (250ms): lower than the Paper default so idle
+        // ping reporting has minimal scheduling jitter and rapid feedback.
         updated = ensureYamlSectionValue(updated, "misc", "keep-alive-timeout", "60")
-        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-interval", "10")
+        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-interval", "5")
         // Compression level 4 is a better latency/CPU tradeoff than 6 for mobile servers.
         // Higher levels add measurable CPU overhead on the server tick thread per packet.
         updated = ensureYamlSectionValue(updated, "misc", "compression-level", "4")
@@ -1384,27 +1410,28 @@ class ServerLauncher(private val context: Context) {
             props["player-idle-timeout"] = "0"
             changed = true
         }
+        // Async chunk writes: prevents main-thread disk sync stalls on mobile flash storage
+        if (props.getProperty("sync-chunk-writes") != "false") {
+            props["sync-chunk-writes"] = "false"
+            changed = true
+        }
+        // Network compression: 256 bytes reduces bandwidth and packet queuing latency
+        if (props.getProperty("network-compression-threshold") != "256") {
+            props["network-compression-threshold"] = "256"
+            changed = true
+        }
 
         if (changed) {
             ServerPropertiesHelper.saveProperties(serverDir, props)
-            onOutput("[PocketCraft] Fabric/Vanilla relay server.properties tuned (tick watchdog, rate-limit, op-level).")
+            onOutput("[PocketCraft] Fabric/Vanilla relay server.properties tuned (sync-chunk-writes, compression, rate-limit, op-level).")
         }
 
-        // --- Carpet Mod Auto-Installation ----------------------------------------
-        // Safely fetch and install Carpet mod for Fabric servers matching the exact versionId.
-        // Must NEVER throw exceptions or block server launch if offline/network fails.
-        val mcVersion = versionId.ifBlank {
-            props.getProperty("pocketcraft-mc-version")
-                ?: props.getProperty("version")
-                ?: "1.20.1"
-        }
-        
-        runCatching {
-            kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
-                CarpetModManager.ensureCarpetInstalled(serverDir, mcVersion, onOutput)
-            }
-        }.onFailure { error ->
-            onOutput("[PocketCraft] Note: Carpet mod auto-check skipped: ${error.message}")
+        // --- Mod Auto-Installation Disabled ------------------------------------
+        // Automatic installation of Carpet mod & Fabric API is disabled.
+        // Purge any previously auto-downloaded Carpet or Fabric API jars to prevent version mismatch crashes.
+        val modsDir = File(serverDir, "mods")
+        if (modsDir.exists()) {
+            CarpetModManager.purgeAllCarpetJars(modsDir, onOutput)
         }
     }
 

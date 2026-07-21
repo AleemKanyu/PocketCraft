@@ -18,16 +18,9 @@ data class PlayerInfo(
     fun pingText(unavailable: String = "Ping unavailable"): String {
         val rawPing = pingMs.takeIf { it >= 0 } ?: return unavailable
         if (isWifiPlayer && rawPing > MAX_REALISTIC_WIFI_PING_MS) {
-            return "Wi-Fi ping unavailable"
+            return "Ping unavailable"
         }
-
-        val label = when {
-            isRelayBridge -> "Local relay bridge ping"
-            isBedrockBridge -> "Local Bedrock bridge ping"
-            isWifiPlayer -> "Wi-Fi ping"
-            else -> "Ping"
-        }
-        return "$label: ${rawPing}ms"
+        return "Ping: ${rawPing}ms"
     }
 
     companion object {

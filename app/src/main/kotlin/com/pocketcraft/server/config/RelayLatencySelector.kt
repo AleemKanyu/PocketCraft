@@ -14,7 +14,7 @@ import kotlinx.coroutines.withContext
 
 object RelayLatencySelector {
     private const val CONNECT_TIMEOUT_MS = 1_500
-    private const val SAMPLE_COUNT = 3
+    private const val SAMPLE_COUNT = 5
 
     suspend fun pickFastestRelay(regions: List<RelayRegion>): RelayRegion {
         val fallback = regions.firstOrNull() ?: RelayServers.defaultRegions().first()
@@ -43,7 +43,7 @@ object RelayLatencySelector {
             }
         }
         if (samples.isEmpty()) return Long.MAX_VALUE
-        return samples.sorted()[samples.size / 2]
+        return samples.minOrNull() ?: Long.MAX_VALUE
     }
 
     private fun measureTcpConnectLatency(host: String, port: Int): Long {

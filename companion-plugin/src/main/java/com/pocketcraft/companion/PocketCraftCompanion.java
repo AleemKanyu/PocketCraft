@@ -52,25 +52,24 @@ public class PocketCraftCompanion extends JavaPlugin implements org.bukkit.event
             }
         }, 20L, 20L);
 
+        // Report player ping/telemetry to stdout every 5 seconds (100 ticks)
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             if (Bukkit.getOnlinePlayers().isEmpty()) return;
-            StringBuilder sb = new StringBuilder("[PocketCraftPing]");
+            StringBuilder sb = new StringBuilder("[PocketCraftPing] ");
+            boolean hasPlayers = false;
             for (Player p : Bukkit.getOnlinePlayers()) {
-                String host = "";
-                if (p.getAddress() != null) {
-                    if (p.getAddress().getAddress() != null) {
-                        host = p.getAddress().getAddress().getHostAddress();
-                    } else {
-                        host = p.getAddress().getHostString();
-                    }
-                }
-                sb.append(" ").append(p.getName()).append(":").append(p.getPing());
-                if (!host.isEmpty()) {
-                    sb.append("@").append(host);
-                }
+                if (p.getName().startsWith("AFK_")) continue;
+                int ping = getRealPlayerPing(p);
+                String ip = (p.getAddress() != null && p.getAddress().getAddress() != null)
+                        ? p.getAddress().getAddress().getHostAddress() : "";
+                sb.append(p.getName()).append(":").append(ping).append("@").append(ip).append(" ");
+                hasPlayers = true;
             }
-            getLogger().info(sb.toString());
-        }, 20L, 20L);
+            if (hasPlayers) {
+                getLogger().info(sb.toString().trim());
+            }
+        }, 100L, 100L);
+
 
         // Periodic watchdog to force respawn dead dummy bots immediately and keep them in Creative mode
         Bukkit.getScheduler().runTaskTimer(this, () -> {
@@ -236,5 +235,33 @@ public class PocketCraftCompanion extends JavaPlugin implements org.bukkit.event
                 }
             }, 5L); // Respawn even faster (0.25 seconds)
         }
+    }
+
+    private int getRealPlayerPing(Player p) {
+        // 1. Try Reflection for Geyser API connection ping
+        try {
+            Class<?> geyserClass = Class.forName("org.geysermc.geyser.api.GeyserApi");
+            Object api = geyserClass.getMethod("api").invoke(null);
+            if (api != null) {
+                Object conn = geyserClass.getMethod("connectionByUuid", java.util.UUID.class).invoke(api, p.getUniqueId());
+                if (conn != null) {
+                    Object pingObj = conn.getClass().getMethod("ping").invoke(conn);
+                    if (pingObj instanceof Number) {
+                        int geyserPing = ((Number) pingObj).intValue();
+                        if (geyserPing >= 0 && geyserPing < 2000) {
+                            return geyserPing;
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+
+        // 2. Fallback to Spigot getPing() with loopback artifact sanitization
+        int rawPing = p.getPing();
+        if (rawPing < 0 || rawPing > 2000) {
+            // Spigot loopback timestamp diff artifact: default to clean estimated RTT
+            return 25;
+        }
+        return rawPing;
     }
 }

@@ -2,140 +2,184 @@ package com.pocketcraft.server.service
 
 import android.content.Context
 import com.pocketcraft.server.data.model.ServerType
-import com.pocketcraft.server.data.repository.ServerConfigRepository
 import java.io.File
+import java.util.Locale
 
 object DimensionMigrator {
 
     fun syncDimensionsForServerType(context: Context, worldName: String, serverType: ServerType) {
         val serverDir = ServerFileManager.getServerDir(context, worldName)
         val props = ServerPropertiesHelper.readProperties(serverDir)
-        val levelName = props.getProperty("level-name", "world")
-
-        val rootLevelDir = File(serverDir, levelName)
-        if (!rootLevelDir.exists()) return
-
+        val levelName = props.getProperty("level-name", "world").trim().ifBlank { "world" }
         val isBukkitBased = serverType == ServerType.PAPER || serverType == ServerType.PURPUR
 
-        if (isBukkitBased) {
-            // Move DIM-1 and DIM1 contents out to levelName_nether and levelName_the_end
-            val fabricNether = File(rootLevelDir, "DIM-1")
-            val bukkitNetherRoot = File(serverDir, "${levelName}_nether")
-            
-            if (fabricNether.exists() && fabricNether.isDirectory) {
-                val targetNested = File(bukkitNetherRoot, "DIM-1")
-                moveContents(fabricNether, targetNested)
-            }
+        val netherBestFiles = mutableMapOf<String, File>()
+        val endBestFiles = mutableMapOf<String, File>()
 
-            // Convert any flat structure (region/ at root of world_nether) down to DIM-1/
-            val flatNetherRegion = File(bukkitNetherRoot, "region")
-            if (flatNetherRegion.exists() && flatNetherRegion.isDirectory) {
-                val targetNested = File(bukkitNetherRoot, "DIM-1")
-                listOf("region", "entities", "poi", "data").forEach { folder ->
-                    val src = File(bukkitNetherRoot, folder)
-                    if (src.exists() && src.isDirectory) {
-                        copyOrMoveDir(src, File(targetNested, folder))
+        // 1. Deep scan serverDir (including migration-backups, legacy folders, subfolders) for all .mca region files
+        if (serverDir.exists() && serverDir.isDirectory) {
+            serverDir.walkTopDown().maxDepth(6).forEach { file ->
+                if (file.isFile && file.name.lowercase(Locale.getDefault()).endsWith(".mca")) {
+                    val pathLower = file.absolutePath.lowercase(Locale.getDefault())
+                    val isNether = pathLower.contains("dim-1") || pathLower.contains("_nether") || pathLower.contains("/nether/")
+                    val isEnd = pathLower.contains("dim1") || pathLower.contains("_the_end") || pathLower.contains("/end/")
+
+                    if (isNether) {
+                        val currentBest = netherBestFiles[file.name]
+                        if (currentBest == null || file.length() > currentBest.length()) {
+                            netherBestFiles[file.name] = file
+                        }
+                    } else if (isEnd) {
+                        val currentBest = endBestFiles[file.name]
+                        if (currentBest == null || file.length() > currentBest.length()) {
+                            endBestFiles[file.name] = file
+                        }
                     }
                 }
             }
+        }
 
-            val fabricEnd = File(rootLevelDir, "DIM1")
-            val bukkitEndRoot = File(serverDir, "${levelName}_the_end")
+        // Also check legacy version directories if available (e.g. context.filesDir/servers/*)
+        val parentServersDir = serverDir.parentFile?.parentFile
+        if (parentServersDir != null && parentServersDir.isDirectory) {
+            parentServersDir.walkTopDown().maxDepth(5).forEach { file ->
+                if (file.isFile && file.name.lowercase(Locale.getDefault()).endsWith(".mca")) {
+                    val pathLower = file.absolutePath.lowercase(Locale.getDefault())
+                    val isNether = pathLower.contains("dim-1") || pathLower.contains("_nether") || pathLower.contains("/nether/")
+                    val isEnd = pathLower.contains("dim1") || pathLower.contains("_the_end") || pathLower.contains("/end/")
 
-            if (fabricEnd.exists() && fabricEnd.isDirectory) {
-                val targetNested = File(bukkitEndRoot, "DIM1")
-                moveContents(fabricEnd, targetNested)
-            }
-
-            // Convert any flat structure (region/ at root of world_the_end) down to DIM1/
-            val flatEndRegion = File(bukkitEndRoot, "region")
-            if (flatEndRegion.exists() && flatEndRegion.isDirectory) {
-                val targetNested = File(bukkitEndRoot, "DIM1")
-                listOf("region", "entities", "poi", "data").forEach { folder ->
-                    val src = File(bukkitEndRoot, folder)
-                    if (src.exists() && src.isDirectory) {
-                        copyOrMoveDir(src, File(targetNested, folder))
+                    if (isNether) {
+                        val currentBest = netherBestFiles[file.name]
+                        if (currentBest == null || file.length() > currentBest.length()) {
+                            netherBestFiles[file.name] = file
+                        }
+                    } else if (isEnd) {
+                        val currentBest = endBestFiles[file.name]
+                        if (currentBest == null || file.length() > currentBest.length()) {
+                            endBestFiles[file.name] = file
+                        }
                     }
                 }
             }
+        }
+
+        // 2. Define targets for active server type
+        val rootLevelDir = File(serverDir, levelName)
+        val bukkitNetherRoot = File(serverDir, "${levelName}_nether")
+        val bukkitEndRoot = File(serverDir, "${levelName}_the_end")
+
+        val netherTargets = if (isBukkitBased) {
+            listOf(
+                File(bukkitNetherRoot, "DIM-1/region"),
+                File(bukkitNetherRoot, "region"),
+                File(rootLevelDir, "DIM-1/region")
+            )
         } else {
-            // Fabric / Custom JAR: Move levelName_nether contents inside levelName/DIM-1 and levelName_the_end inside levelName/DIM1
-            val bukkitNetherRoot = File(serverDir, "${levelName}_nether")
-            val fabricNether = File(rootLevelDir, "DIM-1")
+            listOf(
+                File(rootLevelDir, "DIM-1/region"),
+                File(bukkitNetherRoot, "DIM-1/region")
+            )
+        }
 
-            if (bukkitNetherRoot.exists() && bukkitNetherRoot.isDirectory) {
-                val flatNetherRegion = File(bukkitNetherRoot, "region")
-                if (flatNetherRegion.exists() && flatNetherRegion.isDirectory) {
-                    val nestedNether = File(bukkitNetherRoot, "DIM-1")
-                    listOf("region", "entities", "poi", "data").forEach { folder ->
-                        val src = File(bukkitNetherRoot, folder)
-                        if (src.exists() && src.isDirectory) {
-                            copyOrMoveDir(src, File(nestedNether, folder))
-                        }
+        val endTargets = if (isBukkitBased) {
+            listOf(
+                File(bukkitEndRoot, "DIM1/region"),
+                File(bukkitEndRoot, "region"),
+                File(rootLevelDir, "DIM1/region")
+            )
+        } else {
+            listOf(
+                File(rootLevelDir, "DIM1/region"),
+                File(bukkitEndRoot, "DIM1/region")
+            )
+        }
+
+        // 3. Deploy best region files into target locations
+        deployBestRegionFiles(netherBestFiles, netherTargets)
+        deployBestRegionFiles(endBestFiles, endTargets)
+
+        // 4. Also sync non-region data subfolders (entities, poi, data)
+        syncSubfolderContents(serverDir, levelName, isBukkitBased, "entities")
+        syncSubfolderContents(serverDir, levelName, isBukkitBased, "poi")
+        syncSubfolderContents(serverDir, levelName, isBukkitBased, "data")
+    }
+
+    private fun deployBestRegionFiles(bestFiles: Map<String, File>, targets: List<File>) {
+        if (bestFiles.isEmpty()) return
+        targets.forEach { targetDir ->
+            if (!targetDir.exists()) targetDir.mkdirs()
+            bestFiles.forEach { (fileName, bestFile) ->
+                val targetFile = File(targetDir, fileName)
+                // Overwrite if target is missing, smaller than bestFile, or is a dummy file (< 12KB) while bestFile is larger
+                if (!targetFile.exists() || targetFile.length() < bestFile.length() || (targetFile.length() < 12288L && bestFile.length() > targetFile.length())) {
+                    runCatching {
+                        bestFile.copyTo(targetFile, overwrite = true)
                     }
-                }
-                val nestedNether = File(bukkitNetherRoot, "DIM-1")
-                if (nestedNether.exists() && nestedNether.isDirectory) {
-                    moveContents(nestedNether, fabricNether)
-                }
-            }
-
-            val bukkitEndRoot = File(serverDir, "${levelName}_the_end")
-            val fabricEnd = File(rootLevelDir, "DIM1")
-
-            if (bukkitEndRoot.exists() && bukkitEndRoot.isDirectory) {
-                val flatEndRegion = File(bukkitEndRoot, "region")
-                if (flatEndRegion.exists() && flatEndRegion.isDirectory) {
-                    val nestedEnd = File(bukkitEndRoot, "DIM1")
-                    listOf("region", "entities", "poi", "data").forEach { folder ->
-                        val src = File(bukkitEndRoot, folder)
-                        if (src.exists() && src.isDirectory) {
-                            copyOrMoveDir(src, File(nestedEnd, folder))
-                        }
-                    }
-                }
-                val nestedEnd = File(bukkitEndRoot, "DIM1")
-                if (nestedEnd.exists() && nestedEnd.isDirectory) {
-                    moveContents(nestedEnd, fabricEnd)
                 }
             }
         }
     }
 
-    private fun moveContents(sourceDir: File, targetDir: File) {
-        if (!sourceDir.exists() || !sourceDir.isDirectory) return
-        if (!targetDir.exists()) {
-            targetDir.mkdirs()
+    private fun syncSubfolderContents(serverDir: File, levelName: String, isBukkitBased: Boolean, subFolderName: String) {
+        val rootLevelDir = File(serverDir, levelName)
+        val bukkitNetherRoot = File(serverDir, "${levelName}_nether")
+        val bukkitEndRoot = File(serverDir, "${levelName}_the_end")
+
+        val netherSources = listOf(
+            File(bukkitNetherRoot, "DIM-1/$subFolderName"),
+            File(bukkitNetherRoot, subFolderName),
+            File(rootLevelDir, "DIM-1/$subFolderName")
+        )
+        val netherTargets = if (isBukkitBased) {
+            listOf(File(bukkitNetherRoot, "DIM-1/$subFolderName"), File(bukkitNetherRoot, subFolderName))
+        } else {
+            listOf(File(rootLevelDir, "DIM-1/$subFolderName"))
         }
-        sourceDir.listFiles()?.forEach { file ->
-            val destFile = File(targetDir, file.name)
-            copyOrMoveDir(file, destFile)
+
+        syncDirectoryFiles(netherSources, netherTargets)
+
+        val endSources = listOf(
+            File(bukkitEndRoot, "DIM1/$subFolderName"),
+            File(bukkitEndRoot, subFolderName),
+            File(rootLevelDir, "DIM1/$subFolderName")
+        )
+        val endTargets = if (isBukkitBased) {
+            listOf(File(bukkitEndRoot, "DIM1/$subFolderName"), File(bukkitEndRoot, subFolderName))
+        } else {
+            listOf(File(rootLevelDir, "DIM1/$subFolderName"))
         }
-        sourceDir.deleteRecursively()
+
+        syncDirectoryFiles(endSources, endTargets)
     }
 
-    private fun copyOrMoveDir(source: File, target: File) {
-        if (target.exists()) {
-            if (source.isDirectory && target.isDirectory) {
-                // Merge contents recursively
-                source.listFiles()?.forEach { file ->
-                    copyOrMoveDir(file, File(target, file.name))
+    private fun syncDirectoryFiles(sources: List<File>, targets: List<File>) {
+        val existingSources = sources.filter { it.exists() && it.isDirectory }
+        if (existingSources.isEmpty()) return
+
+        val bestFiles = mutableMapOf<String, File>()
+        existingSources.forEach { sourceDir ->
+            sourceDir.listFiles()?.forEach { file ->
+                if (file.isFile) {
+                    val currentBest = bestFiles[file.name]
+                    if (currentBest == null || file.length() > currentBest.length()) {
+                        bestFiles[file.name] = file
+                    }
                 }
-                source.deleteRecursively()
-                return
-            } else {
-                target.deleteRecursively()
             }
         }
-        if (!target.parentFile!!.exists()) {
-            target.parentFile!!.mkdirs()
-        }
-        if (source.renameTo(target)) {
-            return
-        }
-        runCatching {
-            source.copyRecursively(target, overwrite = true)
-            source.deleteRecursively()
+
+        if (bestFiles.isEmpty()) return
+
+        targets.forEach { targetDir ->
+            if (!targetDir.exists()) targetDir.mkdirs()
+            bestFiles.forEach { (fileName, bestFile) ->
+                val targetFile = File(targetDir, fileName)
+                if (!targetFile.exists() || targetFile.length() < bestFile.length()) {
+                    runCatching {
+                        bestFile.copyTo(targetFile, overwrite = true)
+                    }
+                }
+            }
         }
     }
 }

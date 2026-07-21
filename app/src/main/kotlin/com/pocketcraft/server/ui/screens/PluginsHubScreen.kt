@@ -90,6 +90,11 @@ import coil.compose.AsyncImage
 import com.pocketcraft.server.data.model.Plugin
 import com.pocketcraft.server.service.PluginManager
 import com.pocketcraft.server.service.PluginSourceUrls
+import androidx.compose.ui.platform.LocalContext
+import com.pocketcraft.server.service.ServerFileManager
+import com.pocketcraft.server.service.ServerPropertiesHelper
+import com.pocketcraft.server.ui.components.DuoButton
+import com.pocketcraft.server.ui.components.DuoButtonVariant
 import com.pocketcraft.server.ui.components.PluginInstallBottomSheet
 import com.pocketcraft.server.ui.components.PocketModsIcon
 import com.pocketcraft.server.ui.components.duoTextFieldColors
@@ -360,6 +365,15 @@ fun PluginsHubScreen(
         ) {
             item {
                 Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            if (currentTab().type == PluginManager.ContentType.RESOURCE_PACKS) {
+                item {
+                    ServerResourcePackConfigCard(
+                        stateHolder = stateHolder,
+                        onMessage = onMessage
+                    )
+                }
             }
 
             item {
@@ -1690,5 +1704,92 @@ private fun formatDownloads(downloads: Long): String {
         downloads >= 1_000_000 -> String.format(Locale.US, "%.1fM downloads", downloads / 1_000_000f)
         downloads >= 1_000 -> String.format(Locale.US, "%.1fK downloads", downloads / 1_000f)
         else -> "$downloads downloads"
+    }
+}
+
+@Composable
+private fun ServerResourcePackConfigCard(
+    stateHolder: ServerStateHolder,
+    onMessage: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val serverDir = remember(stateHolder.activeWorld) {
+        com.pocketcraft.server.service.ServerFileManager.getServerDir(context, stateHolder.activeWorld)
+    }
+    var requirePack by remember(stateHolder.activeWorld) {
+        mutableStateOf(ServerPropertiesHelper.getProperty(serverDir, "require-resource-pack", "false").toBoolean())
+    }
+    var isSaving by remember { mutableStateOf(false) }
+
+    PocketCraftCard(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = pluginsHubCardColor())
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("📦", fontSize = 20.sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Server Resource Pack (Auto-Prompt)",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Prompt joining players to download & apply your pack automatically.",
+                        fontSize = 12.sp,
+                        color = pluginsHubMutedTextColor()
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Require Resource Pack",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Players must accept the pack download to join",
+                        fontSize = 11.sp,
+                        color = pluginsHubMutedTextColor()
+                    )
+                }
+                Switch(
+                    checked = requirePack,
+                    onCheckedChange = { requirePack = it }
+                )
+            }
+
+            DuoButton(
+                text = if (isSaving) "Saving..." else "Save Server Resource Pack Config",
+                onClick = {
+                    isSaving = true
+                    scope.launch(Dispatchers.IO) {
+                        ServerPropertiesHelper.setProperty(serverDir, "require-resource-pack", requirePack.toString())
+                        isSaving = false
+                        withContext(Dispatchers.Main) {
+                            onMessage("Resource pack settings saved! Restart server to apply.")
+                        }
+                    }
+                },
+                variant = DuoButtonVariant.Primary,
+                enabled = !isSaving,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }

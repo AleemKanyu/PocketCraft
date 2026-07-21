@@ -163,6 +163,44 @@ class AfkHelperManager(
         "Deleted ${entity.name}."
     }
 
+    suspend fun updateFarm(
+        id: String,
+        name: String,
+        x: Int,
+        y: Int,
+        z: Int
+    ): String = withContext(Dispatchers.IO) {
+        val entity = cachedEntities.firstOrNull { it.id == id }
+            ?: return@withContext "That AFK helper no longer exists."
+
+        val trimmedName = name.trim()
+        if (trimmedName.isBlank()) {
+            return@withContext "Bot name cannot be empty."
+        }
+
+        val wasActive = entity.isActive
+        if (wasActive) {
+            disableFarmInternal(entity)
+        }
+
+        val updated = entity.copy(
+            name = trimmedName,
+            x = x,
+            y = y,
+            z = z
+        )
+        runCatching { dao.upsert(updated) }
+        syncWorldPluginFiles(updated.worldName)
+
+        if (wasActive) {
+            enableFarmInternal(updated)
+        } else {
+            refreshNow()
+        }
+
+        "Updated ${updated.name} settings."
+    }
+
     suspend fun toggleFarm(id: String): String = withContext(Dispatchers.IO) {
         val entity = cachedEntities.firstOrNull { it.id == id }
             ?: return@withContext "That AFK helper no longer exists."
@@ -205,7 +243,7 @@ class AfkHelperManager(
     private suspend fun enableFarmInternal(entity: AfkFarmLocationEntity): String {
         isBusy = true
         return try {
-            val owner = entity.resolveOwnerOrDefault() ?: return "Let at least one player join once before activating AFK Helpers."
+            val owner = entity.resolveOwnerOrDefault()
             val prepared = entity.copy(
                 isActive = true,
                 ownerPlayerName = owner.name,
@@ -230,26 +268,47 @@ class AfkHelperManager(
             // Format: /dummy create <name> <owner_uuid> <world> <x> <y> <z>
             val configuredWorldName = resolveConfiguredLevelName(serverDir)
             val command = "dummy create ${prepared.dummyEntityName} ${prepared.ownerPlayerUuid} $configuredWorldName ${prepared.x} ${prepared.y} ${prepared.z}"
-            val createResponse = runCatching {
+            var createResponse = runCatching {
                 sendRconCommand(command)
             }.getOrElse { error ->
                 appendLog("[PocketCraft] AFK helper console create failed for ${prepared.name}: ${error.message}")
                 ""
             }
 
-            val isUnknownCommand = createResponse.contains("Unknown", ignoreCase = true) || createResponse.contains("Incomplete", ignoreCase = true) || createResponse.isBlank()
+            var isUnknownCommand = createResponse.contains("Unknown", ignoreCase = true) || createResponse.contains("Incomplete", ignoreCase = true) || createResponse.isBlank()
             if (isUnknownCommand) {
-                // Try Carpet mod fake-player bot spawn command (/player <name> spawn at x y z)
+                // Hot reload plugin manager to register DummyPlayers.jar if freshly copied
+                hotReloadDummyPlugin(prepared)
+                createResponse = runCatching { sendRconCommand(command) }.getOrDefault("")
+                isUnknownCommand = createResponse.contains("Unknown", ignoreCase = true) || createResponse.contains("Incomplete", ignoreCase = true) || createResponse.isBlank()
+            }
+
+            if (isUnknownCommand) {
                 val botDisplayName = dummyDisplayName(prepared)
                 val safeName = botDisplayName.replace("'", "").replace("\"", "")
-                val carpetSpawnCmd = com.pocketcraft.server.server.CarpetModManager.buildSpawnCommand(safeName, prepared.x, prepared.y, prepared.z)
-                val carpetResp = runCatching { sendRconCommand(carpetSpawnCmd) }.getOrDefault("")
-                val carpetSuccess = com.pocketcraft.server.server.CarpetModManager.isCarpetPlayerCommandAvailable(carpetResp)
 
-                if (!carpetSuccess) {
-                    // Fallback if Carpet mod is not loaded: summon Zombie placeholder
-                    val summonCommand = "summon minecraft:zombie ${prepared.x} ${prepared.y} ${prepared.z} {CustomName:'\"$safeName\"',CustomNameVisible:1b,Invulnerable:1b,NoAI:1b,Silent:1b,PersistenceRequired:1b,IsBaby:0b,Tags:[\"pocketcraft_afk_bot\"]}"
-                    runCatching { sendRconCommand(summonCommand) }
+                // Try Purpur native bot commands (/bot <name> spawn at x y z or /bot spawn <name>)
+                val purpurCmd1 = "bot $safeName spawn at ${prepared.x} ${prepared.y} ${prepared.z}"
+                val purpurResp1 = runCatching { sendRconCommand(purpurCmd1) }.getOrDefault("")
+                var purpurSuccess = !purpurResp1.contains("Unknown", ignoreCase = true) && !purpurResp1.contains("Incomplete", ignoreCase = true) && purpurResp1.isNotBlank()
+
+                if (!purpurSuccess) {
+                    val purpurCmd2 = "bot spawn $safeName"
+                    val purpurResp2 = runCatching { sendRconCommand(purpurCmd2) }.getOrDefault("")
+                    purpurSuccess = !purpurResp2.contains("Unknown", ignoreCase = true) && !purpurResp2.contains("Incomplete", ignoreCase = true) && purpurResp2.isNotBlank()
+                }
+
+                if (!purpurSuccess) {
+                    // Try Carpet mod fake-player bot spawn command (/player <name> spawn at x y z)
+                    val carpetSpawnCmd = com.pocketcraft.server.server.CarpetModManager.buildSpawnCommand(safeName, prepared.x, prepared.y, prepared.z)
+                    val carpetResp = runCatching { sendRconCommand(carpetSpawnCmd) }.getOrDefault("")
+                    val carpetSuccess = com.pocketcraft.server.server.CarpetModManager.isCarpetPlayerCommandAvailable(carpetResp)
+
+                    if (!carpetSuccess) {
+                        // Fallback if Carpet mod / Purpur bot / Dummy plugin are not loaded: summon Zombie placeholder
+                        val summonCommand = "summon minecraft:zombie ${prepared.x} ${prepared.y} ${prepared.z} {CustomName:'\"$safeName\"',CustomNameVisible:1b,Invulnerable:1b,NoAI:1b,Silent:1b,PersistenceRequired:1b,IsBaby:0b,Tags:[\"pocketcraft_afk_bot\"]}"
+                        runCatching { sendRconCommand(summonCommand) }
+                    }
                 }
             } else {
                 runCatching { sendRconCommand("forceload remove $forceloadKey") }
@@ -263,6 +322,7 @@ class AfkHelperManager(
                     ownerPlayerUuid = record.ownerUuid.ifBlank { prepared.ownerPlayerUuid }
                 )
             } ?: prepared
+
             dao.upsert(synced)
             syncWorldPluginFiles(synced.worldName)
 
@@ -297,11 +357,15 @@ class AfkHelperManager(
                 val command = "dummy remove ${disabled.dummyEntityName} ${disabled.ownerPlayerUuid}"
                 runCatching { sendRconCommand(command) }
                 
-                // 2. Try Carpet mod /player <name> kill
+                // 2. Try Purpur native bot kill
+                runCatching { sendRconCommand("bot $safeName kill") }
+                runCatching { sendRconCommand("bot $safeName remove") }
+
+                // 3. Try Carpet mod /player <name> kill
                 val carpetKillCmd = com.pocketcraft.server.server.CarpetModManager.buildKillCommand(safeName)
                 runCatching { sendRconCommand(carpetKillCmd) }
 
-                // 3. Clean up kicks/kills for other formats
+                // 4. Clean up kicks/kills for other formats
                 runCatching { sendRconCommand("kick $safeName") }
                 runCatching { sendRconCommand("kill ${dummySelector(disabled)}") }
                 
@@ -498,7 +562,7 @@ class AfkHelperManager(
             ?: onlinePlayersProvider().firstOrNull { it.uuid.isNotBlank() }
             ?: onlinePlayersProvider().firstOrNull()
 
-    private fun AfkFarmLocationEntity.resolveOwnerOrDefault(): PlayerInfo? {
+    private fun AfkFarmLocationEntity.resolveOwnerOrDefault(): PlayerInfo {
         val existingOwner = resolveOnlineOwner(this)
             ?: knownPlayersProvider().firstOrNull {
                 ownerPlayerUuid.isNotBlank() && it.uuid == ownerPlayerUuid
@@ -506,7 +570,11 @@ class AfkHelperManager(
             ?: knownPlayersProvider().firstOrNull {
                 ownerPlayerName.isNotBlank() && it.name.equals(ownerPlayerName, ignoreCase = true)
             }
-        return existingOwner ?: resolveDefaultOwner()
+            ?: resolveDefaultOwner()
+        return existingOwner ?: PlayerInfo(
+            name = ownerPlayerName.ifBlank { "Server" },
+            uuid = ownerPlayerUuid.ifBlank { UUID.randomUUID().toString() }
+        )
     }
 
     private suspend fun isDummyLive(entity: AfkFarmLocationEntity): Boolean {

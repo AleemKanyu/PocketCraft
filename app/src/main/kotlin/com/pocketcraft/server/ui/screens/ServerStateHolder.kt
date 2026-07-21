@@ -181,6 +181,8 @@ class ServerStateHolder(
     private var periodicWorldSaveJob: Job? = null
     private var periodicLocationJob: Job? = null
     private var periodicPingJob: Job? = null
+    @Volatile
+    private var lastPingLogReceivedTimeMs = 0L
     private var lastRequestedServerType: ServerType? = null
     private var consoleVisibleAfterStart = false
     private var pendingRestart by mutableStateOf(false)
@@ -244,6 +246,10 @@ class ServerStateHolder(
         get() = _isRunning.value
         private set(value) {
             _isRunning.value = value
+            if (value) {
+                _isStarting.value = false
+                _isRestartingCycle.value = false
+            }
             updateServerUiState()
             afkHelperManager.onServerStateChanged(value)
             notifyStateChanged()
@@ -253,6 +259,7 @@ class ServerStateHolder(
     var isStarting: Boolean
         get() = _isStarting.value
         private set(value) {
+            if (value && _isRunning.value) return
             _isStarting.value = value
             updateServerUiState()
             notifyStateChanged()
@@ -269,7 +276,7 @@ class ServerStateHolder(
     private fun updateServerUiState() {
         serverUiState = when {
             isRunning -> ServerUiState.RUNNING
-            isStarting -> ServerUiState.STARTING
+            isStarting || isRestartingCycle -> ServerUiState.STARTING
             else -> ServerUiState.IDLE
         }
     }
@@ -489,12 +496,11 @@ class ServerStateHolder(
         private set
 
     private fun attemptTransitionToOnline() {
-        if (!isStarting) return
+        if (!isStarting && !isRestartingCycle) return
 
-        val bridgeEnabled = try { PluginManager.isBedrockBridgeEnabled(appContext, activeWorld.ifBlank { "world" }) } catch (e: Exception) { false }
-        val javaAndGeyserReady = if (bridgeEnabled) isJavaServerDone && isGeyserDone else isJavaServerDone
-
-        if (javaAndGeyserReady) {
+        if (isJavaServerDone) {
+            isGeyserDone = true
+            val bridgeEnabled = try { PluginManager.isBedrockBridgeEnabled(appContext, activeWorld.ifBlank { "world" }) } catch (e: Exception) { false }
             markServerReady()
             markJoinable()
             bedrockBridgeEnabled = bridgeEnabled
@@ -540,23 +546,31 @@ class ServerStateHolder(
                 }
                 // If a real player joined this session and the server stopped (not restarting),
                 // mark the rating popup as pending — it will show on the next app launch.
-                val shouldRestart = type == ServerHostService.EVENT_STOPPED && pendingRestart
+                val isRestartingNow = isRestartingCycle || pendingRestart
+                val shouldRestart = type == ServerHostService.EVENT_STOPPED && isRestartingNow
                 if (!shouldRestart && sessionPlayers.isNotEmpty()) {
                     prefs.pendingRatingPopup = true
                 }
                 scope.launch {
-                    val failedDuringStartup = isStarting
-                    val shouldRestart = type == ServerHostService.EVENT_STOPPED && pendingRestart
-                    pendingRestart = false
+                    val failedDuringStartup = isStarting && !shouldRestart
                     restartFallbackJob?.cancel()
                     restartFallbackJob = null
                     stopStartupProgressTracking(reset = !shouldRestart)
                     isStopping = false
-                    isStarting = false
                     isRunning = false
                     if (!shouldRestart) {
+                        isStarting = false
                         isRestartingCycle = false
+                        pendingRestart = false
+                    } else {
+                        isStarting = true
+                        isRestartingCycle = true
+                        isJavaServerDone = false
+                        isGeyserDone = false
+                        startupStatusMessage = "Restarting server..."
+                        startStartupProgressTracking()
                     }
+                    updateServerUiState()
                     stopPeriodicLocationPolling()
                     tps = 0f
                     if (!shouldRestart) {
@@ -834,10 +848,8 @@ class ServerStateHolder(
     val status: ServerStatus
         get() = when {
             isRestarting -> ServerStatus.RESTARTING
-            // Derive server status from runtime lifecycle only.
-            // Player presence and address availability are independent UI concerns.
-            isStarting -> ServerStatus.STARTING
             isRunning -> ServerStatus.ONLINE
+            isStarting -> ServerStatus.STARTING
             else -> ServerStatus.OFFLINE
         }
 
@@ -906,21 +918,16 @@ class ServerStateHolder(
         afkHelperManager.addFarm(name = name, x = x, y = y, z = z)
 
     suspend fun toggleAfkFarm(id: String): String {
-        val farm = afkHelperManager.farms.firstOrNull { it.id == id }
-        val wasActive = farm?.isActive == true
         val result = afkHelperManager.toggleFarm(id)
-        if (farm != null && !wasActive) {
-            val context = appContext
-            val isPremium = com.pocketcraft.server.billing.BillingManager.getInstance(context).isPremium.value
-            if (isPremium) {
-                lastAfkEnabledTime = System.currentTimeMillis()
-            }
-        }
+        lastAfkEnabledTime = System.currentTimeMillis()
         return result
     }
 
     suspend fun deleteAfkFarm(id: String): String =
         afkHelperManager.deleteFarm(id)
+
+    suspend fun updateAfkFarm(id: String, name: String, x: Int, y: Int, z: Int): String =
+        afkHelperManager.updateFarm(id, name, x, y, z)
 
     suspend fun refreshAfkHelpers() {
         afkHelperManager.refreshNow()
@@ -1184,10 +1191,11 @@ class ServerStateHolder(
     }
 
     fun stopServer() {
-        if (isStopping || (!isRunning && !isStarting)) return
+        if (isStopping || (!isRunning && !isStarting && !isRestartingCycle)) return
         startupLaunchJob?.cancel()
         startupLaunchJob = null
         pendingRestart = false
+        isRestartingCycle = false
         restartFallbackJob?.cancel()
         restartFallbackJob = null
         isStopping = true
@@ -1230,7 +1238,12 @@ class ServerStateHolder(
 
         isRestartingCycle = true
         pendingRestart = true
+        isStarting = true
         isStopping = true
+        isJavaServerDone = false
+        isGeyserDone = false
+        startupStatusMessage = "Restarting server..."
+        updateServerUiState()
         appendLog("[PocketCraft] Restart requested...")
         requestWorldSave(reason = "before restart")
         stopPeriodicWorldSave()
@@ -1326,6 +1339,7 @@ class ServerStateHolder(
         }
 
         parsedPings.takeIf { it.isNotEmpty() }?.let { pings ->
+            lastPingLogReceivedTimeMs = SystemClock.elapsedRealtime()
             onlinePlayers.replaceAll { player ->
                 val newPing = pings[player.name] ?: pings[player.name.lowercase()]
                 if (newPing != null) {
@@ -1473,9 +1487,7 @@ class ServerStateHolder(
     }
 
     fun clearLogs() {
-        logsQueue.clear()
-        logs.clear()
-        consoleVisibleAfterStart = false
+        // Console logs are preserved permanently per user requirement.
     }
 
     fun currentLogLines(): List<String> = logsQueue.toList()
@@ -1729,27 +1741,35 @@ class ServerStateHolder(
             return
         }
 
-        if (!state.isStarting && isStarting && (SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 120000)) {
-            // Keep isStarting = true during the 120s grace period to allow service to spawn and Paper to boot
+        if (state.isRunning) {
+            isStarting = false
+            isRestartingCycle = false
+            isRunning = true
+            isRelayDone = true
+            isJavaServerDone = true
+            isGeyserDone = true
+            startupProgressPercent = 100
+            startupStatusMessage = "Server ready!"
+            stopStartupProgressTracking(reset = false)
+            startPeriodicWorldSave()
+            startPeriodicLocationPolling()
+            startPeriodicPingPolling()
+            markJoinable()
+        } else if (!state.isStarting && isStarting && (SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 120000)) {
+            // Keep isStarting = true during the 120s grace period ONLY IF server is NOT yet running!
+            isStarting = true
+            isRunning = false
         } else {
             isStarting = state.isStarting
+            isRunning = state.isRunning
         }
-        isRunning = state.isRunning
         if (state.isRunning || state.isStarting) {
             consoleVisibleAfterStart = true
             if (logs.isEmpty()) {
                 loadLogsFromDisk()
             }
         }
-        if (state.isRunning) {
-            isRelayDone = true
-            isJavaServerDone = true
-            isGeyserDone = true
-            startPeriodicWorldSave()
-            startPeriodicLocationPolling()
-            startPeriodicPingPolling()
-            markJoinable()
-        } else if (!isStarting) {
+        if (!isRunning && !isStarting) {
             stopPeriodicWorldSave()
             stopPeriodicLocationPolling()
             resetJoinable()
@@ -1771,11 +1791,11 @@ class ServerStateHolder(
             }
         }
 
-        if (isStarting && startupStartedAtRealtime == null) {
+        if (isStarting && !isRunning && startupStartedAtRealtime == null) {
             startupStartedAtRealtime = SystemClock.elapsedRealtime()
             jvmStartedTracking = false
             startStartupProgressTracking()
-        } else if (!isStarting) {
+        } else if (!isStarting || isRunning) {
             stopStartupProgressTracking(reset = false)
         }
 
@@ -3761,7 +3781,7 @@ class ServerStateHolder(
     private fun startStartupProgressTracking() {
         startupProgressJob?.cancel()
         startupProgressJob = scope.launch {
-            while (isStarting) {
+            while (isStarting && !isRunning) {
                 if (!isStopping) {
                     val elapsedMs = (SystemClock.elapsedRealtime() - (startupStartedAtRealtime ?: SystemClock.elapsedRealtime())).coerceAtLeast(0L)
                     if (elapsedMs > 420_000L) {
@@ -3777,6 +3797,8 @@ class ServerStateHolder(
                         elapsedMs < 55_000L -> 78f + (((elapsedMs - 35_000L) / 20_000f) * 20f)
                         else -> 98f
                     }.toInt().coerceIn(minOf(startupProgressPercent, 98), 98)
+
+                    if (!isStarting || isRunning) break
 
                     startupProgressPercent = nextProgress
                     if (startupStatusMessage.isBlank() || startupStatusMessage == "Initializing..." || startupStatusMessage == "Preparing server...") {
@@ -4239,10 +4261,11 @@ class ServerStateHolder(
         sample: ParsedPlayerPing,
         nextIp: String
     ): Int {
-        if (!isPrivateWifiIp(nextIp) || sample.pingMs <= MAX_REALISTIC_WIFI_PING_MS) {
-            return sample.pingMs
+        if (sample.pingMs < 0) return -1
+        if (sample.pingMs > MAX_REALISTIC_WIFI_PING_MS) {
+            return player.pingMs.takeIf { it in 0..MAX_REALISTIC_WIFI_PING_MS } ?: -1
         }
-        return player.pingMs.takeIf { it in 0..MAX_REALISTIC_WIFI_PING_MS } ?: -1
+        return sample.pingMs
     }
 
     private fun isPrivateWifiIp(value: String): Boolean {
@@ -5453,7 +5476,7 @@ class ServerStateHolder(
         periodicPingJob?.cancel()
         periodicPingJob = scope.launch(Dispatchers.IO) {
             while (isActive) {
-                delay(10_000)
+                delay(5_000)
                 if (!isRunning || isStopping) continue
                 applyPingUpdatesFromRcon()
             }
@@ -5461,42 +5484,47 @@ class ServerStateHolder(
     }
 
     private suspend fun applyPingUpdatesFromRcon() {
+        val now = SystemClock.elapsedRealtime()
+        // Skip RCON ping polling if companion plugin telemetry already provided pings recently
+        if (now - lastPingLogReceivedTimeMs < 12_000L) return
+
         val players = withContext(Dispatchers.Main) { onlinePlayers.toList() }
         if (players.isEmpty()) return
 
-        for (player in players) {
-            runCatching {
-                var rconResponse = sendRconCommand("ping ${escapeSelectorName(player.name)}")
-                if (rconResponse.isBlank() || rconResponse.contains("Unknown", ignoreCase = true) || rconResponse.contains("Incomplete", ignoreCase = true) || rconResponse.contains("Could not", ignoreCase = true)) {
-                    rconResponse = sendRconCommand("player ${escapeSelectorName(player.name)} ping")
+        val commands = players.map { "ping ${escapeSelectorName(it.name)}" }
+        val responses = sendRconCommands(commands)
+
+        for ((index, player) in players.withIndex()) {
+            val rconResponse = responses.getOrNull(index) ?: continue
+            if (rconResponse.isBlank() || rconResponse.startsWith("[RCON] Error") || rconResponse.startsWith("[RCON] Connection")) continue
+            
+            var pings = ConsoleParser.parsePing(rconResponse)
+            if (pings.isEmpty()) {
+                val fabricLatency = ConsoleParser.parseFabricEntityLatency(rconResponse)
+                if (fabricLatency in 0..5000) {
+                    pings = mapOf(player.name to ParsedPlayerPing(pingMs = fabricLatency))
                 }
-                if (rconResponse.isBlank() || rconResponse.contains("Unknown", ignoreCase = true) || rconResponse.contains("Incomplete", ignoreCase = true) || rconResponse.contains("Could not", ignoreCase = true)) {
-                    rconResponse = sendRconCommand("data get entity ${escapeSelectorName(player.name)} latency")
-                }
-                if (rconResponse.isBlank() || rconResponse.startsWith("[RCON] Error") || rconResponse.startsWith("[RCON] Connection")) return@runCatching
-                val pings = ConsoleParser.parsePing(rconResponse)
-                if (pings.isEmpty()) return@runCatching
-                withContext(Dispatchers.Main) {
-                    onlinePlayers.replaceAll { p ->
-                        val newPing = pings[p.name] ?: pings[p.name.lowercase()]
-                        if (newPing != null) {
-                            val nextIp = newPing.ip.ifBlank { p.ip }
-                            val updated = p.copy(
-                                pingMs = sanitizeWifiPingSample(p, newPing, nextIp),
-                                ip = nextIp
-                            )
-                            val sessionIdx = sessionPlayers.indexOfFirst {
-                                canonicalPlayerName(it.name) == canonicalPlayerName(p.name)
-                            }
-                            if (sessionIdx >= 0) sessionPlayers[sessionIdx] = updated
-                            updated
-                        } else p
-                    }
-                }
-            }.onFailure { error ->
-                android.util.Log.w("ServerStateHolder", "RCON ping poll failed for ${player.name}: ${error.message}")
             }
-            delay(100)
+            if (pings.isEmpty()) continue
+
+            withContext(Dispatchers.Main) {
+                onlinePlayers.replaceAll { p ->
+                    val targetKey = pings.keys.firstOrNull { canonicalPlayerName(it) == canonicalPlayerName(p.name) }
+                    val newPing = if (targetKey != null) pings[targetKey] else pings[p.name] ?: pings[p.name.lowercase()]
+                    if (newPing != null && newPing.pingMs >= 0) {
+                        val nextIp = newPing.ip.ifBlank { p.ip }
+                        val updated = p.copy(
+                            pingMs = newPing.pingMs,
+                            ip = nextIp
+                        )
+                        val sessionIdx = sessionPlayers.indexOfFirst {
+                            canonicalPlayerName(it.name) == canonicalPlayerName(p.name)
+                        }
+                        if (sessionIdx >= 0) sessionPlayers[sessionIdx] = updated
+                        updated
+                    } else p
+                }
+            }
         }
     }
 

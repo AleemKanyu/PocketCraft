@@ -10,7 +10,9 @@ object BundledPluginInstaller {
     private val BUNDLED_PLUGINS = listOf(
         "Geyser-Spigot.jar",
         "floodgate-spigot.jar",
-        "ViaVersion.jar"
+        "ViaVersion.jar",
+        "PocketCraftCompanion.jar",
+        "DummyPlayers.jar"
     )
 
     private val LEGACY_PLUGIN_NAMES = listOf(
@@ -80,7 +82,8 @@ object BundledPluginInstaller {
             if (!existingFile.exists()) return@forEach
 
             runCatching {
-                val assetSize = context.assets.open("plugins/$pluginName").use { input ->
+                val assetPath = if (pluginName == "PocketCraftCompanion.jar") "default_plugins/$pluginName" else "plugins/$pluginName"
+                val assetSize = context.assets.open(assetPath).use { input ->
                     var size = 0L
                     val buffer = ByteArray(8192)
                     var read: Int
@@ -102,7 +105,8 @@ object BundledPluginInstaller {
 
     private fun copyAssetPlugin(context: Context, pluginName: String, destFile: File) {
         runCatching {
-            context.assets.open("plugins/$pluginName").use { input ->
+            val assetPath = if (pluginName == "PocketCraftCompanion.jar") "default_plugins/$pluginName" else "plugins/$pluginName"
+            context.assets.open(assetPath).use { input ->
                 destFile.outputStream().use { output ->
                     input.copyTo(output)
                 }

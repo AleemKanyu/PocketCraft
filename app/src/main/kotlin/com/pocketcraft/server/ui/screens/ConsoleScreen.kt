@@ -676,12 +676,14 @@ fun ConsoleScreen(
                 }
             }
         }
-        item(key = "release_train_26_warning") {
-            ReleaseTrain26WarningBanner(
-                activeVersion = displayedRuntimeVersion,
-                onChangeVersion = onChangeVersion,
-                modifier = Modifier.fillMaxWidth()
-            )
+        if (com.pocketcraft.server.service.MinecraftVersionPolicy.shouldShowReleaseTrain26Warning(displayedRuntimeVersion)) {
+            item(key = "release_train_26_warning") {
+                ReleaseTrain26WarningBanner(
+                    activeVersion = displayedRuntimeVersion,
+                    onChangeVersion = onChangeVersion,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
         item {
             AnimatedEntranceContainer(index = 9) {

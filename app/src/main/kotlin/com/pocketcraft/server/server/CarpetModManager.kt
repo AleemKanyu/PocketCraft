@@ -112,13 +112,14 @@ object CarpetModManager {
     }
 
     /**
-     * Removes all Carpet mod jars from modsDir to recover from crash.
+     * Removes Carpet and auto-installed Fabric API mod jars from modsDir.
      */
     fun purgeAllCarpetJars(modsDir: File, onOutput: ((String) -> Unit)? = null) {
         modsDir.listFiles()?.filter { file ->
-            file.name.contains("carpet", ignoreCase = true) && (file.extension == "jar" || file.extension == "disabled")
+            (file.name.contains("carpet", ignoreCase = true) || file.name.contains("fabric-api", ignoreCase = true)) && 
+                (file.extension == "jar" || file.extension == "disabled")
         }?.forEach { file ->
-            onOutput?.invoke("[PocketCraft] Purging Carpet mod jar: ${file.name}")
+            onOutput?.invoke("[PocketCraft] Purging auto-installed mod jar: ${file.name}")
             file.delete()
         }
     }

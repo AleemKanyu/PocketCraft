@@ -75,10 +75,14 @@ class BackupForegroundService : Service() {
             val intent = Intent(context, BackupForegroundService::class.java).apply {
                 action = ACTION_START_BACKUP
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                Log.e("BackupFgService", "Failed to start BackupForegroundService: ${e.message}")
             }
         }
 
@@ -86,7 +90,11 @@ class BackupForegroundService : Service() {
             val intent = Intent(context, BackupForegroundService::class.java).apply {
                 action = ACTION_STOP_BACKUP
             }
-            context.startService(intent)
+            try {
+                context.startService(intent)
+            } catch (e: Exception) {
+                Log.e("BackupFgService", "Failed to stop BackupForegroundService: ${e.message}")
+            }
         }
 
         private fun sanitizeWorldName(name: String): String =
@@ -122,7 +130,15 @@ class BackupForegroundService : Service() {
 
         isCancelled = false
         // Promote to foreground immediately so Android does not kill us.
-        startForeground(NOTIFICATION_ID, buildNotification("Starting backup…", 0, true))
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, buildNotification("Starting backup…", 0, true), android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            } else {
+                startForeground(NOTIFICATION_ID, buildNotification("Starting backup…", 0, true))
+            }
+        } catch (e: Exception) {
+            Log.e("BackupFgService", "startForeground failed: ${e.message}")
+        }
 
         scope.launch {
             try {
