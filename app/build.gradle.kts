@@ -180,6 +180,7 @@ android {
                 "**/libjava*",
                 "**/libjawt*",
                 "**/libjdwp*",
+                "**/libjimage*",
                 "**/libjimg*",
                 "**/libjli*",
                 "**/libjnid*",
