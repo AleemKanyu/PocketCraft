@@ -1412,9 +1412,8 @@ class ServerStateHolder(
         if (ConsoleParser.isDone(cleanLine) || cleanLine.contains("Done (", ignoreCase = true)) {
             areSpawnChunksLoaded = true
             isJavaServerDone = true
-            if (isStarting) {
-                attemptTransitionToOnline()
-            }
+            markServerReady()
+            attemptTransitionToOnline()
         }
 
         if (cleanLine.contains("[Geyser-Spigot] Done (", ignoreCase = true) || 

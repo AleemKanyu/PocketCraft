@@ -569,9 +569,12 @@ fun ConsoleScreen(
                         )
                     }
                     ServerUiState.STARTING -> {
+                        val isDone = stateHolder.isJavaServerDone || stateHolder.startupStatusMessage == "Server ready!"
+                        val displayPercent = if (isDone) 100 else stateHolder.startupProgressPercent
+                        val displayProgress = if (isDone) 1f else animatedStartupProgress
                         StartupProgressCard(
-                            progress = animatedStartupProgress,
-                            progressPercent = stateHolder.startupProgressPercent,
+                            progress = displayProgress,
+                            progressPercent = displayPercent,
                             status = stateHolder.startupStatusMessage.ifBlank { "Initializing server..." },
                             isStopping = stateHolder.isStopping,
                             onStop = {

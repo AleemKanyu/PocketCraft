@@ -796,24 +796,28 @@ class RelayManager(private val context: Context) {
         return InetAddress.getByName(host)
     }
 
-    private fun resolveRelayIp(relayHost: String): String? {
-        val dnsResolved = runBlocking(Dispatchers.IO) {
-            runCatching {
-                withTimeoutOrNull(2_000L) {
-                    resolvePreferIPv4(relayHost).hostAddress
+    private fun resolveRelayIp(relayHost: String): String {
+        val staticIp = RelayServers.getByHost(relayHost).fallbackIp?.trim()
+        if (!staticIp.isNullOrBlank()) {
+            val asyncDns = runCatching {
+                val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+                try {
+                    val future = executor.submit<String> {
+                        resolvePreferIPv4(relayHost).hostAddress
+                    }
+                    future.get(1200, java.util.concurrent.TimeUnit.MILLISECONDS)
+                } finally {
+                    executor.shutdownNow()
                 }
-            }.getOrNull()
-                ?.trim()
-                ?.takeIf { it.isNotBlank() }
+            }.getOrNull()?.trim()?.takeIf { it.isNotBlank() }
+
+            if (asyncDns != null) {
+                return asyncDns
+            }
+            return staticIp
         }
 
-        if (dnsResolved != null) {
-            return dnsResolved
-        }
-
-        return RelayServers.getByHost(relayHost).fallbackIp
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
+        return runCatching { resolvePreferIPv4(relayHost).hostAddress }.getOrNull()?.trim()?.takeIf { it.isNotBlank() } ?: relayHost
     }
 
     private fun topUpPool(localPort: Int) {
