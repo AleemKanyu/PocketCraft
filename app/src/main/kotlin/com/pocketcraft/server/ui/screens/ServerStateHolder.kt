@@ -1443,6 +1443,7 @@ class ServerStateHolder(
         isStarting = false
         isRestartingCycle = false
         isRunning = true
+        ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_RUNNING)
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(appContext)
         prefs.successfulServerStarts = prefs.successfulServerStarts + 1
         android.util.Log.i("ServerStateHolder", "Server start count incremented: ${prefs.successfulServerStarts}")
@@ -1841,7 +1842,7 @@ class ServerStateHolder(
         val portOpen = isServerPortOpen(config.port)
         val serviceActive = isServiceActive() || ServerHostService.isServiceRunning(appContext) || isStarting
         
-        if (rawState == ServerHostService.RUNTIME_STATE_RUNNING) {
+        if (rawState == ServerHostService.RUNTIME_STATE_RUNNING || isRunning) {
             // Verify if the server is actually running by checking its port or service
             if (portOpen || serviceActive) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)

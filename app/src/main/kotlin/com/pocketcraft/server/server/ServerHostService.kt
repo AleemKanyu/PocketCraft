@@ -1590,8 +1590,8 @@ class ServerHostService : Service() {
         }
         AppPreferences(applicationContext).consecutiveCrashCount = 0
 
-        // 2. Broadcast a direct server-ready event so the UI can transition to ONLINE
-        // without depending on log-parsing, which may be affected by R8 in release builds.
+        // 2. Persist RUNTIME_STATE_RUNNING & broadcast a direct server-ready event so the UI can transition to ONLINE
+        persistRuntimeState(applicationContext, versionId, activeWorldNameOrDefault(), RUNTIME_STATE_RUNNING)
         val readyIntent = Intent(ACTION_SERVER_EVENT).apply {
             setPackage(packageName)
             putExtra(EXTRA_VERSION_ID, versionId)
