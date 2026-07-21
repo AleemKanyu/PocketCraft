@@ -51,29 +51,16 @@ class ServerConfigRepository @Inject constructor(
     private val setupMarkerFile: File get() = File(context.filesDir, ".setup_done")
 
     suspend fun loadConfig(): ServerConfig = withContext(Dispatchers.IO) {
-        val activeServer = getActiveServerName()
-        val file = serverFile(activeServer)
-        when {
-            file.exists() -> {
-                val profileConfig = parseConfig(file)
-                if (propertiesFile.exists()) {
-                    val propsConfig = parseConfig(propertiesFile, profileConfig)
-                    if (propsConfig != profileConfig) {
-                        serversDir.mkdirs()
-                        writeConfigFile(file, propsConfig)
-                        propsConfig
-                    } else {
-                        profileConfig
-                    }
-                } else {
-                    profileConfig
-                }
+        if (propertiesFile.exists()) {
+            parseConfig(propertiesFile)
+        } else {
+            val activeServer = getActiveServerName()
+            val file = serverFile(activeServer)
+            if (file.exists()) {
+                parseConfig(file)
+            } else {
+                ServerConfig()
             }
-            propertiesFile.exists() -> parseConfig(propertiesFile).also {
-                serversDir.mkdirs()
-                writeConfigFile(file, it)
-            }
-            else -> ServerConfig()
         }
     }
 
@@ -299,17 +286,15 @@ class ServerConfigRepository @Inject constructor(
             motd = (props["motd"] ?: "A PocketCraft Server").removeSuffix(" - Hosted on Pocketcraft").trim(),
             pvp = props["pvp"]?.toBoolean() ?: true,
             viewDistance = props["pocketcraft-desired-view-distance"]?.toIntOrNull()
-                ?: fallbackConfig?.viewDistance
                 ?: props["view-distance"]?.toIntOrNull()
+                ?: fallbackConfig?.viewDistance
                 ?: 6,
             simulationDistance = props["pocketcraft-desired-simulation-distance"]?.toIntOrNull()
-                ?: fallbackConfig?.simulationDistance
                 ?: props["simulation-distance"]?.toIntOrNull()
+                ?: fallbackConfig?.simulationDistance
                 ?: 4,
             spawnProtection = props["spawn-protection"]?.toIntOrNull() ?: 16,
-            allowFlight = props["allow-flight"]?.toBoolean()?.let { diskVal ->
-                if (diskVal && fallbackConfig != null) fallbackConfig.allowFlight else diskVal
-            } ?: fallbackConfig?.allowFlight ?: true,
+            allowFlight = props["allow-flight"]?.toBoolean() ?: fallbackConfig?.allowFlight ?: true,
             whiteList = props["white-list"]?.toBoolean() ?: false,
             enforceWhitelist = props["enforce-whitelist"]?.toBoolean() ?: false,
             commandBlocks = props["enable-command-block"]?.toBoolean() ?: true,
@@ -324,20 +309,14 @@ class ServerConfigRepository @Inject constructor(
             ramMode = props["pocketcraft-ram-mode"]
                 ?: fallbackConfig?.ramMode
                 ?: "low",
-            entityBroadcastRangePercentage = props["entity-broadcast-range-percentage"]?.toIntOrNull()?.let { diskVal ->
-                if (fallbackConfig != null && diskVal == diskVal.coerceIn(70, 100)) {
-                    fallbackConfig.entityBroadcastRangePercentage
-                } else {
-                    diskVal
-                }
-            } ?: fallbackConfig?.entityBroadcastRangePercentage ?: ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT,
+            entityBroadcastRangePercentage = props["entity-broadcast-range-percentage"]?.toIntOrNull()
+                ?: fallbackConfig?.entityBroadcastRangePercentage
+                ?: ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT,
             enableRcon = props["enable-rcon"]?.toBoolean() ?: true,
             generateStructures = props["generate-structures"]?.toBoolean() ?: true,
             levelType = props["level-type"] ?: "default",
             maxWorldSize = props["max-world-size"]?.toIntOrNull() ?: 29999984,
-            useNativeTransport = props["use-native-transport"]?.toBoolean()?.let { diskVal ->
-                if (!diskVal && fallbackConfig != null) fallbackConfig.useNativeTransport else diskVal
-            } ?: fallbackConfig?.useNativeTransport ?: false,
+            useNativeTransport = props["use-native-transport"]?.toBoolean() ?: fallbackConfig?.useNativeTransport ?: false,
             maxBuildHeight = props["max-build-height"]?.toIntOrNull() ?: 320,
             joinMessageEnabled = true,
             joinMessageText = POCKETCRAFT_JOIN_MESSAGE_TEXT,
