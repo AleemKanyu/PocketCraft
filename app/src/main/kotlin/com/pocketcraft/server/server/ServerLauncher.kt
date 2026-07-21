@@ -550,20 +550,34 @@ class ServerLauncher(private val context: Context) {
             add("-Xshare:off")
             add("-version")
         }
-        val shellCmd = "exec " + rawCommand.joinToString(" ") { arg ->
-            "'" + arg.replace("'", "'\\''") + "'"
-        }
-        val process = ProcessBuilder("/system/bin/sh", "-c", shellCmd)
-            .redirectErrorStream(true)
-            .apply {
-                environment()["JAVA_HOME"] = jrePath
-                environment()["TMPDIR"] = tmpDir
-                environment()["HOME"] = homeDir
-                environment()["LD_LIBRARY_PATH"] = "$jrePath/lib/server:$jrePath/lib:$jrePath/lib/jli:$ldLibraryPath"
-                environment()["PATH"] = "$jrePath/bin:/system/bin:/system/xbin:$javaBinDir:${System.getenv("PATH").orEmpty()}"
-                environment()["BIONIC_DISABLE_PTR_TAGGING"] = "1"
+        val process = runCatching {
+            ProcessBuilder(rawCommand)
+                .redirectErrorStream(true)
+                .apply {
+                    environment()["JAVA_HOME"] = jrePath
+                    environment()["TMPDIR"] = tmpDir
+                    environment()["HOME"] = homeDir
+                    environment()["LD_LIBRARY_PATH"] = "$jrePath/lib/server:$jrePath/lib:$jrePath/lib/jli:$ldLibraryPath"
+                    environment()["PATH"] = "$jrePath/bin:/system/bin:/system/xbin:$javaBinDir:${System.getenv("PATH").orEmpty()}"
+                    environment()["BIONIC_DISABLE_PTR_TAGGING"] = "1"
+                }
+                .start()
+        }.getOrElse {
+            val shellCmd = "exec " + rawCommand.joinToString(" ") { arg ->
+                "'" + arg.replace("'", "'\\''") + "'"
             }
-            .start()
+            ProcessBuilder("/system/bin/sh", "-c", shellCmd)
+                .redirectErrorStream(true)
+                .apply {
+                    environment()["JAVA_HOME"] = jrePath
+                    environment()["TMPDIR"] = tmpDir
+                    environment()["HOME"] = homeDir
+                    environment()["LD_LIBRARY_PATH"] = "$jrePath/lib/server:$jrePath/lib:$jrePath/lib/jli:$ldLibraryPath"
+                    environment()["PATH"] = "$jrePath/bin:/system/bin:/system/xbin:$javaBinDir:${System.getenv("PATH").orEmpty()}"
+                    environment()["BIONIC_DISABLE_PTR_TAGGING"] = "1"
+                }
+                .start()
+        }
 
         val output = StringBuilder()
         val readerThread = Thread {
@@ -779,6 +793,24 @@ class ServerLauncher(private val context: Context) {
  
         val startTime = System.currentTimeMillis()
         val processResult = runCatching {
+            ProcessBuilder(rawCommand)
+                .directory(File(serverDir))
+                .redirectErrorStream(true)
+                .apply {
+                    environment()["POJAV_NATIVEDIR"] = nativeLibDir
+                    environment()["JAVA_HOME"] = jrePath
+                    environment()["HOME"] = serverDir
+                    environment()["TMPDIR"] = tmpDir
+                    environment()["LD_LIBRARY_PATH"] = "$jrePath/lib/server:$jrePath/lib:$jrePath/lib/jli:$ldLibraryPath"
+                    environment()["PATH"] = "$jrePath/bin:/system/bin:/system/xbin:${javaBin.parent}:${System.getenv("PATH").orEmpty()}"
+                    environment()["BIONIC_DISABLE_PTR_TAGGING"] = "1"
+                }
+                .start()
+        }.recoverCatching {
+            val shellCmd = "exec " + rawCommand.joinToString(" ") { arg ->
+                "'" + arg.replace("'", "'\\''" ) + "'"
+            }
+            val command = listOf("/system/bin/sh", "-c", shellCmd)
             ProcessBuilder(command)
                 .directory(File(serverDir))
                 .redirectErrorStream(true)
@@ -1648,18 +1680,11 @@ class ServerLauncher(private val context: Context) {
             android.util.Log.d("ServerLauncher", "Skipping JRE chmod — already applied for ${runtime.displayName}")
             return
         }
-        val jreBinDir = File(jreDir, "bin")
-        val jreLibDir = File(jreDir, "lib")
-
-        // 0x1ED = octal 0755 (rwxr-xr-x)  — use the real chmod(2) syscall via Os.chmod
-        // so that the execute bit is actually applied even under restrictive SELinux contexts.
-        listOf(jreBinDir, jreLibDir).forEach { dir ->
-            if (dir.exists()) {
-                dir.walkTopDown().forEach { file ->
-                    if (file.isFile) {
-                        runCatching { android.system.Os.chmod(file.absolutePath, 0x1ED) }
-                    }
-                }
+        // 0x1ED = octal 0755 (rwxr-xr-x) — use the real chmod(2) syscall via Os.chmod
+        // so that the execute/search bits are applied to both files and directories.
+        if (jreDir.exists()) {
+            jreDir.walkTopDown().forEach { file ->
+                runCatching { android.system.Os.chmod(file.absolutePath, 0x1ED) }
             }
         }
         runCatching { marker.writeText(runtime.displayName) }

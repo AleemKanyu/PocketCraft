@@ -531,8 +531,7 @@ class ServerStateHolder(
                 type == ServerHostService.EVENT_CHUNKS_LOADING ||
                 type == ServerHostService.EVENT_OUTPUT
             val isStopSignal = type == ServerHostService.EVENT_STOPPED ||
-                type == ServerHostService.EVENT_SERVER_CRASHED ||
-                type == ServerHostService.EVENT_ERROR
+                type == ServerHostService.EVENT_SERVER_CRASHED
             if (!isStopSignal && !isStopping) {
                 if (!isRunning && !isStarting && isLaunchSignal) {
                     isStarting = true
@@ -680,19 +679,7 @@ class ServerStateHolder(
                         recordServerFailure(reason, failedDuringStartup)
                     }
                     ServerHostService.EVENT_ERROR -> {
-                        val failedDuringStartup = isStarting
                         appendLog("[ERROR] $line")
-                        stopStartupProgressTracking(reset = true)
-                        isStopping = false
-                        pendingRestart = false
-                        isStarting = false
-                        isRunning = false
-                        tps = 0f
-                        resetJoinable()
-                        recordServerFailure(
-                            reason = line.ifBlank { "PocketCraft could not start the server process." },
-                            duringStartup = failedDuringStartup
-                        )
                     }
                     ServerHostService.EVENT_STOPPED -> {
                         // Note: This branch is unreachable because EVENT_STOPPED is handled
