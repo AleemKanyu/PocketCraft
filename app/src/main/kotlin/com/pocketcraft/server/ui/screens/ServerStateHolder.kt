@@ -528,7 +528,8 @@ class ServerStateHolder(
                 type == ServerHostService.EVENT_TUNNEL_CONNECTED ||
                 type == ServerHostService.EVENT_TUNNEL_FAILED ||
                 type == ServerHostService.EVENT_CHUNKY_PROGRESS ||
-                type == ServerHostService.EVENT_CHUNKS_LOADING
+                type == ServerHostService.EVENT_CHUNKS_LOADING ||
+                type == ServerHostService.EVENT_OUTPUT
             val isStopSignal = type == ServerHostService.EVENT_STOPPED ||
                 type == ServerHostService.EVENT_SERVER_CRASHED ||
                 type == ServerHostService.EVENT_ERROR
@@ -1754,8 +1755,8 @@ class ServerStateHolder(
             startPeriodicLocationPolling()
             startPeriodicPingPolling()
             markJoinable()
-        } else if (!state.isStarting && isStarting && (SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 120000)) {
-            // Keep isStarting = true during the 120s grace period ONLY IF server is NOT yet running!
+        } else if (!state.isStarting && isStarting && (lastStartRequestedRealtime == 0L || SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 180000L)) {
+            // Keep isStarting = true during startup grace period; prevent brief flickering to OFFLINE
             isStarting = true
             isRunning = false
         } else {
@@ -1838,27 +1839,23 @@ class ServerStateHolder(
         val rawState = ServerHostService.getPersistedRuntimeState(appContext, versionId)
         val address = ServerHostService.getPersistedPublicAddress(appContext, versionId)
         val portOpen = isServerPortOpen(config.port)
-        val serviceActive = isServiceActive()
+        val serviceActive = isServiceActive() || ServerHostService.isServiceRunning(appContext) || isStarting
         
         if (rawState == ServerHostService.RUNTIME_STATE_RUNNING) {
-            // Verify if the server is actually running by checking its port
-            if (portOpen) {
-                return PersistedRuntimeState(isRunning = true, publicAddress = address)
-            }
-            // If the port is closed, double check if service is running or process is active
-            if (ServerHostService.isServiceRunning(appContext) || serviceActive) {
+            // Verify if the server is actually running by checking its port or service
+            if (portOpen || serviceActive) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
             ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
             return PersistedRuntimeState()
         }
         
-        if (rawState == ServerHostService.RUNTIME_STATE_STARTING) {
+        if (rawState == ServerHostService.RUNTIME_STATE_STARTING || isStarting) {
             if (portOpen) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
             // If starting, check if the service is running or process is active
-            if (ServerHostService.isServiceRunning(appContext) || serviceActive) {
+            if (serviceActive || (lastStartRequestedRealtime > 0 && SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 180000L)) {
                 return PersistedRuntimeState(isStarting = true, publicAddress = address)
             }
             // Dead state
@@ -2206,7 +2203,9 @@ class ServerStateHolder(
         }
         saveConfig(enforced, targetDir = targetDir)
         runCatching {
-            ServerConfigRepository(appContext).saveConfig(enforced)
+            ServerConfigRepository(appContext).apply {
+                setWorldNameOverride(targetWorldName ?: activeWorld)
+            }.saveConfig(enforced)
         }.onFailure { error ->
             android.util.Log.w("ServerStateHolder", "Failed to sync saved settings: ${error.message}")
         }

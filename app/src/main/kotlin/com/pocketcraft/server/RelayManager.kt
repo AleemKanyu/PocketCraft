@@ -890,6 +890,7 @@ class RelayManager(private val context: Context) {
                 }
             }
 
+            val relayHost = activeRelayHost ?: com.pocketcraft.server.data.preferences.AppPreferences(context).relayHost
             try {
                 val staggerDelayMs = ((connectingSockets.get() - 1).coerceAtLeast(0) * SOCKET_OPEN_STAGGER_MS)
                     .coerceAtMost(4_000L)
@@ -897,7 +898,6 @@ class RelayManager(private val context: Context) {
                     delay(staggerDelayMs)
                 }
 
-                val relayHost = activeRelayHost ?: com.pocketcraft.server.data.preferences.AppPreferences(context).relayHost
                 // Use the same region-scoped ID that was used during register() so the relay
                 // can match this tunnel socket to the correct port assignment.
                 val userId = relaySessionIdForHost(relayHost)
@@ -914,7 +914,7 @@ class RelayManager(private val context: Context) {
 
                 socket = Socket()
                 configureRelaySocket(socket)
-                socket.connect(java.net.InetSocketAddress(targetIp, PHONE_TUNNEL_PORT), 10_000)
+                socket.connect(java.net.InetSocketAddress(targetIp, PHONE_TUNNEL_PORT), 3000)
 
                 socket.outputStream.write("$userId\n".toByteArray(Charsets.UTF_8))
                 socket.outputStream.flush()
@@ -974,7 +974,11 @@ class RelayManager(private val context: Context) {
                     
                     val replenishDelayMs = if (isRapidFailure) {
                         val fails = consecutiveFailures.incrementAndGet()
-                        (2000L * (1 shl fails.coerceAtMost(5))).coerceAtMost(60_000L)
+                        if (fails >= 2 && !preferFallbackRelay) {
+                            preferFallbackRelay = true
+                            android.util.Log.w("RelayManager", "Relay socket rapidly closed. Triggering fallback relay.")
+                        }
+                        (1500L * (1 shl fails.coerceAtMost(4))).coerceAtMost(30_000L)
                     } else if (currentPoolSize() <= POOL_REFRESH_FLOOR) {
                         SOCKET_OPEN_STAGGER_MS
                     } else {
@@ -984,7 +988,7 @@ class RelayManager(private val context: Context) {
                 }
 
             } catch (e: Exception) {
-                android.util.Log.e("RelayManager", "Pool socket error: ${e.message}")
+                android.util.Log.e("RelayManager", "Pool socket error for $relayHost: ${e.message}")
                 resolvedRelayIp = null
                 synchronized(socketPool) {
                     pooledSocket?.let { socketPool.remove(it) }
@@ -994,7 +998,11 @@ class RelayManager(private val context: Context) {
                 socket?.close()
                 if (poolScope.isActive) {
                     val fails = consecutiveFailures.incrementAndGet()
-                    val backoffMs = (2000L * (1 shl fails.coerceAtMost(5))).coerceAtMost(60_000L)
+                    if (fails >= 2 && !preferFallbackRelay) {
+                        preferFallbackRelay = true
+                        android.util.Log.w("RelayManager", "Pool socket error count $fails on $relayHost. Activating fallback relay.")
+                    }
+                    val backoffMs = (1500L * (1 shl fails.coerceAtMost(4))).coerceAtMost(30_000L)
                     schedulePoolTopUp(localPort, delayMs = backoffMs)
                 }
             } finally {

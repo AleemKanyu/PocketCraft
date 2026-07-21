@@ -2825,6 +2825,7 @@ class ServerHostService : Service() {
 
         @JvmStatic
         fun isServiceRunning(context: Context): Boolean {
+            if (isServiceRunning) return true
             val file = getStateFile(context)
             if (!file.exists()) return false
             val pid = runCatching {
