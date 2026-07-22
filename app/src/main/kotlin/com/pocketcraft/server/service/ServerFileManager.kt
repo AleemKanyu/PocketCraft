@@ -9,24 +9,52 @@ import java.io.File
 object ServerFileManager {
 
     /**
+     * Recursively applies 0755 permissions to a directory and all its parent directories
+     * up to context.filesDir to prevent SELinux/umask file access errors on MIUI/HyperOS/OnePlus.
+     */
+    fun ensureDirectoryPermissions(dir: File) {
+        runCatching {
+            var current: File? = dir
+            while (current != null) {
+                android.system.Os.chmod(current.absolutePath, 0x1ED) // 0755
+                if (current.name == "files" || current.name == "code_cache" || current.name == "cache") break
+                current = current.parentFile
+            }
+            if (dir.exists()) {
+                dir.walkTopDown().forEach { file ->
+                    android.system.Os.chmod(file.absolutePath, 0x1ED) // 0755
+                }
+            }
+        }
+    }
+
+    /**
      * Returns the directory where a specific world's server files are stored.
      */
     fun getServerDir(context: Context, worldName: String): File {
-        return File(context.filesDir, "servers/worlds/$worldName").also { it.mkdirs() }
+        return File(context.filesDir, "servers/worlds/$worldName").also {
+            it.mkdirs()
+            ensureDirectoryPermissions(it)
+        }
     }
 
     /**
      * Returns the directory without creating it. Useful for checking existence.
      */
     fun getServerDirNoCreate(context: Context, worldName: String): File {
-        return File(context.filesDir, "servers/worlds/$worldName")
+        return File(context.filesDir, "servers/worlds/$worldName").also {
+            if (it.exists()) ensureDirectoryPermissions(it)
+        }
     }
 
     /**
      * Returns the directory where a specific version's server JAR is stored.
      */
     fun getServerJarDir(context: Context, gameVersion: String): File {
-        return File(context.filesDir, "servers/binaries/$gameVersion").also { it.mkdirs() }
+        return File(context.filesDir, "servers/binaries/$gameVersion").also {
+            it.mkdirs()
+            ensureDirectoryPermissions(it)
+        }
     }
 
     fun getServerJarFile(context: Context, gameVersion: String, serverType: ServerType): File {

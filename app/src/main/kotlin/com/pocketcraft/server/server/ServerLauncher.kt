@@ -219,6 +219,9 @@ class ServerLauncher(private val context: Context) {
         val serverDir = serverDirFile.absolutePath
         val tmpDir    = normalizeAndroidPath(File(context.filesDir, "runtime-tmp").also { it.mkdirs() }.absolutePath)
         val shimDir = File(normalizeAndroidPath(File(context.filesDir, "lib-shims").also { it.mkdirs() }.absolutePath))
+        ServerFileManager.ensureDirectoryPermissions(serverDirFile)
+        ServerFileManager.ensureDirectoryPermissions(File(tmpDir))
+        ServerFileManager.ensureDirectoryPermissions(shimDir)
         ensureSystemShims(shimDir, File(tmpDir), onOutput)
         val deviceProfile = buildDeviceStabilityProfile(totalRamMb = getTotalRamMb(context), availableRamMb = com.pocketcraft.server.util.RamUtils.getAvailableRamMb(context))
         val forceExternal = AppPreferences(context).forceExternalJvm || deviceProfile.forceExternalJvm
