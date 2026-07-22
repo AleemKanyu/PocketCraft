@@ -242,6 +242,12 @@ object ModpackManager {
         val tempFile = File(context.cacheDir, "modpack_import_${System.currentTimeMillis()}.zip")
         try {
             onStatus("Copying modpack package...")
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    zipUri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
             context.contentResolver.openInputStream(zipUri)?.use { input ->
                 tempFile.outputStream().use { output ->
                     input.copyTo(output)

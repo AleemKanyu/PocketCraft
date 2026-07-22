@@ -1681,7 +1681,10 @@ class ServerLauncher(private val context: Context) {
             return
         }
         // 0x1ED = octal 0755 (rwxr-xr-x) — use the real chmod(2) syscall via Os.chmod
-        // so that the execute/search bits are applied to both files and directories.
+        // so that the execute/search bits are applied to both files and directories,
+        // including context.filesDir and jreDir itself for OxygenOS/Knox process boundary compatibility.
+        runCatching { android.system.Os.chmod(context.filesDir.absolutePath, 0x1ED) }
+        runCatching { android.system.Os.chmod(jreDir.absolutePath, 0x1ED) }
         if (jreDir.exists()) {
             jreDir.walkTopDown().forEach { file ->
                 runCatching { android.system.Os.chmod(file.absolutePath, 0x1ED) }

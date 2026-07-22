@@ -840,6 +840,12 @@ object PluginManager {
             }
 
             val destFile = File(dir, sanitizeFileName(fileName))
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
             val inputStream = context.contentResolver.openInputStream(uri)
                 ?: throw IllegalStateException("Could not open selected file")
             val totalBytes = context.contentResolver.openFileDescriptor(uri, "r")?.statSize ?: -1L

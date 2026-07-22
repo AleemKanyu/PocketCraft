@@ -26,6 +26,12 @@ object WorldImporter {
                 // Step 1: Copy to local temp file to avoid ContentResolver stream instabilities
                 onProgress(0f, "Importing selected world file...")
                 val sourceSize = queryContentLength(context, zipUri)
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        zipUri,
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
                 context.contentResolver.openInputStream(zipUri)?.use { input ->
                     tempFile.outputStream().use { output ->
                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)

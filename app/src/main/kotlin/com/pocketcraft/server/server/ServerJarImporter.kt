@@ -31,6 +31,12 @@ object ServerJarImporter {
             }
 
             targetFile.parentFile?.mkdirs()
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
             context.contentResolver.openInputStream(uri)?.use { input ->
                 targetFile.outputStream().use { output ->
                     input.copyTo(output)
