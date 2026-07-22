@@ -68,14 +68,14 @@ val fastReleaseBuild = providers.gradleProperty("pocketcraftFastRelease")
 
 android {
     namespace = "com.pocketcraft.server"
-    compileSdk = 35
+    compileSdk = 36
     buildToolsVersion = "35.0.0"
     ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "com.pocketcraft.server"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = autoVersionCode
         versionName = "1.8.1"
 
