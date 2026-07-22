@@ -28,7 +28,7 @@ const BASE_DOMAIN = process.env.SUBDOMAIN_BASE_DOMAIN || 'pocketcraft.online';
 const HANDSHAKE_TIMEOUT_MS = 3_000;
 const MAX_HANDSHAKE_BYTES = 1024;
 const BACKEND_CONNECT_TIMEOUT_MS = 3_000;
-// Reduced from 128KB: smaller HWM fires data events sooner, lowering Java player ping.
+// Reduced to 16KB: smaller HWM fires data events immediately, eliminating Java player ping delay.
 const STREAM_HIGH_WATER_MARK = 128 * 1024;
 
 // Short-lived cache for relay /status responses.
