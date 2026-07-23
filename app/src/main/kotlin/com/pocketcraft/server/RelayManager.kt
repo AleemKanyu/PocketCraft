@@ -1269,6 +1269,8 @@ class RelayManager(private val context: Context) {
      * Call this when the server stops.
      */
     fun disconnect() {
+        val currentUserId = activeRelaySessionId
+        activeRelaySessionId = null
         relayHostingAllowed.set(false)
         stopBedrockBridge()
         tunnelHeartbeatJob?.cancel()
@@ -1291,6 +1293,29 @@ class RelayManager(private val context: Context) {
             socketPool.clear()
         }
         connectingSockets.set(0)
+
+        if (!currentUserId.isNullOrBlank()) {
+            val relayHost = (activeRelayHost ?: "").ifBlank { RelayServers.MUMBAI.host }
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val url = URL("http://$relayHost:$CONTROL_PORT/unregister")
+                    val conn = url.openConnection() as HttpURLConnection
+                    conn.requestMethod = "POST"
+                    conn.connectTimeout = 3000
+                    conn.readTimeout = 3000
+                    conn.doOutput = true
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.setRequestProperty("x-pocketcraft-secret", RELAY_SECRET)
+                    val json = JSONObject().apply { put("userId", currentUserId) }
+                    conn.outputStream.use { it.write(json.toString().toByteArray()) }
+                    val code = conn.responseCode
+                    android.util.Log.i("RelayManager", "Unregistered relay session for $currentUserId (HTTP $code)")
+                } catch (e: Exception) {
+                    android.util.Log.w("RelayManager", "Failed to send unregister HTTP request to relay: ${e.message}")
+                }
+            }
+        }
+
         android.util.Log.i("RelayManager", "Tunnel disconnected and scope reset.")
     }
 

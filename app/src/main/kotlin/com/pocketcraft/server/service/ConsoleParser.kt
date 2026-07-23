@@ -105,14 +105,9 @@ object ConsoleParser {
 
     /** Returns (name, uuid) if a player joined. */
     fun parseJoin(line: String): Pair<String, String>? {
-        JOIN_WITH_UUID_REGEX.find(line)?.let { match ->
-            return match.groupValues[1] to match.groupValues[2]
-        }
-
         JOINED_GAME_REGEX.find(line)?.let { match ->
             return match.groupValues[1] to ""
         }
-
         return null
     }
 

@@ -189,23 +189,19 @@ public class PocketCraftCompanion extends JavaPlugin implements org.bukkit.event
     }
 
     private void performGracefulStop(Object mcServer) {
-        if (mcServer == null) {
-            getLogger().warning("No MinecraftServer reference, falling back to Bukkit.shutdown()");
+        getLogger().info("Graceful stop signal received. Executing Bukkit.shutdown() on main thread...");
+        try {
+            Bukkit.getScheduler().runTask(this, () -> {
+                try {
+                    Bukkit.shutdown();
+                } catch (Throwable e) {
+                    getLogger().warning("Bukkit.shutdown() failed: " + e.getMessage());
+                }
+            });
+        } catch (Throwable e) {
+            getLogger().warning("Failed to schedule main thread shutdown, falling back to direct shutdown: " + e.getMessage());
             Bukkit.shutdown();
-            return;
         }
-
-        new Thread(() -> {
-            try {
-                Method stopServer = mcServer.getClass().getDeclaredMethod("stopServer");
-                stopServer.setAccessible(true);
-                stopServer.invoke(mcServer);
-                getLogger().info("Server stopped gracefully (System.exit bypassed).");
-            } catch (Exception e) {
-                getLogger().warning("Reflection stopServer() failed: " + e.getMessage() + ". Falling back to Bukkit.shutdown()");
-                Bukkit.shutdown();
-            }
-        }, "PocketCraft-Shutdown-Thread").start();
     }
 
     @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.HIGH)

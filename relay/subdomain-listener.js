@@ -363,7 +363,7 @@ async function handleCloudStatusPing(playerSocket, fullBuffer, handshakeLength, 
   }
 
   const entry = status[ownerId];
-  if (!entry) {
+  if (!entry || !entry.port || entry.idlePhoneSockets === 0) {
     const offlineStatus = {
       version: '1.21.11',
       motd: '§cServer is offline',

@@ -162,7 +162,7 @@ object ServerPropertiesWriter {
             onlineMode = config.onlineMode,
             motd = if (config.motd.isBlank()) {
                 "Hosted on Pocketcraft"
-            } else if (config.motd.endsWith(" - Hosted on Pocketcraft", ignoreCase = true)) {
+            } else if (config.motd.contains("Hosted on Pocketcraft", ignoreCase = true)) {
                 config.motd
             } else {
                 "${config.motd} - Hosted on Pocketcraft"

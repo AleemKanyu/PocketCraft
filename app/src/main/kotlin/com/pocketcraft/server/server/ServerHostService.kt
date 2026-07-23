@@ -210,6 +210,7 @@ class ServerHostService : Service() {
 
         if (intent?.action == ACTION_START) {
             keepListenerRunningManual = com.pocketcraft.server.data.preferences.AppPreferences(applicationContext).alwaysAliveBackground
+            com.pocketcraft.server.data.preferences.AppPreferences(applicationContext).isUserStopped = false
         }
         val requestedVersionId = intent?.getStringExtra(EXTRA_VERSION_ID).orEmpty().trim()
         val versionId = if (intent?.action == ACTION_START && requestedVersionId.isBlank()) {
@@ -220,10 +221,12 @@ class ServerHostService : Service() {
         if (intent?.action == ACTION_STOP) {
             keepListenerRunningManual = intent.getBooleanExtra("keep_listener_alive", false)
             stopReason = "user"
+            com.pocketcraft.server.data.preferences.AppPreferences(applicationContext).isUserStopped = true
             autoRecoverAttempts = 0
             autoRecoverWindowStartMs = 0L
             pendingRestartVersionId = null
             pendingRestartWorldName = null
+            currentVersionId?.let { persistRuntimeState(applicationContext, it, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE) }
             updateNotification(ServerStage.STOPPING, force = true)
             pushWidgetUpdate("stopping")
             currentVersionId?.let {
@@ -295,8 +298,8 @@ class ServerHostService : Service() {
             val prefs = AppPreferences(applicationContext)
             val now = System.currentTimeMillis()
             val previousRuntimeState = getPersistedRuntimeState(applicationContext, activeVersion)
-            if (previousRuntimeState == RUNTIME_STATE_OFFLINE || stopReason == "user" || stopInProgress.get()) {
-                android.util.Log.i("ServerHostService", "Service restarted with null intent but server is offline or stopped by user. Suppressing auto-resume.")
+            if (previousRuntimeState == RUNTIME_STATE_OFFLINE || stopReason == "user" || stopInProgress.get() || prefs.isUserStopped) {
+                android.util.Log.i("ServerHostService", "Service restarted without explicit START but server is offline, user-stopped, or stopping. Suppressing auto-resume.")
                 try {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                 } catch (e: Exception) {
@@ -606,12 +609,11 @@ class ServerHostService : Service() {
         super.onTaskRemoved(rootIntent)
         // Keep service lifecycle independent from recent-task UI removal.
         // This avoids races where user-initiated shutdown is misread as a crash/restart flow.
-        if (keepListenerRunning) {
-            val isServerActive = (serverProcess?.isAlive == true || serverReadyHandled.get()) && !stopInProgress.get() && stopReason != "user"
-            val restartAction = if (isServerActive) ACTION_START else ACTION_START_LISTENER
-            
+        val isUserStopped = AppPreferences(applicationContext).isUserStopped
+        val isServerActive = (serverProcess?.isAlive == true || serverReadyHandled.get()) && !stopInProgress.get() && stopReason != "user" && !isUserStopped
+        if (keepListenerRunning && isServerActive) {
             val restartServiceIntent = Intent(applicationContext, ServerHostService::class.java).apply {
-                action = restartAction
+                action = ACTION_START
                 putExtra(EXTRA_VERSION_ID, currentVersionId.orEmpty())
                 putExtra(EXTRA_WORLD_NAME, currentWorldName.orEmpty())
             }
@@ -633,6 +635,8 @@ class ServerHostService : Service() {
                 pendingIntent
             )
             android.util.Log.i("ServerHostService", "Scheduled alarm to auto-restart service after task removal.")
+        } else {
+            android.util.Log.i("ServerHostService", "Task removed while server is offline or user stopped. Skipping auto-restart alarm.")
         }
     }
 

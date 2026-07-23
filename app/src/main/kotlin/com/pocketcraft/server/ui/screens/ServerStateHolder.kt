@@ -27,6 +27,7 @@ import kotlinx.coroutines.sync.withLock
 import com.pocketcraft.server.analytics.FirebaseAnalyticsManager
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.tasks.await
 import com.pocketcraft.server.BuildConfig
 import com.pocketcraft.server.RelayManager
@@ -234,6 +235,8 @@ class ServerStateHolder(
             notifyStateChanged = ::notifyStateChanged
         )
     }
+
+    private val recentlyWelcomedPlayers = ConcurrentHashMap<String, Long>()
 
     private val _stateUpdateTrigger = MutableStateFlow(0)
     val stateUpdateTrigger: StateFlow<Int> = _stateUpdateTrigger.asStateFlow()
@@ -1387,20 +1390,25 @@ class ServerStateHolder(
                 sendCommand("chunky pause", showOfflineWarning = false)
                 upsertOnlinePlayer(name = name, uuid = uuid)
                 
-                // Send branded welcome message
-                scope.launch {
-                    delay(1500) // Ensure player is fully connected before sending message
-                    if (isRunning && !isStopping) {
-                        val shortName = serverName.take(12)
-                        val displayUrl = POCKETCRAFT_JOIN_MESSAGE_URL
-                            .removePrefix("https://")
-                            .removePrefix("http://")
-                        val firstLine = """{"text":"\n[","color":"gray"},{"text":"$shortName","color":"green","bold":true},{"text":"] ","color":"gray"},{"text":"$POCKETCRAFT_JOIN_MESSAGE_TEXT","color":"white"}"""
-                        val urlSection = """,{"text":"\n[","color":"gray"},{"text":"$shortName","color":"green","bold":true},{"text":"] ","color":"gray"},{"text":"Join our Discord using ","color":"white"},{"text":"$displayUrl","color":"aqua","underlined":true,"clickEvent":{"action":"open_url","value":"$POCKETCRAFT_JOIN_MESSAGE_URL"}},"""
-                        val spacerLine = """{"text":"\n \n","color":"white"}"""
-                        val tellrawArg = """[$firstLine$urlSection$spacerLine]"""
-                        val escapedName = escapeSelectorName(name)
-                        sendCommand("tellraw @a[name=\"$escapedName\"] $tellrawArg", showOfflineWarning = false)
+                val now: Long = SystemClock.elapsedRealtime()
+                val lastMsgTime: Long = recentlyWelcomedPlayers[name.lowercase()] ?: 0L
+                if (now - lastMsgTime > 10_000L) {
+                    recentlyWelcomedPlayers[name.lowercase()] = now
+                    // Send branded welcome message
+                    scope.launch {
+                        delay(1500) // Ensure player is fully connected before sending message
+                        if (isRunning && !isStopping) {
+                            val shortName = serverName.take(12)
+                            val displayUrl = POCKETCRAFT_JOIN_MESSAGE_URL
+                                .removePrefix("https://")
+                                .removePrefix("http://")
+                            val firstLine = """{"text":"\n[","color":"gray"},{"text":"$shortName","color":"green","bold":true},{"text":"] ","color":"gray"},{"text":"$POCKETCRAFT_JOIN_MESSAGE_TEXT","color":"white"}"""
+                            val urlSection = """,{"text":"\n[","color":"gray"},{"text":"$shortName","color":"green","bold":true},{"text":"] ","color":"gray"},{"text":"Join our Discord using ","color":"white"},{"text":"$displayUrl","color":"aqua","underlined":true,"clickEvent":{"action":"open_url","value":"$POCKETCRAFT_JOIN_MESSAGE_URL"}},"""
+                            val spacerLine = """{"text":"\n \n","color":"white"}"""
+                            val tellrawArg = """[$firstLine$urlSection$spacerLine]"""
+                            val escapedName = escapeSelectorName(name)
+                            sendCommand("tellraw @a[name=\"$escapedName\"] $tellrawArg", showOfflineWarning = false)
+                        }
                     }
                 }
             }

@@ -174,6 +174,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean("auto_restart", false)
         set(value) = prefs.edit().putBoolean("auto_restart", value).apply()
 
+    var isUserStopped: Boolean
+        get() = prefs.getBoolean("is_user_stopped", false)
+        set(value) { prefs.edit().putBoolean("is_user_stopped", value).commit() }
+
     var forceExternalJvm: Boolean
         get() = prefs.getBoolean("force_external_jvm", android.os.Build.VERSION.SDK_INT >= 34)
         set(value) = prefs.edit().putBoolean("force_external_jvm", value).apply()
