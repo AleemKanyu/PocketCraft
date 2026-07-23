@@ -319,8 +319,8 @@ class ServerConfigRepository @Inject constructor(
             useNativeTransport = props["use-native-transport"]?.toBoolean() ?: fallbackConfig?.useNativeTransport ?: false,
             maxBuildHeight = props["max-build-height"]?.toIntOrNull() ?: 320,
             joinMessageEnabled = true,
-            joinMessageText = POCKETCRAFT_JOIN_MESSAGE_TEXT,
-            joinMessageUrl = POCKETCRAFT_JOIN_MESSAGE_URL,
+            joinMessageText = props["pocketcraft-join-message-text"] ?: POCKETCRAFT_JOIN_MESSAGE_TEXT,
+            joinMessageUrl = props["pocketcraft-join-message-url"] ?: POCKETCRAFT_JOIN_MESSAGE_URL,
             serverType = props["pocketcraft-server-type"]?.let { ServerType.fromString(it) }
                 ?: fallbackConfig?.serverType
                 ?: ServerType.PAPER,

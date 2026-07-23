@@ -39,7 +39,9 @@ data class ServerPrefsSnapshot(
     val levelType: String,
     val serverType: String,
     val gameVersion: String,
-    val customJarPath: String?
+    val customJarPath: String?,
+    val joinMessageText: String = "hosted on Pocketcraft",
+    val joinMessageUrl: String = "https://discord.gg/7xw3Rd2vs2"
 )
 
 object ServerPropertiesWriter {
@@ -141,8 +143,8 @@ object ServerPropertiesWriter {
         }
         props["pocketcraft-game-version"] = prefs.gameVersion
         props["pocketcraft-join-message-enabled"] = "true"
-        props["pocketcraft-join-message-text"] = ServerConfig().joinMessageText
-        props["pocketcraft-join-message-url"] = ServerConfig().joinMessageUrl
+        props["pocketcraft-join-message-text"] = prefs.joinMessageText.ifBlank { "hosted on Pocketcraft" }
+        props["pocketcraft-join-message-url"] = prefs.joinMessageUrl.ifBlank { "https://discord.gg/7xw3Rd2vs2" }
         if (prefs.customJarPath.isNullOrBlank()) {
             if (!preserveModpackMetadata) {
                 props.remove("pocketcraft-custom-jar-path")
@@ -192,7 +194,9 @@ object ServerPropertiesWriter {
             levelType = config.levelType,
             serverType = config.serverType.name,
             gameVersion = config.gameVersion,
-            customJarPath = config.customJarPath
+            customJarPath = config.customJarPath,
+            joinMessageText = config.joinMessageText,
+            joinMessageUrl = config.joinMessageUrl
         )
     }
 

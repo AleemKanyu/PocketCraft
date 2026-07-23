@@ -1399,11 +1399,15 @@ class ServerStateHolder(
                         delay(1500) // Ensure player is fully connected before sending message
                         if (isRunning && !isStopping) {
                             val shortName = serverName.take(12)
-                            val displayUrl = POCKETCRAFT_JOIN_MESSAGE_URL
+                            val prefs = com.pocketcraft.server.data.preferences.AppPreferences(appContext)
+                            val isPremium = prefs.isPremiumUser || prefs.debugPremiumOverride
+                            val joinText = if (isPremium && config.joinMessageText.isNotBlank()) config.joinMessageText else POCKETCRAFT_JOIN_MESSAGE_TEXT
+                            val rawUrl = if (isPremium && config.joinMessageUrl.isNotBlank()) config.joinMessageUrl else POCKETCRAFT_JOIN_MESSAGE_URL
+                            val displayUrl = rawUrl
                                 .removePrefix("https://")
                                 .removePrefix("http://")
-                            val firstLine = """{"text":"\n[","color":"gray"},{"text":"$shortName","color":"green","bold":true},{"text":"] ","color":"gray"},{"text":"$POCKETCRAFT_JOIN_MESSAGE_TEXT","color":"white"}"""
-                            val urlSection = """,{"text":"\n[","color":"gray"},{"text":"$shortName","color":"green","bold":true},{"text":"] ","color":"gray"},{"text":"Join our Discord using ","color":"white"},{"text":"$displayUrl","color":"aqua","underlined":true,"clickEvent":{"action":"open_url","value":"$POCKETCRAFT_JOIN_MESSAGE_URL"}},"""
+                            val firstLine = """{"text":"\n[","color":"gray"},{"text":"$shortName","color":"green","bold":true},{"text":"] ","color":"gray"},{"text":"$joinText","color":"white"}"""
+                            val urlSection = """,{"text":"\n[","color":"gray"},{"text":"$shortName","color":"green","bold":true},{"text":"] ","color":"gray"},{"text":"Join using ","color":"white"},{"text":"$displayUrl","color":"aqua","underlined":true,"clickEvent":{"action":"open_url","value":"$rawUrl"}},"""
                             val spacerLine = """{"text":"\n \n","color":"white"}"""
                             val tellrawArg = """[$firstLine$urlSection$spacerLine]"""
                             val escapedName = escapeSelectorName(name)
@@ -1436,7 +1440,7 @@ class ServerStateHolder(
             areSpawnChunksLoaded = true
         }
 
-        if (ConsoleParser.isDone(cleanLine) || cleanLine.contains("Done (", ignoreCase = true)) {
+        if (ConsoleParser.isDone(cleanLine)) {
             areSpawnChunksLoaded = true
             isJavaServerDone = true
             markServerReady()

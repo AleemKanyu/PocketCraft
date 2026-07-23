@@ -343,7 +343,8 @@ class ServerHostService : Service() {
         }
 
         val existingServerPort = resolveServerPort(worldName)
-        if (isLocalServerPortOpen(existingServerPort)) {
+        val hasLiveProcess = serverProcess?.isAlive == true || ServerLauncher.hasActiveExternalProcess()
+        if (hasLiveProcess && isLocalServerPortOpen(existingServerPort)) {
             return attachToExistingServer(versionId, worldName, existingServerPort, "start request")
         }
 

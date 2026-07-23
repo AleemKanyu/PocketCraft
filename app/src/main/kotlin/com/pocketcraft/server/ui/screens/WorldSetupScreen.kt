@@ -28,8 +28,10 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Forest
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -137,6 +139,12 @@ fun WorldSetupScreen(
     }
     var selectedCustomJarPath by remember(stateHolder.config.customJarPath) {
         mutableStateOf(stateHolder.config.customJarPath)
+    }
+    var joinMessageText by remember(stateHolder.config.joinMessageText) {
+        mutableStateOf(stateHolder.config.joinMessageText)
+    }
+    var joinMessageUrl by remember(stateHolder.config.joinMessageUrl) {
+        mutableStateOf(stateHolder.config.joinMessageUrl)
     }
     var showVersionDialog by remember { mutableStateOf(false) }
     var showServerNameError by remember { mutableStateOf(false) }
@@ -288,7 +296,9 @@ fun WorldSetupScreen(
             customJarPath = selectedCustomJarPath,
             maxPlayers = maxPlayersValue.roundToInt(),
             viewDistance = stateHolder.config.viewDistance.coerceIn(3, 32),
-            simulationDistance = stateHolder.config.simulationDistance.coerceIn(3, 32)
+            simulationDistance = stateHolder.config.simulationDistance.coerceIn(3, 32),
+            joinMessageText = if (isPremium) joinMessageText.trim() else stateHolder.config.joinMessageText,
+            joinMessageUrl = if (isPremium) joinMessageUrl.trim() else stateHolder.config.joinMessageUrl
         )
         stateHolder.saveSettings(updatedConfig, targetWorldName = targetWorld)
 
@@ -691,6 +701,127 @@ fun WorldSetupScreen(
                     Icon(Icons.Filled.UploadFile, contentDescription = null)
                     Spacer(Modifier.padding(horizontal = 4.dp))
                     Text(if (endZipName.isBlank()) "Upload The End ZIP (${activeWorld}_the_end)" else "End ZIP: $endZipName")
+                }
+
+                // In-Game Join Announcement Section (Premium Feature)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (isPremium) PocketColors.Primary.copy(alpha = 0.08f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            RoundedCornerShape(20.dp)
+                        )
+                        .border(
+                            1.dp,
+                            if (isPremium) PocketColors.Primary.copy(alpha = 0.25f)
+                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                            RoundedCornerShape(20.dp)
+                        )
+                        .padding(14.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Campaign,
+                                contentDescription = null,
+                                tint = if (isPremium) PocketColors.PrimaryDark else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "In-Game Announcement",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(Modifier.weight(1f))
+                            if (!isPremium) {
+                                Surface(
+                                    color = PocketColors.Primary.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.clickable { showPremiumBottomSheet = true }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Lock,
+                                            contentDescription = null,
+                                            tint = PocketColors.PrimaryDark,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Text(
+                                            text = "PRO",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = PocketColors.PrimaryDark
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = "Custom message broadcasted in game chat whenever a player joins your world.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        val textInteractionSource = remember { MutableInteractionSource() }
+                        val urlInteractionSource = remember { MutableInteractionSource() }
+                        LaunchedEffect(textInteractionSource, urlInteractionSource) {
+                            scope.launch {
+                                textInteractionSource.interactions.collect { interaction ->
+                                    if (interaction is PressInteraction.Release && !isPremium) {
+                                        showPremiumBottomSheet = true
+                                    }
+                                }
+                            }
+                            scope.launch {
+                                urlInteractionSource.interactions.collect { interaction ->
+                                    if (interaction is PressInteraction.Release && !isPremium) {
+                                        showPremiumBottomSheet = true
+                                    }
+                                }
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = joinMessageText,
+                            onValueChange = { if (isPremium) joinMessageText = it else showPremiumBottomSheet = true },
+                            singleLine = true,
+                            readOnly = !isPremium,
+                            interactionSource = textInteractionSource,
+                            label = { Text("Announcement text") },
+                            placeholder = { Text("e.g. hosted on Pocketcraft") },
+                            trailingIcon = if (!isPremium) {
+                                { Icon(Icons.Filled.Lock, contentDescription = "Locked", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            } else null,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = duoTextFieldShape(),
+                            colors = duoOutlinedTextFieldColors()
+                        )
+
+                        OutlinedTextField(
+                            value = joinMessageUrl,
+                            onValueChange = { if (isPremium) joinMessageUrl = it else showPremiumBottomSheet = true },
+                            singleLine = true,
+                            readOnly = !isPremium,
+                            interactionSource = urlInteractionSource,
+                            label = { Text("Announcement link / Discord URL") },
+                            placeholder = { Text("e.g. https://discord.gg/yourcode") },
+                            trailingIcon = if (!isPremium) {
+                                { Icon(Icons.Filled.Lock, contentDescription = "Locked", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            } else null,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = duoTextFieldShape(),
+                            colors = duoOutlinedTextFieldColors()
+                        )
+                    }
                 }
 
                 ServerPhotoUpload(

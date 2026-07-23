@@ -93,8 +93,15 @@ object ConsoleParser {
     }
 
     fun isDone(line: String): Boolean {
-        val text = stripLogDecorations(stripAnsi(line))
-        return DONE_PREFIX_REGEX.containsMatchIn(text)
+        val clean = stripAnsi(line).trim()
+        if (!clean.contains("Done (", ignoreCase = true)) return false
+        
+        val afterThread = clean.substringAfter("]: ", clean)
+        if (afterThread.startsWith("[") && !afterThread.startsWith("[Server thread")) {
+            return false
+        }
+        val text = stripLogDecorations(clean)
+        return DONE_PREFIX_REGEX.containsMatchIn(text) || (text.startsWith("Done (", ignoreCase = true) && text.contains("help", ignoreCase = true))
     }
 
     fun parseEvent(line: String): ServerEvent? =
