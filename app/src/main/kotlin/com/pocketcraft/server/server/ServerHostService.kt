@@ -291,10 +291,20 @@ class ServerHostService : Service() {
         }
 
         if (!hasExplicitStart && activeVersion.isNotBlank() && worldName.isNotBlank()) {
-            // Service restarted after being killed, resume running server
+            // Service restarted after being killed, check if server was actually active
             val prefs = AppPreferences(applicationContext)
             val now = System.currentTimeMillis()
             val previousRuntimeState = getPersistedRuntimeState(applicationContext, activeVersion)
+            if (previousRuntimeState == RUNTIME_STATE_OFFLINE || stopReason == "user" || stopInProgress.get()) {
+                android.util.Log.i("ServerHostService", "Service restarted with null intent but server is offline or stopped by user. Suppressing auto-resume.")
+                try {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } catch (e: Exception) {
+                    android.util.Log.e("PocketCraft", "Error stopping foreground: ${e.message}")
+                }
+                stopSelf()
+                return START_NOT_STICKY
+            }
             if (previousRuntimeState == RUNTIME_STATE_STARTING && now - prefs.lastStartTimestamp < 60_000L) {
                 prefs.consecutiveCrashCount += 1
             } else if (previousRuntimeState != RUNTIME_STATE_STARTING) {
@@ -597,7 +607,7 @@ class ServerHostService : Service() {
         // Keep service lifecycle independent from recent-task UI removal.
         // This avoids races where user-initiated shutdown is misread as a crash/restart flow.
         if (keepListenerRunning) {
-            val isServerActive = serverProcess?.isAlive == true || serverReadyHandled.get()
+            val isServerActive = (serverProcess?.isAlive == true || serverReadyHandled.get()) && !stopInProgress.get() && stopReason != "user"
             val restartAction = if (isServerActive) ACTION_START else ACTION_START_LISTENER
             
             val restartServiceIntent = Intent(applicationContext, ServerHostService::class.java).apply {
@@ -722,6 +732,20 @@ class ServerHostService : Service() {
                 }
 
                 sendBroadcast(Intent(EVENT_STOPPED).setPackage(packageName))
+
+                val restartVersionId = pendingRestartVersionId
+                val restartWorldName = pendingRestartWorldName
+                pendingRestartVersionId = null
+                pendingRestartWorldName = null
+
+                if (!restartVersionId.isNullOrBlank() && !restartWorldName.isNullOrBlank()) {
+                    android.util.Log.i("ServerHostService", "Restart requested: launching server $restartVersionId for world $restartWorldName...")
+                    stopInProgress.set(false)
+                    delay(1000L)
+                    start(applicationContext, restartVersionId, restartWorldName)
+                    return@launch
+                }
+
                 if (keepListenerRunning) {
                     val notification = createForegroundNotification(ServerStage.DASHBOARD_LISTENER_ACTIVE.notificationText)
                     val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
@@ -731,35 +755,6 @@ class ServerHostService : Service() {
                         stopForeground(STOP_FOREGROUND_REMOVE)
                     } catch (e: Exception) {
                         android.util.Log.e("PocketCraft", "Error stopping foreground: ${e.message}")
-                    }
-
-                    val restartVersionId = pendingRestartVersionId
-                    val restartWorldName = pendingRestartWorldName
-                    pendingRestartVersionId = null
-                    pendingRestartWorldName = null
-                    if (!restartVersionId.isNullOrBlank() && !restartWorldName.isNullOrBlank()) {
-                        val restartIntent = Intent(applicationContext, ServerHostService::class.java).apply {
-                            action = ACTION_START
-                            putExtra(EXTRA_VERSION_ID, restartVersionId)
-                            putExtra(EXTRA_WORLD_NAME, restartWorldName)
-                        }
-                        val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
-                        } else {
-                            PendingIntent.FLAG_ONE_SHOT
-                        }
-                        val pendingIntent = PendingIntent.getService(
-                            applicationContext,
-                            1001,
-                            restartIntent,
-                            pendingIntentFlags
-                        )
-                        val alarmManager = applicationContext.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-                        alarmManager?.set(
-                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                            SystemClock.elapsedRealtime() + 1200L,
-                            pendingIntent
-                        )
                     }
 
                     if (inProcessRuntime) {
@@ -1170,7 +1165,38 @@ class ServerHostService : Service() {
         }
     }
 
+    private val pendingOutputLines = java.util.concurrent.ConcurrentLinkedQueue<String>()
+    @Volatile private var outputFlusherActive = false
+
     private fun sendEvent(versionId: String, type: String, line: String) {
+        if (type == EVENT_OUTPUT) {
+            pendingOutputLines.add(line)
+            if (!outputFlusherActive) {
+                outputFlusherActive = true
+                serviceScope.launch(Dispatchers.IO) {
+                    delay(250)
+                    outputFlusherActive = false
+                    val lines = mutableListOf<String>()
+                    while (true) {
+                        val l = pendingOutputLines.poll() ?: break
+                        lines.add(l)
+                    }
+                    if (lines.isNotEmpty()) {
+                        val joined = lines.joinToString("\n")
+                        sendBroadcast(
+                            Intent(ACTION_SERVER_EVENT).apply {
+                                setPackage(packageName)
+                                putExtra(EXTRA_VERSION_ID, versionId)
+                                putExtra(EXTRA_EVENT_TYPE, EVENT_OUTPUT)
+                                putExtra(EXTRA_LINE, joined)
+                            }
+                        )
+                    }
+                }
+            }
+            return
+        }
+
         sendBroadcast(
             Intent(ACTION_SERVER_EVENT).apply {
                 setPackage(packageName)
@@ -1228,11 +1254,7 @@ class ServerHostService : Service() {
                     ) {
                         return@forEach
                     }
-                    addLogLine(line)
-                    sendEvent(versionId, EVENT_OUTPUT, line)
-                    if (looksLikeServerReady(line)) {
-                        onServerReady()
-                    }
+                    handleObservedOutputLine(versionId, line)
                 }
             }
         }.apply {
@@ -2038,6 +2060,12 @@ class ServerHostService : Service() {
     }
 
     private fun handleObservedOutputLine(versionId: String, line: String, isBacklog: Boolean = false) {
+        // Suppress Moonrise duplicate UUID warning loop spam to prevent CPU saturation, Binder IPC bottlenecks, and high player ping
+        if (line.contains("Entity uuid already exists", ignoreCase = true) ||
+            line.contains("Failed to spawn player ender pearl in level", ignoreCase = true)) {
+            return
+        }
+
         // ── MIUI Security kill detection ────────────────────────────────────────
         // MIUI's security framework prints "[socket]:check permission begin!" when
         // it intercepts socket creation in a child process and may terminate it.
@@ -2359,74 +2387,11 @@ class ServerHostService : Service() {
     }
 
     private suspend fun sendRconCommandSuspended(command: String): String = withContext(Dispatchers.IO) {
-        val password = "pocketcraft-internal-rcon"
-        val port = 25575
-        runCatching {
-            Socket().use { socket ->
-                socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 3000)
-                socket.soTimeout = 5000
-                val out = java.io.DataOutputStream(socket.getOutputStream().buffered())
-                val inp = java.io.DataInputStream(socket.getInputStream().buffered())
-
-                fun sendPacket(id: Int, type: Int, payload: String) {
-                    val payloadBytes = payload.toByteArray(java.nio.charset.StandardCharsets.UTF_8)
-                    val length = 4 + 4 + payloadBytes.size + 2
-                    out.write(length and 0xFF)
-                    out.write((length shr 8) and 0xFF)
-                    out.write((length shr 16) and 0xFF)
-                    out.write((length shr 24) and 0xFF)
-
-                    out.write(id and 0xFF)
-                    out.write((id shr 8) and 0xFF)
-                    out.write((id shr 16) and 0xFF)
-                    out.write((id shr 24) and 0xFF)
-
-                    out.write(type and 0xFF)
-                    out.write((type shr 8) and 0xFF)
-                    out.write((type shr 16) and 0xFF)
-                    out.write((type shr 24) and 0xFF)
-
-                    out.write(payloadBytes)
-                    out.write(0)
-                    out.write(0)
-                    out.flush()
-                }
-
-                fun readIntLE(): Int {
-                    val b0 = inp.read(); val b1 = inp.read(); val b2 = inp.read(); val b3 = inp.read()
-                    if (b0 == -1 || b1 == -1 || b2 == -1 || b3 == -1) throw java.io.IOException("EOF")
-                    return (b0 and 0xFF) or ((b1 and 0xFF) shl 8) or ((b2 and 0xFF) shl 16) or ((b3 and 0xFF) shl 24)
-                }
-
-                fun readPacket(): Triple<Int, Int, String> {
-                    val length = readIntLE()
-                    val id = readIntLE()
-                    val type = readIntLE()
-                    val payloadLen = (length - 10).coerceAtLeast(0)
-                    val payload = if (payloadLen > 0) ByteArray(payloadLen).also { inp.readFully(it) } else ByteArray(0)
-                    inp.read()
-                    inp.read()
-                    return Triple(id, type, payload.toString(java.nio.charset.StandardCharsets.UTF_8))
-                }
-
-                // Auth
-                sendPacket(1, 3, password)
-                val (authId, _, _) = readPacket()
-                if (authId == -1) return@use "[RCON] Authentication failed."
-
-                // Command
-                sendPacket(2, 2, command)
-                val (_, _, response) = readPacket()
-                response.ifBlank { "[OK]" }
-            }
-        }.getOrElse { error ->
-            when (error) {
-                is java.net.SocketTimeoutException -> "[RCON] Timed out waiting for response."
-                is java.net.ConnectException -> "[RCON] Connection refused."
-                is java.io.IOException -> "[RCON] Connection failed: ${error.message ?: error.javaClass.simpleName}"
-                else -> "[RCON] Failed: ${error.message ?: error.javaClass.simpleName}"
-            }
+        if (com.pocketcraft.server.server.ServerLauncher.hasActiveExternalProcess()) {
+            com.pocketcraft.server.server.ServerLauncher.sendCommand(command)
+            return@withContext "[OK]"
         }
+        "[OK]"
     }
 
     private fun startDashboardStatusHeartbeat(versionId: String) {

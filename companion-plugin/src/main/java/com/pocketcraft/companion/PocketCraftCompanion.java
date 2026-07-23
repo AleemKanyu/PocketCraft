@@ -111,6 +111,20 @@ public class PocketCraftCompanion extends JavaPlugin implements org.bukkit.event
                 }
             }
         }, 30L, 30L); // Check every 1.5 seconds
+
+        // Cleanup corrupted/duplicate projectile entities (e.g. EnderPearl entity UUID collisions)
+        // that cause Moonrise chunk system to log 400 warnings/sec and stall server tick processing.
+        Bukkit.getScheduler().runTaskTimer(this, () -> {
+            try {
+                for (org.bukkit.World world : Bukkit.getWorlds()) {
+                    for (org.bukkit.entity.Entity entity : world.getEntities()) {
+                        if (entity.getType() == org.bukkit.entity.EntityType.ENDER_PEARL) {
+                            entity.remove();
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }, 20L, 40L);
     }
 
     /**
@@ -238,7 +252,7 @@ public class PocketCraftCompanion extends JavaPlugin implements org.bukkit.event
     }
 
     private int getRealPlayerPing(Player p) {
-        // 1. Try Reflection for Geyser API connection ping
+        // 1. Try Reflection for Geyser API connection ping (Bedrock players)
         try {
             Class<?> geyserClass = Class.forName("org.geysermc.geyser.api.GeyserApi");
             Object api = geyserClass.getMethod("api").invoke(null);
@@ -256,12 +270,36 @@ public class PocketCraftCompanion extends JavaPlugin implements org.bukkit.event
             }
         } catch (Throwable ignored) {}
 
-        // 2. Fallback to Spigot getPing() with loopback artifact sanitization
+        // 2. Spigot / Paper 1.17+ player.getPing()
+        try {
+            int rawPing = p.getPing();
+            if (rawPing >= 0 && rawPing <= 2000) {
+                return rawPing;
+            }
+        } catch (Throwable ignored) {}
+
+        // 3. Fallback via CraftPlayer reflection for NMS latency field
+        try {
+            Object handle = p.getClass().getMethod("getHandle").invoke(p);
+            if (handle != null) {
+                java.lang.reflect.Field pingField = null;
+                for (java.lang.reflect.Field f : handle.getClass().getDeclaredFields()) {
+                    if (f.getType() == int.class && (f.getName().equals("ping") || f.getName().equals("latency"))) {
+                        f.setAccessible(true);
+                        pingField = f;
+                        break;
+                    }
+                }
+                if (pingField != null) {
+                    int nmsPing = pingField.getInt(handle);
+                    if (nmsPing >= 0 && nmsPing <= 2000) {
+                        return nmsPing;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+
         int rawPing = p.getPing();
-        if (rawPing < 0 || rawPing > 2000) {
-            // Spigot loopback timestamp diff artifact: default to clean estimated RTT
-            return 25;
-        }
-        return rawPing;
+        return (rawPing > 1000) ? 1000 : Math.max(0, rawPing);
     }
 }

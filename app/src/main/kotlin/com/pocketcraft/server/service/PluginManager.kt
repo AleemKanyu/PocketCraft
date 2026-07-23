@@ -49,9 +49,7 @@ object PluginManager {
     // (debug_subscription_request decode kicks). Keep them disabled for native hosting.
     private val incompatiblePluginTokens = listOf(
         "fastleafdecay",
-        "inventoryprofiles",
-        "viabackwards",
-        "viarewind"
+        "inventoryprofiles"
     )
     private val BLOCKED_PLUGINS = setOf("spark", "spark-bukkit")
     private val paperCompatibleLoaders = setOf("paper", "spigot", "purpur", "bukkit", "folia")

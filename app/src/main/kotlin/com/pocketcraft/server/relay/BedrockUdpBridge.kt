@@ -82,7 +82,7 @@ class BedrockUdpBridge(
         val ipBytes = byteArrayOf(ipParts[0].toByte(), ipParts[1].toByte(), ipParts[2].toByte(), ipParts[3].toByte())
 
         val thread = Thread {
-            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE)
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
             try {
                 val buffer = ByteArray(MAX_UDP_SIZE)
                 val packet = DatagramPacket(buffer, buffer.size)
@@ -124,7 +124,7 @@ class BedrockUdpBridge(
             }
         }
         thread.name = "BedrockUDP-$clientIp:$clientPort"
-        thread.priority = Thread.NORM_PRIORITY
+        thread.priority = Thread.MAX_PRIORITY
         thread.start()
     }
 

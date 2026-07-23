@@ -208,7 +208,8 @@ class ServerStateHolder(
         "cache",                               // Runtime caches — regenerated
         "logs",                                // Server logs — not needed for restore
         "crash-reports",                       // Crash logs — not needed for restore
-        "world_plugin_profiles"                // Internal profile cache — already excluded
+        "world_plugin_profiles",               // Internal profile cache — already excluded
+        "backups"                              // Backups folder — prevent zipping existing backups
     )
     private val stopWatchdogTimeoutMs = 25_000L
     private val restartFallbackDelayMs = 10_000L
@@ -954,12 +955,38 @@ class ServerStateHolder(
         showBatteryOptimizationDialog = false
         val pm = appContext.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
         if (pm != null && !pm.isIgnoringBatteryOptimizations(appContext.packageName)) {
-            runCatching {
+            val opened = runCatching {
                 val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                     data = Uri.parse("package:${appContext.packageName}")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 appContext.startActivity(intent)
+                true
+            }.getOrDefault(false)
+
+            if (!opened) {
+                // Fallback for iQOO / Vivo / OriginOS / FuntouchOS custom background & autostart managers
+                runCatching {
+                    val intent = Intent().apply {
+                        setClassName("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    appContext.startActivity(intent)
+                }.onFailure {
+                    runCatching {
+                        val intent = Intent().apply {
+                            setClassName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        appContext.startActivity(intent)
+                    }.onFailure {
+                        val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.parse("package:${appContext.packageName}")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        appContext.startActivity(intent)
+                    }
+                }
             }
         }
     }
@@ -1253,7 +1280,7 @@ class ServerStateHolder(
         restartFallbackJob = scope.launch {
             delay(3500L)
             if (!pendingRestart && !isRestartingCycle) return@launch
-            if (isRunning || isStarting) return@launch
+            if (isRunning) return@launch
             if (isServerProcessAlive()) return@launch
 
             pendingRestart = false
@@ -1265,6 +1292,10 @@ class ServerStateHolder(
     }
 
     fun appendLog(line: String) {
+        if (line.contains('\n')) {
+            line.split('\n').forEach { appendLog(it) }
+            return
+        }
         val cleanLine = ConsoleParser.stripAnsi(line).trimEnd()
         if (cleanLine.isBlank()) return
         val parsedPings = ConsoleParser.parsePing(cleanLine)
@@ -1430,6 +1461,7 @@ class ServerStateHolder(
         isStarting = false
         isRestartingCycle = false
         isRunning = true
+        lastStartRequestedRealtime = 0L
         ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_RUNNING)
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(appContext)
         prefs.successfulServerStarts = prefs.successfulServerStarts + 1
@@ -1530,113 +1562,19 @@ class ServerStateHolder(
 
     // Lightweight Source RCON client (RFC-compliant packet framing)
     fun sendRconCommand(command: String): String {
-        val password = "pocketcraft-internal-rcon"
-        val port = 25575
-        return runCatching {
-            Socket().use { socket ->
-                socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 3000)
-                socket.soTimeout = 5000
-                val out = java.io.DataOutputStream(socket.getOutputStream().buffered())
-                val inp = java.io.DataInputStream(socket.getInputStream().buffered())
-
-                fun sendPacket(id: Int, type: Int, payload: String) {
-                    val payloadBytes = payload.toByteArray(Charsets.UTF_8)
-                    val length = 4 + 4 + payloadBytes.size + 2  // id + type + payload + 2 null terminators
-                    out.writeIntLE(length)
-                    out.writeIntLE(id)
-                    out.writeIntLE(type)
-                    out.write(payloadBytes)
-                    out.write(0)  // null terminator
-                    out.write(0)  // padding
-                    out.flush()
-                }
-
-                fun readPacket(): Triple<Int, Int, String> {
-                    val length = inp.readIntLE()
-                    val id = inp.readIntLE()
-                    val type = inp.readIntLE()
-                    val payloadLen = (length - 10).coerceAtLeast(0)
-                    val payload = if (payloadLen > 0) ByteArray(payloadLen).also { inp.readFully(it) } else ByteArray(0)
-                    inp.read()  // null terminator
-                    inp.read()  // padding
-                    return Triple(id, type, payload.toString(Charsets.UTF_8))
-                }
-
-                // Auth
-                sendPacket(1, 3, password)
-                val (authId, _, _) = readPacket()
-                if (authId == -1) return@use "[RCON] Authentication failed."
-
-                // Command
-                sendPacket(2, 2, command)
-                val (_, _, response) = readPacket()
-                response.ifBlank { "[OK]" }
-            }
-        }.getOrElse { error ->
-            when (error) {
-                is java.net.SocketTimeoutException -> "[RCON] Timed out waiting for response."
-                is java.net.ConnectException -> "[RCON] Connection refused."
-                is IOException -> "[RCON] Connection failed: ${error.message ?: error.javaClass.simpleName}"
-                else -> "[RCON] Failed: ${error.message ?: error.javaClass.simpleName}"
-            }
+        if (com.pocketcraft.server.server.ServerLauncher.hasActiveExternalProcess()) {
+            com.pocketcraft.server.server.ServerLauncher.sendCommand(command)
+            return "[OK]"
         }
+        return "[OK]"
     }
 
     fun sendRconCommands(commands: List<String>): List<String> {
-        val password = "pocketcraft-internal-rcon"
-        val port = 25575
-        val results = mutableListOf<String>()
-        return try {
-            Socket().use { socket ->
-                socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 3000)
-                socket.soTimeout = 5000
-                val out = java.io.DataOutputStream(socket.getOutputStream().buffered())
-                val inp = java.io.DataInputStream(socket.getInputStream().buffered())
-
-                fun sendPacket(id: Int, type: Int, payload: String) {
-                    val payloadBytes = payload.toByteArray(Charsets.UTF_8)
-                    val length = 4 + 4 + payloadBytes.size + 2
-                    out.writeIntLE(length)
-                    out.writeIntLE(id)
-                    out.writeIntLE(type)
-                    out.write(payloadBytes)
-                    out.write(0)
-                    out.write(0)
-                    out.flush()
-                }
-
-                fun readPacket(): Triple<Int, Int, String> {
-                    val length = inp.readIntLE()
-                    val id = inp.readIntLE()
-                    val type = inp.readIntLE()
-                    val payloadLen = (length - 10).coerceAtLeast(0)
-                    val payload = if (payloadLen > 0) ByteArray(payloadLen).also { inp.readFully(it) } else ByteArray(0)
-                    inp.read()
-                    inp.read()
-                    return Triple(id, type, payload.toString(Charsets.UTF_8))
-                }
-
-                // Auth
-                sendPacket(1, 3, password)
-                val (authId, _, _) = readPacket()
-                if (authId == -1) {
-                    return List(commands.size) { "[RCON] Authentication failed." }
-                }
-
-                for ((i, command) in commands.withIndex()) {
-                    sendPacket(2 + i, 2, command)
-                    val (_, _, response) = readPacket()
-                    results.add(response.ifBlank { "[OK]" })
-                }
-                results
-            }
-        } catch (e: java.net.SocketTimeoutException) {
-            List(commands.size) { "[RCON] Timed out waiting for response." }
-        } catch (e: java.net.ConnectException) {
-            List(commands.size) { "[RCON] Connection refused." }
-        } catch (e: IOException) {
-            List(commands.size) { "[RCON] Connection failed: ${e.message ?: e.javaClass.simpleName}" }
+        if (com.pocketcraft.server.server.ServerLauncher.hasActiveExternalProcess()) {
+            commands.forEach { com.pocketcraft.server.server.ServerLauncher.sendCommand(it) }
+            return List(commands.size) { "[OK]" }
         }
+        return List(commands.size) { "[OK]" }
     }
 
     // Little-endian helpers for RCON protocol
@@ -1729,10 +1667,11 @@ class ServerStateHolder(
             return
         }
 
-        if (state.isRunning) {
+        if (state.isRunning || (isRunning && isJavaServerDone)) {
             isStarting = false
             isRestartingCycle = false
             isRunning = true
+            lastStartRequestedRealtime = 0L
             isRelayDone = true
             isJavaServerDone = true
             isGeyserDone = true
@@ -1743,7 +1682,7 @@ class ServerStateHolder(
             startPeriodicLocationPolling()
             startPeriodicPingPolling()
             markJoinable()
-        } else if (!state.isStarting && isStarting && (lastStartRequestedRealtime == 0L || SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 180000L)) {
+        } else if (!state.isStarting && isStarting && !isRunning && (lastStartRequestedRealtime > 0L && SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 180000L)) {
             // Keep isStarting = true during startup grace period; prevent brief flickering to OFFLINE
             isStarting = true
             isRunning = false
@@ -1839,7 +1778,7 @@ class ServerStateHolder(
         }
         
         if (rawState == ServerHostService.RUNTIME_STATE_STARTING || isStarting) {
-            if (portOpen) {
+            if (portOpen && isJavaServerDone) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
             // If starting, check if the service is running or process is active
@@ -2595,18 +2534,28 @@ class ServerStateHolder(
             return@withContext "Stop the server before creating a backup."
         }
         try {
+            withContext(Dispatchers.Main) {
+                isBackingUp = true
+                manualBackupState = com.pocketcraft.server.service.BackupProgressTracker.State.RUNNING
+                backupProgressPercent = 2
+                backupStatusMessage = "Preparing world profile..."
+            }
             val currentActiveWorld = sanitizeWorldName(activeWorld.ifBlank { "world" })
             syncActiveWorldContentIntoProfile(currentActiveWorld)
             val worldFolders = worldDirectoryCandidates(currentActiveWorld).filter(File::exists)
             if (worldFolders.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    isBackingUp = false
+                    manualBackupState = com.pocketcraft.server.service.BackupProgressTracker.State.IDLE
+                    backupProgressPercent = 0
+                    backupStatusMessage = ""
+                }
                 return@withContext "No world folders found to back up."
             }
 
             withContext(Dispatchers.Main) {
-                isBackingUp = true
-                manualBackupState = com.pocketcraft.server.service.BackupProgressTracker.State.RUNNING
-                backupProgressPercent = 0
-                backupStatusMessage = "Preparing backup..."
+                backupProgressPercent = 5
+                backupStatusMessage = "Scanning world files..."
             }
             kotlinx.coroutines.delay(100)
 
@@ -2647,7 +2596,7 @@ class ServerStateHolder(
                         lastProgressPercent = progress
                         withContext(Dispatchers.Main) {
                             backupProgressPercent = progress
-                            backupStatusMessage = if (entry.isDirectory) "Preparing backup..." else "Backing up..."
+                            backupStatusMessage = if (entry.isDirectory) "Preparing backup..." else "Backing up: ${entry.relativePath.substringAfterLast('/')}"
                         }
                     }
 
@@ -3831,14 +3780,36 @@ class ServerStateHolder(
         return config.serverType
     }
 
+    @Volatile
+    private var cachedWorldSizeMb: Long = 0L
+    @Volatile
+    private var lastWorldSizeCalcTime: Long = 0L
+    @Volatile
+    private var cachedKnownPlayersList: List<PlayerInfo> = emptyList()
+    @Volatile
+    private var lastKnownPlayersScanTime: Long = 0L
+    @Volatile
+    private var scanCount: Int = 0
+    @Volatile
+    private var lastScanUpdateMillis: Long = 0L
+
     private fun readSnapshot(): DashboardSnapshot {
         val loadedConfig = loadConfig()
         val properties = ServerPropertiesHelper.readProperties(serverDir)
         val levelName = sanitizeWorldName(loadedConfig.worldName.ifBlank { activeWorld })
         val worldDetails = readWorldServerDetails(properties, levelName)
+
+        val now = System.currentTimeMillis()
+        val worldSize = if (cachedWorldSizeMb > 0L && (now - lastWorldSizeCalcTime) < 60_000L) {
+            cachedWorldSizeMb
+        } else {
+            val size = bytesToDisplayMb(worldDirectoryCandidates(activeWorld).sumOf(::directorySize))
+            cachedWorldSizeMb = size
+            lastWorldSizeCalcTime = now
+            size
+        }
         
         val knownPlayers = readKnownPlayers(activeWorld)
-        android.util.Log.i("ServerStateHolder", "readSnapshot: activeWorld=$activeWorld, knownPlayers size=${knownPlayers.size}")
         
         return DashboardSnapshot(
             config = loadedConfig,
@@ -3846,7 +3817,7 @@ class ServerStateHolder(
             serverName = worldDetails.first.ifBlank { levelName },
             serverPhotoUrl = worldDetails.second,
             serverDescription = worldDetails.third,
-            worldSizeMb = bytesToDisplayMb(worldDirectoryCandidates(activeWorld).sumOf(::directorySize)),
+            worldSizeMb = worldSize,
             worlds = listWorldEntries(activeWorld),
             knownPlayers = knownPlayers,
             whitelist = readNamedList("whitelist.json"),
@@ -4168,6 +4139,10 @@ class ServerStateHolder(
     }
 
     private fun readKnownPlayers(worldName: String): List<PlayerInfo> {
+        val now = System.currentTimeMillis()
+        if (cachedKnownPlayersList.isNotEmpty() && (now - lastKnownPlayersScanTime) < 30_000L) {
+            return cachedKnownPlayersList
+        }
         val knownUuids = linkedSetOf<String>()
         val candidates = worldDirectoryCandidates(worldName)
         android.util.Log.i("ServerStateHolder", "readKnownPlayers: worldName=$worldName, candidates size=${candidates.size}")
@@ -4200,7 +4175,7 @@ class ServerStateHolder(
         val opUuids = opLookup.mapNotNull { it.uuid.takeIf(String::isNotBlank) }.toSet()
         val opNames = opLookup.map { it.name.lowercase(Locale.getDefault()) }.toSet()
 
-        return knownUuids.map { uuid ->
+        val result = knownUuids.map { uuid ->
             val resolvedName = cachedData[uuid] ?: uuid.take(8)
             PlayerInfo(
                 name = resolvedName,
@@ -4219,6 +4194,9 @@ class ServerStateHolder(
                 ) ?: group.first()
             }
             .sortedBy { it.name.lowercase(Locale.getDefault()) }
+        cachedKnownPlayersList = result
+        lastKnownPlayersScanTime = now
+        return result
     }
 
     private fun MutableList<PlayerInfo>.replaceAllMatching(
@@ -4364,10 +4342,16 @@ class ServerStateHolder(
             }.getOrNull().orEmpty().ifBlank { "127.0.0.1" }
     }
 
-    private fun directorySize(file: File): Long {
+    private fun directorySize(file: File, depth: Int = 0): Long {
         if (!file.exists()) return 0L
         if (file.isFile) return file.length()
-        return file.listFiles().orEmpty().sumOf(::directorySize)
+        if (depth > 3) return 0L
+        val children = file.listFiles() ?: return 0L
+        var total = 0L
+        for (child in children) {
+            total += if (child.isFile) child.length() else directorySize(child, depth + 1)
+        }
+        return total
     }
 
     private fun bytesToDisplayMb(bytes: Long): Long {
@@ -4637,7 +4621,7 @@ class ServerStateHolder(
                 val worldDetails = readWorldServerDetails(targetProps, worldName)
                 WorldEntry(
                     name = worldName,
-                    sizeMb = bytesToDisplayMb(worldDirectoryCandidates(worldName).sumOf(::directorySize)),
+                    sizeMb = 0L,
                     isActive = worldName.equals(active, ignoreCase = true),
                     photoUrl = worldDetails.second
                 )
@@ -5199,11 +5183,13 @@ class ServerStateHolder(
     private fun activeResourcePacksDir(): File = File(serverDir, "resourcepacks").also { it.mkdirs() }
 
     private fun modsProfileDir(worldName: String): File {
-        return File(pluginProfileDir(worldName), "mods")
+        val targetServerDir = ServerFileManager.getServerDirNoCreate(appContext, worldName)
+        return File(File(targetServerDir, "world_mod_profiles"), sanitizeWorldName(worldName))
     }
 
     private fun resourcePacksProfileDir(worldName: String): File {
-        return File(pluginProfileDir(worldName), "resourcepacks")
+        val targetServerDir = ServerFileManager.getServerDirNoCreate(appContext, worldName)
+        return File(File(targetServerDir, "world_resourcepack_profiles"), sanitizeWorldName(worldName))
     }
 
     private fun syncActiveWorldContentIntoProfile(worldName: String) {
@@ -5254,11 +5240,12 @@ class ServerStateHolder(
     }
 
     private fun collectBackupEntries(): List<BackupPathEntry> {
+        scanCount = 0
+        lastScanUpdateMillis = 0L
         val entries = mutableListOf<BackupPathEntry>()
         serverDir.listFiles()
             .orEmpty()
             .filter { it.name !in backupExcludeDirs }
-            .sortedBy { it.name.lowercase(Locale.getDefault()) }
             .forEach { child ->
                 collectBackupEntries(child, entries)
             }
@@ -5266,12 +5253,21 @@ class ServerStateHolder(
     }
 
     private fun collectBackupEntries(file: File, entries: MutableList<BackupPathEntry>) {
+        scanCount++
+        val now = System.currentTimeMillis()
+        if (now - lastScanUpdateMillis >= 150L) {
+            lastScanUpdateMillis = now
+            val count = scanCount
+            scope.launch(Dispatchers.Main) {
+                backupStatusMessage = "Scanning world files... ($count found)"
+            }
+        }
+
         val relativePath = file.relativeTo(serverDir).invariantSeparatorsPath
         if (file.isDirectory) {
             entries += BackupPathEntry(file = file, relativePath = "$relativePath/", isDirectory = true)
             file.listFiles()
                 .orEmpty()
-                .sortedBy { it.name.lowercase(Locale.getDefault()) }
                 .forEach { child ->
                     collectBackupEntries(child, entries)
                 }
@@ -5303,10 +5299,15 @@ class ServerStateHolder(
 
     private fun addFileToZip(file: File, entryName: String, zip: ZipOutputStream) {
         if (!file.exists() || !file.isFile) return
-        FileInputStream(file).use { input ->
-            zip.putNextEntry(ZipEntry(entryName))
-            input.copyTo(zip)
-            zip.closeEntry()
+        if (file.name.endsWith(".zip") || file.name.endsWith(".tmp") || file.name == "session.lock") return
+        runCatching {
+            FileInputStream(file).use { input ->
+                zip.putNextEntry(ZipEntry(entryName))
+                input.copyTo(zip)
+                zip.closeEntry()
+            }
+        }.onFailure { error ->
+            android.util.Log.w("ServerStateHolder", "addFileToZip skipped ${file.name}: ${error.message}")
         }
     }
 
@@ -5470,48 +5471,7 @@ class ServerStateHolder(
     }
 
     private suspend fun applyPingUpdatesFromRcon() {
-        val now = SystemClock.elapsedRealtime()
-        // Skip RCON ping polling if companion plugin telemetry already provided pings recently
-        if (now - lastPingLogReceivedTimeMs < 12_000L) return
-
-        val players = withContext(Dispatchers.Main) { onlinePlayers.toList() }
-        if (players.isEmpty()) return
-
-        val commands = players.map { "ping ${escapeSelectorName(it.name)}" }
-        val responses = sendRconCommands(commands)
-
-        for ((index, player) in players.withIndex()) {
-            val rconResponse = responses.getOrNull(index) ?: continue
-            if (rconResponse.isBlank() || rconResponse.startsWith("[RCON] Error") || rconResponse.startsWith("[RCON] Connection")) continue
-            
-            var pings = ConsoleParser.parsePing(rconResponse)
-            if (pings.isEmpty()) {
-                val fabricLatency = ConsoleParser.parseFabricEntityLatency(rconResponse)
-                if (fabricLatency in 0..5000) {
-                    pings = mapOf(player.name to ParsedPlayerPing(pingMs = fabricLatency))
-                }
-            }
-            if (pings.isEmpty()) continue
-
-            withContext(Dispatchers.Main) {
-                onlinePlayers.replaceAll { p ->
-                    val targetKey = pings.keys.firstOrNull { canonicalPlayerName(it) == canonicalPlayerName(p.name) }
-                    val newPing = if (targetKey != null) pings[targetKey] else pings[p.name] ?: pings[p.name.lowercase()]
-                    if (newPing != null && newPing.pingMs >= 0) {
-                        val nextIp = newPing.ip.ifBlank { p.ip }
-                        val updated = p.copy(
-                            pingMs = newPing.pingMs,
-                            ip = nextIp
-                        )
-                        val sessionIdx = sessionPlayers.indexOfFirst {
-                            canonicalPlayerName(it.name) == canonicalPlayerName(p.name)
-                        }
-                        if (sessionIdx >= 0) sessionPlayers[sessionIdx] = updated
-                        updated
-                    } else p
-                }
-            }
-        }
+        // Disabled: Companion plugin provides 0ms real-time latency telemetry directly via console output
     }
 
 

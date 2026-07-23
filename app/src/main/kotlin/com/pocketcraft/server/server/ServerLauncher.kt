@@ -340,6 +340,23 @@ class ServerLauncher(private val context: Context) {
                         onOutput = onOutput,
                         onError = onError
                     )
+                    if ((result == 126 || result == 127) && NativeLauncher.loadLibrary()) {
+                        onOutput("[PocketCraft] External JVM failed with exit $result (Permission Denied). Switching to in-process JNI JVM fallback...")
+                        result = runCatching {
+                            NativeLauncher.launchJVM(
+                                jrePath = jrePath,
+                                jarPath = normalizedJarPath,
+                                serverDir = serverDir,
+                                tmpDir = tmpDir,
+                                nativeLibDir = normalizeAndroidPath(context.applicationInfo.nativeLibraryDir),
+                                shimDir = shimDir.absolutePath,
+                                minRamMb = minRamMb,
+                                maxRamMb = maxRamMb,
+                                serverType = serverType.name,
+                                port = resolveServerPort(worldName)
+                            )
+                        }.getOrElse { -1 }
+                    }
                 } else {
                     result = runCatching {
                         onOutput("[PocketCraft] Launching in-process JVM on Android ${Build.VERSION.RELEASE}.")
@@ -461,6 +478,10 @@ class ServerLauncher(private val context: Context) {
         )
         if (!result.success) {
             onOutput("[PocketCraft] ${runtime.displayName} preflight failed (exit=${result.exitCode}): ${result.detail}")
+            if (NativeLauncher.loadLibrary() && libjvm.exists()) {
+                onOutput("[PocketCraft] SELinux/permission blocked external java process. Automatically switching to in-process JNI JVM execution for ${runtime.displayName}...")
+                return true
+            }
         }
         return result.success
     }
@@ -1718,7 +1739,7 @@ class ServerLauncher(private val context: Context) {
                 val pb = ProcessBuilder(javaBin.absolutePath, "-version").redirectErrorStream(true)
                 pb.environment()["LD_LIBRARY_PATH"] = "$jreLibDir/server:$jreLibDir:$jreLibDir/jli"
                 val p = pb.start()
-                val finished = p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+                val finished = p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
                 if (!finished) p.destroyForcibly()
                 !finished || p.exitValue() != 0
             } else {
@@ -1773,7 +1794,7 @@ class ServerLauncher(private val context: Context) {
                 pb.environment()["LD_LIBRARY_PATH"] = "$jreLibDir/server:$jreLibDir:$jreLibDir/jli"
                 val p = pb.start()
                 val out = p.inputStream.bufferedReader().readText()
-                val finished = p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+                val finished = p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
                 if (!finished) p.destroyForcibly()
                 finished && (p.exitValue() == 0 || out.contains("version", ignoreCase = true))
             }.getOrDefault(false)

@@ -52,9 +52,9 @@ class RelayManager(private val context: Context) {
         const val PHONE_TUNNEL_PORT = 9000
         // Bound kernel queues so chunks backpressure Paper before keepalives sit
         // behind seconds of unsent data on constrained mobile relay routes.
-        private const val SOCKET_BUFFER_SIZE = 64 * 1024
-        private const val PLAYER_BRIDGE_BUFFER_SIZE = 8 * 1024
-        private const val PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE = 8 * 1024
+        private const val SOCKET_BUFFER_SIZE = 128 * 1024
+        private const val PLAYER_BRIDGE_BUFFER_SIZE = 64 * 1024
+        private const val PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE = 64 * 1024
         private const val BEDROCK_TX_BUFFER_SIZE = 8 * 1024
         private const val BEDROCK_SMALL_FRAME_MAX_BYTES = 3072
         private const val BEDROCK_LARGE_FRAME_BATCH_MAX = 4
@@ -391,22 +391,25 @@ class RelayManager(private val context: Context) {
     private fun isHighPriorityBedrockFrame(frame: ByteArray): Boolean {
         // Frame layout: [0x03][len_hi][len_lo][ip0][ip1][ip2][ip3][port_hi][port_lo][payload...]
         // Byte 9 is the first byte of the RakNet UDP payload (the RakNet packet ID).
-        if (frame.size < 10) return true // tiny/unknown frames: treat as high-priority
+        if (frame.size < 10) return true
         val packetId = frame[9].toInt() and 0xFF
         return when (packetId) {
             0xC0,           // ACK — acknowledgement, critical for RakNet reliability
             0xA0,           // NACK — triggers retransmit
             0x00,           // ConnectedPing
             0x03,           // ConnectedPong
+            0x05,           // OpenConnectionRequest1
             0x06,           // OpenConnectionReply1
+            0x07,           // OpenConnectionRequest2
             0x08,           // OpenConnectionReply2
+            0x09,           // ConnectionRequest
             0x10,           // NewIncomingConnection
             0x13,           // DisconnectNotification
             0x14,           // InvalidVersion
             0x15,           // NoFreeIncomingConnections
             0x1C            // UnconnectedPong
             -> true
-            else -> frame.size <= BEDROCK_SMALL_FRAME_MAX_BYTES // fallback: small = ping
+            else -> frame.size <= 128 // Strict fallback: only tiny control frames
         }
     }
 
@@ -637,25 +640,12 @@ class RelayManager(private val context: Context) {
 
         android.util.Log.d("RelayManager", "Notifying relay phone-ready (userId=$userId, relay=$relayHost, local=$localIp:$localPort)")
 
-        val endpointCandidates = listOf("/phone-ready", "/phone_ready", "/ready", "/phoneReady")
-        val payloadCandidates = buildList {
-            for (candidateHost in localIpCandidates) {
-                // Try common key variants for relay compatibility.
-                add("""{"userId":"$userId","host":"$candidateHost","port":$localPort,"bedrockPort":19132}""")
-                add("""{"userId":"$userId","host":"$candidateHost","port":$localPort}""")
-                add("""{"userId":"$userId","host":"$candidateHost"}""")
-                add("""{"userId":"$userId","ip":"$candidateHost","port":$localPort,"bedrockPort":19132}""")
-                add("""{"userId":"$userId","ip":"$candidateHost","port":$localPort}""")
-                add("""{"userId":"$userId","ip":"$candidateHost"}""")
-                add("""{"userId":"$userId","localIp":"$candidateHost","port":$localPort,"bedrockPort":19132}""")
-                add("""{"userId":"$userId","localIp":"$candidateHost","port":$localPort}""")
-                add("""{"userId":"$userId","localHost":"$candidateHost","port":$localPort,"bedrockPort":19132}""")
-                add("""{"userId":"$userId","localHost":"$candidateHost","port":$localPort}""")
-            }
-            add("""{"userId":"$userId","port":$localPort,"bedrockPort":19132}""")
-            add("""{"userId":"$userId","port":$localPort}""")
-            add("""{"userId":"$userId"}""")
-        }.distinct()
+        val endpointCandidates = listOf("/phone-ready", "/ready")
+        val primaryHost = localIpCandidates.firstOrNull() ?: "127.0.0.1"
+        val payloadCandidates = listOf(
+            """{"userId":"$userId","host":"$primaryHost","port":$localPort,"bedrockPort":19132}""",
+            """{"userId":"$userId"}"""
+        )
 
         for (endpoint in endpointCandidates) {
             for (body in payloadCandidates) {
@@ -666,8 +656,8 @@ class RelayManager(private val context: Context) {
                     conn.requestMethod = "POST"
                     conn.setRequestProperty("Content-Type", "application/json")
                     conn.setRequestProperty("Host", relayHost)
-                    conn.connectTimeout = 10_000
-                    conn.readTimeout = 10_000
+                    conn.connectTimeout = 3_000
+                    conn.readTimeout = 3_000
                     conn.doOutput = true
 
                     conn.outputStream.write(body.toByteArray(Charsets.UTF_8))
@@ -1159,7 +1149,7 @@ class RelayManager(private val context: Context) {
         }
 
         val relayToLocalThread = Thread {
-            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE)
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
             var totalBytes = 0L
             try {
                 val output = localSocket.getOutputStream()
@@ -1173,21 +1163,20 @@ class RelayManager(private val context: Context) {
                 // Continue streaming normally
                 val buffer = ByteArray(PLAYER_BRIDGE_BUFFER_SIZE)
                 var bytesRead: Int
-                var consecutiveFullReads = 0
 
                 while (true) {
                     bytesRead = try { relayInput.read(buffer) } catch (e: Exception) { -1 }
                     if (bytesRead <= 0) break
 
                     val startTime = System.nanoTime()
-                    // tcpNoDelay=true on the socket means every write() is sent immediately
-                    // by the kernel — an explicit flush() on an unbuffered OutputStream is
-                    // a no-op and only wastes a syscall round-trip.
                     output.write(buffer, 0, bytesRead)
+                    if (relayInput.available() == 0) {
+                        runCatching { output.flush() }
+                    }
                     totalBytes += bytesRead
 
                     val durationMicros = (System.nanoTime() - startTime) / 1000
-                    if (durationMicros > 50_000) {
+                    if (durationMicros > 100_000) {
                          android.util.Log.w("RelayManager", "RelayToLocal stall! Wrote $bytesRead bytes in ${durationMicros}μs")
                     }
                 }
@@ -1200,13 +1189,12 @@ class RelayManager(private val context: Context) {
             }
         }
         relayToLocalThread.name = "JavaRelayToLocal"
+        relayToLocalThread.priority = Thread.MAX_PRIORITY
 
         val localToRelayThread = Thread {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE)
             var totalBytes = 0L
             try {
-                configureRelaySocket(relaySocket)
-                configureLocalSocket(localSocket)
                 val input = localSocket.getInputStream()
                 val output = relaySocket.getOutputStream()
                 val buffer = ByteArray(PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE)
@@ -1217,6 +1205,9 @@ class RelayManager(private val context: Context) {
                     if (bytesRead <= 0) break
 
                     output.write(buffer, 0, bytesRead)
+                    if (input.available() == 0) {
+                        runCatching { output.flush() }
+                    }
                     totalBytes += bytesRead
                 }
                 android.util.Log.d("RelayManager", "LocalToRelay: End of stream. Total upstream: $totalBytes bytes")
@@ -1228,6 +1219,7 @@ class RelayManager(private val context: Context) {
             }
         }
         localToRelayThread.name = "JavaLocalToRelay"
+        localToRelayThread.priority = Thread.MAX_PRIORITY
 
         relayToLocalThread.start()
         localToRelayThread.start()
@@ -1245,14 +1237,18 @@ class RelayManager(private val context: Context) {
     }
 
     private fun configureLocalSocket(socket: Socket) {
+        tuneLowLatencySocket(socket)
+    }
+
+    private fun tuneLowLatencySocket(socket: Socket) {
         runCatching {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
+            socket.sendBufferSize = 64 * 1024
+            socket.receiveBufferSize = 64 * 1024
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
-            // Do NOT set sendBufferSize/receiveBufferSize — let Linux TCP auto-tune.
-            // Artificial limits throttle chunk bursts and inflate ping under load.
         }
     }
 
@@ -1261,10 +1257,10 @@ class RelayManager(private val context: Context) {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
+            socket.sendBufferSize = 64 * 1024
+            socket.receiveBufferSize = 64 * 1024
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
-            // Do NOT set sendBufferSize/receiveBufferSize — let Linux TCP auto-tune.
-            // Artificial limits throttle chunk bursts and inflate ping under load.
         }
     }
 
