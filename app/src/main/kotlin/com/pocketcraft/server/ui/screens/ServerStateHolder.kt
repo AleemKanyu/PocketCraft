@@ -532,8 +532,7 @@ class ServerStateHolder(
                 type == ServerHostService.EVENT_TUNNEL_CONNECTED ||
                 type == ServerHostService.EVENT_TUNNEL_FAILED ||
                 type == ServerHostService.EVENT_CHUNKY_PROGRESS ||
-                type == ServerHostService.EVENT_CHUNKS_LOADING ||
-                type == ServerHostService.EVENT_OUTPUT
+                type == ServerHostService.EVENT_CHUNKS_LOADING
             val isStopSignal = type == ServerHostService.EVENT_STOPPED ||
                 type == ServerHostService.EVENT_SERVER_CRASHED
             if (!isStopSignal && !isStopping) {
@@ -582,6 +581,7 @@ class ServerStateHolder(
                         tunnelConnecting = false
                         tunnelError = null
                         startedAtRealtime = null
+                        lastStartRequestedRealtime = 0L
                         resetJoinable()
                     }
                     onlinePlayers.clear()
@@ -1368,7 +1368,12 @@ class ServerStateHolder(
                     val nextIp = newPing.ip.ifBlank { player.ip }
                     val updated = player.copy(
                         pingMs = sanitizeWifiPingSample(player, newPing, nextIp),
-                        ip = nextIp
+                        ip = nextIp,
+                        uuid = newPing.uuid.ifBlank { player.uuid },
+                        x = newPing.x ?: player.x,
+                        y = newPing.y ?: player.y,
+                        z = newPing.z ?: player.z,
+                        worldName = newPing.world.ifBlank { player.worldName }
                     )
                     val sessionIdx = sessionPlayers.indexOfFirst { canonicalPlayerName(it.name) == canonicalPlayerName(player.name) }
                     if (sessionIdx >= 0) {

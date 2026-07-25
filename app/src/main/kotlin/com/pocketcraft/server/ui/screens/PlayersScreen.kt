@@ -1106,14 +1106,17 @@ private fun AddAfkFarmDialog(
                         x = location.first.toString()
                         y = location.second.toString()
                         z = location.third.toString()
+                        Toast.makeText(context, "Loaded location for ${player.name} (X: ${location.first}, Y: ${location.second}, Z: ${location.third})", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Could not fetch location for ${player.name}.", Toast.LENGTH_SHORT).show()
                     }
                     
                     // Copy player IP to clipboard
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    val clip = android.content.ClipData.newPlainText("Player IP", player.ip)
-                    clipboard.setPrimaryClip(clip)
-                    
-                    Toast.makeText(context, "Copied IP for ${player.name} (${player.ip}) and loaded location.", Toast.LENGTH_LONG).show()
+                    if (player.ip.isNotBlank()) {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("Player IP", player.ip)
+                        clipboard.setPrimaryClip(clip)
+                    }
                     showPlayerSelectionSheet = false
                 }
             }
@@ -1304,6 +1307,9 @@ private fun EditAfkFarmDialog(
                         x = location.first.toString()
                         y = location.second.toString()
                         z = location.third.toString()
+                        Toast.makeText(context, "Loaded location for ${player.name} (X: ${location.first}, Y: ${location.second}, Z: ${location.third})", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Could not fetch location for ${player.name}.", Toast.LENGTH_SHORT).show()
                     }
                     showPlayerSelectionSheet = false
                 }

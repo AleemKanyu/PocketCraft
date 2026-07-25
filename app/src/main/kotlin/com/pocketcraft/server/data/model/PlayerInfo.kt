@@ -8,7 +8,11 @@ data class PlayerInfo(
     val uuid: String = "",
     val pingMs: Int = -1,
     val ip: String = "",
-    val isOp: Boolean = false
+    val isOp: Boolean = false,
+    val x: Int? = null,
+    val y: Int? = null,
+    val z: Int? = null,
+    val worldName: String = ""
 ) {
     val isBedrock: Boolean get() = name.startsWith(".")
     val isRelayBridge: Boolean get() = !isBedrock && isLoopbackIp(ip)

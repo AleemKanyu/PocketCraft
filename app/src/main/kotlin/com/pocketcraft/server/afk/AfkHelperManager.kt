@@ -130,14 +130,14 @@ class AfkHelperManager(
             x = x,
             y = y,
             z = z,
-            isActive = false,
+            isActive = true,
             dummyEntityName = nextDummyEntityName(trimmedName),
             ownerPlayerName = defaultOwner?.name.orEmpty(),
             ownerPlayerUuid = defaultOwner?.uuid.orEmpty(),
             createdAt = System.currentTimeMillis()
         )
         runCatching { dao.upsert(entity) }
-        "Saved $trimmedName to AFK Helpers."
+        enableFarmInternal(entity)
     }
 
     suspend fun deleteFarm(id: String): String = withContext(Dispatchers.IO) {
@@ -232,29 +232,64 @@ class AfkHelperManager(
     }
 
     suspend fun captureSuggestedLocation(playerName: String? = null): Triple<Int, Int, Int>? = withContext(Dispatchers.IO) {
-        val targetName = playerName ?: onlinePlayersProvider().firstOrNull { it.uuid.isNotBlank() }?.name ?: return@withContext null
-        val selector = playerSelector(targetName)
-        val posLine = runCatching { sendRconCommand("data get entity $selector Pos") }.getOrNull() ?: return@withContext null
-        NBTParser.parsePosition(posLine)?.let { (x, y, z) ->
-            Triple(x.toInt(), y.toInt(), z.toInt())
+        val player = if (!playerName.isNullOrBlank()) {
+            onlinePlayersProvider().firstOrNull { it.name.equals(playerName, ignoreCase = true) }
+        } else {
+            onlinePlayersProvider().firstOrNull { it.uuid.isNotBlank() }
         }
+        
+        if (player != null && player.x != null && player.y != null && player.z != null) {
+            return@withContext Triple(player.x, player.y, player.z)
+        }
+
+        val targetUuid = player?.uuid.orEmpty()
+        val targetName = player?.name ?: playerName.orEmpty()
+
+        val selectorsToTry = listOfNotNull(
+            targetUuid.takeIf { it.isNotBlank() },
+            targetName.takeIf { it.isNotBlank() },
+            targetName.takeIf { it.isNotBlank() }?.let { "@a[name=\"${escapeSelectorName(it)}\",limit=1]" },
+            "@p"
+        )
+
+        for (selector in selectorsToTry) {
+            val rconOutput = runCatching { sendRconCommand("data get entity $selector Pos") }.getOrDefault("")
+            var pos = NBTParser.parsePosition(rconOutput) ?: NBTParser.parseBlockPosition(rconOutput)
+            if (pos == null) {
+                val stdinOutput = runCatching {
+                    com.pocketcraft.server.server.ServerLauncher.sendCommand("data get entity $selector Pos")
+                    ""
+                }.getOrDefault("")
+                pos = NBTParser.parsePosition(stdinOutput) ?: NBTParser.parseBlockPosition(stdinOutput)
+            }
+            if (pos != null) {
+                return@withContext Triple(pos.first.toInt(), pos.second.toInt(), pos.third.toInt())
+            }
+        }
+        null
     }
 
     private suspend fun enableFarmInternal(entity: AfkFarmLocationEntity): String {
         isBusy = true
         return try {
             val owner = entity.resolveOwnerOrDefault()
+            val safeOwnerUuid = owner.uuid.ifBlank {
+                entity.ownerPlayerUuid.ifBlank { UUID.randomUUID().toString() }
+            }
+            val safeDummyUuid = entity.dummyUuid.ifBlank { UUID.randomUUID().toString() }
+            val activeWorld = currentWorldName()
             val prepared = entity.copy(
                 isActive = true,
-                ownerPlayerName = owner.name,
-                ownerPlayerUuid = owner.uuid,
-                dummyUuid = entity.dummyUuid.ifBlank { UUID.randomUUID().toString() },
+                worldName = activeWorld,
+                ownerPlayerName = owner.name.ifBlank { "Server" },
+                ownerPlayerUuid = safeOwnerUuid,
+                dummyUuid = safeDummyUuid,
                 createdAt = entity.createdAt.takeIf { it > 0L } ?: System.currentTimeMillis()
             )
             dao.upsert(prepared)
             syncWorldPluginFiles(prepared.worldName)
 
-            if (!isServerRunningProvider() || !prepared.worldName.equals(currentWorldName(), ignoreCase = true)) {
+            if (!isServerRunningProvider()) {
                 return "${prepared.name} will spawn automatically the next time this world starts."
             }
 
@@ -263,58 +298,67 @@ class AfkHelperManager(
 
             val forceloadKey = "${prepared.x} ${prepared.z}"
             runCatching { sendRconCommand("forceload add $forceloadKey") }
+            runCatching { com.pocketcraft.server.server.ServerLauncher.sendCommand("forceload add $forceloadKey") }
 
-            // Spawn the dummy player directly via console
-            // Format: /dummy create <name> <owner_uuid> <world> <x> <y> <z>
             val configuredWorldName = resolveConfiguredLevelName(serverDir)
-            val command = "dummy create ${prepared.dummyEntityName} ${prepared.ownerPlayerUuid} $configuredWorldName ${prepared.x} ${prepared.y} ${prepared.z}"
-            var createResponse = runCatching {
-                sendRconCommand(command)
-            }.getOrElse { error ->
-                appendLog("[PocketCraft] AFK helper console create failed for ${prepared.name}: ${error.message}")
-                ""
+            val worldCandidates = listOf(activeWorld, configuredWorldName, "world").distinct()
+
+            // Remove any stale registration in DummyManager so dummyNameExists returns false
+            val removeCmd = "dummy remove ${prepared.dummyEntityName} $safeOwnerUuid"
+            runCatching { sendRconCommand(removeCmd) }
+            runCatching { com.pocketcraft.server.server.ServerLauncher.sendCommand(removeCmd) }
+            delay(150)
+
+            var spawned = false
+            for (wName in worldCandidates) {
+                if (spawned) break
+                val command = "dummy create ${prepared.dummyEntityName} $safeOwnerUuid $wName ${prepared.x} ${prepared.y} ${prepared.z}"
+                runCatching { sendRconCommand(command) }
+                runCatching { com.pocketcraft.server.server.ServerLauncher.sendCommand(command) }
+                delay(400)
+                if (isDummyLive(prepared)) {
+                    spawned = true
+                    break
+                }
             }
 
-            var isUnknownCommand = createResponse.contains("Unknown", ignoreCase = true) || createResponse.contains("Incomplete", ignoreCase = true) || createResponse.isBlank()
-            if (isUnknownCommand) {
-                // Hot reload plugin manager to register DummyPlayers.jar if freshly copied
-                hotReloadDummyPlugin(prepared)
-                createResponse = runCatching { sendRconCommand(command) }.getOrDefault("")
-                isUnknownCommand = createResponse.contains("Unknown", ignoreCase = true) || createResponse.contains("Incomplete", ignoreCase = true) || createResponse.isBlank()
-            }
-
-            if (isUnknownCommand) {
+            if (!spawned) {
                 val botDisplayName = dummyDisplayName(prepared)
                 val safeName = botDisplayName.replace("'", "").replace("\"", "")
 
                 // Try Purpur native bot commands (/bot <name> spawn at x y z or /bot spawn <name>)
                 val purpurCmd1 = "bot $safeName spawn at ${prepared.x} ${prepared.y} ${prepared.z}"
-                val purpurResp1 = runCatching { sendRconCommand(purpurCmd1) }.getOrDefault("")
-                var purpurSuccess = !purpurResp1.contains("Unknown", ignoreCase = true) && !purpurResp1.contains("Incomplete", ignoreCase = true) && purpurResp1.isNotBlank()
+                runCatching { sendRconCommand(purpurCmd1) }
+                runCatching { com.pocketcraft.server.server.ServerLauncher.sendCommand(purpurCmd1) }
+                delay(300)
 
-                if (!purpurSuccess) {
+                if (!isDummyLive(prepared)) {
                     val purpurCmd2 = "bot spawn $safeName"
-                    val purpurResp2 = runCatching { sendRconCommand(purpurCmd2) }.getOrDefault("")
-                    purpurSuccess = !purpurResp2.contains("Unknown", ignoreCase = true) && !purpurResp2.contains("Incomplete", ignoreCase = true) && purpurResp2.isNotBlank()
+                    runCatching { sendRconCommand(purpurCmd2) }
+                    runCatching { com.pocketcraft.server.server.ServerLauncher.sendCommand(purpurCmd2) }
+                    delay(300)
                 }
 
-                if (!purpurSuccess) {
+                if (!isDummyLive(prepared)) {
                     // Try Carpet mod fake-player bot spawn command (/player <name> spawn at x y z)
                     val carpetSpawnCmd = com.pocketcraft.server.server.CarpetModManager.buildSpawnCommand(safeName, prepared.x, prepared.y, prepared.z)
-                    val carpetResp = runCatching { sendRconCommand(carpetSpawnCmd) }.getOrDefault("")
-                    val carpetSuccess = com.pocketcraft.server.server.CarpetModManager.isCarpetPlayerCommandAvailable(carpetResp)
-
-                    if (!carpetSuccess) {
-                        // Fallback if Carpet mod / Purpur bot / Dummy plugin are not loaded: summon Zombie placeholder
-                        val summonCommand = "summon minecraft:zombie ${prepared.x} ${prepared.y} ${prepared.z} {CustomName:'\"$safeName\"',CustomNameVisible:1b,Invulnerable:1b,NoAI:1b,Silent:1b,PersistenceRequired:1b,IsBaby:0b,Tags:[\"pocketcraft_afk_bot\"]}"
-                        runCatching { sendRconCommand(summonCommand) }
-                    }
+                    runCatching { sendRconCommand(carpetSpawnCmd) }
+                    runCatching { com.pocketcraft.server.server.ServerLauncher.sendCommand(carpetSpawnCmd) }
+                    delay(300)
                 }
-            } else {
-                runCatching { sendRconCommand("forceload remove $forceloadKey") }
-            }
 
-            delay(750)
+                if (!isDummyLive(prepared)) {
+                    // Fallback if Carpet mod / Purpur bot / Dummy plugin are not loaded: summon Zombie placeholder
+                    val summonCommand = "summon minecraft:zombie ${prepared.x} ${prepared.y} ${prepared.z} {CustomName:'\"$safeName\"',CustomNameVisible:1b,Invulnerable:1b,NoAI:1b,Silent:1b,PersistenceRequired:1b,IsBaby:0b,Tags:[\"pocketcraft_afk_bot\"]}"
+                    runCatching { sendRconCommand(summonCommand) }
+                    runCatching { com.pocketcraft.server.server.ServerLauncher.sendCommand(summonCommand) }
+                    delay(300)
+                }
+            }
+            runCatching { sendRconCommand("forceload remove $forceloadKey") }
+            runCatching { com.pocketcraft.server.server.ServerLauncher.sendCommand("forceload remove $forceloadKey") }
+
+            delay(500)
             val synced = readDummyRecordByName(prepared.worldName, prepared.dummyEntityName)?.let { record ->
                 prepared.copy(
                     dummyUuid = record.uuid.ifBlank { prepared.dummyUuid },
@@ -327,8 +371,9 @@ class AfkHelperManager(
             syncWorldPluginFiles(synced.worldName)
 
             refreshNow()
-            val liveNow = liveDummyIds.contains(synced.id)
+            val liveNow = liveDummyIds.contains(synced.id) || isDummyLive(synced)
             if (liveNow) {
+                liveDummyIds += synced.id
                 restartPendingIds.remove(synced.id)
                 renderCurrentWorld()
                 "${synced.name} is live now."
@@ -578,6 +623,16 @@ class AfkHelperManager(
     }
 
     private suspend fun isDummyLive(entity: AfkFarmLocationEntity): Boolean {
+        val botName = dummyDisplayName(entity)
+        if (onlinePlayersProvider().any {
+            it.name.equals(botName, ignoreCase = true) ||
+            it.name.equals(entity.dummyEntityName, ignoreCase = true) ||
+            it.name.equals("AFK_${entity.dummyEntityName}", ignoreCase = true) ||
+            it.name.equals(entity.name, ignoreCase = true)
+        }) {
+            return true
+        }
+
         var response = runCatching {
             sendRconCommand("data get entity ${dummySelector(entity)} Pos")
         }.getOrDefault("")

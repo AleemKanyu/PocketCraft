@@ -62,7 +62,14 @@ public class PocketCraftCompanion extends JavaPlugin implements org.bukkit.event
                 int ping = getRealPlayerPing(p);
                 String ip = (p.getAddress() != null && p.getAddress().getAddress() != null)
                         ? p.getAddress().getAddress().getHostAddress() : "";
-                sb.append(p.getName()).append(":").append(ping).append("@").append(ip).append(" ");
+                org.bukkit.Location loc = p.getLocation();
+                String world = (p.getWorld() != null) ? p.getWorld().getName() : "world";
+                sb.append(p.getName())
+                  .append(":").append(ping)
+                  .append("@").append(ip)
+                  .append("#").append(p.getUniqueId())
+                  .append("!").append(loc.getBlockX()).append(",").append(loc.getBlockY()).append(",").append(loc.getBlockZ()).append(",").append(world)
+                  .append(" ");
                 hasPlayers = true;
             }
             if (hasPlayers) {

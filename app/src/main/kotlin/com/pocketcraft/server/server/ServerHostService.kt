@@ -289,16 +289,23 @@ class ServerHostService : Service() {
 
         if (hasExplicitStart) {
             val prefs = AppPreferences(applicationContext)
+            prefs.isUserStopped = false
             prefs.consecutiveCrashCount = 0
             prefs.lastStartTimestamp = System.currentTimeMillis()
         }
 
-        if (!hasExplicitStart && activeVersion.isNotBlank() && worldName.isNotBlank()) {
+        if (!hasExplicitStart) {
             // Service restarted after being killed, check if server was actually active
             val prefs = AppPreferences(applicationContext)
             val now = System.currentTimeMillis()
-            val previousRuntimeState = getPersistedRuntimeState(applicationContext, activeVersion)
-            if (previousRuntimeState == RUNTIME_STATE_OFFLINE || stopReason == "user" || stopInProgress.get() || prefs.isUserStopped) {
+            val previousRuntimeState = if (activeVersion.isNotBlank()) getPersistedRuntimeState(applicationContext, activeVersion) else RUNTIME_STATE_OFFLINE
+            if (activeVersion.isBlank() ||
+                worldName.isBlank() ||
+                previousRuntimeState == RUNTIME_STATE_OFFLINE ||
+                stopReason == "user" ||
+                stopInProgress.get() ||
+                prefs.isUserStopped
+            ) {
                 android.util.Log.i("ServerHostService", "Service restarted without explicit START but server is offline, user-stopped, or stopping. Suppressing auto-resume.")
                 try {
                     stopForeground(STOP_FOREGROUND_REMOVE)
@@ -789,6 +796,8 @@ class ServerHostService : Service() {
         relayManager.disconnect()
         setServerReadyState(false)
         serverReadyHandled.set(false)
+        stopReason = "user"
+        AppPreferences(applicationContext).isUserStopped = true
         persistPublicAddress(applicationContext, "")
         currentVersionId?.let { versionId ->
             persistRuntimeState(applicationContext, versionId, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE)
@@ -2879,6 +2888,7 @@ class ServerHostService : Service() {
             if (state == RUNTIME_STATE_OFFLINE) {
                 obj.put(KEY_PLAYER_COUNT, 0)
                 obj.put("server_pid", -1)
+                AppPreferences(context).isUserStopped = true
             } else {
                 obj.put("server_pid", android.os.Process.myPid())
             }
@@ -2923,7 +2933,14 @@ class ServerHostService : Service() {
 
         private fun writeStateFile(context: Context, obj: org.json.JSONObject) {
             val file = getStateFile(context)
-            runCatching { file.writeText(obj.toString()) }
+            runCatching {
+                val bytes = obj.toString().toByteArray(Charsets.UTF_8)
+                java.io.FileOutputStream(file).use { fos ->
+                    fos.write(bytes)
+                    fos.flush()
+                    fos.fd.sync()
+                }
+            }
         }
 
         fun pushWidgetUpdate(context: Context, statusOverride: String? = null) {

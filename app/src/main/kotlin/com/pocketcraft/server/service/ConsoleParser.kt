@@ -11,7 +11,12 @@ data class ChunkyProgress(
 
 data class ParsedPlayerPing(
     val pingMs: Int,
-    val ip: String = ""
+    val ip: String = "",
+    val uuid: String = "",
+    val x: Int? = null,
+    val y: Int? = null,
+    val z: Int? = null,
+    val world: String = ""
 )
 
 sealed interface ServerEvent {
@@ -167,8 +172,41 @@ object ConsoleParser {
                 if (name.isBlank() || !pair.contains(':')) continue
                 val value = pair.substringAfter(':')
                 val ping = value.substringBefore('@').toIntOrNull() ?: -1
-                val ip = value.substringAfter('@', "").trim()
-                pings[name] = ParsedPlayerPing(pingMs = ping, ip = ip)
+                val afterPing = value.substringAfter('@', "")
+                val ip = afterPing.substringBefore('#').substringBefore('!').trim()
+
+                var parsedUuid = ""
+                if (afterPing.contains('#')) {
+                    parsedUuid = afterPing.substringAfter('#').substringBefore('!').trim()
+                }
+
+                var parsedX: Int? = null
+                var parsedY: Int? = null
+                var parsedZ: Int? = null
+                var parsedWorld = ""
+
+                if (afterPing.contains('!')) {
+                    val locStr = afterPing.substringAfter('!').trim()
+                    val parts = locStr.split(',')
+                    if (parts.size >= 3) {
+                        parsedX = parts[0].toIntOrNull()
+                        parsedY = parts[1].toIntOrNull()
+                        parsedZ = parts[2].toIntOrNull()
+                    }
+                    if (parts.size >= 4) {
+                        parsedWorld = parts[3].trim()
+                    }
+                }
+
+                pings[name] = ParsedPlayerPing(
+                    pingMs = ping,
+                    ip = ip,
+                    uuid = parsedUuid,
+                    x = parsedX,
+                    y = parsedY,
+                    z = parsedZ,
+                    world = parsedWorld
+                )
             }
             return pings
         }
