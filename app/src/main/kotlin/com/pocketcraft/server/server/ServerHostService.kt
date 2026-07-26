@@ -35,6 +35,7 @@ import com.pocketcraft.server.service.ConsoleParser
 import com.pocketcraft.server.service.PluginManager
 import com.pocketcraft.server.service.ServerFileManager
 import com.pocketcraft.server.service.ServerVersionMigrator
+import com.pocketcraft.server.network.RconClient
 import com.pocketcraft.server.setup.JreExtractor
 import com.pocketcraft.server.widget.ServerWidgetUpdater
 import java.io.File
@@ -2401,6 +2402,10 @@ class ServerHostService : Service() {
     }
 
     private suspend fun sendRconCommandSuspended(command: String): String = withContext(Dispatchers.IO) {
+        val rconResponse = RconClient.sendCommand(command)
+        if (rconResponse.isNotBlank()) {
+            return@withContext rconResponse
+        }
         if (com.pocketcraft.server.server.ServerLauncher.hasActiveExternalProcess()) {
             com.pocketcraft.server.server.ServerLauncher.sendCommand(command)
             return@withContext "[OK]"

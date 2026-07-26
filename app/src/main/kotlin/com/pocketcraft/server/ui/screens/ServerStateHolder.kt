@@ -41,6 +41,7 @@ import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.data.preferences.AppPreferencesStore
 import com.pocketcraft.server.data.repository.ServerConfigRepository
 import com.pocketcraft.server.notification.NotificationHelper
+import com.pocketcraft.server.network.RconClient
 import com.pocketcraft.server.service.PluginManager
 import com.pocketcraft.server.service.ConsoleParser
 import com.pocketcraft.server.service.ParsedPlayerPing
@@ -1577,8 +1578,12 @@ class ServerStateHolder(
         }
     }
 
-    // Lightweight Source RCON client (RFC-compliant packet framing)
+    // Source RCON client (RFC-compliant packet framing over TCP socket 25575)
     fun sendRconCommand(command: String): String {
+        val rconResponse = RconClient.sendCommand(command)
+        if (rconResponse.isNotBlank()) {
+            return rconResponse
+        }
         if (com.pocketcraft.server.server.ServerLauncher.hasActiveExternalProcess()) {
             com.pocketcraft.server.server.ServerLauncher.sendCommand(command)
             return "[OK]"
@@ -1587,11 +1592,7 @@ class ServerStateHolder(
     }
 
     fun sendRconCommands(commands: List<String>): List<String> {
-        if (com.pocketcraft.server.server.ServerLauncher.hasActiveExternalProcess()) {
-            commands.forEach { com.pocketcraft.server.server.ServerLauncher.sendCommand(it) }
-            return List(commands.size) { "[OK]" }
-        }
-        return List(commands.size) { "[OK]" }
+        return commands.map { sendRconCommand(it) }
     }
 
     // Little-endian helpers for RCON protocol
