@@ -113,11 +113,11 @@ class ServerWidget : GlanceAppWidget() {
         val rawStatus = prefs[ServerWidgetStateKeys.status]
         val liveVersion = rawVersion?.ifBlank { null } ?: ServerHostService.getPersistedActiveVersion(context)
         val liveWorld = rawWorld?.ifBlank { null } ?: ServerHostService.getPersistedActiveWorld(context)
-        val status = rawStatus ?: resolveStatus(context, liveVersion, liveWorld)
+        val status = rawStatus ?: ServerWidgetUpdater.resolveStatus(context, liveVersion, liveWorld)
         val worldName = if (!rawWorld.isNullOrBlank()) rawWorld else liveWorld.ifBlank { "world" }
         val versionId = if (!rawVersion.isNullOrBlank()) rawVersion else liveVersion
         val players = prefs[ServerWidgetStateKeys.players] ?: 0
-        val maxPlayers = prefs[ServerWidgetStateKeys.maxPlayers] ?: readMaxPlayers(context, worldName)
+        val maxPlayers = prefs[ServerWidgetStateKeys.maxPlayers] ?: ServerWidgetUpdater.readMaxPlayers(context, worldName)
         val startedAt = prefs[ServerWidgetStateKeys.startedAtMillis] ?: 0L
         val isRunning = status.equals(ServerHostService.RUNTIME_STATE_RUNNING, ignoreCase = true)
         val isStarting = status.uppercase().startsWith("STARTING") || status.equals(ServerHostService.RUNTIME_STATE_STARTING, ignoreCase = true)
