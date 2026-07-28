@@ -41,4 +41,16 @@ class ServerWidgetReceiver : GlanceAppWidgetReceiver() {
             }
         }
     }
+
+    override fun onUpdate(context: Context, appWidgetManager: android.appwidget.AppWidgetManager, appWidgetIds: IntArray) {
+        super.onUpdate(context, appWidgetManager, appWidgetIds)
+        val pendingResult = goAsync()
+        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            try {
+                ServerWidgetUpdater.push(context.applicationContext)
+            } finally {
+                pendingResult.finish()
+            }
+        }
+    }
 }

@@ -2236,7 +2236,7 @@ class ServerHostService : Service() {
         if (widgetUpdateJob?.isActive == true) return
         widgetUpdateJob = serviceScope.launch {
             while (isActive) {
-                delay(60_000L)
+                delay(3_000L)
                 pushWidgetUpdate(applicationContext)
             }
         }
