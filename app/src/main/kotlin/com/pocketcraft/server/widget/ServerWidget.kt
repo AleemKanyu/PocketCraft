@@ -554,7 +554,7 @@ object ServerWidgetUpdater {
         }
     }
 
-    private fun readMaxPlayers(context: Context, worldName: String): Int {
+    fun readMaxPlayers(context: Context, worldName: String): Int {
         val serverDir = ServerFileManager.getServerDir(context, worldName)
         val propsFile = File(serverDir, "server.properties")
         val props = Properties()
