@@ -1299,10 +1299,9 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlPathValue(updated, listOf("timings"), "server-name-privacy", "true")
 
         // Keep-alive: extend timeout so high-latency relay players aren't kicked.
-        // Use a 5-tick interval (250ms): lower than the Paper default so idle
-        // ping reporting has minimal scheduling jitter and rapid feedback.
+        // Use a 15-second interval (300 ticks): avoids TCP packet queue congestion on relay tunnel.
         updated = ensureYamlSectionValue(updated, "misc", "keep-alive-timeout", "60")
-        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-interval", "5")
+        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-interval", "15")
         // Compression level 4 is a better latency/CPU tradeoff than 6 for mobile servers.
         // Higher levels add measurable CPU overhead on the server tick thread per packet.
         updated = ensureYamlSectionValue(updated, "misc", "compression-level", "4")

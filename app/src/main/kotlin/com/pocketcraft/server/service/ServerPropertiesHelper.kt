@@ -42,7 +42,7 @@ object ServerPropertiesHelper {
             props["server-port"] = "25565"
             props["motd"] = "A PocketCraft Server"
             props["max-players"] = "5"
-            props["difficulty"] = "easy"
+            props["difficulty"] = "normal"
             props["gamemode"] = "survival"
             props["online-mode"] = "false"
             props["pvp"] = "true"
@@ -60,6 +60,8 @@ object ServerPropertiesHelper {
             props["pocketcraft-max-ram-mb"] = "1024"
             props["view-distance"] = DEFAULT_VIEW_DISTANCE.toString()
             props["simulation-distance"] = DEFAULT_SIMULATION_DISTANCE.toString()
+            props[DESIRED_VIEW_DISTANCE_KEY] = DEFAULT_VIEW_DISTANCE.toString()
+            props[DESIRED_SIMULATION_DISTANCE_KEY] = DEFAULT_SIMULATION_DISTANCE.toString()
             props["entity-broadcast-range-percentage"] = RELAY_READY_ENTITY_BROADCAST_PERCENT.toString()
             props["network-compression-threshold"] = RELAY_READY_COMPRESSION_THRESHOLD.toString()
             props["sync-chunk-writes"] = "false"
@@ -121,27 +123,12 @@ object ServerPropertiesHelper {
     private fun syncDesiredChunkDistances(props: Properties): Boolean {
         var changed = false
 
-        // Seed desired keys from legacy view-distance values once.
-        if (props.getProperty(DESIRED_VIEW_DISTANCE_KEY).isNullOrBlank()) {
-            props.getProperty("view-distance")?.toIntOrNull()?.coerceIn(3, 32)?.let { legacy ->
-                props[DESIRED_VIEW_DISTANCE_KEY] = legacy.toString()
-                changed = true
-            }
-        }
-        if (props.getProperty(DESIRED_SIMULATION_DISTANCE_KEY).isNullOrBlank()) {
-            props.getProperty("simulation-distance")?.toIntOrNull()?.coerceIn(3, 32)?.let { legacy ->
-                props[DESIRED_SIMULATION_DISTANCE_KEY] = legacy.toString()
-                changed = true
-            }
-        }
-
-        // Keep the user's requested values separate from the active runtime values.
-        // Relay startup intentionally lowers view-distance and simulation-distance;
-        // ordinary UI reads must not restore the larger requested values afterward.
+        val existingView = props.getProperty("view-distance")?.toIntOrNull()?.coerceIn(3, 32)
+        val existingSim = props.getProperty("simulation-distance")?.toIntOrNull()?.coerceIn(3, 32)
         val desiredView = props.getProperty(DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull()?.coerceIn(3, 32)
-            ?: DEFAULT_VIEW_DISTANCE
+            ?: existingView ?: DEFAULT_VIEW_DISTANCE
         val desiredSimulation = props.getProperty(DESIRED_SIMULATION_DISTANCE_KEY)?.toIntOrNull()?.coerceIn(3, 32)
-            ?: DEFAULT_SIMULATION_DISTANCE
+            ?: existingSim ?: DEFAULT_SIMULATION_DISTANCE
 
         if (props.getProperty(DESIRED_VIEW_DISTANCE_KEY)?.toIntOrNull() != desiredView) {
             props[DESIRED_VIEW_DISTANCE_KEY] = desiredView.toString()
@@ -151,6 +138,15 @@ object ServerPropertiesHelper {
             props[DESIRED_SIMULATION_DISTANCE_KEY] = desiredSimulation.toString()
             changed = true
         }
+        if (props.getProperty("view-distance")?.toIntOrNull() != desiredView) {
+            props["view-distance"] = desiredView.toString()
+            changed = true
+        }
+        if (props.getProperty("simulation-distance")?.toIntOrNull() != desiredSimulation) {
+            props["simulation-distance"] = desiredSimulation.toString()
+            changed = true
+        }
+
         return changed
     }
 
