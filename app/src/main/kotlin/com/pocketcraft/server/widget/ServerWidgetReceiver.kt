@@ -18,13 +18,13 @@ class ServerWidgetReceiver : GlanceAppWidgetReceiver() {
     override fun onReceive(context: Context, intent: android.content.Intent) {
         super.onReceive(context, intent)
         if (intent.action == ACTION_TRIGGER_WIDGET_UPDATE) {
-            val pendingResult = goAsync()
+            val pendingResult = runCatching { goAsync() }.getOrNull()
             val statusOverride = intent.getStringExtra("status_override")
             CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
                 try {
                     ServerWidgetUpdater.push(context.applicationContext, statusOverride)
                 } finally {
-                    pendingResult.finish()
+                    pendingResult?.finish()
                 }
             }
         }
@@ -32,24 +32,24 @@ class ServerWidgetReceiver : GlanceAppWidgetReceiver() {
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
-        val pendingResult = goAsync()
+        val pendingResult = runCatching { goAsync() }.getOrNull()
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             try {
                 ServerWidgetUpdater.push(context.applicationContext)
             } finally {
-                pendingResult.finish()
+                pendingResult?.finish()
             }
         }
     }
 
     override fun onUpdate(context: Context, appWidgetManager: android.appwidget.AppWidgetManager, appWidgetIds: IntArray) {
         super.onUpdate(context, appWidgetManager, appWidgetIds)
-        val pendingResult = goAsync()
+        val pendingResult = runCatching { goAsync() }.getOrNull()
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             try {
                 ServerWidgetUpdater.push(context.applicationContext)
             } finally {
-                pendingResult.finish()
+                pendingResult?.finish()
             }
         }
     }
