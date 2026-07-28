@@ -108,15 +108,23 @@ class ServerWidget : GlanceAppWidget() {
             customIconTint = prefs[ServerWidgetStateKeys.customIconTint]
         )
         val scheme = resolveWidgetThemeScheme(context, themeSettings)
-        val status = prefs[ServerWidgetStateKeys.status] ?: ServerHostService.RUNTIME_STATE_OFFLINE
-        val worldName = prefs[ServerWidgetStateKeys.worldName] ?: "world"
-        val versionId = prefs[ServerWidgetStateKeys.versionId] ?: ""
+        val rawVersion = prefs[ServerWidgetStateKeys.versionId]
+        val rawWorld = prefs[ServerWidgetStateKeys.worldName]
+        val rawStatus = prefs[ServerWidgetStateKeys.status]
+        val liveVersion = rawVersion?.ifBlank { null } ?: ServerHostService.getPersistedActiveVersion(context)
+        val liveWorld = rawWorld?.ifBlank { null } ?: ServerHostService.getPersistedActiveWorld(context)
+        val status = rawStatus ?: resolveStatus(context, liveVersion, liveWorld)
+        val worldName = if (!rawWorld.isNullOrBlank()) rawWorld else liveWorld.ifBlank { "world" }
+        val versionId = if (!rawVersion.isNullOrBlank()) rawVersion else liveVersion
         val players = prefs[ServerWidgetStateKeys.players] ?: 0
-        val maxPlayers = prefs[ServerWidgetStateKeys.maxPlayers] ?: 10
+        val maxPlayers = prefs[ServerWidgetStateKeys.maxPlayers] ?: readMaxPlayers(context, worldName)
         val startedAt = prefs[ServerWidgetStateKeys.startedAtMillis] ?: 0L
-        val startEnabled = prefs[ServerWidgetStateKeys.startEnabled] ?: true
-        val stopEnabled = prefs[ServerWidgetStateKeys.stopEnabled] ?: false
-        val restartEnabled = prefs[ServerWidgetStateKeys.restartEnabled] ?: false
+        val isRunning = status.equals(ServerHostService.RUNTIME_STATE_RUNNING, ignoreCase = true)
+        val isStarting = status.uppercase().startsWith("STARTING") || status.equals(ServerHostService.RUNTIME_STATE_STARTING, ignoreCase = true)
+        val isStopping = status.equals("stopping", ignoreCase = true)
+        val startEnabled = prefs[ServerWidgetStateKeys.startEnabled] ?: (!isRunning && !isStarting && !isStopping && versionId.isNotBlank())
+        val stopEnabled = prefs[ServerWidgetStateKeys.stopEnabled] ?: (isRunning || isStarting)
+        val restartEnabled = prefs[ServerWidgetStateKeys.restartEnabled] ?: (isRunning || isStarting)
         val startIntent = Intent(context, ServerHostService::class.java).apply {
             action = ServerHostService.ACTION_START
             putExtra(ServerHostService.EXTRA_VERSION_ID, versionId)
@@ -170,7 +178,7 @@ class ServerWidget : GlanceAppWidget() {
 
                 Spacer(GlanceModifier.height(8.dp))
 
-                val isServerOffline = status == ServerHostService.RUNTIME_STATE_OFFLINE
+                val isServerOffline = status.equals(ServerHostService.RUNTIME_STATE_OFFLINE, ignoreCase = true)
 
                 Row(
                     modifier = GlanceModifier.fillMaxWidth(),
@@ -487,6 +495,15 @@ object ServerWidgetUpdater {
             }
         }
         ServerWidget().updateAll(context)
+        runCatching {
+            val intent = Intent(context, ServerWidgetReceiver::class.java).apply {
+                action = android.appwidget.AppWidgetManager.ACTION_APPWIDGET_UPDATE
+                val componentName = android.content.ComponentName(context, ServerWidgetReceiver::class.java)
+                val appWidgetIds = android.appwidget.AppWidgetManager.getInstance(context).getAppWidgetIds(componentName)
+                putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_IDS, appWidgetIds)
+            }
+            context.sendBroadcast(intent)
+        }
     }
 
     suspend fun buildSnapshot(context: Context, statusOverride: String? = null): ServerWidgetSnapshot {
