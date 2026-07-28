@@ -504,7 +504,7 @@ class ServerStateHolder(
     private fun attemptTransitionToOnline() {
         if (!isStarting && !isRestartingCycle) return
 
-        if (isJavaServerDone) {
+        if (isJavaServerDone && areSpawnChunksLoaded) {
             isGeyserDone = true
             val bridgeEnabled = try { PluginManager.isBedrockBridgeEnabled(appContext, activeWorld.ifBlank { "world" }) } catch (e: Exception) { false }
             markServerReady()
@@ -1482,6 +1482,7 @@ class ServerStateHolder(
         isRunning = true
         lastStartRequestedRealtime = 0L
         ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_RUNNING)
+        ServerHostService.pushWidgetUpdate(appContext)
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(appContext)
         prefs.successfulServerStarts = prefs.successfulServerStarts + 1
         android.util.Log.i("ServerStateHolder", "Server start count incremented: ${prefs.successfulServerStarts}")
