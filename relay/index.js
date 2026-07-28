@@ -1484,6 +1484,32 @@ controlServer.on('error', (err) => {
 refreshPublicIpv4();
 setInterval(refreshPublicIpv4, 5 * 60 * 1000);
 
+// Periodic Relay Optimization: Prevent V8 heap fragmentation & memory leaks over long PM2 uptimes
+setInterval(() => {
+  const now = Date.now();
+
+  // 1. Evict stale log throttle entries older than 10 minutes
+  for (const [key, lastTime] of logThrottleState.entries()) {
+    if (now - lastTime > 10 * 60 * 1000) {
+      logThrottleState.delete(key);
+    }
+  }
+
+  // 2. Prune empty inner bedrock client maps
+  for (const [userId, clientMap] of bedrockClientMap.entries()) {
+    if (!clientMap || clientMap.size === 0) {
+      bedrockClientMap.delete(userId);
+    }
+  }
+
+  // 3. Compact V8 Heap Garbage Collection if exposed to avoid GC pauses
+  if (global.gc) {
+    try {
+      global.gc();
+    } catch (_) {}
+  }
+}, 3 * 60 * 1000);
+
 // Start Bedrock UDP ping responder
 
 startBedrockPing(19132);

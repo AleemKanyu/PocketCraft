@@ -280,10 +280,11 @@ class ServerStateHolder(
 
     private fun updateServerUiState() {
         serverUiState = when {
-            isRunning -> ServerUiState.RUNNING
-            isStarting || isRestartingCycle -> ServerUiState.STARTING
+            isRunning && isJavaServerDone && serverJoinable -> ServerUiState.RUNNING
+            isStarting || isRestartingCycle || isRunning -> ServerUiState.STARTING
             else -> ServerUiState.IDLE
         }
+        ServerHostService.pushWidgetUpdate(appContext)
     }
 
     private val _isRestartingCycle = mutableStateOf(false)
@@ -294,7 +295,7 @@ class ServerStateHolder(
             notifyStateChanged()
         }
     private var lastStartRequestedRealtime: Long = 0L
-    var config by mutableStateOf(ServerConfig())
+    var config by mutableStateOf(loadConfig())
         private set
     var localIp by mutableStateOf("127.0.0.1")
         private set
@@ -312,7 +313,7 @@ class ServerStateHolder(
         private set
     private val _publicAddress = mutableStateOf<String?>(null)
     var publicAddress: String?
-        get() = _publicAddress.value
+        get() = if (status == ServerStatus.OFFLINE) null else _publicAddress.value
         private set(value) {
             _publicAddress.value = value
             notifyStateChanged()
@@ -841,8 +842,8 @@ class ServerStateHolder(
     val status: ServerStatus
         get() = when {
             isRestarting -> ServerStatus.RESTARTING
-            isRunning -> ServerStatus.ONLINE
-            isStarting -> ServerStatus.STARTING
+            isRunning && isJavaServerDone && serverJoinable -> ServerStatus.ONLINE
+            isStarting || isRunning -> ServerStatus.STARTING
             else -> ServerStatus.OFFLINE
         }
 
@@ -1562,17 +1563,12 @@ class ServerStateHolder(
             return
         }
         appendLog("> $clean")
+        com.pocketcraft.server.server.ServerLauncher.sendCommand(clean)
         scope.launch(Dispatchers.IO) {
-            try {
-                val response = sendRconCommand(clean)
-                if (response.isNotBlank()) {
+            runCatching {
+                val response = RconClient.sendCommand(clean)
+                if (response.isNotBlank() && response != "[OK]") {
                     withContext(Dispatchers.Main) { appendLog(response) }
-                }
-            } catch (e: Exception) {
-                // Fallback to stdin command delivery if RCON is offline/failing
-                com.pocketcraft.server.server.ServerLauncher.sendCommand(clean)
-                withContext(Dispatchers.Main) {
-                    appendLog("[RCON] Failed to send command: ${e.message}. Sent via console input fallback.")
                 }
             }
         }
@@ -1584,15 +1580,13 @@ class ServerStateHolder(
         if (rconResponse.isNotBlank()) {
             return rconResponse
         }
-        if (com.pocketcraft.server.server.ServerLauncher.hasActiveExternalProcess()) {
-            com.pocketcraft.server.server.ServerLauncher.sendCommand(command)
-            return "[OK]"
-        }
+        com.pocketcraft.server.server.ServerLauncher.sendCommand(command)
         return "[OK]"
     }
 
     fun sendRconCommands(commands: List<String>): List<String> {
-        return commands.map { sendRconCommand(it) }
+        if (commands.isEmpty()) return emptyList()
+        return RconClient.sendCommands(commands)
     }
 
     // Little-endian helpers for RCON protocol
@@ -1685,7 +1679,7 @@ class ServerStateHolder(
             return
         }
 
-        if (state.isRunning || (isRunning && isJavaServerDone)) {
+        if (isJavaServerDone && areSpawnChunksLoaded) {
             isStarting = false
             isRestartingCycle = false
             isRunning = true
@@ -1784,30 +1778,33 @@ class ServerStateHolder(
         val rawState = ServerHostService.getPersistedRuntimeState(appContext, versionId)
         val address = ServerHostService.getPersistedPublicAddress(appContext, versionId)
         val portOpen = isServerPortOpen(config.port)
-        val serviceActive = isServiceActive() || ServerHostService.isServiceRunning(appContext) || isStarting
-        
+        val processAlive = isServerProcessAlive()
+        val startingGracePeriod = isStarting || (lastStartRequestedRealtime > 0 && SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 120000L)
+
         if (rawState == ServerHostService.RUNTIME_STATE_RUNNING || isRunning) {
-            // Verify if the server is actually running by checking its port or service
-            if (portOpen || serviceActive) {
+            // Verify if the server is actually running by checking if port is open AND java server is done
+            if (portOpen && isJavaServerDone && areSpawnChunksLoaded) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
+            }
+            if (startingGracePeriod && (processAlive || ServerHostService.isServiceRunning(appContext))) {
+                return PersistedRuntimeState(isStarting = true, publicAddress = address)
             }
             ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
             return PersistedRuntimeState()
         }
-        
+
         if (rawState == ServerHostService.RUNTIME_STATE_STARTING || isStarting) {
             if (portOpen && isJavaServerDone) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
-            // If starting, check if the service is running or process is active
-            if (serviceActive || (lastStartRequestedRealtime > 0 && SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 180000L)) {
+            if (startingGracePeriod && (processAlive || ServerHostService.isServiceRunning(appContext))) {
                 return PersistedRuntimeState(isStarting = true, publicAddress = address)
             }
             // Dead state
             ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
             return PersistedRuntimeState()
         }
-        
+
         return PersistedRuntimeState()
     }
 
@@ -3754,6 +3751,8 @@ class ServerStateHolder(
                     if (!isStarting || isRunning) break
 
                     startupProgressPercent = nextProgress
+                    ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, "STARTING ($nextProgress%)")
+                    ServerHostService.pushWidgetUpdate(appContext, "STARTING ($nextProgress%)")
                     if (startupStatusMessage.isBlank() || startupStatusMessage == "Initializing..." || startupStatusMessage == "Preparing server...") {
                         startupStatusMessage = naturalStartupStatus(elapsedMs)
                     }
@@ -5479,17 +5478,40 @@ class ServerStateHolder(
 
     private fun startPeriodicPingPolling() {
         periodicPingJob?.cancel()
-        periodicPingJob = scope.launch(Dispatchers.IO) {
-            while (isActive) {
-                delay(5_000)
-                if (!isRunning || isStopping) continue
-                applyPingUpdatesFromRcon()
-            }
-        }
+        // PocketCraftCompanion plugin broadcasts live player ping and telemetry directly to the console.
     }
 
     private suspend fun applyPingUpdatesFromRcon() {
-        // Disabled: Companion plugin provides 0ms real-time latency telemetry directly via console output
+        if (!isRunning || isStopping) return
+        val currentOnline = onlinePlayers.toList()
+        if (currentOnline.isEmpty()) return
+
+        for (player in currentOnline) {
+            val target = """@a[name="${escapeSelectorName(player.name)}",limit=1]"""
+            val pingResp = sendRconCommand("ping ${escapeSelectorName(player.name)}")
+            var parsedPing = -1
+            if (pingResp.isNotBlank() && !pingResp.startsWith("[RCON]")) {
+                val pings = ConsoleParser.parsePing(pingResp)
+                if (pings.isNotEmpty()) {
+                    parsedPing = pings.values.firstOrNull()?.pingMs ?: -1
+                } else {
+                    parsedPing = ConsoleParser.parseFabricEntityLatency(pingResp)
+                }
+            }
+            if (parsedPing < 0) {
+                val latResp = sendRconCommand("data get entity $target latency")
+                parsedPing = ConsoleParser.parseFabricEntityLatency(latResp)
+            }
+
+            if (parsedPing >= 0) {
+                val finalPing = parsedPing
+                withContext(Dispatchers.Main) {
+                    onlinePlayers.replaceAllMatching(player.name, player.uuid) { p ->
+                        p.copy(pingMs = finalPing)
+                    }
+                }
+            }
+        }
     }
 
 

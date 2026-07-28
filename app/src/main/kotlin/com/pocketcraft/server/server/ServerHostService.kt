@@ -352,7 +352,7 @@ class ServerHostService : Service() {
 
         val existingServerPort = resolveServerPort(worldName)
         val hasLiveProcess = serverProcess?.isAlive == true || ServerLauncher.hasActiveExternalProcess()
-        if (hasLiveProcess && isLocalServerPortOpen(existingServerPort)) {
+        if (hasLiveProcess && isLocalServerPortOpen(existingServerPort) && serverReadyHandled.get()) {
             return attachToExistingServer(versionId, worldName, existingServerPort, "start request")
         }
 
@@ -1616,7 +1616,7 @@ class ServerHostService : Service() {
     private fun scheduleServerReadyFallback(versionId: String) {
         serverReadyFallbackJob?.cancel()
         serverReadyFallbackJob = serviceScope.launch {
-            delay(90_000)
+            delay(180_000)
             val shouldPromote = currentVersionId == versionId &&
                 !serverReadyHandled.get() &&
                 (serverProcess?.isAlive == true ||
@@ -2759,20 +2759,13 @@ class ServerHostService : Service() {
 
         @JvmStatic
         fun isServiceRunning(context: Context): Boolean {
-            if (isServiceRunning) return true
-            val file = getStateFile(context)
-            if (!file.exists()) return false
-            val pid = runCatching {
-                org.json.JSONObject(file.readText()).optInt("server_pid", -1)
-            }.getOrDefault(-1)
-            
+            if (ServerLauncher.isServerProcessAlive(context)) return true
+            if (!isServiceRunning) return false
+            val pid = getExternalJvmPid(context)
             if (pid <= 0) return false
-            
             return try {
-                android.system.Os.kill(pid, 0)
+                android.system.Os.kill(pid.toInt(), 0)
                 true
-            } catch (e: android.system.ErrnoException) {
-                false
             } catch (e: Exception) {
                 false
             }

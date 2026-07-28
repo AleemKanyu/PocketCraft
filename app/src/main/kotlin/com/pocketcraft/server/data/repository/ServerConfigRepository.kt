@@ -41,8 +41,9 @@ class ServerConfigRepository @Inject constructor(
 
     private val serverDir: File 
         get() {
-            val worldName = worldNameOverride ?: runBlocking { AppPreferencesStore.getSelectedWorldFlow(context).first() }
-            return ServerFileManager.getServerDir(context, worldName)
+            val worldName = worldNameOverride ?: com.pocketcraft.server.data.preferences.AppPreferences(context).selectedWorld
+            val safeName = if (worldName.isBlank()) "world" else worldName
+            return ServerFileManager.getServerDir(context, safeName)
         }
     private val serversDir: File get() = File(serverDir, "profiles")
     private val activeServerFile: File get() = File(serverDir, ".active_server")
@@ -305,10 +306,10 @@ class ServerConfigRepository @Inject constructor(
             hardcore = props["hardcore"]?.toBoolean() ?: false,
             maxRamMb = props["pocketcraft-max-ram-mb"]?.toIntOrNull()
                 ?: fallbackConfig?.maxRamMb
-                ?: 1024,
+                ?: com.pocketcraft.server.data.preferences.AppPreferences(context).manualRamMb,
             ramMode = props["pocketcraft-ram-mode"]
                 ?: fallbackConfig?.ramMode
-                ?: "low",
+                ?: com.pocketcraft.server.data.preferences.AppPreferences(context).ramMode,
             entityBroadcastRangePercentage = props["entity-broadcast-range-percentage"]?.toIntOrNull()
                 ?: fallbackConfig?.entityBroadcastRangePercentage
                 ?: ServerPropertiesHelper.RELAY_READY_ENTITY_BROADCAST_PERCENT,

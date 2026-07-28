@@ -2,6 +2,7 @@ package com.pocketcraft.server.widget
 
 import android.content.Context
 import android.content.Intent
+import com.pocketcraft.server.server.ServerLauncher
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -431,23 +432,24 @@ private fun widgetSurfaceModifier(scheme: WidgetColorScheme): GlanceModifier {
     }
 }
 
-private fun statusLabel(status: String): String = when (status) {
-    ServerHostService.RUNTIME_STATE_RUNNING -> "RUNNING"
-    ServerHostService.RUNTIME_STATE_STARTING, "starting" -> "STARTING"
-    "stopping" -> "STOPPING"
+private fun statusLabel(status: String): String = when {
+    status.equals(ServerHostService.RUNTIME_STATE_RUNNING, ignoreCase = true) -> "RUNNING"
+    status.equals("stopping", ignoreCase = true) -> "STOPPING"
+    status.uppercase().startsWith("STARTING") -> status.uppercase()
+    status.equals(ServerHostService.RUNTIME_STATE_STARTING, ignoreCase = true) -> "STARTING"
     else -> "OFFLINE"
 }
 
-private fun presenceLabel(status: String): String? = when (status) {
-    ServerHostService.RUNTIME_STATE_RUNNING -> "online"
-    ServerHostService.RUNTIME_STATE_STARTING, "starting" -> "booting"
-    "stopping" -> "ending"
+private fun presenceLabel(status: String): String? = when {
+    status.equals(ServerHostService.RUNTIME_STATE_RUNNING, ignoreCase = true) -> "online"
+    status.equals("stopping", ignoreCase = true) -> "ending"
+    status.uppercase().startsWith("STARTING") || status.equals(ServerHostService.RUNTIME_STATE_STARTING, ignoreCase = true) -> "booting"
     else -> null
 }
 
 private fun uptimeLabel(status: String, startedAtMillis: Long): String {
     return when {
-        startedAtMillis <= 0L || status != ServerHostService.RUNTIME_STATE_RUNNING -> "0:00"
+        startedAtMillis <= 0L || !status.equals(ServerHostService.RUNTIME_STATE_RUNNING, ignoreCase = true) -> "0:00"
         else -> {
             val elapsedSeconds = ((System.currentTimeMillis() - startedAtMillis) / 1000L).coerceAtLeast(0L)
             val hours = elapsedSeconds / 3600
@@ -493,20 +495,15 @@ object ServerWidgetUpdater {
         val selectedWorld = AppPreferencesStore.getSelectedWorldFlow(context).first()
         val activeWorld = ServerHostService.getPersistedActiveWorld(context).ifBlank { selectedWorld }
         val resolvedStatus = resolveStatus(context, versionId, activeWorld)
-        val status = when {
-            resolvedStatus == ServerHostService.RUNTIME_STATE_RUNNING -> resolvedStatus
-            resolvedStatus == ServerHostService.RUNTIME_STATE_OFFLINE && statusOverride == "stopping" -> statusOverride
-            statusOverride != null -> statusOverride
-            else -> resolvedStatus
-        }
+        val status = statusOverride ?: resolvedStatus
         val startedAt = AppPreferencesStore.getServerStartedAtMillis(context)
-            .takeIf { status == ServerHostService.RUNTIME_STATE_RUNNING }
+            .takeIf { status.equals(ServerHostService.RUNTIME_STATE_RUNNING, ignoreCase = true) }
             ?: 0L
         val themeSettings = WidgetThemePrefs.ensureAllowedTheme(context)
         val maxPlayers = readMaxPlayers(context, activeWorld)
-        val isRunning = status == ServerHostService.RUNTIME_STATE_RUNNING
-        val isStarting = status == ServerHostService.RUNTIME_STATE_STARTING || status == "starting"
-        val isStopping = status == "stopping"
+        val isRunning = status.equals(ServerHostService.RUNTIME_STATE_RUNNING, ignoreCase = true)
+        val isStarting = status.uppercase().startsWith("STARTING") || status.equals(ServerHostService.RUNTIME_STATE_STARTING, ignoreCase = true)
+        val isStopping = status.equals("stopping", ignoreCase = true)
         return ServerWidgetSnapshot(
             status = status,
             worldName = activeWorld,
@@ -523,16 +520,20 @@ object ServerWidgetUpdater {
     }
 
     fun resolveStatus(context: Context, versionId: String, activeWorld: String): String {
-        if (versionId.isBlank()) return ServerHostService.RUNTIME_STATE_OFFLINE
-        val persisted = ServerHostService.getPersistedRuntimeState(context, versionId)
-        val serviceRunning = ServerHostService.isServiceRunning(context)
+        val processAlive = ServerLauncher.isServerProcessAlive(context)
         val portOpen = isLocalServerPortOpen(context, activeWorld)
+        val safeVersion = versionId.ifBlank { ServerHostService.getPersistedActiveVersion(context) }
+        val persisted = ServerHostService.getPersistedRuntimeState(context, safeVersion) ?: ServerHostService.RUNTIME_STATE_OFFLINE
+
+        val isStartingState = persisted.uppercase().startsWith("STARTING") ||
+            persisted.equals(ServerHostService.RUNTIME_STATE_STARTING, ignoreCase = true)
 
         return when {
-            serviceRunning && portOpen -> ServerHostService.RUNTIME_STATE_RUNNING
-            serviceRunning && persisted == ServerHostService.RUNTIME_STATE_OFFLINE -> ServerHostService.RUNTIME_STATE_STARTING
-            !serviceRunning -> ServerHostService.RUNTIME_STATE_OFFLINE
-            else -> persisted
+            isStartingState && (processAlive || ServerHostService.isServiceRunning(context)) -> persisted
+            persisted.equals("stopping", ignoreCase = true) -> "stopping"
+            processAlive && portOpen && persisted.equals(ServerHostService.RUNTIME_STATE_RUNNING, ignoreCase = true) -> ServerHostService.RUNTIME_STATE_RUNNING
+            processAlive -> ServerHostService.RUNTIME_STATE_STARTING
+            else -> ServerHostService.RUNTIME_STATE_OFFLINE
         }
     }
 

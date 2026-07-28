@@ -198,6 +198,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getString("selected_world_path", null)
         set(value) = prefs.edit().putString("selected_world_path", value).apply()
 
+    var selectedWorld: String
+        get() = prefs.getString("selected_world", "world")?.ifBlank { "world" } ?: "world"
+        set(value) = prefs.edit().putString("selected_world", value).apply()
+
     var fcmToken: String?
         get() = prefs.getString("fcm_token", null)
         set(value) = prefs.edit().putString("fcm_token", value).apply()

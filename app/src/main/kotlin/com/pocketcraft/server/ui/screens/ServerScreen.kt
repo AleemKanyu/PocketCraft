@@ -185,7 +185,6 @@ fun ServerScreen(
     var worldSetupCreateMode by remember { mutableStateOf(false) }
     var showSetupLoading by remember { mutableStateOf(false) }
     var setupLoadingProgress by remember { mutableStateOf(0f) }
-    val navigationHistory = remember { mutableStateListOf<PocketTab>() }
     var settingsInitialActiveTab by remember { mutableStateOf<Int?>(null) }
     var settingsInitialAuthTab by remember { mutableStateOf<Int?>(null) }
     val backupState by BackupProgressTracker.state.collectAsState()
@@ -193,25 +192,10 @@ fun ServerScreen(
     var showBackupSheet by remember { mutableStateOf(false) }
 
     fun navigateToTab(tab: PocketTab) {
-        if (currentTab != tab) {
-            if (tab != PocketTab.SETTINGS) {
-                navigationHistory.add(currentTab)
-            }
-        }
         currentTab = tab
         selectedPlayer = null
         settingsInitialActiveTab = null
         settingsInitialAuthTab = null
-    }
-
-    fun goBack(): Boolean {
-        return if (navigationHistory.isNotEmpty()) {
-            val previousTab = navigationHistory.removeAt(navigationHistory.size - 1)
-            currentTab = previousTab
-            true
-        } else {
-            false
-        }
     }
 
     fun openWorldSetup(createMode: Boolean) {
@@ -281,12 +265,11 @@ fun ServerScreen(
             selectedPlayer != null -> {
                 selectedPlayer = null
             }
-            else -> if (!goBack()) {
-                if (currentTab != PocketTab.HOME) {
-                    currentTab = PocketTab.HOME
-                } else {
-                    onRequestExit()
-                }
+            currentTab != PocketTab.HOME -> {
+                currentTab = PocketTab.HOME
+            }
+            else -> {
+                onRequestExit()
             }
         }
     }

@@ -1849,7 +1849,7 @@ private fun ServerIdentityCard(
             .takeIf(::isShareableLanIp)
             ?.let { "$it:${stateHolder.config.port}" }
         val relayReady = !publicAddress.isNullOrBlank()
-        val canShareAddresses = stateHolder.serverUiState == ServerUiState.RUNNING
+        val canShareAddresses = stateHolder.status == ServerStatus.ONLINE && stateHolder.isServerFullyReady
         val joinCardShadowColor = pocketCardShadowColor()
         val joinCardBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
 

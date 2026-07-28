@@ -116,6 +116,23 @@ class ServerLauncher(private val context: Context) {
 
         fun hasActiveExternalProcess(): Boolean = activeExternalProcess?.isAlive == true
 
+        @JvmStatic
+        fun isServerProcessAlive(context: Context? = null): Boolean {
+            if (activeExternalProcess?.isAlive == true) return true
+            if (context != null) {
+                val pid = ServerHostService.getExternalJvmPid(context)
+                if (pid > 0) {
+                    return try {
+                        android.system.Os.kill(pid.toInt(), 0)
+                        true
+                    } catch (e: Exception) {
+                        false
+                    }
+                }
+            }
+            return false
+        }
+
         fun sendCommand(command: String) {
             activeExternalProcess?.let { process ->
                 runCatching {
