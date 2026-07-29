@@ -162,38 +162,7 @@ android {
 
     packaging {
         jniLibs {
-            useLegacyPackaging = false
-            excludes.addAll(listOf(
-                "**/libawt*",
-                "**/libdt_*",
-                "**/libext*",
-                "**/libfont*",
-                "**/libfree*",
-                "**/libinst*",
-                "**/libj2*",
-                "**/libjaas*",
-                "**/libjava*",
-                "**/libjawt*",
-                "**/libjdwp*",
-                "**/libjimage*",
-                "**/libjimg*",
-                "**/libjli*",
-                "**/libjnid*",
-                "**/libjsig*",
-                "**/libjvm*",
-                "**/liblcms*",
-                "**/libmanag*",
-                "**/libmlib*",
-                "**/libnet*",
-                "**/libnio*",
-                "**/libpref*",
-                "**/librmi*",
-                "**/libsctp*",
-                "**/libsysl*",
-                "**/libver*",
-                "**/libzip*",
-                "**/libc++_shared.so"
-            ))
+            useLegacyPackaging = true
         }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
