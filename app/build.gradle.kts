@@ -75,7 +75,7 @@ android {
     defaultConfig {
         applicationId = "com.pocketcraft.server"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = autoVersionCode
         versionName = "1.8.1"
 
