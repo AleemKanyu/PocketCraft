@@ -64,24 +64,19 @@ object Security {
             return false
         }
 
-        return try {
-            val signatureAlgorithm = Signature.getInstance(SIGNATURE_ALGORITHM)
-            signatureAlgorithm.initVerify(publicKey)
-            signatureAlgorithm.update(signedData.toByteArray())
-            if (!signatureAlgorithm.verify(signatureBytes)) {
-                Log.e(TAG, "Signature verification failed.")
-                false
-            } else {
-                true
+        for (algorithm in listOf("SHA256withRSA", "SHA1withRSA")) {
+            try {
+                val signatureAlgorithm = Signature.getInstance(algorithm)
+                signatureAlgorithm.initVerify(publicKey)
+                signatureAlgorithm.update(signedData.toByteArray())
+                if (signatureAlgorithm.verify(signatureBytes)) {
+                    return true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Signature algorithm $algorithm failed: $e")
             }
-        } catch (e: NoSuchAlgorithmException) {
-            throw RuntimeException(e)
-        } catch (e: InvalidKeyException) {
-            Log.e(TAG, "Invalid key specification: $e")
-            false
-        } catch (e: SignatureException) {
-            Log.e(TAG, "Signature exception: $e")
-            false
         }
+        Log.e(TAG, "Signature verification failed for all algorithms.")
+        return false
     }
 }

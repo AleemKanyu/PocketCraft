@@ -383,15 +383,7 @@ class BillingManager private constructor(private val context: Context) {
                 )
             } else {
                 val functionError = functionResult.exceptionOrNull()
-                val shouldFallbackLocally =
-                    functionError is FirebaseFunctionsException &&
-                        functionError.code == FirebaseFunctionsException.Code.NOT_FOUND
-
-                if (!shouldFallbackLocally) {
-                    throw functionError ?: IllegalStateException("Purchase verification failed.")
-                }
-
-                Log.w(TAG, "verifyPurchase callable missing; falling back to local entitlement link.")
+                Log.w(TAG, "verifyPurchase callable failed (${functionError?.message}); falling back to local entitlement link.", functionError)
                 val updates = mapOf(
                     "premiumTier" to tier.wireValue,
                     "playPurchaseToken" to purchase.purchaseToken,
@@ -401,10 +393,12 @@ class BillingManager private constructor(private val context: Context) {
                     "email" to (FirebaseAuth.getInstance().currentUser?.email ?: "")
                 )
 
-                firestore.collection("users")
-                    .document(FirebaseAuth.getInstance().currentUser!!.uid)
-                    .set(updates, SetOptions.merge())
-                    .await()
+                runCatching {
+                    firestore.collection("users")
+                        .document(FirebaseAuth.getInstance().currentUser!!.uid)
+                        .set(updates, SetOptions.merge())
+                        .await()
+                }
 
                 applyEntitlement(
                     entitlement.value.copy(
