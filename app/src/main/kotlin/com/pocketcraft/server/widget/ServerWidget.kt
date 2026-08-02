@@ -19,8 +19,11 @@ import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.action.Action
 import androidx.glance.action.clickable
+import androidx.glance.action.ActionParameters
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
+import androidx.glance.appwidget.action.ActionCallback
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.action.actionStartService
 import androidx.glance.appwidget.appWidgetBackground
@@ -87,6 +90,45 @@ data class ServerWidgetSnapshot(
     val restartEnabled: Boolean
 )
 
+class StartServerAction : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        val activeVersion = ServerHostService.getPersistedActiveVersion(context)
+            .ifBlank { runCatching { AppPreferencesStore.getSelectedVersionFlow(context).first() }.getOrNull().orEmpty() }
+        val activeWorld = ServerHostService.getPersistedActiveWorld(context)
+            .ifBlank { runCatching { AppPreferencesStore.getSelectedWorldFlow(context).first() }.getOrNull().orEmpty() }
+        val finalWorld = activeWorld.ifBlank { "world" }
+
+        ServerWidgetUpdater.push(context, ServerHostService.RUNTIME_STATE_STARTING)
+        ServerHostService.start(context, activeVersion, finalWorld)
+    }
+}
+
+class StopServerAction : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        ServerWidgetUpdater.push(context, "stopping")
+        ServerHostService.stop(context)
+    }
+}
+
+class RestartServerAction : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        ServerWidgetUpdater.push(context, "stopping")
+        ServerHostService.restart(context)
+    }
+}
+
 class ServerWidget : GlanceAppWidget() {
     override val stateDefinition = PreferencesGlanceStateDefinition
 
@@ -111,31 +153,36 @@ class ServerWidget : GlanceAppWidget() {
         val rawVersion = prefs[ServerWidgetStateKeys.versionId]
         val rawWorld = prefs[ServerWidgetStateKeys.worldName]
         val rawStatus = prefs[ServerWidgetStateKeys.status]
-        val liveVersion = rawVersion?.ifBlank { null } ?: ServerHostService.getPersistedActiveVersion(context)
-        val liveWorld = rawWorld?.ifBlank { null } ?: ServerHostService.getPersistedActiveWorld(context)
-        val status = rawStatus ?: ServerWidgetUpdater.resolveStatus(context, liveVersion, liveWorld)
+
+        val liveVersion = rawVersion?.ifBlank { null }
+            ?: ServerHostService.getPersistedActiveVersion(context)
+
+        val liveWorld = rawWorld?.ifBlank { null }
+            ?: ServerHostService.getPersistedActiveWorld(context)
+            .ifBlank { "world" }
+
+        val liveStatus = ServerWidgetUpdater.resolveStatus(context, liveVersion, liveWorld)
+
+        val status = when {
+            rawStatus.equals("stopping", ignoreCase = true) && liveStatus != ServerHostService.RUNTIME_STATE_RUNNING -> "stopping"
+            rawStatus?.uppercase()?.startsWith("STARTING") == true && liveStatus == ServerHostService.RUNTIME_STATE_OFFLINE -> rawStatus
+            else -> liveStatus
+        }
+
         val worldName = if (!rawWorld.isNullOrBlank()) rawWorld else liveWorld.ifBlank { "world" }
         val versionId = if (!rawVersion.isNullOrBlank()) rawVersion else liveVersion
         val players = prefs[ServerWidgetStateKeys.players] ?: 0
         val maxPlayers = prefs[ServerWidgetStateKeys.maxPlayers] ?: ServerWidgetUpdater.readMaxPlayers(context, worldName)
         val startedAt = prefs[ServerWidgetStateKeys.startedAtMillis] ?: 0L
+
         val isRunning = status.equals(ServerHostService.RUNTIME_STATE_RUNNING, ignoreCase = true)
         val isStarting = status.uppercase().startsWith("STARTING") || status.equals(ServerHostService.RUNTIME_STATE_STARTING, ignoreCase = true)
         val isStopping = status.equals("stopping", ignoreCase = true)
-        val startEnabled = prefs[ServerWidgetStateKeys.startEnabled] ?: (!isRunning && !isStarting && !isStopping && versionId.isNotBlank())
-        val stopEnabled = prefs[ServerWidgetStateKeys.stopEnabled] ?: (isRunning || isStarting)
-        val restartEnabled = prefs[ServerWidgetStateKeys.restartEnabled] ?: (isRunning || isStarting)
-        val startIntent = Intent(context, ServerHostService::class.java).apply {
-            action = ServerHostService.ACTION_START
-            putExtra(ServerHostService.EXTRA_VERSION_ID, versionId)
-            putExtra(ServerHostService.EXTRA_WORLD_NAME, worldName)
-        }
-        val stopIntent = Intent(context, ServerHostService::class.java).apply {
-            action = ServerHostService.ACTION_STOP
-        }
-        val restartIntent = Intent(context, ServerHostService::class.java).apply {
-            action = ServerHostService.ACTION_RESTART
-        }
+
+        val startEnabled = !isRunning && !isStarting && !isStopping
+        val stopEnabled = isRunning || isStarting
+        val restartEnabled = isRunning || isStarting
+
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
@@ -194,7 +241,7 @@ class ServerWidget : GlanceAppWidget() {
                             tint = 0xFF3DDC84.toInt(),
                             disabledBackground = scheme.buttonDisabledBg,
                             disabledTint = scheme.buttonDisabledTint,
-                            action = actionStartService(startIntent, isForegroundService = true)
+                            action = actionRunCallback<StartServerAction>()
                         )
                     } else {
                         WidgetActionButton(
@@ -206,7 +253,7 @@ class ServerWidget : GlanceAppWidget() {
                             tint = scheme.buttonStopTint,
                             disabledBackground = scheme.buttonDisabledBg,
                             disabledTint = scheme.buttonDisabledTint,
-                            action = actionStartService(stopIntent, isForegroundService = true)
+                            action = actionRunCallback<StopServerAction>()
                         )
                         Spacer(GlanceModifier.width(8.dp))
                         WidgetActionButton(
@@ -218,7 +265,7 @@ class ServerWidget : GlanceAppWidget() {
                             tint = scheme.buttonRestartTint,
                             disabledBackground = scheme.buttonDisabledBg,
                             disabledTint = scheme.buttonDisabledTint,
-                            action = actionStartService(restartIntent, isForegroundService = true)
+                            action = actionRunCallback<RestartServerAction>()
                         )
                     }
                 }

@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.content.Context
 import android.net.Uri
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.pocketcraft.server.billing.BillingManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -149,7 +150,15 @@ fun SettingsScreen(
     var activeTab by remember { mutableIntStateOf(0) }
     val tabs = listOf(activeS.settingsServer, activeS.settingsApp, "Account", activeS.settingsAbout)
     var firebaseUser by remember { mutableStateOf(AccountManager.currentUser()) }
-    var signedInAccount by remember { mutableStateOf(AccountManager.currentDriveAccount(context)) }
+    var signedInAccount by remember { mutableStateOf<GoogleSignInAccount?>(null) }
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val acc = AccountManager.currentDriveAccount(context)
+            withContext(Dispatchers.Main) {
+                signedInAccount = acc
+            }
+        }
+    }
     var emailInput by rememberSaveable { mutableStateOf(firebaseUser?.email.orEmpty()) }
     var passwordInput by rememberSaveable { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
@@ -212,22 +221,23 @@ fun SettingsScreen(
             if (firebaseUser?.email?.isNullOrBlank() == false) {
                 emailInput = firebaseUser?.email.orEmpty()
             }
+            val activeAcc = signedInAccount
             driveStatus = when {
                 errorMessage != null -> errorMessage
-                signedInAccount != null -> "Signed in with Google as ${signedInAccount?.email ?: signedInAccount?.displayName.orEmpty()}."
+                activeAcc != null -> "Signed in with Google as ${activeAcc.email ?: activeAcc.displayName.orEmpty()}."
                 else -> "Google sign-in completed, but Drive access is not available yet."
             }
-            if (signedInAccount != null) {
+            if (activeAcc != null) {
                 scope.launch {
                     try {
                         driveStatus = "Synchronizing app settings..."
-                        val restored = DriveBackupManager.restoreAppSettings(context, signedInAccount!!)
+                        val restored = DriveBackupManager.restoreAppSettings(context, activeAcc)
                         if (restored) {
                             driveStatus = "Restored app settings from cloud backup."
                             context.findActivity()?.recreate()
                         } else {
-                            DriveBackupManager.uploadAppSettings(context, signedInAccount!!)
-                            driveStatus = "Signed in with Google as ${signedInAccount?.email ?: signedInAccount?.displayName.orEmpty()}. Settings backed up to cloud."
+                            DriveBackupManager.uploadAppSettings(context, activeAcc)
+                            driveStatus = "Signed in with Google as ${activeAcc.email ?: activeAcc.displayName.orEmpty()}. Settings backed up to cloud."
                         }
                     } catch (e: Exception) {
                         val cause = e.cause ?: e
@@ -243,8 +253,16 @@ fun SettingsScreen(
         }
     }
 
-    var currentState by remember { mutableStateOf(SettingsState()) }
-    var savedState by remember { mutableStateOf(SettingsState()) }
+    val initialSettings = remember {
+        SettingsState(
+            config = stateHolder.config,
+            autoRestartEnabled = preferences.autoRestart,
+            maxPowerEnabled = preferences.isMaxPowerMode,
+            forceExternalJvm = preferences.forceExternalJvm
+        )
+    }
+    var currentState by remember { mutableStateOf(initialSettings) }
+    var savedState by remember { mutableStateOf(initialSettings) }
     var hasLoadedInitial by remember { mutableStateOf(false) }
     var saveStatus by remember { mutableStateOf(SaveStatus.IDLE) }
     
@@ -255,7 +273,7 @@ fun SettingsScreen(
     var showMaxPowerWarning by remember { mutableStateOf(false) }
     var showBuildHeightWarning by remember { mutableStateOf(false) }
     var pendingBuildHeightValue by remember { mutableIntStateOf(320) }
-    var installedVersions by remember { mutableStateOf(scanInstalledVersions(context)) }
+    var installedVersions by remember { mutableStateOf<List<InstalledVersionInfo>>(emptyList()) }
     var selectedForDeletion by remember { mutableStateOf<Set<String>>(emptySet()) }
     var isDeletingVersions by remember { mutableStateOf(false) }
     var showThemeMaker by remember { mutableStateOf(false) }
@@ -299,28 +317,44 @@ fun SettingsScreen(
     }
 
     LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val versions = scanInstalledVersions(context)
+            withContext(Dispatchers.Main) {
+                installedVersions = versions
+            }
+        }
         stateHolder.refreshAll()
     }
 
     LaunchedEffect(stateHolder.config, isPremium) {
-        val maxPlayersLimit = if (isPremium) 50 else 10
-        val loadedState = SettingsState(
-            config = stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, maxPlayersLimit)),
-            forceGamemode = stateHolder.readServerProperty("force-gamemode")?.toBoolean() ?: false,
-            broadcastConsoleToOps = stateHolder.readServerProperty("broadcast-console-to-ops")?.toBoolean() ?: false,
-            hideOnlinePlayers = stateHolder.readServerProperty("hide-online-players")?.toBoolean() ?: false,
-            levelType = normalizeWorldType(stateHolder.readServerProperty("level-type")),
-            autoRestartEnabled = preferences.autoRestart,
-            maxPowerEnabled = preferences.isMaxPowerMode,
-            optimizationPreset = stateHolder.readOptimizationPreset(),
-            forceExternalJvm = preferences.forceExternalJvm
-        )
-        if (!hasLoadedInitial || !hasUnsavedChanges) {
-            currentState = loadedState
-            savedState = loadedState
-            hasLoadedInitial = true
-        } else {
-            savedState = loadedState
+        withContext(Dispatchers.IO) {
+            val maxPlayersLimit = if (isPremium) 50 else 10
+            val forceGamemodeVal = stateHolder.readServerProperty("force-gamemode")?.toBoolean() ?: false
+            val broadcastConsoleVal = stateHolder.readServerProperty("broadcast-console-to-ops")?.toBoolean() ?: false
+            val hideOnlineVal = stateHolder.readServerProperty("hide-online-players")?.toBoolean() ?: false
+            val levelTypeVal = normalizeWorldType(stateHolder.readServerProperty("level-type"))
+            val optPresetVal = stateHolder.readOptimizationPreset()
+
+            val loadedState = SettingsState(
+                config = stateHolder.config.copy(maxPlayers = stateHolder.config.maxPlayers.coerceIn(1, maxPlayersLimit)),
+                forceGamemode = forceGamemodeVal,
+                broadcastConsoleToOps = broadcastConsoleVal,
+                hideOnlinePlayers = hideOnlineVal,
+                levelType = levelTypeVal,
+                autoRestartEnabled = preferences.autoRestart,
+                maxPowerEnabled = preferences.isMaxPowerMode,
+                optimizationPreset = optPresetVal,
+                forceExternalJvm = preferences.forceExternalJvm
+            )
+            withContext(Dispatchers.Main) {
+                if (!hasLoadedInitial || !hasUnsavedChanges) {
+                    currentState = loadedState
+                    savedState = loadedState
+                    hasLoadedInitial = true
+                } else {
+                    savedState = loadedState
+                }
+            }
         }
     }
 
@@ -1006,9 +1040,10 @@ fun SettingsScreen(
                                                 // Silent fail
                                             }
                                         }
-                                        if (signedInAccount != null) {
+                                        val activeAcc = signedInAccount
+                                        if (activeAcc != null) {
                                             try {
-                                                DriveBackupManager.uploadAppSettings(context, signedInAccount!!)
+                                                DriveBackupManager.uploadAppSettings(context, activeAcc)
                                             } catch (e: Exception) {
                                                 // Silent fail
                                             }
@@ -2054,12 +2089,15 @@ fun SettingsScreen(
                                             levelType = normalizedLevelType
                                         )
                                         val result = runCatching {
-                                            stateHolder.saveSettings(nextConfig)
                                             withContext(Dispatchers.IO) {
-                                                stateHolder.writeServerProperty("force-gamemode", currentState.forceGamemode.toString())
-                                                stateHolder.writeServerProperty("broadcast-console-to-ops", currentState.broadcastConsoleToOps.toString())
-                                                stateHolder.writeServerProperty("hide-online-players", currentState.hideOnlinePlayers.toString())
+                                                // Batch all server.properties writes in a single read+write pass
+                                                stateHolder.writeBulkServerProperties(mapOf(
+                                                    "force-gamemode" to currentState.forceGamemode.toString(),
+                                                    "broadcast-console-to-ops" to currentState.broadcastConsoleToOps.toString(),
+                                                    "hide-online-players" to currentState.hideOnlinePlayers.toString()
+                                                ))
                                             }
+                                            stateHolder.saveSettings(nextConfig)
                                             stateHolder.applyOptimizationPresetBlocking(currentState.optimizationPreset)
                                             val preferencesSaved = preferences.saveRuntimeSettings(
                                                 autoRestart = currentState.autoRestartEnabled,
@@ -2082,7 +2120,7 @@ fun SettingsScreen(
                                             currentState = savedStateSnapshot
                                             savedState = savedStateSnapshot
                                             saveStatus = SaveStatus.SAVED
-                                            delay(1500)
+                                            delay(300)
                                             if (saveStatus == SaveStatus.SAVED) {
                                                 saveStatus = SaveStatus.IDLE
                                             }

@@ -58,8 +58,10 @@ class BedrockUdpBridge(
             try {
                 DatagramSocket().also { datagramSocket ->
                     datagramSocket.receiveBufferSize = 4 * 1024 * 1024  // 4 MB
-                    datagramSocket.sendBufferSize   = 1024 * 1024        // 1 MB
+                    datagramSocket.sendBufferSize   = 2 * 1024 * 1024        // 2 MB
                     datagramSocket.soTimeout = 30000 // 30s timeout
+                    runCatching { datagramSocket.trafficClass = 0x10 } // IPTOS_LOWDELAY
+                    datagramSocket.reuseAddress = true
                     datagramSocket.connect(InetAddress.getByName(geyserHost), GEYSER_LOCAL_PORT)
                     startListening(datagramSocket, frame.clientIp, frame.clientPort)
                 }

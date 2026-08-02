@@ -569,9 +569,9 @@ fun ConsoleScreen(
                         )
                     }
                     ServerUiState.STARTING -> {
-                        val isDone = stateHolder.isJavaServerDone || stateHolder.startupStatusMessage == "Server ready!"
-                        val displayPercent = if (isDone) 100 else stateHolder.startupProgressPercent
-                        val displayProgress = if (isDone) 1f else animatedStartupProgress
+                        val isDone = stateHolder.serverJoinable && (stateHolder.isJavaServerDone || stateHolder.startupStatusMessage == "Server ready!") && !stateHolder.isStopping
+                        val displayPercent = if (isDone) 100 else stateHolder.startupProgressPercent.coerceAtMost(99)
+                        val displayProgress = if (isDone) 1f else animatedStartupProgress.coerceAtMost(0.99f)
                         StartupProgressCard(
                             progress = displayProgress,
                             progressPercent = displayPercent,
@@ -1560,26 +1560,6 @@ private fun ServerIdentityCard(
                         ServerStatus.OFFLINE -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
 
-                    val pulse = rememberInfiniteTransition(label = "online_status_pulse")
-                    val ringAlpha by pulse.animateFloat(
-                        initialValue = if (stateHolder.status == ServerStatus.ONLINE) 0.45f else 0f,
-                        targetValue = 0f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(durationMillis = 1800),
-                            repeatMode = RepeatMode.Restart
-                        ),
-                        label = "online_status_alpha"
-                    )
-                    val ringScale by pulse.animateFloat(
-                        initialValue = 1f,
-                        targetValue = if (stateHolder.status == ServerStatus.ONLINE) 2.1f else 1f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(durationMillis = 1800),
-                            repeatMode = RepeatMode.Restart
-                        ),
-                        label = "online_status_scale"
-                    )
-
                     Surface(
                         modifier = Modifier
                             .card3d(
@@ -1617,13 +1597,6 @@ private fun ServerIdentityCard(
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (stateHolder.status == ServerStatus.ONLINE) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(4.dp)
-                                            .scale(ringScale)
-                                            .clip(CircleShape)
-                                            .background(Color.White.copy(alpha = ringAlpha))
-                                    )
                                     Box(
                                         modifier = Modifier
                                             .size(3.dp)

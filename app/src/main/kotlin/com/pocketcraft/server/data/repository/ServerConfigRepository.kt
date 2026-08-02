@@ -71,6 +71,14 @@ class ServerConfigRepository @Inject constructor(
         writeConfigFile(propertiesFile, config)
         writeConfigFile(serverFile(activeServer), config)
         writeSpigotYml(config)
+
+        val worldDir = File(serverDir, config.worldName.ifBlank { "world" })
+        val levelDat = File(worldDir, "level.dat")
+        if (levelDat.exists()) {
+            runCatching {
+                com.pocketcraft.server.service.NBTParser.updateDifficultyInLevelDat(levelDat, config.difficulty)
+            }
+        }
     }
 
     suspend fun loadWorldDetails(): WorldDetails = withContext(Dispatchers.IO) {

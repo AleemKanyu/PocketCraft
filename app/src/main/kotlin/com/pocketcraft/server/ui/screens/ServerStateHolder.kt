@@ -280,6 +280,7 @@ class ServerStateHolder(
 
     private fun updateServerUiState() {
         serverUiState = when {
+            isStopping && !isRestartingCycle && !pendingRestart -> ServerUiState.RUNNING
             isRunning && isJavaServerDone && serverJoinable -> ServerUiState.RUNNING
             isStarting || isRestartingCycle || isRunning -> ServerUiState.STARTING
             else -> ServerUiState.IDLE
@@ -567,11 +568,15 @@ class ServerStateHolder(
                         isStarting = false
                         isRestartingCycle = false
                         pendingRestart = false
+                        isJavaServerDone = false
+                        isGeyserDone = false
+                        areSpawnChunksLoaded = false
                     } else {
                         isStarting = true
                         isRestartingCycle = true
                         isJavaServerDone = false
                         isGeyserDone = false
+                        areSpawnChunksLoaded = false
                         startupStatusMessage = "Restarting server..."
                         startStartupProgressTracking()
                     }
@@ -1219,6 +1224,11 @@ class ServerStateHolder(
         restartFallbackJob?.cancel()
         restartFallbackJob = null
         isStopping = true
+        isJavaServerDone = false
+        isGeyserDone = false
+        areSpawnChunksLoaded = false
+        stopStartupProgressTracking(reset = true)
+        updateServerUiState()
         appendLog("[PocketCraft] Stopping server...")
         val durationSeconds = startedAtRealtime
             ?.let { ((SystemClock.elapsedRealtime() - it) / 1000L).coerceAtLeast(0L) }
@@ -1780,25 +1790,30 @@ class ServerStateHolder(
         val address = ServerHostService.getPersistedPublicAddress(appContext, versionId)
         val portOpen = isServerPortOpen(config.port)
         val processAlive = isServerProcessAlive()
-        val startingGracePeriod = isStarting || (lastStartRequestedRealtime > 0 && SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 120000L)
+
+        // If Java server startup has completed and process is alive, server is RUNNING (never regress to STARTING on screen switch)
+        if ((isRunning || isJavaServerDone) && processAlive) {
+            return PersistedRuntimeState(isRunning = true, publicAddress = address)
+        }
+
+        val startingGracePeriod = !isJavaServerDone && (isStarting || (lastStartRequestedRealtime > 0 && SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 120000L))
 
         if (rawState == ServerHostService.RUNTIME_STATE_RUNNING || isRunning) {
-            // Verify if the server is actually running by checking if port is open AND java server is done
-            if (portOpen && isJavaServerDone && areSpawnChunksLoaded) {
+            if ((portOpen || processAlive) && isJavaServerDone) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
-            if (startingGracePeriod && (processAlive || ServerHostService.isServiceRunning(appContext))) {
+            if (startingGracePeriod && processAlive) {
                 return PersistedRuntimeState(isStarting = true, publicAddress = address)
             }
             ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
             return PersistedRuntimeState()
         }
 
-        if (rawState == ServerHostService.RUNTIME_STATE_STARTING || isStarting) {
-            if (portOpen && isJavaServerDone) {
+        if (rawState == ServerHostService.RUNTIME_STATE_STARTING || isStarting || rawState.startsWith("STARTING")) {
+            if ((portOpen || processAlive) && isJavaServerDone) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
-            if (startingGracePeriod && (processAlive || ServerHostService.isServiceRunning(appContext))) {
+            if (startingGracePeriod && processAlive) {
                 return PersistedRuntimeState(isStarting = true, publicAddress = address)
             }
             // Dead state
@@ -2099,6 +2114,22 @@ class ServerStateHolder(
         file.writeText(lines.joinToString("\n"))
     }
 
+    fun writeBulkServerProperties(entries: Map<String, String>) {
+        if (entries.isEmpty()) return
+        val file = File(serverDir, "server.properties")
+        if (!file.exists()) return
+        val lines = file.readLines().toMutableList()
+        for ((key, value) in entries) {
+            val idx = lines.indexOfFirst { it.startsWith("$key=") }
+            if (idx >= 0) {
+                lines[idx] = "$key=$value"
+            } else {
+                lines.add("$key=$value")
+            }
+        }
+        file.writeText(lines.joinToString("\n"))
+    }
+
     fun copyPublicAddressToClipboard(): Boolean {
         val address = publicAddress?.trim().orEmpty()
         if (address.isBlank()) return false
@@ -2176,6 +2207,7 @@ class ServerStateHolder(
                 add("gamemode ${config.gameMode.lowercase()} @a")
                 add("gamerule pvp ${config.pvp}")
                 add("gamerule doMobSpawning ${config.spawnMonsters}")
+                add("save-all")
             }
         }
         return runCatching {
@@ -2594,7 +2626,8 @@ class ServerStateHolder(
                 return@withContext "No server files found to back up."
             }
 
-            ZipOutputStream(BufferedOutputStream(FileOutputStream(backupFile))).use { zip ->
+            ZipOutputStream(BufferedOutputStream(FileOutputStream(backupFile), 65536)).use { zip ->
+                zip.setLevel(java.util.zip.Deflater.BEST_SPEED)
                 withContext(Dispatchers.Main) {
                     backupStatusMessage = "Backing up server directory..."
                     backupProgressPercent = 5
@@ -3735,10 +3768,10 @@ class ServerStateHolder(
             while (isStarting && !isRunning) {
                 if (!isStopping) {
                     val elapsedMs = (SystemClock.elapsedRealtime() - (startupStartedAtRealtime ?: SystemClock.elapsedRealtime())).coerceAtLeast(0L)
-                    if (elapsedMs > 420_000L) {
-                        appendLog("[ERROR] Server startup timed out (exceeded 7 minutes).")
+                    if (elapsedMs > 720_000L) {
+                        appendLog("[ERROR] Server startup timed out (exceeded 12 minutes).")
                         stopServer()
-                        recordServerFailure("Server startup timed out (exceeded 7 minutes). Please verify your JRE settings or check the console log for errors.", duringStartup = true)
+                        recordServerFailure("Server startup timed out (exceeded 12 minutes). Please verify your JRE settings or check the console log for errors.", duringStartup = true)
                         break
                     }
                     val nextProgress = when {
@@ -3869,6 +3902,15 @@ class ServerStateHolder(
         ServerPropertiesWriter.overlayManagedValues(targetDir, props, ServerPropertiesWriter.toSnapshot(enforcedConfig), isPremium)
         ServerPropertiesHelper.saveProperties(targetDir, props)
 
+        // Directly sync difficulty to level.dat on disk to prevent world auto-saves from reverting difficulty to easy
+        val levelName = props.getProperty("level-name", enforcedConfig.worldName.ifBlank { "world" })
+        val worldDir = File(targetDir, levelName)
+        val levelDat = File(worldDir, "level.dat")
+        if (levelDat.exists()) {
+            runCatching {
+                com.pocketcraft.server.service.NBTParser.updateDifficultyInLevelDat(levelDat, enforcedConfig.difficulty)
+            }
+        }
 
         // Sync registries to all worlds to keep them updated
         val active = sanitizeWorldName(enforcedConfig.worldName)
@@ -3989,26 +4031,29 @@ class ServerStateHolder(
         val paperWorldFile = File(serverDir, "config/paper-world-defaults.yml")
         paperWorldFile.parentFile?.mkdirs()
 
+        // Read server.properties ONCE, apply all changes, save ONCE
+        val props = ServerPropertiesHelper.readProperties(serverDir)
+        props["pocketcraft-optimization-preset"] = preset
+
         when (preset) {
             "lite" -> {
                 writeBukkitSpawnLimits(bukkitFile, monsters = 50, animals = 12, waterAnimals = 5, waterAmbient = 15, ambient = 10)
-                writePaperWorldOptimization(paperWorldFile, entityActivation = true, eigenRedstone = true, crammingLimit = 16)
+                writePaperWorldOptimization(paperWorldFile, entityActivation = true, eigenRedstone = true, crammingLimit = 16, props = props)
             }
             "balanced" -> {
                 writeBukkitSpawnLimits(bukkitFile, monsters = 35, animals = 10, waterAnimals = 5, waterAmbient = 10, ambient = 5)
-                writePaperWorldOptimization(paperWorldFile, entityActivation = true, eigenRedstone = true, crammingLimit = 8)
+                writePaperWorldOptimization(paperWorldFile, entityActivation = true, eigenRedstone = true, crammingLimit = 8, props = props)
             }
             "performance" -> {
                 writeBukkitSpawnLimits(bukkitFile, monsters = 20, animals = 8, waterAnimals = 3, waterAmbient = 5, ambient = 3)
-                writePaperWorldOptimization(paperWorldFile, entityActivation = true, eigenRedstone = true, crammingLimit = 6)
+                writePaperWorldOptimization(paperWorldFile, entityActivation = true, eigenRedstone = true, crammingLimit = 6, props = props)
             }
             else -> {
                 writeBukkitSpawnLimits(bukkitFile, monsters = 70, animals = 15, waterAnimals = 5, waterAmbient = 20, ambient = 15)
-                writePaperWorldOptimization(paperWorldFile, entityActivation = false, eigenRedstone = false, crammingLimit = 24)
+                writePaperWorldOptimization(paperWorldFile, entityActivation = false, eigenRedstone = false, crammingLimit = 24, props = props)
             }
         }
-        val props = ServerPropertiesHelper.readProperties(serverDir)
-        props["pocketcraft-optimization-preset"] = preset
+        // Single write for all server.properties changes
         ServerPropertiesHelper.saveProperties(serverDir, props)
     }
 
@@ -4044,16 +4089,15 @@ class ServerStateHolder(
         paperWorldFile: File,
         entityActivation: Boolean,
         eigenRedstone: Boolean,
-        crammingLimit: Int
+        crammingLimit: Int,
+        props: java.util.Properties
     ) {
         val original = runCatching { paperWorldFile.readText() }.getOrDefault("")
         var updated = original
         updated = ensurePaperWorldValue(updated, "entity-activation-range", "enabled", entityActivation.toString())
         updated = ensurePaperWorldValue(updated, "misc", "use-faster-eigencraft-redstone", eigenRedstone.toString())
-        // max-entity-cramming lives in server.properties
-        val props = ServerPropertiesHelper.readProperties(serverDir)
+        // Write cramming limit into the already-loaded props object — caller saves once
         props["max-entity-cramming"] = crammingLimit.toString()
-        ServerPropertiesHelper.saveProperties(serverDir, props)
         if (updated != original) paperWorldFile.writeText(updated)
     }
 
@@ -5271,6 +5315,7 @@ class ServerStateHolder(
     }
 
     private fun collectBackupEntries(file: File, entries: MutableList<BackupPathEntry>) {
+        if (file.name in backupExcludeDirs || file.name.startsWith(".cache") || file.name.startsWith(".mixin")) return
         scanCount++
         val now = System.currentTimeMillis()
         if (now - lastScanUpdateMillis >= 150L) {
@@ -5286,10 +5331,12 @@ class ServerStateHolder(
             entries += BackupPathEntry(file = file, relativePath = "$relativePath/", isDirectory = true)
             file.listFiles()
                 .orEmpty()
+                .filter { it.name !in backupExcludeDirs && !it.name.startsWith(".cache") }
                 .forEach { child ->
                     collectBackupEntries(child, entries)
                 }
         } else if (file.isFile) {
+            if (file.name.endsWith(".zip") || file.name.endsWith(".tmp") || file.name == "session.lock") return
             entries += BackupPathEntry(file = file, relativePath = relativePath, isDirectory = false)
         }
     }
@@ -5321,7 +5368,7 @@ class ServerStateHolder(
         runCatching {
             FileInputStream(file).use { input ->
                 zip.putNextEntry(ZipEntry(entryName))
-                input.copyTo(zip)
+                input.copyTo(zip, bufferSize = 65536)
                 zip.closeEntry()
             }
         }.onFailure { error ->

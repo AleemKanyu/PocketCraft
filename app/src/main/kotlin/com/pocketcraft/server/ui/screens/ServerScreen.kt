@@ -14,6 +14,8 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -365,17 +367,8 @@ fun ServerScreen(
                             AnimatedContent(
                                 targetState = currentTab,
                                 transitionSpec = {
-                                    if (targetState.ordinal > initialState.ordinal) {
-                                        slideInHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 480)) { it / 12 } +
-                                            fadeIn(PocketMotion.softFloatTween(durationMillis = 380)) togetherWith
-                                            slideOutHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 420)) { -it / 14 } +
-                                            fadeOut(PocketMotion.softFloatTween(durationMillis = 240))
-                                    } else {
-                                        slideInHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 480)) { -it / 12 } +
-                                            fadeIn(PocketMotion.softFloatTween(durationMillis = 380)) togetherWith
-                                            slideOutHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 420)) { it / 14 } +
-                                            fadeOut(PocketMotion.softFloatTween(durationMillis = 240))
-                                    }
+                                    (fadeIn(tween(durationMillis = 120)) + scaleIn(initialScale = 0.985f, animationSpec = tween(durationMillis = 120))) togetherWith
+                                    (fadeOut(tween(durationMillis = 90)) + scaleOut(targetScale = 0.995f, animationSpec = tween(durationMillis = 90)))
                                 },
                                 label = "tab-navigation"
                             ) { targetTab ->
@@ -619,25 +612,6 @@ fun ServerScreen(
                 )
                 // Pulse only on first server start (discovery hint) — stops permanently after first tap
                 val showAttentionPulse = isServerActive && !isFloatingChatFirstTimeShown && chatNotificationCount == 0 && !showFloatingChatSheet
-                val infiniteTransition = rememberInfiniteTransition(label = "chat_fab_pulse")
-                val pulseScale by infiniteTransition.animateFloat(
-                    initialValue = 1f,
-                    targetValue = 1.45f,
-                    animationSpec = InfiniteRepeatableSpec(
-                        animation = tween(900, easing = FastOutSlowInEasing),
-                        repeatMode = RepeatMode.Restart
-                    ),
-                    label = "pulse_scale"
-                )
-                val pulseAlpha by infiniteTransition.animateFloat(
-                    initialValue = 0.55f,
-                    targetValue = 0f,
-                    animationSpec = InfiniteRepeatableSpec(
-                        animation = tween(900, easing = FastOutSlowInEasing),
-                        repeatMode = RepeatMode.Restart
-                    ),
-                    label = "pulse_alpha"
-                )
 
                 
                 Box(
@@ -647,17 +621,7 @@ fun ServerScreen(
                 ) {
                     // Attention pulse ring
                     if (showAttentionPulse) {
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .align(Alignment.Center)
-                                .graphicsLayer(
-                                    scaleX = pulseScale,
-                                    scaleY = pulseScale,
-                                    alpha = pulseAlpha
-                                )
-                                .background(PocketColors.Primary.copy(alpha = 0.5f), CircleShape)
-                        )
+                        AttentionPulseRing()
                     }
                     Box(
                         modifier = Modifier
@@ -1339,41 +1303,62 @@ fun ServerFailureDialog(
                                 isSending = true
                                 submitError = null
                                 val ticket = "PC-" + String.format("%06d", java.util.Random().nextInt(1000000))
-                                val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                                val data = hashMapOf(
-                                    "ticket" to ticket,
-                                    "reason" to reason,
-                                    "details" to details,
-                                    "consoleLines" to logs,
-                                    "device" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (Android ${android.os.Build.VERSION.RELEASE})",
-                                    "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
-                                )
-                                val timeoutJob = scope.launch {
-                                    kotlinx.coroutines.delay(8000)
-                                    if (isSending && ticketNumber == null) {
-                                        submitError = "Upload timed out. Check your connection or try again."
-                                        isSending = false
-                                    }
-                                }
-                                db.collection("tickets").document(ticket).set(data)
-                                    .addOnSuccessListener {
-                                        timeoutJob.cancel()
-                                        if (ticketNumber == null) {
+                                val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+
+                                fun performSubmit() {
+                                    val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                                    val uid = auth.currentUser?.uid ?: "anonymous"
+                                    val data = hashMapOf(
+                                        "ticket" to ticket,
+                                        "reason" to reason,
+                                        "details" to details,
+                                        "consoleLines" to logs,
+                                        "userId" to uid,
+                                        "device" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (Android ${android.os.Build.VERSION.RELEASE})",
+                                        "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                                    )
+                                    val timeoutJob = scope.launch {
+                                        kotlinx.coroutines.delay(8000)
+                                        if (isSending && ticketNumber == null) {
                                             ticketNumber = ticket
                                             isSending = false
                                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                             val clip = android.content.ClipData.newPlainText("PocketCraft Ticket", ticket)
                                             clipboard.setPrimaryClip(clip)
-                                            Toast.makeText(context, "Ticket created & copied to clipboard!", Toast.LENGTH_LONG).show()
+                                            Toast.makeText(context, "Ticket $ticket created & copied to clipboard!", Toast.LENGTH_LONG).show()
                                         }
                                     }
-                                    .addOnFailureListener { e ->
-                                        timeoutJob.cancel()
-                                        if (isSending) {
-                                            submitError = e.message ?: "Failed to upload logs"
-                                            isSending = false
+                                    db.collection("tickets").document(ticket).set(data)
+                                        .addOnSuccessListener {
+                                            timeoutJob.cancel()
+                                            if (ticketNumber == null) {
+                                                ticketNumber = ticket
+                                                isSending = false
+                                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                                val clip = android.content.ClipData.newPlainText("PocketCraft Ticket", ticket)
+                                                clipboard.setPrimaryClip(clip)
+                                                Toast.makeText(context, "Ticket $ticket created & copied to clipboard!", Toast.LENGTH_LONG).show()
+                                            }
                                         }
-                                    }
+                                        .addOnFailureListener { e ->
+                                            timeoutJob.cancel()
+                                            if (isSending) {
+                                                ticketNumber = ticket
+                                                isSending = false
+                                                val fullReport = "Ticket: $ticket\nReason: $reason\nDetails: $details\nLogs:\n${logs.takeLast(25).joinToString("\n")}"
+                                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                                val clip = android.content.ClipData.newPlainText("PocketCraft Ticket $ticket", fullReport)
+                                                clipboard.setPrimaryClip(clip)
+                                                Toast.makeText(context, "Ticket $ticket generated! Log report copied to clipboard.", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                }
+
+                                if (auth.currentUser == null) {
+                                    auth.signInAnonymously().addOnCompleteListener { performSubmit() }
+                                } else {
+                                    performSubmit()
+                                }
                             },
                             enabled = !isSending,
                             modifier = Modifier.weight(1f),
@@ -1661,4 +1646,37 @@ fun BatteryOptimizationDialog(onAccept: () -> Unit, onDismiss: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun AttentionPulseRing() {
+    val infiniteTransition = rememberInfiniteTransition(label = "chat_fab_pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.45f,
+        animationSpec = androidx.compose.animation.core.InfiniteRepeatableSpec(
+            animation = tween(900, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+        ),
+        label = "pulse_scale"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.55f,
+        targetValue = 0f,
+        animationSpec = androidx.compose.animation.core.InfiniteRepeatableSpec(
+            animation = tween(900, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+        ),
+        label = "pulse_alpha"
+    )
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .graphicsLayer(
+                scaleX = pulseScale,
+                scaleY = pulseScale,
+                alpha = pulseAlpha
+            )
+            .background(PocketColors.Primary.copy(alpha = 0.5f), CircleShape)
+    )
 }

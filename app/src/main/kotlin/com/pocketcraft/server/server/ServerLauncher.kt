@@ -301,8 +301,10 @@ class ServerLauncher(private val context: Context) {
             else -> 512
         }
         val availRamCap = (availRam * 0.85f).toInt().coerceAtLeast(deviceProfile.minHeapFloorMb)
+        val maxHeapCapForAndroid = if (preferInProcessJvm) 1536 else maxAllowedRam
         val maxRamMb = requestedMaxRamMb
             .coerceAtMost(availRamCap)
+            .coerceAtMost(maxHeapCapForAndroid)
             .coerceIn(deviceProfile.minHeapFloorMb, maxAllowedRam)
         val minRamMb = requestedMinRamMb.coerceIn(deviceProfile.minHeapFloorMb, maxRamMb)
 
@@ -697,25 +699,33 @@ class ServerLauncher(private val context: Context) {
         // On high-RAM devices pre-touch heap pages at JVM startup to eliminate page-fault
         // latency spikes during GC. Only enable when we have >5GB total RAM so startup cost
         // doesn't hurt low-memory devices.
+        val concGcThreads = (cores / 2).coerceIn(1, 4)
         val gcFlags = buildList {
-            add("-XX:G1NewSizePercent=30")
-            add("-XX:G1MaxNewSizePercent=40")
-            add("-XX:G1ReservePercent=20")
-            add("-XX:InitiatingHeapOccupancyPercent=15")
-            add("-XX:G1HeapWastePercent=5")
-            add("-XX:G1MixedGCCountTarget=4")
-            add("-XX:G1MixedGCLiveThresholdPercent=90")
-            add("-XX:G1RSetUpdatingPauseTimePercent=5")
+            add("-XX:+UseG1GC")
+            add("-XX:+ParallelRefProcEnabled")
+            add("-XX:ConcGCThreads=$concGcThreads")
+            add("-XX:InitiatingHeapOccupancyPercent=45")
+            add("-XX:G1HeapWastePercent=10")
+            add("-XX:G1MixedGCCountTarget=8")
             add("-XX:G1HeapRegionSize=${g1RegionSizeMb}m")
-            add("-XX:SurvivorRatio=32")
-            add("-XX:MaxTenuringThreshold=1")
+            add("-XX:SurvivorRatio=8")
             add("-XX:-AlwaysPreTouch")
         }
 
         val vmArgs = mutableListOf(
             "-Xmx${maxRamMb}m",
             "-Xms${minRamMb}m",
+            "-XX:+TieredCompilation",
             "-Djava.home=$jrePath",
+            "-Xverify:none",
+            "-XX:+UnlockDiagnosticVMOptions",
+            "-XX:TieredStopAtLevel=1",
+            "-Dca.spottedleaf.dataconverter.parallel=true",
+            "-Dca.spottedleaf.dataconverter.threads=4",
+            "-Dyggdrasil.service.host=127.0.0.1",
+            "-Dmojang.services.host=127.0.0.1",
+            "-Djava.home=$jrePath",
+            "-Djava.security.egd=file:/dev/urandom",
             "-Djava.io.tmpdir=$tmpDir",
             "-Djna.tmpdir=$tmpDir",
             "-Djansi.tmpdir=$tmpDir",
@@ -734,6 +744,7 @@ class ServerLauncher(private val context: Context) {
             "-Dfile.encoding=UTF-8",
             "-Dusing.aikars.flags=https://mcflags.emc.gs",
             "-Dpaper.playerconnection.keepalive=90",
+            "-Dpaper.disable-profile-key-verification=true",
             "-Dorg.jline.terminal.jna=false",
             "-Dorg.jline.terminal.jni=false",
             "-Dorg.jline.terminal.dumb=true",
@@ -742,8 +753,8 @@ class ServerLauncher(private val context: Context) {
             "-DPaper.IgnoreJavaVersion=true",
             "-Dpaper.disable-update-check=true",
             "-Dpaper.disable-plugin-update-check=true",
-            "-Dsun.net.client.defaultConnectTimeout=5000",
-            "-Dsun.net.client.defaultReadTimeout=5000",
+            "-Dsun.net.client.defaultConnectTimeout=1000",
+            "-Dsun.net.client.defaultReadTimeout=1000",
             "-Dsun.zip.disableMemoryMapping=true",
             "-Djdk.attach.allowAttachSelf=true",
             "-Djna.nosys=true",
@@ -766,8 +777,10 @@ class ServerLauncher(private val context: Context) {
                 add("-XX:-UsePerfData")
                 add("-XX:-UseContainerSupport")
                 add("-XX:ErrorFile=$errorFilePattern")
-                // maxOrder=8 → max pooled buffer = 256KB * 2^8 = 2MB (was 4MB with order=9).
-                // Smaller max allocation reduces swap page-in stalls on the Netty I/O path.
+                // Tighten recycler pools & increase Netty event loop threads for low ping
+                val nettyLoopThreads = cores.coerceIn(4, 8)
+                add("-Dio.netty.eventLoopThreads=$nettyLoopThreads")
+                add("-Dpaper.maxChunkIOThreads=$nettyLoopThreads")
                 add("-Dio.netty.allocator.maxOrder=8")
                 // Tighten recycler pools: the default 262144 cap was holding ~100MB of
                 // pooled byte buffers in swap, causing page-in latency on packet sends.
@@ -1074,13 +1087,13 @@ class ServerLauncher(private val context: Context) {
     ): Int {
         val vd = viewDistance.coerceIn(4, 32)
         if (flightModeEnabled) {
-            val base = if (cellularRelay) 20 else 24
-            val viewScale = (7.0 / vd).pow(0.7).coerceIn(0.45, 1.0)
-            return (base * viewScale + 2).toInt().coerceIn(16, 26)
+            val base = if (cellularRelay) 100 else 280
+            val viewScale = (7.0 / vd).pow(0.4).coerceIn(0.7, 1.0)
+            return (base * viewScale + 10).toInt().coerceIn(if (cellularRelay) 80 else 180, if (cellularRelay) 180 else 400)
         }
-        val base = if (cellularRelay) 17 else 22
-        val viewScale = (7.0 / vd).pow(0.65).coerceIn(0.55, 1.0)
-        return (base * viewScale).toInt().coerceIn(13, 20)
+        val base = if (cellularRelay) 80 else 220
+        val viewScale = (7.0 / vd).pow(0.35).coerceIn(0.75, 1.0)
+        return (base * viewScale).toInt().coerceIn(if (cellularRelay) 60 else 140, if (cellularRelay) 140 else 350)
     }
 
     private fun computeRelayChunkConcurrency(
@@ -1088,12 +1101,10 @@ class ServerLauncher(private val context: Context) {
         flightModeEnabled: Boolean
     ): Triple<Int, Int, Int> {
         // Returns Triple(concurrentGenerates, concurrentLoads, concurrentSends)
-        // Keep concurrentSends = 1 so chunk sends are serialized, preventing keepalive/ping
-        // packets from queuing behind parallel chunk bursts.
         return if (flightModeEnabled) {
-            if (cellularRelay) Triple(3, 4, 1) else Triple(4, 5, 1)
+            if (cellularRelay) Triple(8, 12, 4) else Triple(12, 20, 10)
         } else {
-            if (cellularRelay) Triple(3, 4, 1) else Triple(4, 5, 1)
+            if (cellularRelay) Triple(6, 10, 3) else Triple(10, 16, 8)
         }
     }
 
@@ -1103,13 +1114,13 @@ class ServerLauncher(private val context: Context) {
     ): Pair<Int, Int> {
         return if (flightModeEnabled) {
             Pair(
-                (chunkSendRate * 4).coerceIn(40, 78),
-                (chunkSendRate * 5).coerceIn(52, 96)
+                (chunkSendRate * 2).coerceIn(120, 350),
+                (chunkSendRate * 3).coerceIn(250, 600)
             )
         } else {
             Pair(
-                (chunkSendRate * 4).coerceIn(42, 72),
-                (chunkSendRate * 6).coerceIn(56, 90)
+                (chunkSendRate * 2).coerceIn(100, 300),
+                (chunkSendRate * 3).coerceIn(200, 500)
             )
         }
     }
@@ -1280,14 +1291,14 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", concurrentLoads.toString())
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-sends", concurrentSends.toString())
 
-        // Capping to 2 threads prevents CPU core oversaturation, leaving cores open for main thread, GC, and bridge.
-        val threads = 2
+        // Dynamically scale chunk I/O and worker threads based on available CPU cores (4 to 8)
+        val threads = (Runtime.getRuntime().availableProcessors() - 1).coerceIn(4, 8)
 
         updated = removeYamlPathKey(updated, listOf("misc"), "io-threads")
         updated = removeYamlPathKey(updated, listOf("misc"), "worker-threads")
         updated = ensureYamlSectionValue(updated, "chunk-system", "io-threads", threads.toString())
         updated = ensureYamlSectionValue(updated, "chunk-system", "worker-threads", threads.toString())
-        updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "3")
+        updated = ensureYamlSectionValue(updated, "misc", "max-joins-per-tick", "6")
 
         // Disable bundled Spark profiler (fails to load native libraries on Android)
         updated = ensureYamlSectionValue(updated, "spark", "enabled", "false")
@@ -1298,13 +1309,12 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlPathValue(updated, listOf("timings"), "really-enabled", "false")
         updated = ensureYamlPathValue(updated, listOf("timings"), "server-name-privacy", "true")
 
-        // Keep-alive: extend timeout so high-latency relay players aren't kicked.
-        // Use a 15-second interval (300 ticks): avoids TCP packet queue congestion on relay tunnel.
-        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-timeout", "60")
-        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-interval", "15")
-        // Compression level 4 is a better latency/CPU tradeoff than 6 for mobile servers.
-        // Higher levels add measurable CPU overhead on the server tick thread per packet.
-        updated = ensureYamlSectionValue(updated, "misc", "compression-level", "4")
+        // Keep-alive: 10s interval for low-ping packet flow without timeout disconnects.
+        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-timeout", "30")
+        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-interval", "10")
+        // Compression level 1 is the fastest compression level (~75% less CPU overhead than level 4).
+        // This eliminates CPU spikes on the tick thread per packet, keeping server ping ultra-low.
+        updated = ensureYamlSectionValue(updated, "misc", "compression-level", "1")
 
         // Disable updater and metrics submission checks to prevent slow network lookup stalls on startup
         updated = ensureYamlPathValue(updated, listOf("updater"), "updater-status", "none")
@@ -1368,6 +1378,16 @@ class ServerLauncher(private val context: Context) {
         onOutput: (String) -> Unit
     ) {
         val configDir = File(serverDir, "config").also { it.mkdirs() }
+        val paperGlobalFile = File(configDir, "paper-global.yml")
+        var globalYaml = runCatching { paperGlobalFile.readText() }.getOrDefault("")
+        val origGlobal = globalYaml
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "player-max-concurrent-loads", "4")
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "global-max-concurrent-loads", "8")
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "target-background-loads", "2")
+        if (globalYaml != origGlobal) {
+            paperGlobalFile.writeText(globalYaml)
+        }
+
         val paperWorldDefaults = File(configDir, "paper-world-defaults.yml")
         val original = runCatching { paperWorldDefaults.readText() }.getOrDefault("")
 
@@ -1380,17 +1400,21 @@ class ServerLauncher(private val context: Context) {
         // paper-world-defaults.yml uses top-level sections. Nesting these under a
         // synthetic "world-defaults" key makes Paper ignore every optimization.
         // On high-RAM devices keep chunks warm much longer to prevent re-load flicker.
-        // 30s gives players time to backtrack without chunks being evicted.
+        // 120s gives players time to explore/backtrack without chunks being evicted.
         val totalRamMb = com.pocketcraft.server.util.RamUtils.getAvailableRamMb(context) +
             (Runtime.getRuntime().totalMemory() / 1024 / 1024).toInt()
-        val chunkUnloadDelay = if (totalRamMb >= 4000) "30s" else "10s"
+        val chunkUnloadDelay = if (totalRamMb >= 4000) "120s" else "60s"
         // More chunks saved per tick on high-RAM = spread I/O evenly, no big auto-save spike.
-        val autoSavePerTick = if (totalRamMb >= 4000) 8 else 4
+        val autoSavePerTick = if (totalRamMb >= 4000) 12 else 6
 
         updated = removeYamlTopLevelSection(updated, "world-defaults")
         updated = ensureYamlPathValue(updated, listOf("chunks"), "delay-chunk-unloads-by", chunkUnloadDelay)
         updated = ensureYamlPathValue(updated, listOf("chunks"), "max-auto-save-chunks-per-tick", autoSavePerTick.toString())
         updated = ensureYamlPathValue(updated, listOf("chunks"), "prevent-moving-into-unloaded-chunks", "true")
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded-range", "0")
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded", "false")
+        updated = ensureYamlPathValue(updated, listOf("spawn-chunks"), "keep-spawn-loaded", "false")
+        updated = ensureYamlPathValue(updated, listOf("spawn-chunks"), "spawn-chunk-radius", "0")
         updated = ensureYamlPathValue(updated, listOf("collisions"), "max-entity-collisions", "2")
 
         // Entity save limits to reduce chunk I/O overhead
@@ -1404,6 +1428,21 @@ class ServerLauncher(private val context: Context) {
         if (updated != original) {
             paperWorldDefaults.writeText(updated)
             onOutput("[PocketCraft] Paper world defaults updated: entity limits + chunk unload buffer + anti-void walking.")
+        }
+
+        serverDir.listFiles()?.filter { it.isDirectory }?.forEach { subDir ->
+            val paperWorldFile = File(subDir, "paper-world.yml")
+            if (paperWorldFile.exists()) {
+                var worldYaml = runCatching { paperWorldFile.readText() }.getOrDefault("")
+                val origYaml = worldYaml
+                worldYaml = ensureYamlPathValue(worldYaml, listOf("spawn-chunks"), "keep-spawn-loaded", "false")
+                worldYaml = ensureYamlPathValue(worldYaml, listOf("spawn-chunks"), "spawn-chunk-radius", "0")
+                worldYaml = ensureYamlPathValue(worldYaml, listOf("chunks"), "keep-spawn-loaded-range", "0")
+                worldYaml = ensureYamlPathValue(worldYaml, listOf("chunks"), "keep-spawn-loaded", "false")
+                if (worldYaml != origYaml) {
+                    paperWorldFile.writeText(worldYaml)
+                }
+            }
         }
     }
 

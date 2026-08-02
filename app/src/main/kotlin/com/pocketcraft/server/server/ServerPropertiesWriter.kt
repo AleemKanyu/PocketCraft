@@ -126,6 +126,7 @@ object ServerPropertiesWriter {
         // can leak an unspecified address into join/status paths on some builds.
         props["server-ip"] = ""
         props["network-compression-threshold"] = ServerPropertiesHelper.RELAY_READY_COMPRESSION_THRESHOLD.toString()
+        props["spawn-chunk-radius"] = "0"
         props["sync-chunk-writes"] = "false"
         props["max-tick-time"] = "60000"
         props["enable-rcon"] = "true"

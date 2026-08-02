@@ -252,6 +252,20 @@ fun PremiumUpgradeBottomSheet(
                 }
 
                 DuoButton(
+                    text = "RESTORE PURCHASES",
+                    onClick = {
+                        billingManager.restorePurchases { result ->
+                            Toast.makeText(context, result, Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    variant = DuoButtonVariant.Secondary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    minHeight = 38.dp
+                )
+
+                DuoButton(
                     text = "MAYBE LATER",
                     onClick = {
                         scope.launch {

@@ -47,4 +47,8 @@
         <key>feature_premium_purchase_enabled</key>
         <value>false</value>
     </entry>
+    <entry>
+        <key>feature_free_trial_enabled</key>
+        <value>true</value>
+    </entry>
 </defaultsMap>

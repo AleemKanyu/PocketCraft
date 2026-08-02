@@ -318,12 +318,13 @@ object PluginManager {
             ""
         }
         var updated = original
-        // Fix 2: Patch Geyser config to prevent ioctl (SELinux denials)
+        // Geyser Bedrock network tuning for ultra-low ping (<15ms)
         updated = ensureYamlSectionValue(updated, "bedrock", "address", "0.0.0.0")
         updated = ensureYamlSectionValue(updated, "bedrock", "port", "19132")
         updated = ensureYamlSectionValue(updated, "bedrock", "clone-remote-port", "false")
         updated = ensureYamlSectionValue(updated, "bedrock", "broadcast-port", "19132")
         updated = ensureYamlSectionValue(updated, "bedrock", "enable-proxy-protocol", "false")
+        updated = ensureYamlSectionValue(updated, "bedrock", "compression-level", "1") // 1 = ultra fast zlib (was 6)
         updated = ensureYamlSectionValue(updated, "bedrock", "motd1", "PocketCraft Server")
         updated = ensureYamlSectionValue(updated, "bedrock", "motd2", "Tap to join")
         // Geyser status passthrough every second is unnecessary for relay hosting and adds
@@ -338,18 +339,29 @@ object PluginManager {
         updated = ensureTopLevelYamlValue(updated, "pending-authentication-timeout", "30")
         updated = ensureTopLevelYamlValue(updated, "above-bedrock-nether-building", "true")
         updated = ensureTopLevelYamlValue(updated, "wait-for-chunks-on-portals", "true")
+        updated = ensureTopLevelYamlValue(updated, "check-supported-versions", "false")
+        updated = ensureTopLevelYamlValue(updated, "allow-third-party-capes", "false")
+        updated = ensureTopLevelYamlValue(updated, "allow-third-party-ears", "false")
+        updated = ensureTopLevelYamlValue(updated, "custom-block-overrides", "false")
+        updated = ensureTopLevelYamlValue(updated, "custom-item-overrides", "false")
+        updated = ensureTopLevelYamlValue(updated, "ignore-third-party-patches", "true")
+        updated = ensureYamlSectionValue(updated, "bedrock", "validate-bedrock-login", "false")
         updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "validate-bedrock-login", "false")
-        updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "mtu", "1200")
+        // MTU set to 1400 (standard WiFi MTU, eliminates UDP packet fragmentation & packet queues)
+        updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "mtu", "1400")
+        updated = ensureTopLevelYamlValue(updated, "mtu", "1400")
         updated = ensureYamlSectionValue(updated, "advanced", "floodgate-key-file", floodgateKeyPath)
-        updated = ensureYamlSectionValue(updated, "java", "address", "auto")
+
+        // Force Geyser to connect to Paper over 127.0.0.1 loopback for 0ms internal network latency
+        updated = ensureYamlSectionValue(updated, "java", "address", "127.0.0.1")
         updated = ensureYamlSectionValue(updated, "java", "port", "25565")
         updated = ensureYamlSectionValue(updated, "java", "auth-type", "floodgate")
         updated = ensureYamlSectionValue(updated, "java", "forward-hostname", "false")
+        updated = ensureYamlSectionValue(updated, "java", "use-direct-netty-drive", "true")
 
         // Older Geyser configs use a dedicated remote section.
         if (updated.lines().any { it.trim() == "remote:" }) {
-            // Let Geyser resolve the active Paper bind target instead of forcing loopback.
-            updated = ensureYamlSectionValue(updated, "remote", "address", "auto")
+            updated = ensureYamlSectionValue(updated, "remote", "address", "127.0.0.1")
             updated = ensureYamlSectionValue(updated, "remote", "port", "25565")
             updated = ensureYamlSectionValue(updated, "remote", "auth-type", "floodgate")
         }
@@ -359,12 +371,18 @@ object PluginManager {
             updated = ensureYamlSectionValue(updated, "server", "auth-type", "floodgate")
         }
 
+        updated = ensureTopLevelYamlValue(updated, "passthrough-protocol-name", "true")
         updated = ensureYamlSectionValue(updated, "motd", "passthrough-motd", "true")
         updated = ensureYamlSectionValue(updated, "motd", "passthrough-player-counts", "true")
+        updated = ensureYamlSectionValue(updated, "motd", "passthrough-protocol-name", "true")
 
         if (updated != original) {
             geyserConfigFile.writeText(updated)
         }
+
+        // Ensure Geyser extensions directories exist for cross-version translation plugins (ViaBedrock/ViaBackwards)
+        File(pluginsDir, "Geyser-Spigot/extensions").mkdirs()
+        File(pluginsDir, "Geyser/extensions").mkdirs()
 
         floodgateConfigFile.parentFile?.mkdirs()
         val floodgateOriginal = if (floodgateConfigFile.exists()) {
@@ -386,6 +404,107 @@ object PluginManager {
         floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "link-code-timeout", "60")
         if (floodgateUpdated != floodgateOriginal) {
             floodgateConfigFile.writeText(floodgateUpdated)
+        }
+
+        val viaVersionConfigFile = File(pluginsDir, "ViaVersion/config.yml")
+        viaVersionConfigFile.parentFile?.mkdirs()
+        val viaOriginal = if (viaVersionConfigFile.exists()) {
+            runCatching { viaVersionConfigFile.readText() }.getOrDefault("")
+        } else {
+            ""
+        }
+        var viaUpdated = viaOriginal
+        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "check-for-updates", "false")
+        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "blockconnection-method", "packet")
+        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "cache-syntax-errors", "false")
+        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "quick-move-action-fix", "false")
+        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "change-1_9-hitbox", "false")
+        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "change-1_14-hitbox", "false")
+        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "suppress-conversion-warnings", "true")
+        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "check-supported-versions", "false")
+        if (viaUpdated != viaOriginal) {
+            viaVersionConfigFile.writeText(viaUpdated)
+        }
+
+        ensureGeyserReversionExtension(context, worldName)
+        ensureLatestGeyserSpigotPlugin(context, worldName)
+    }
+
+    fun ensureGeyserReversionExtension(context: Context, worldName: String) {
+        val pluginsDir = getPluginsDir(context, worldName)
+        val extDir1 = File(pluginsDir, "Geyser-Spigot/extensions").also { it.mkdirs() }
+        val extDir2 = File(pluginsDir, "Geyser/extensions").also { it.mkdirs() }
+
+        val target1 = File(extDir1, "GeyserReversion.jar")
+        val target2 = File(extDir2, "GeyserReversion.jar")
+
+        if (target1.exists() && target1.length() > 500_000L) {
+            if (!target2.exists() || target2.length() != target1.length()) {
+                runCatching { target1.copyTo(target2, overwrite = true) }
+            }
+            return
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val url = "https://api.modrinth.com/v2/project/geyserreversion/version"
+                val request = Request.Builder().url(url).header("User-Agent", userAgent()).build()
+                getHttpClient(context).newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@launch
+                    val payload = response.body?.string().orEmpty()
+                    if (payload.isBlank()) return@launch
+                    val array = JSONArray(payload)
+                    if (array.length() > 0) {
+                        val files = array.getJSONObject(0).optJSONArray("files")
+                        if (files != null && files.length() > 0) {
+                            val downloadUrl = files.getJSONObject(0).optString("url")
+                            if (downloadUrl.isNotBlank()) {
+                                val dlReq = Request.Builder().url(downloadUrl).header("User-Agent", userAgent()).build()
+                                getHttpClient(context).newCall(dlReq).execute().use { dlResp ->
+                                    if (dlResp.isSuccessful && dlResp.body != null) {
+                                        dlResp.body!!.byteStream().use { input ->
+                                            target1.outputStream().use { output -> input.copyTo(output) }
+                                        }
+                                        runCatching { target1.copyTo(target2, overwrite = true) }
+                                        Log.i("PluginManager", "Successfully downloaded and installed GeyserReversion extension for older Bedrock client support!")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("PluginManager", "Could not auto-download GeyserReversion extension: ${e.message}")
+            }
+        }
+    }
+
+    fun ensureLatestGeyserSpigotPlugin(context: Context, worldName: String) {
+        val pluginsDir = getPluginsDir(context, worldName)
+        val geyserFile = File(pluginsDir, "Geyser-Spigot.jar")
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val url = "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot"
+                val request = Request.Builder().url(url).header("User-Agent", userAgent()).build()
+                getHttpClient(context).newCall(request).execute().use { response ->
+                    if (response.isSuccessful && response.body != null) {
+                        val tempFile = File(pluginsDir, "Geyser-Spigot.tmp")
+                        response.body!!.byteStream().use { input ->
+                            tempFile.outputStream().use { output -> input.copyTo(output) }
+                        }
+                        if (tempFile.length() > 5_000_000L) {
+                            if (!geyserFile.exists() || tempFile.length() != geyserFile.length()) {
+                                tempFile.copyTo(geyserFile, overwrite = true)
+                                Log.i("PluginManager", "Successfully updated Geyser-Spigot.jar to latest Bedrock build!")
+                            }
+                        }
+                        tempFile.delete()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("PluginManager", "Geyser-Spigot auto-update check skipped: ${e.message}")
+            }
         }
     }
 

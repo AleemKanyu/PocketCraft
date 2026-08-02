@@ -505,7 +505,7 @@ fun PocketCraftApp(
             return@LaunchedEffect
         }
         val nextScreen = transitionTarget ?: Screen.SERVER
-        delay(220)
+        delay(40)
         screen = nextScreen
         transitionTarget = null
     }
@@ -1116,10 +1116,10 @@ fun PocketCraftApp(
         AnimatedContent(
             targetState = screen,
             transitionSpec = {
-                (fadeIn(animationSpec = PocketMotion.softFloatTween(durationMillis = 420)) +
-                    scaleIn(initialScale = 0.985f, animationSpec = PocketMotion.softFloatTween(durationMillis = 480))) togetherWith
-                (fadeOut(animationSpec = PocketMotion.softFloatTween(durationMillis = 240)) +
-                    scaleOut(targetScale = 0.995f, animationSpec = PocketMotion.softFloatTween(durationMillis = 320)))
+                (fadeIn(animationSpec = PocketMotion.softFloatTween(durationMillis = 120)) +
+                    scaleIn(initialScale = 0.99f, animationSpec = PocketMotion.softFloatTween(durationMillis = 140))) togetherWith
+                (fadeOut(animationSpec = PocketMotion.softFloatTween(durationMillis = 100)) +
+                    scaleOut(targetScale = 0.995f, animationSpec = PocketMotion.softFloatTween(durationMillis = 120)))
             },
             label = "app_screen_transition"
         ) { targetScreen ->

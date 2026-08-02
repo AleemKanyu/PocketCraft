@@ -19,12 +19,14 @@ object RemoteConfigManager {
     private val _relayRegions = MutableStateFlow(RelayServers.defaultRegions())
     private val _customSubdomainEnabled = MutableStateFlow(false)
     private val _premiumPurchaseEnabled = MutableStateFlow(false)
+    private val _freeTrialEnabled = MutableStateFlow(true)
 
     val showDiscordButton: Flow<Boolean> = _showDiscordButton.asStateFlow()
     val showInstagramButton: Flow<Boolean> = _showInstagramButton.asStateFlow()
     val relayRegions: Flow<List<RelayRegion>> = _relayRegions.asStateFlow()
     val customSubdomainEnabled: Flow<Boolean> = _customSubdomainEnabled.asStateFlow()
     val premiumPurchaseEnabled: Flow<Boolean> = _premiumPurchaseEnabled.asStateFlow()
+    val freeTrialEnabled: Flow<Boolean> = _freeTrialEnabled.asStateFlow()
 
     private var isInitialized = false
 
@@ -56,6 +58,7 @@ object RemoteConfigManager {
             _showInstagramButton.value = remoteConfig.getBoolean("show_instagram_button")
             _customSubdomainEnabled.value = remoteConfig.getBoolean("feature_custom_subdomain_enabled")
             _premiumPurchaseEnabled.value = remoteConfig.getBoolean("feature_premium_purchase_enabled")
+            _freeTrialEnabled.value = remoteConfig.getBoolean("feature_free_trial_enabled")
             updateRelayRegions(remoteConfig.getString("relay_servers"), context)
 
             isInitialized = true
@@ -74,6 +77,7 @@ object RemoteConfigManager {
             _showInstagramButton.value = remoteConfig.getBoolean("show_instagram_button")
             _customSubdomainEnabled.value = remoteConfig.getBoolean("feature_custom_subdomain_enabled")
             _premiumPurchaseEnabled.value = remoteConfig.getBoolean("feature_premium_purchase_enabled")
+            _freeTrialEnabled.value = remoteConfig.getBoolean("feature_free_trial_enabled")
             updateRelayRegions(remoteConfig.getString("relay_servers"), context)
         } catch (e: Exception) {
             // Keep existing values on error
@@ -96,6 +100,10 @@ object RemoteConfigManager {
 
     fun isPremiumPurchaseEnabledSync(): Boolean {
         return FirebaseRemoteConfig.getInstance().getBoolean("feature_premium_purchase_enabled")
+    }
+
+    fun isFreeTrialEnabledSync(): Boolean {
+        return runCatching { FirebaseRemoteConfig.getInstance().getBoolean("feature_free_trial_enabled") }.getOrDefault(true)
     }
 
     private fun hydrateRelayRegionsFromCache(context: Context) {

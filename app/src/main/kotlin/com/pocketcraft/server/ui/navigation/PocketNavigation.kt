@@ -242,23 +242,8 @@ fun PocketTopBar(
             ) {
                 // Pro star button
                 if (!isPremium) {
-                    val infiniteTransition = rememberInfiniteTransition(label = "star_pulse")
-                    val pulseScale by infiniteTransition.animateFloat(
-                        initialValue = 1.0f,
-                        targetValue = 1.15f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(1200, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "star_scale"
-                    )
-
                     Box(
                         modifier = Modifier
-                            .graphicsLayer {
-                                scaleX = pulseScale
-                                scaleY = pulseScale
-                            }
                             .size(28.dp)
                             .raisedBorder(
                                 color = Color(0xFFFFD700), // Gold

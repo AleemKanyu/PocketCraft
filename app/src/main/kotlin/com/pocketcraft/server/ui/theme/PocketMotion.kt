@@ -14,7 +14,7 @@ object PocketMotion {
     val SmoothEmphasis = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 
     fun softFloatTween(
-        durationMillis: Int = 420,
+        durationMillis: Int = 180,
         delayMillis: Int = 0
     ): FiniteAnimationSpec<Float> = tween(
         durationMillis = durationMillis,
@@ -23,7 +23,7 @@ object PocketMotion {
     )
 
     fun softDpTween(
-        durationMillis: Int = 420,
+        durationMillis: Int = 180,
         delayMillis: Int = 0
     ): FiniteAnimationSpec<Dp> = tween(
         durationMillis = durationMillis,
@@ -32,7 +32,7 @@ object PocketMotion {
     )
 
     fun softIntOffsetTween(
-        durationMillis: Int = 420,
+        durationMillis: Int = 180,
         delayMillis: Int = 0
     ): FiniteAnimationSpec<IntOffset> = tween(
         durationMillis = durationMillis,

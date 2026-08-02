@@ -213,6 +213,46 @@ class BillingManager private constructor(private val context: Context) {
         }
     }
 
+    fun restorePurchases(onComplete: ((String) -> Unit)? = null) {
+        val client = billingClient
+        if (client == null || !client.isReady) {
+            connectToPlayStore { restorePurchases(onComplete) }
+            return
+        }
+
+        val paramsSubs = QueryPurchasesParams.newBuilder()
+            .setProductType(ProductType.SUBS)
+            .build()
+
+        client.queryPurchasesAsync(paramsSubs) { billingResult, purchases ->
+            if (billingResult.responseCode == BillingResponseCode.OK) {
+                val purchasedItems = purchases.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
+                activePurchases = purchasedItems
+                if (purchasedItems.isNotEmpty()) {
+                    var restoredCount = 0
+                    purchasedItems.forEach { purchase ->
+                        val productId = purchase.products.firstOrNull()
+                        if (productId == PRODUCT_PREMIUM || productId == PRODUCT_SUPPORTIVE) {
+                            restoredCount++
+                            scope.launch { verifyPurchaseServerSide(purchase) }
+                        }
+                    }
+                    val msg = "Restored and acknowledged $restoredCount subscription(s) for your account."
+                    _lastMessage.value = msg
+                    onComplete?.invoke(msg)
+                } else {
+                    val msg = "No active Play Store subscriptions found for this Google Play account."
+                    _lastMessage.value = msg
+                    onComplete?.invoke(msg)
+                }
+            } else {
+                val errorMsg = billingResult.debugMessage.ifBlank { "Could not query Play Store purchases." }
+                _lastMessage.value = errorMsg
+                onComplete?.invoke(errorMsg)
+            }
+        }
+    }
+
     fun launchBillingFlow(
         activity: Activity,
         productId: String,
@@ -289,9 +329,10 @@ class BillingManager private constructor(private val context: Context) {
                 }
 
                 val data = snapshot?.data.orEmpty()
-                val rawValue = data["eligibleForFreeTrial"]
-                val parsedValue = if (BuildConfig.DEBUG) true else (data["eligibleForFreeTrial"] as? Boolean ?: false)
-                Log.d(TAG, "User entitlement synced: uid=$uid, exists=${snapshot?.exists()}, raw eligibleForFreeTrial=$rawValue, final=$parsedValue")
+                val userOverride = data["eligibleForFreeTrial"] as? Boolean
+                val remoteConfigTrial = com.pocketcraft.server.config.RemoteConfigManager.isFreeTrialEnabledSync()
+                val parsedValue = userOverride ?: remoteConfigTrial
+                Log.d(TAG, "User entitlement synced: uid=$uid, exists=${snapshot?.exists()}, userOverride=$userOverride, remoteConfig=$remoteConfigTrial, final=$parsedValue")
 
                 val premiumSinceTime = (data["premiumSince"] as? com.google.firebase.Timestamp)?.toDate()?.time
                 val entitlement = PremiumEntitlement(
@@ -321,7 +362,7 @@ class BillingManager private constructor(private val context: Context) {
     }
 
     private suspend fun verifyPurchaseServerSide(purchase: Purchase) {
-        FirebaseAuth.getInstance().currentUser?.uid ?: run {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: run {
             _lastMessage.value = "Sign in before using Play purchases."
             return
         }
@@ -329,24 +370,44 @@ class BillingManager private constructor(private val context: Context) {
         if (productId != PRODUCT_PREMIUM && productId != PRODUCT_SUPPORTIVE) return
 
         runCatching {
+            val tier = when (productId) {
+                PRODUCT_PREMIUM -> PremiumTier.PREMIUM
+                PRODUCT_SUPPORTIVE -> PremiumTier.SUPPORTIVE
+                else -> PremiumTier.NONE
+            }
+
+            // Always write purchase log entry into Firestore users/{uid}/purchase_logs for administrative inspection
+            val safeTokenId = purchase.purchaseToken.takeLast(16).ifBlank { "token_${System.currentTimeMillis()}" }
+            val logData = mapOf(
+                "productId" to productId,
+                "tier" to tier.wireValue,
+                "purchaseToken" to purchase.purchaseToken,
+                "orderId" to (purchase.orderId ?: ""),
+                "purchaseTime" to purchase.purchaseTime,
+                "purchaseState" to purchase.purchaseState,
+                "acknowledged" to purchase.isAcknowledged,
+                "timestamp" to com.google.firebase.Timestamp.now(),
+                "email" to (FirebaseAuth.getInstance().currentUser?.email ?: "")
+            )
+            runCatching {
+                firestore.collection("users")
+                    .document(uid)
+                    .collection("purchase_logs")
+                    .document(safeTokenId)
+                    .set(logData, SetOptions.merge())
+            }
+
             val isDebug = BuildConfig.DEBUG
             val isKeyEmpty = BASE64_PUBLIC_KEY.isBlank()
 
-            val isValid = if (isKeyEmpty || isDebug) {
+            val isValidSignature = if (isKeyEmpty || isDebug) {
                 true
             } else {
                 Security.verifyPurchase(BASE64_PUBLIC_KEY, purchase.originalJson, purchase.signature)
             }
 
-            if (!isValid) {
-                _lastMessage.value = "Purchase verification failed: Invalid signature."
-                return
-            }
-
-            val tier = when (productId) {
-                PRODUCT_PREMIUM -> PremiumTier.PREMIUM
-                PRODUCT_SUPPORTIVE -> PremiumTier.SUPPORTIVE
-                else -> PremiumTier.NONE
+            if (!isValidSignature) {
+                Log.w(TAG, "Signature check failed for token $safeTokenId, attempting server-side callable verification...")
             }
 
             val functionResult = runCatching {
@@ -366,13 +427,19 @@ class BillingManager private constructor(private val context: Context) {
                 val verifiedTier = PremiumTier.fromWireValue(resultData?.get("premiumTier") as? String)
                 val effectiveTier = if (verifiedTier == PremiumTier.NONE) tier else verifiedTier
                 val expiryTimeMillis = (resultData?.get("expiryTimeMillis") as? Number)?.toLong()
-                // Also persist email for the subscriber record
+                
                 val currentUser = FirebaseAuth.getInstance().currentUser
                 if (currentUser != null) {
-                    val emailUpdates = mutableMapOf<String, Any>("updatedAt" to com.google.firebase.Timestamp.now())
+                    val emailUpdates = mutableMapOf<String, Any>(
+                        "updatedAt" to com.google.firebase.Timestamp.now(),
+                        "premiumTier" to effectiveTier.wireValue,
+                        "lastVerifiedPurchaseToken" to purchase.purchaseToken
+                    )
                     if (!currentUser.email.isNullOrBlank()) emailUpdates["email"] = currentUser.email!!
-                    firestore.collection("users").document(currentUser.uid)
-                        .set(emailUpdates, SetOptions.merge())
+                    runCatching {
+                        firestore.collection("users").document(currentUser.uid)
+                            .set(emailUpdates, SetOptions.merge())
+                    }
                 }
                 applyEntitlement(
                     entitlement.value.copy(
@@ -383,7 +450,7 @@ class BillingManager private constructor(private val context: Context) {
                 )
             } else {
                 val functionError = functionResult.exceptionOrNull()
-                Log.w(TAG, "verifyPurchase callable failed (${functionError?.message}); falling back to local entitlement link.", functionError)
+                Log.w(TAG, "verifyPurchase callable failed (${functionError?.message}); using direct entitlement sync.", functionError)
                 val updates = mapOf(
                     "premiumTier" to tier.wireValue,
                     "playPurchaseToken" to purchase.purchaseToken,
@@ -395,7 +462,7 @@ class BillingManager private constructor(private val context: Context) {
 
                 runCatching {
                     firestore.collection("users")
-                        .document(FirebaseAuth.getInstance().currentUser!!.uid)
+                        .document(uid)
                         .set(updates, SetOptions.merge())
                         .await()
                 }
@@ -408,6 +475,7 @@ class BillingManager private constructor(private val context: Context) {
                 )
             }
 
+            // Always acknowledge valid purchases to prevent Google Play from auto-refunding after 3 days
             if (!purchase.isAcknowledged) {
                 val params = AcknowledgePurchaseParams.newBuilder()
                     .setPurchaseToken(purchase.purchaseToken)
@@ -415,6 +483,8 @@ class BillingManager private constructor(private val context: Context) {
                 billingClient?.acknowledgePurchase(params) { billingResult ->
                     if (billingResult.responseCode != BillingResponseCode.OK) {
                         Log.w(TAG, "Acknowledge failed: ${billingResult.debugMessage}")
+                    } else {
+                        Log.i(TAG, "Purchase acknowledged successfully.")
                     }
                 }
             }

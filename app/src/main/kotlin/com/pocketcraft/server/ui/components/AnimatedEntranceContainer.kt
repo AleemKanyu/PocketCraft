@@ -24,8 +24,8 @@ fun AnimatedEntranceContainer(
     
     if (shouldAnimate) {
         LaunchedEffect(Unit) {
-            // Stagger only the first few items on screen load
-            val delayTime = index * 40L
+            // Stagger only the first few items on screen load for max snappiness
+            val delayTime = index * 15L
             if (delayTime > 0) {
                 delay(delayTime)
             }
@@ -36,12 +36,12 @@ fun AnimatedEntranceContainer(
     if (shouldAnimate) {
         val alpha by animateFloatAsState(
             targetValue = if (visible) 1f else 0f,
-            animationSpec = PocketMotion.softFloatTween(durationMillis = 520),
+            animationSpec = PocketMotion.softFloatTween(durationMillis = 140),
             label = "entrance_alpha"
         )
         val slideY by animateFloatAsState(
-            targetValue = if (visible) 0f else 14f,
-            animationSpec = PocketMotion.softFloatTween(durationMillis = 560),
+            targetValue = if (visible) 0f else 6f,
+            animationSpec = PocketMotion.softFloatTween(durationMillis = 150),
             label = "entrance_slide"
         )
         
