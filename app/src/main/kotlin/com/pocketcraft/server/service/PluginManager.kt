@@ -414,12 +414,11 @@ object PluginManager {
             ""
         }
         var viaUpdated = viaOriginal
-        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "check-for-updates", "false")
-        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "blockconnection-method", "packet")
-        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "cache-syntax-errors", "false")
-        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "quick-move-action-fix", "false")
-        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "change-1_9-hitbox", "false")
-        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "change-1_14-hitbox", "false")
+        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "max-packets-per-second", "1000")
+        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "tracking-warning-pps", "800")
+        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "max-warnings", "1000")
+        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "tracking-period", "10")
+        viaUpdated = ensureTopLevelYamlValue(viaUpdated, "max-warnings-kick", "false")
         viaUpdated = ensureTopLevelYamlValue(viaUpdated, "suppress-conversion-warnings", "true")
         viaUpdated = ensureTopLevelYamlValue(viaUpdated, "check-supported-versions", "false")
         if (viaUpdated != viaOriginal) {

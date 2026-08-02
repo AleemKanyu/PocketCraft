@@ -1384,6 +1384,9 @@ class ServerLauncher(private val context: Context) {
         globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "player-max-concurrent-loads", "4")
         globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "global-max-concurrent-loads", "8")
         globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "target-background-loads", "2")
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("packet-limiter", "all-packets"), "max-packet-rate", "1000.0")
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("packet-limiter", "all-packets"), "interval", "1.0")
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("packet-limiter", "overload-kick"), "enabled", "false")
         if (globalYaml != origGlobal) {
             paperGlobalFile.writeText(globalYaml)
         }
