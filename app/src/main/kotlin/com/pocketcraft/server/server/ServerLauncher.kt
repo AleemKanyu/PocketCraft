@@ -144,6 +144,11 @@ class ServerLauncher(private val context: Context) {
         }
 
         fun requestForceStop() {
+            runCatching {
+                if (NativeLauncher.loadLibrary()) {
+                    NativeLauncher.notifyShutdownStarted()
+                }
+            }
             activeExternalProcess?.let { process ->
                 runCatching {
                     process.destroy()
@@ -155,6 +160,7 @@ class ServerLauncher(private val context: Context) {
             activeExternalProcess = null
         }
     }
+
 
     fun startServer(
         worldName: String,

@@ -18,11 +18,14 @@ object NativeLauncher {
         }
     }
 
+    external fun notifyShutdownStarted()
+
     /**
      * Boots the JVM in-process via dlopen().
      * Returns 0 on success, negative int on failure.
      * This call BLOCKS until the server stops.
      */
+
     external fun launchJVM(
         jrePath  : String,
         jarPath  : String,

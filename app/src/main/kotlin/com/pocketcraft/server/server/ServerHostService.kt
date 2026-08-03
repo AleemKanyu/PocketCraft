@@ -8,6 +8,7 @@
 // ============================================================================
 package com.pocketcraft.server.server
 
+import com.pocketcraft.server.NativeLauncher
 import android.app.ActivityManager
 import android.app.AlarmManager
 import android.app.Notification
@@ -216,20 +217,25 @@ class ServerHostService : Service() {
         if (intent?.action == ACTION_STOP) {
             keepListenerRunningManual = intent.getBooleanExtra("keep_listener_alive", false)
             stopReason = "user"
-            com.pocketcraft.server.data.preferences.AppPreferences(applicationContext).isUserStopped = true
+            val prefs = com.pocketcraft.server.data.preferences.AppPreferences(applicationContext)
+            prefs.isUserStopped = true
             autoRecoverAttempts = 0
             autoRecoverWindowStartMs = 0L
             pendingRestartVersionId = null
             pendingRestartWorldName = null
-            currentVersionId?.let { persistRuntimeState(applicationContext, it, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE) }
+            val activeVer = currentVersionId?.takeIf { it.isNotBlank() } ?: getPersistedActiveVersion(applicationContext)
+            if (activeVer.isNotBlank()) {
+                persistRuntimeState(applicationContext, activeVer, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE)
+            }
             updateNotification(ServerStage.STOPPING, force = true)
             pushWidgetUpdate("stopping")
-            currentVersionId?.let {
-                sendEvent(it, EVENT_OUTPUT, "[PocketCraft] Stop requested.")
+            if (activeVer.isNotBlank()) {
+                sendEvent(activeVer, EVENT_OUTPUT, "[PocketCraft] Stop requested.")
             }
             stopServer()
             return START_NOT_STICKY
         }
+
 
         if (intent?.action == ACTION_RESTART) {
             val activeVersionId = currentVersionId ?: getPersistedActiveVersion(applicationContext)
@@ -645,7 +651,13 @@ class ServerHostService : Service() {
 
     private fun stopServer() {
         if (!stopInProgress.compareAndSet(false, true)) return
+        runCatching {
+            if (NativeLauncher.loadLibrary()) {
+                NativeLauncher.notifyShutdownStarted()
+            }
+        }
         stopDashboardStatusAndClear()
+
         launchJob?.cancel()
         launchJob = null
         serverReadyFallbackJob?.cancel()
