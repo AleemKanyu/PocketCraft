@@ -148,31 +148,31 @@ class AppPreferences(context: Context) {
         get() {
             val stored = prefs.getString("ram_mode", null)
             if (stored.isNullOrBlank()) {
-                prefs.edit().putString("ram_mode", "manual").apply()
+                prefs.edit().putString("ram_mode", "manual").commit()
                 return "manual"
             }
             return stored
         }
-        set(value) = prefs.edit().putString("ram_mode", value).apply()
+        set(value) { prefs.edit().putString("ram_mode", value).commit() }
 
     var manualRamMb: Int
         get() {
             if (!prefs.contains("manual_ram_mb")) {
                 val defaultMb = getDefaultRamMb(appContext)
-                prefs.edit().putInt("manual_ram_mb", defaultMb).apply()
+                prefs.edit().putInt("manual_ram_mb", defaultMb).commit()
                 return defaultMb
             }
             return prefs.getInt("manual_ram_mb", 1024)
         }
-        set(value) = prefs.edit().putInt("manual_ram_mb", value).apply()
+        set(value) { prefs.edit().putInt("manual_ram_mb", value).commit() }
 
     var isMaxPowerMode: Boolean
         get() = prefs.getBoolean(KEY_MAX_POWER_MODE, false)
-        set(value) = prefs.edit().putBoolean(KEY_MAX_POWER_MODE, value).apply()
+        set(value) { prefs.edit().putBoolean(KEY_MAX_POWER_MODE, value).commit() }
 
     var autoRestart: Boolean
         get() = prefs.getBoolean("auto_restart", false)
-        set(value) = prefs.edit().putBoolean("auto_restart", value).apply()
+        set(value) { prefs.edit().putBoolean("auto_restart", value).commit() }
 
     var isUserStopped: Boolean
         get() = prefs.getBoolean("is_user_stopped", false)
@@ -180,7 +180,7 @@ class AppPreferences(context: Context) {
 
     var forceExternalJvm: Boolean
         get() = prefs.getBoolean("force_external_jvm", android.os.Build.VERSION.SDK_INT >= 34)
-        set(value) = prefs.edit().putBoolean("force_external_jvm", value).apply()
+        set(value) { prefs.edit().putBoolean("force_external_jvm", value).commit() }
 
     fun saveRuntimeSettings(
         autoRestart: Boolean,
@@ -196,15 +196,23 @@ class AppPreferences(context: Context) {
 
     var selectedWorldPath: String?
         get() = prefs.getString("selected_world_path", null)
-        set(value) = prefs.edit().putString("selected_world_path", value).apply()
+        set(value) { prefs.edit().putString("selected_world_path", value).commit() }
 
     var selectedWorld: String
         get() = prefs.getString("selected_world", "world")?.ifBlank { "world" } ?: "world"
-        set(value) = prefs.edit().putString("selected_world", value).apply()
+        set(value) { prefs.edit().putString("selected_world", value).commit() }
+
+    var selectedVersion: String
+        get() = prefs.getString("selected_version", "1.21.11")?.ifBlank { "1.21.11" } ?: "1.21.11"
+        set(value) { prefs.edit().putString("selected_version", value).commit() }
+
+    var selectedServerType: String
+        get() = prefs.getString("selected_server_type", "PAPER")?.ifBlank { "PAPER" } ?: "PAPER"
+        set(value) { prefs.edit().putString("selected_server_type", value).commit() }
 
     var fcmToken: String?
         get() = prefs.getString("fcm_token", null)
-        set(value) = prefs.edit().putString("fcm_token", value).apply()
+        set(value) { prefs.edit().putString("fcm_token", value).commit() }
 
     var relayPort: Int?
         get() {
@@ -734,6 +742,7 @@ object AppPreferencesStore {
         }
 
     suspend fun setSelectedVersion(context: Context, version: String) {
+        AppPreferences(context).selectedVersion = version
         context.appPreferencesDataStore.edit { prefs ->
             prefs[AppPreferencesKeys.SELECTED_VERSION] = version
         }
@@ -745,10 +754,11 @@ object AppPreferencesStore {
 
     fun getSelectedServerTypeFlow(context: Context): Flow<String> =
         context.appPreferencesDataStore.data.map { prefs ->
-            prefs[AppPreferencesKeys.SELECTED_SERVER_TYPE] ?: "PAPER"
+            prefs[AppPreferencesKeys.SELECTED_SERVER_TYPE] ?: AppPreferences(context).selectedServerType
         }
 
     suspend fun setSelectedServerType(context: Context, serverType: String) {
+        AppPreferences(context).selectedServerType = serverType
         context.appPreferencesDataStore.edit { prefs ->
             prefs[AppPreferencesKeys.SELECTED_SERVER_TYPE] = serverType
         }
@@ -756,10 +766,11 @@ object AppPreferencesStore {
 
     fun getSelectedWorldFlow(context: Context): Flow<String> =
         context.appPreferencesDataStore.data.map { prefs ->
-            prefs[AppPreferencesKeys.SELECTED_WORLD] ?: "world"
+            prefs[AppPreferencesKeys.SELECTED_WORLD] ?: AppPreferences(context).selectedWorld
         }
 
     suspend fun setSelectedWorld(context: Context, worldName: String) {
+        AppPreferences(context).selectedWorld = worldName
         context.appPreferencesDataStore.edit { prefs ->
             prefs[AppPreferencesKeys.SELECTED_WORLD] = worldName
         }
