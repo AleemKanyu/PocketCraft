@@ -2191,9 +2191,10 @@ class ServerStateHolder(
         }
 
         if (isRunning) {
-            val rconResult = applyRuntimeSettingsState(enforced, onlyWhitelist = false)
-            if (rconResult != null) {
-                android.util.Log.w("ServerStateHolder", "Settings dynamic update RCON failed, fell back to stdin: $rconResult")
+            scope.launch(Dispatchers.IO) {
+                runCatching {
+                    applyRuntimeSettingsState(enforced, onlyWhitelist = false)
+                }
             }
         }
 

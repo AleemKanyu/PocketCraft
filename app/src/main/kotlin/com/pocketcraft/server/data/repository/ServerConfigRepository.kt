@@ -332,10 +332,10 @@ class ServerConfigRepository @Inject constructor(
             joinMessageUrl = props["pocketcraft-join-message-url"] ?: POCKETCRAFT_JOIN_MESSAGE_URL,
             serverType = props["pocketcraft-server-type"]?.let { ServerType.fromString(it) }
                 ?: fallbackConfig?.serverType
-                ?: ServerType.PAPER,
-            gameVersion = props["pocketcraft-game-version"]
-                ?: fallbackConfig?.gameVersion
-                ?: "",
+                ?: ServerType.fromString(com.pocketcraft.server.data.preferences.AppPreferences(context).selectedServerType),
+            gameVersion = props["pocketcraft-game-version"]?.takeIf { it.isNotBlank() }
+                ?: fallbackConfig?.gameVersion?.takeIf { it.isNotBlank() }
+                ?: com.pocketcraft.server.data.preferences.AppPreferences(context).selectedVersion,
             customJarPath = props["pocketcraft-custom-jar-path"]
                 ?: fallbackConfig?.customJarPath
         )
