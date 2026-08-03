@@ -101,13 +101,16 @@ object ConsoleParser {
         val clean = stripAnsi(line).trim()
         if (!clean.contains("Done (", ignoreCase = true)) return false
         
-        // Ignore plugin loading completion lines (e.g. Geyser, ViaVersion, floodgate)
+        // Ignore plugin loading & level prep completion lines (e.g. Geyser, ViaVersion, floodgate, "Done preparing level")
         if (clean.contains("Geyser", ignoreCase = true) ||
             clean.contains("ViaVersion", ignoreCase = true) ||
             clean.contains("floodgate", ignoreCase = true) ||
-            clean.contains("Companion", ignoreCase = true)) {
+            clean.contains("Companion", ignoreCase = true) ||
+            clean.contains("preparing level", ignoreCase = true) ||
+            clean.contains("preparing spawn", ignoreCase = true)) {
             return false
         }
+
         
         val afterThread = clean.substringAfter("]: ", clean)
         if (afterThread.startsWith("[") && !afterThread.startsWith("[Server thread")) {

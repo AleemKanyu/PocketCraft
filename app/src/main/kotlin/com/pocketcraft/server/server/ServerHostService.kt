@@ -1595,7 +1595,9 @@ class ServerHostService : Service() {
     private fun scheduleServerReadyFallback(versionId: String) {
         serverReadyFallbackJob?.cancel()
         serverReadyFallbackJob = serviceScope.launch {
-            delay(180_000)
+            // Paper startup on Android devices can take 5+ minutes for level prep and plugin init.
+            // Use 10 minutes (600,000ms) as fallback so the timer never fires while Paper is actively booting.
+            delay(600_000L)
             val shouldPromote = currentVersionId == versionId &&
                 !serverReadyHandled.get() &&
                 (serverProcess?.isAlive == true ||
@@ -1604,13 +1606,14 @@ class ServerHostService : Service() {
             if (shouldPromote) {
                 android.util.Log.w(
                     "ServerHostService",
-                    "Server ready signal was missed for $versionId. Promoting readiness via fallback poll."
+                    "Server ready signal was missed for $versionId. Promoting readiness via fallback poll after 10m."
                 )
                 setServerReadyState(true)
                 onServerReady()
             }
         }
     }
+
 
     @Keep
     private fun setServerReadyState(ready: Boolean) {
