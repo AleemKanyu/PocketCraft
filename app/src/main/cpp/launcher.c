@@ -46,19 +46,19 @@ static const char *jvm_log_tag = "PocketCraftJVM";
 // ART-mutex-destruction race.
 static volatile sig_atomic_t jvm_is_shutting_down = 0;
 
-static void sigabrt_handler(int sig) {
-    (void)sig;
+static void jvm_shutdown_signal_handler(int sig) {
     if (jvm_is_shutting_down) {
-        // Known-benign: Paper's MoonriseCommon pool shutdown races with ART's
-        // heap-trim GC, causing pthread_mutex_lock on a destroyed mutex.
-        // Ignore SIGABRT during JVM shutdown so the process remains completely stable.
-        signal(SIGABRT, SIG_IGN);
+        // Known-benign: Native GPU driver teardown (libGLESv2_adreno.so SIGSEGV) or
+        // Paper's MoonriseCommon pool shutdown racing with ART GC mutex cleanup.
+        // Ignore signals during JVM shutdown so the process remains completely stable.
+        signal(sig, SIG_IGN);
         return;
     }
     // Not in shutdown — re-raise so debuggerd can capture the real crash.
-    signal(SIGABRT, SIG_DFL);
-    raise(SIGABRT);
+    signal(sig, SIG_DFL);
+    raise(sig);
 }
+
 
 
 
@@ -498,6 +498,7 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
                   "-Dorg.jline.terminal.jni=false",
                   "-Dorg.jline.terminal.dumb=true",
                   "-Djava.awt.headless=true",
+                  "-Dsun.java2d.opengl=false",
                   "-Djdk.lang.Process.launchMechanism=FORK",
                   lib_path_opt,
                   "-DPaper.IgnoreJavaVersion=true",
@@ -556,24 +557,21 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
     LOGI("argv[%d] = %s", i, argv[i]);
   }
 
-  // On Android 12+ (especially 13), debuggerd holds signal handler locks during
-  // process startup. JLI_Launch internally installs SIGSEGV/SIGBUS/SIGILL/SIGFPE
-  // handlers which deadlock waiting for those same locks. We reset all signal
-  // handlers to SIG_DFL immediately before calling JLI_Launch so the JVM writes
-  // into a clean handler table without contention.
   reset_signal_handlers();
 
-  // Install SIGABRT handler before launching the JVM.
-  // When a shutdown is initiated (notifyShutdownStarted called) or JLI_Launch returns,
-  // any SIGABRT from the ART pthread_mutex_lock-on-destroyed-mutex race is intercepted
-  // and converted to a clean _exit(0) so the app does not visibly crash.
-  struct sigaction sa_abort;
-  memset(&sa_abort, 0, sizeof(sa_abort));
-  sa_abort.sa_handler = sigabrt_handler;
-  sigemptyset(&sa_abort.sa_mask);
-  sigaction(SIGABRT, &sa_abort, NULL);
+  // Install shutdown signal handlers before launching the JVM.
+  // Intercept SIGABRT, SIGSEGV, SIGBUS, SIGPIPE during JVM teardown.
+  struct sigaction sa_shutdown;
+  memset(&sa_shutdown, 0, sizeof(sa_shutdown));
+  sa_shutdown.sa_handler = jvm_shutdown_signal_handler;
+  sigemptyset(&sa_shutdown.sa_mask);
+  sigaction(SIGABRT, &sa_shutdown, NULL);
+  sigaction(SIGSEGV, &sa_shutdown, NULL);
+  sigaction(SIGBUS, &sa_shutdown, NULL);
+  sigaction(SIGPIPE, &sa_shutdown, NULL);
 
   jvm_is_shutting_down = 0;
+
 
   LOGI("Calling JLI_Launch...");
   result = launch(argc, argv, 0, NULL, 0, NULL, FULL_VERSION, DOT_VERSION,
