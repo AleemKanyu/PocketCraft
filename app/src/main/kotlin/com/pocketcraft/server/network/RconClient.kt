@@ -105,6 +105,17 @@ object RconClient {
         }
     }
 
+    /**
+     * Sends multiple commands over a single RCON TCP connection.
+     *
+     * Previously this called sendCommand() per command, which opened a new TCP socket + RCON auth
+     * handshake for each call. Every auth handshake runs on the server's tick thread (Paper
+     * processes RCON on the main thread), causing a ~20-80ms processing spike per connection.
+     * With 2 commands every 20 seconds that was 4 tick interruptions per minute, showing up as
+     * 236-305ms ping spikes in the client.
+     *
+     * This implementation authenticates once and sends all commands over the same socket.
+     */
     fun sendCommands(
         commands: List<String>,
         port: Int = DEFAULT_PORT,
@@ -112,6 +123,59 @@ object RconClient {
         timeoutMs: Int = DEFAULT_TIMEOUT_MS
     ): List<String> {
         if (commands.isEmpty()) return emptyList()
-        return commands.map { cmd -> sendCommand(cmd, port, password, timeoutMs) }
+        val nonBlank = commands.map { it.trim() }.filter { it.isNotBlank() }
+        if (nonBlank.isEmpty()) return emptyList()
+
+        return runCatching {
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress("127.0.0.1", port), timeoutMs)
+                socket.soTimeout = timeoutMs
+                val out = DataOutputStream(socket.getOutputStream())
+                val inp = DataInputStream(socket.getInputStream())
+
+                fun writeIntLE(v: Int) {
+                    out.write(v and 0xFF); out.write((v shr 8) and 0xFF)
+                    out.write((v shr 16) and 0xFF); out.write((v shr 24) and 0xFF)
+                }
+                fun readIntLE(): Int {
+                    val b0 = inp.read(); val b1 = inp.read()
+                    val b2 = inp.read(); val b3 = inp.read()
+                    if (b0 < 0 || b1 < 0 || b2 < 0 || b3 < 0) return -1
+                    return (b0 and 0xFF) or ((b1 and 0xFF) shl 8) or ((b2 and 0xFF) shl 16) or ((b3 and 0xFF) shl 24)
+                }
+                fun sendPacket(id: Int, type: Int, payload: String) {
+                    val bytes = payload.toByteArray(StandardCharsets.UTF_8)
+                    writeIntLE(4 + 4 + bytes.size + 2); writeIntLE(id); writeIntLE(type)
+                    out.write(bytes); out.write(0); out.write(0); out.flush()
+                }
+                fun readPacket(): Triple<Int, Int, String> {
+                    val len = readIntLE(); if (len < 10) return Triple(-1, -1, "")
+                    val id = readIntLE(); val type = readIntLE()
+                    val payloadSize = (len - 10).coerceAtLeast(0)
+                    val bytes = if (payloadSize > 0) ByteArray(payloadSize).also { inp.readFully(it) } else ByteArray(0)
+                    inp.read(); inp.read() // null terminators
+                    return Triple(id, type, String(bytes, StandardCharsets.UTF_8).trim())
+                }
+
+                // Authenticate once
+                sendPacket(1, SERVERDATA_AUTH, password)
+                val (authId, _, _) = readPacket()
+                if (authId == -1) {
+                    Log.w(TAG, "RCON batch auth failed")
+                    return@use commands.map { "" }
+                }
+
+                // Send all commands over the same authenticated connection
+                nonBlank.mapIndexed { index, cmd ->
+                    sendPacket(index + 2, SERVERDATA_EXECCOMMAND, cmd)
+                    val (_, _, response) = readPacket()
+                    if (response.isBlank()) "[OK]" else response
+                }
+            }
+        }.getOrElse { error ->
+            Log.d(TAG, "RCON batch connection failed: ${error.message}")
+            commands.map { "" }
+        }
     }
 }
+

@@ -1320,12 +1320,12 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", concurrentLoads.toString())
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-sends", concurrentSends.toString())
 
-        // Cap Moonrise chunk I/O and worker threads to max 3 on mobile.
-        // The Pixel 5 has 8 cores but 7 worker + 7 I/O threads (14 total) starve the server
-        // main tick thread of CPU time, causing tick lag and high relay ping (400-1000ms).
-        // 2-3 threads is sufficient for chunk loading while keeping the tick thread responsive.
+        // Cap Moonrise chunk I/O and worker threads on mobile to avoid tick-thread starvation.
+        // Previously capped at 2-3, but now that RCON location polling is batched and reduced
+        // from 3x/min to 1x/min, the tick thread has headroom for 4 chunk threads.
+        // 4 threads gives noticeably faster chunk loading without degrading ping.
         val cores = Runtime.getRuntime().availableProcessors()
-        val threads = if (cores <= 4) 2 else 3
+        val threads = if (cores <= 4) 2 else 4
 
         updated = removeYamlPathKey(updated, listOf("misc"), "io-threads")
         updated = removeYamlPathKey(updated, listOf("misc"), "worker-threads")

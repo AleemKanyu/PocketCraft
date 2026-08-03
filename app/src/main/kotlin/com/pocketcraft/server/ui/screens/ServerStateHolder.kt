@@ -5534,24 +5534,28 @@ class ServerStateHolder(
         periodicLocationJob?.cancel()
         periodicLocationJob = scope.launch(Dispatchers.IO) {
             while (isActive) {
-                delay(20_000)
+                // Poll every 60s instead of 20s. The previous 20s interval opened 2 separate
+                // TCP+auth RCON connections per player each cycle, causing tick-thread interruptions
+                // that spiked client ping to 236-305ms. At 60s the impact on tick rate is negligible.
+                delay(60_000)
                 if (!isRunning || isStopping) continue
                 onlinePlayers.toList().forEach { player ->
                     val target = """@a[name="${escapeSelectorName(player.name)}",limit=1]"""
-                    runCatching { sendRconCommand("data get entity $target Pos") }
-                        .onFailure { error ->
-                            android.util.Log.w("ServerStateHolder", "RCON position poll failed: ${error.message}")
-                        }
-                    delay(200)
-                    runCatching { sendRconCommand("data get entity $target Dimension") }
-                        .onFailure { error ->
-                            android.util.Log.w("ServerStateHolder", "RCON dimension poll failed: ${error.message}")
-                        }
-                    delay(200)
+                    // Batch both commands in one TCP+auth connection to halve tick-thread interruptions
+                    runCatching {
+                        sendRconCommands(listOf(
+                            "data get entity $target Pos",
+                            "data get entity $target Dimension"
+                        ))
+                    }.onFailure { error ->
+                        android.util.Log.w("ServerStateHolder", "RCON location poll failed: ${error.message}")
+                    }
+                    delay(100)
                 }
             }
         }
     }
+
 
     private fun startPeriodicPingPolling() {
         periodicPingJob?.cancel()
