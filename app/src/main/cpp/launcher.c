@@ -51,13 +51,15 @@ static void sigabrt_handler(int sig) {
     if (jvm_is_shutting_down) {
         // Known-benign: Paper's MoonriseCommon pool shutdown races with ART's
         // heap-trim GC, causing pthread_mutex_lock on a destroyed mutex.
-        // Terminate only the JVM thread cleanly, keeping the Android app process alive.
-        pthread_exit(NULL);
+        // Ignore SIGABRT during JVM shutdown so the process remains completely stable.
+        signal(SIGABRT, SIG_IGN);
+        return;
     }
     // Not in shutdown — re-raise so debuggerd can capture the real crash.
     signal(SIGABRT, SIG_DFL);
     raise(SIGABRT);
 }
+
 
 
 JNIEXPORT void JNICALL Java_com_pocketcraft_server_NativeLauncher_notifyShutdownStarted(JNIEnv *env, jobject thiz) {

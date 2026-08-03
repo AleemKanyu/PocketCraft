@@ -697,16 +697,13 @@ class ServerHostService : Service() {
                     } catch (e: Exception) {
                         android.util.Log.e("PocketCraft", "Failed to write stop signal: " + e.message)
                     }
-                    if (isServerReady) {
-                        runCatching { sendRconStop() }
-                    }
+                    runCatching { sendRconStop() }
+                    ServerLauncher.sendCommand("stop")
                 } else {
-                    if (isServerReady) {
-                        ServerLauncher.sendCommand("stop")
-                    }
+                    ServerLauncher.sendCommand("stop")
                 }
 
-                // Keep shutdown responsive; the app already requested a save before stopping.
+                // Keep shutdown responsive; wait up to 15s for Paper to save chunks and exit cleanly.
                 while (SystemClock.elapsedRealtime() < deadline) {
                     if (!isLaunching) { // isLaunching is set to false in onStopped
                         break
@@ -718,7 +715,8 @@ class ServerHostService : Service() {
                 android.util.Log.e("PocketCraft", "Error during stop: ${e.message}")
             } finally {
                 forceTerminateHostedServer()
-                waitForLocalServerPortClosed(currentServerPort, 2_500L)
+                waitForLocalServerPortClosed(currentServerPort, 15_000L)
+
                 try {
                     relayManager.disconnect()
                 } catch (_: Exception) {}
