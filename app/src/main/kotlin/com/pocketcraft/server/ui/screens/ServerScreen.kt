@@ -147,8 +147,6 @@ fun ServerScreen(
     onMobThemeChange: (MobTheme) -> Unit,
     homeTopContent: (@Composable () -> Unit)? = null
 ) {
-    val stateTrigger by stateHolder.stateUpdateTrigger.collectAsState(initial = 0)
-    remember(stateTrigger) { stateTrigger }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()

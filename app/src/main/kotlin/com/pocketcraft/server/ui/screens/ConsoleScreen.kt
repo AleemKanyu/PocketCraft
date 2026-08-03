@@ -199,11 +199,6 @@ fun ConsoleScreen(
     topContentBelowServerCard: (@Composable () -> Unit)? = null,
     onNavigateToSignUp: () -> Unit = {}
 ) {
-    val stateTrigger by stateHolder.stateUpdateTrigger.collectAsStateWithLifecycle()
-    
-    // Explicitly read stateTrigger so Compose tracks it as a dependency, 
-    // ensuring this screen recomposes when the ServerStateHolder state changes.
-    remember(stateTrigger) { stateTrigger }
     
     val logListState = rememberLazyListState()
     val scope = rememberCoroutineScope()
