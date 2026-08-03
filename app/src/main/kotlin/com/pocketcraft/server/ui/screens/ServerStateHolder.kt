@@ -1110,6 +1110,8 @@ class ServerStateHolder(
         isGeyserDone = false
         isRelayDone = false
         resetJoinable()
+        ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_STARTING)
+
         tps = 4f
         startedAtRealtime = SystemClock.elapsedRealtime()
         startupStartedAtRealtime = SystemClock.elapsedRealtime()
@@ -1849,15 +1851,19 @@ class ServerStateHolder(
         val portOpen = isServerPortOpen(config.port)
         val processAlive = isServerProcessAlive()
 
-        // If Java server startup has completed and process is alive, server is RUNNING (never regress to STARTING on screen switch)
-        if ((isRunning || isJavaServerDone) && processAlive) {
+        // Server is ONLY truly RUNNING if Java server boot is done AND spawn chunks are loaded AND process is alive.
+        if (isJavaServerDone && areSpawnChunksLoaded && processAlive) {
             return PersistedRuntimeState(isRunning = true, publicAddress = address)
         }
 
         val startingGracePeriod = !isJavaServerDone && (isStarting || (lastStartRequestedRealtime > 0 && SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 120000L))
 
+        if (startingGracePeriod && processAlive) {
+            return PersistedRuntimeState(isStarting = true, publicAddress = address)
+        }
+
         if (rawState == ServerHostService.RUNTIME_STATE_RUNNING || isRunning) {
-            if ((portOpen || processAlive) && isJavaServerDone) {
+            if ((portOpen || processAlive) && isJavaServerDone && areSpawnChunksLoaded) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
             if (startingGracePeriod && processAlive) {
@@ -1868,7 +1874,7 @@ class ServerStateHolder(
         }
 
         if (rawState == ServerHostService.RUNTIME_STATE_STARTING || isStarting || rawState.startsWith("STARTING")) {
-            if ((portOpen || processAlive) && isJavaServerDone) {
+            if ((portOpen || processAlive) && isJavaServerDone && areSpawnChunksLoaded) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
             if (startingGracePeriod && processAlive) {
@@ -1881,6 +1887,7 @@ class ServerStateHolder(
 
         return PersistedRuntimeState()
     }
+
 
     fun kickPlayer(name: String) {
         val normalizedName = name.trim()
