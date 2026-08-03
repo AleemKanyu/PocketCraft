@@ -49,15 +49,19 @@ static volatile sig_atomic_t jvm_is_shutting_down = 0;
 static void jvm_shutdown_signal_handler(int sig) {
     if (jvm_is_shutting_down) {
         // Known-benign: Native GPU driver teardown (libGLESv2_adreno.so SIGSEGV) or
-        // Paper's MoonriseCommon pool shutdown racing with ART GC mutex cleanup.
-        // Ignore signals during JVM shutdown so the process remains completely stable.
+        // Bionic FORTIFY pthread_mutex_lock on a destroyed mutex during JVM teardown.
+        // Terminate the crashing background thread cleanly with pthread_exit(NULL)
+        // so the main Android app process remains completely alive and stable.
+        LOGI("Intercepted shutdown signal %d in background thread. Terminating thread cleanly.", sig);
         signal(sig, SIG_IGN);
+        pthread_exit(NULL);
         return;
     }
     // Not in shutdown — re-raise so debuggerd can capture the real crash.
     signal(sig, SIG_DFL);
     raise(sig);
 }
+
 
 
 

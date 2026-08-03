@@ -1130,14 +1130,10 @@ class ServerLauncher(private val context: Context) {
         flightModeEnabled: Boolean
     ): Triple<Int, Int, Int> {
         // Returns Triple(concurrentGenerates, concurrentLoads, concurrentSends)
-        // Cap concurrentGenerates to 3-4 so terrain generation on mobile ARM CPU never starves
-        // the main server tick thread of CPU resources.
-        return if (flightModeEnabled) {
-            if (cellularRelay) Triple(3, 12, 4) else Triple(4, 20, 10)
-        } else {
-            if (cellularRelay) Triple(2, 10, 3) else Triple(3, 16, 8)
-        }
+        // 4 generates, 20 loads, 12 sends gives fast chunk rendering without tick thread stalls
+        return Triple(4, 20, 12)
     }
+
 
 
     private fun computeRelayChunkPipelineRates(
@@ -1417,9 +1413,9 @@ class ServerLauncher(private val context: Context) {
         val paperGlobalFile = File(configDir, "paper-global.yml")
         var globalYaml = runCatching { paperGlobalFile.readText() }.getOrDefault("")
         val origGlobal = globalYaml
-        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "player-max-concurrent-loads", "4")
-        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "global-max-concurrent-loads", "8")
-        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "target-background-loads", "2")
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "player-max-concurrent-loads", "20")
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "global-max-concurrent-loads", "32")
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "target-background-loads", "4")
         globalYaml = ensureYamlPathValue(globalYaml, listOf("packet-limiter", "all-packets"), "max-packet-rate", "1000.0")
         globalYaml = ensureYamlPathValue(globalYaml, listOf("packet-limiter", "all-packets"), "interval", "1.0")
         globalYaml = ensureYamlPathValue(globalYaml, listOf("packet-limiter", "overload-kick"), "enabled", "false")
@@ -1449,7 +1445,8 @@ class ServerLauncher(private val context: Context) {
         updated = removeYamlTopLevelSection(updated, "world-defaults")
         updated = ensureYamlPathValue(updated, listOf("chunks"), "delay-chunk-unloads-by", chunkUnloadDelay)
         updated = ensureYamlPathValue(updated, listOf("chunks"), "max-auto-save-chunks-per-tick", autoSavePerTick.toString())
-        updated = ensureYamlPathValue(updated, listOf("chunks"), "prevent-moving-into-unloaded-chunks", "true")
+        updated = ensureYamlPathValue(updated, listOf("chunks"), "prevent-moving-into-unloaded-chunks", "false")
+
         updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded-range", "0")
         updated = ensureYamlPathValue(updated, listOf("chunks"), "keep-spawn-loaded", "false")
         updated = ensureYamlPathValue(updated, listOf("spawn-chunks"), "keep-spawn-loaded", "false")
