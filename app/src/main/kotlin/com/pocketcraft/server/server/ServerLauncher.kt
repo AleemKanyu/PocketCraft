@@ -784,10 +784,11 @@ class ServerLauncher(private val context: Context) {
                 add("-XX:-UsePerfData")
                 add("-XX:-UseContainerSupport")
                 add("-XX:ErrorFile=$errorFilePattern")
-                // Tighten recycler pools & increase Netty event loop threads for low ping
-                val nettyLoopThreads = cores.coerceIn(4, 8)
+                // Cap worker & I/O threads on mobile ARM to prevent 100% CPU core pinning and phone overheating
+                val nettyLoopThreads = cores.coerceIn(2, 4)
                 add("-Dio.netty.eventLoopThreads=$nettyLoopThreads")
-                add("-Dpaper.maxChunkIOThreads=$nettyLoopThreads")
+                add("-Dpaper.maxChunkIOThreads=2")
+                add("-Dpaper.maxChunkThreads=2")
                 add("-Dio.netty.allocator.maxOrder=8")
                 // Tighten recycler pools: the default 262144 cap was holding ~100MB of
                 // pooled byte buffers in swap, causing page-in latency on packet sends.

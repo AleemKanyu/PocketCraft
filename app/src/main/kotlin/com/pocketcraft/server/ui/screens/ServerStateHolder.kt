@@ -3753,10 +3753,14 @@ class ServerStateHolder(
     private fun registerReceiver() {
         if (receiverRegistered) return
         val filter = IntentFilter(ServerHostService.ACTION_SERVER_EVENT)
+        val bgThread = android.os.HandlerThread("ServerEventReceiverThread").also { it.start() }
+        val bgHandler = android.os.Handler(bgThread.looper)
         ContextCompat.registerReceiver(
             appContext,
             receiver,
             filter,
+            null,
+            bgHandler,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
         receiverRegistered = true
