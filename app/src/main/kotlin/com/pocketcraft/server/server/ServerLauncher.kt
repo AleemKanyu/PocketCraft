@@ -1130,9 +1130,10 @@ class ServerLauncher(private val context: Context) {
         flightModeEnabled: Boolean
     ): Triple<Int, Int, Int> {
         // Returns Triple(concurrentGenerates, concurrentLoads, concurrentSends)
-        // 4 generates, 20 loads, 12 sends gives fast chunk rendering without tick thread stalls
-        return Triple(4, 20, 12)
+        // 1 generate, 4 loads, 2 sends keeps mobile ARM CPU usage ultra-light and ping low
+        return Triple(1, 4, 2)
     }
+
 
 
 
@@ -1413,9 +1414,10 @@ class ServerLauncher(private val context: Context) {
         val paperGlobalFile = File(configDir, "paper-global.yml")
         var globalYaml = runCatching { paperGlobalFile.readText() }.getOrDefault("")
         val origGlobal = globalYaml
-        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "player-max-concurrent-loads", "20")
-        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "global-max-concurrent-loads", "32")
-        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "target-background-loads", "4")
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "player-max-concurrent-loads", "4")
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "global-max-concurrent-loads", "8")
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "target-background-loads", "1")
+
         globalYaml = ensureYamlPathValue(globalYaml, listOf("packet-limiter", "all-packets"), "max-packet-rate", "1000.0")
         globalYaml = ensureYamlPathValue(globalYaml, listOf("packet-limiter", "all-packets"), "interval", "1.0")
         globalYaml = ensureYamlPathValue(globalYaml, listOf("packet-limiter", "overload-kick"), "enabled", "false")
