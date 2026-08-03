@@ -764,15 +764,7 @@ class ServerHostService : Service() {
                         android.util.Log.e("PocketCraft", "Error stopping foreground: ${e.message}")
                     }
 
-                    if (inProcessRuntime) {
-                        android.util.Log.d("PocketCraft", "In-process runtime stopped. Killing :server process to ensure clean resource release.")
-                        stopSelf()
-                        // Allow the EVENT_STOPPED broadcast to propagate before we terminate our PID
-                        delay(500)
-                        android.os.Process.killProcess(android.os.Process.myPid())
-                    } else {
-                        stopSelf()
-                    }
+                    stopSelf()
                 }
 
                 stopInProgress.set(false)

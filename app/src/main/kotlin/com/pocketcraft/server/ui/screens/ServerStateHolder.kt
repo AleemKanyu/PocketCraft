@@ -1473,7 +1473,7 @@ class ServerStateHolder(
         if (cleanLine.contains("[Geyser-Spigot] Done (", ignoreCase = true) || 
             cleanLine.contains("Started Geyser on UDP port", ignoreCase = true)) {
             isGeyserDone = true
-            if (isStarting) {
+            if (isStarting && isJavaServerDone && areSpawnChunksLoaded) {
                 attemptTransitionToOnline()
             }
         }
