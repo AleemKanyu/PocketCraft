@@ -1333,27 +1333,73 @@ class ServerStateHolder(
             android.util.Log.d("ServerStateHolder", "appendLog received: $cleanLine")
         }
 
-        // Track startup progress
+        // Track startup progress with exact Paper boot log milestones
         if (isStarting) {
             when {
-                cleanLine.contains("Loading properties", ignoreCase = true) -> {
-                    startupStatusMessage = "Loading properties..."
+                cleanLine.contains("Running Java 21", ignoreCase = true) ||
+                    cleanLine.contains("Loading Paper", ignoreCase = true) -> {
+                    startupStatusMessage = "Starting Paper 1.21.11..."
+                    startupProgressPercent = maxOf(startupProgressPercent, 10)
                 }
-                cleanLine.contains("Loading chunks", ignoreCase = true) -> {
-                    startupStatusMessage = "Loading world..."
+                cleanLine.contains("Environment: Environment", ignoreCase = true) -> {
+                    startupStatusMessage = "Loading environment..."
+                    startupProgressPercent = maxOf(startupProgressPercent, 20)
                 }
-                cleanLine.contains("Preparing spawn", ignoreCase = true) || cleanLine.contains("Preparing level", ignoreCase = true) -> {
-                    startupStatusMessage = "Preparing spawn area..."
+                cleanLine.contains("recipes", ignoreCase = true) && cleanLine.contains("Loaded", ignoreCase = true) -> {
+                    startupStatusMessage = "Loaded recipes & advancements..."
+                    startupProgressPercent = maxOf(startupProgressPercent, 35)
                 }
-                cleanLine.contains("Starting server", ignoreCase = true) -> {
-                    startupStatusMessage = "Starting server..."
+                cleanLine.contains("Initialising converters", ignoreCase = true) -> {
+                    startupStatusMessage = "Initialising DataConverters..."
+                    startupProgressPercent = maxOf(startupProgressPercent, 45)
+                }
+                cleanLine.contains("PluginInitializerManager] Initializing plugins", ignoreCase = true) -> {
+                    startupStatusMessage = "Initializing plugins..."
+                    startupProgressPercent = maxOf(startupProgressPercent, 55)
+                }
+                cleanLine.contains("Starting minecraft server version", ignoreCase = true) -> {
+                    startupStatusMessage = "Starting Minecraft server..."
+                    startupProgressPercent = maxOf(startupProgressPercent, 65)
+                }
+                cleanLine.contains("Loading server plugin floodgate", ignoreCase = true) ||
+                    cleanLine.contains("boot Floodgate", ignoreCase = true) -> {
+                    startupStatusMessage = "Loading Floodgate..."
+                    startupProgressPercent = maxOf(startupProgressPercent, 75)
+                }
+                cleanLine.contains("Via-Mappingloader", ignoreCase = true) ||
+                    cleanLine.contains("Loading server plugin ViaVersion", ignoreCase = true) -> {
+                    startupStatusMessage = "Loading ViaVersion mappings..."
+                    startupProgressPercent = maxOf(startupProgressPercent, 80)
+                }
+                cleanLine.contains("Loading server plugin Geyser", ignoreCase = true) ||
+                    cleanLine.contains("Loaded 1 extension", ignoreCase = true) -> {
+                    startupStatusMessage = "Loading Geyser Bedrock bridge..."
+                    startupProgressPercent = maxOf(startupProgressPercent, 85)
+                }
+                cleanLine.contains("Preparing level", ignoreCase = true) -> {
+                    startupStatusMessage = "Loading world level..."
+                    startupProgressPercent = maxOf(startupProgressPercent, 90)
+                }
+                cleanLine.contains("Preparing spawn area", ignoreCase = true) -> {
+                    val pctMatch = Regex("""Preparing spawn area:\s*(\d+)%""", RegexOption.IGNORE_CASE).find(cleanLine)
+                    if (pctMatch != null) {
+                        val pct = pctMatch.groupValues[1]
+                        startupStatusMessage = "Preparing spawn area ($pct%)..."
+                        val rawPct = pct.toIntOrNull() ?: 0
+                        val mapped = 90 + ((rawPct * 8) / 100)
+                        startupProgressPercent = maxOf(startupProgressPercent, mapped)
+                    } else {
+                        startupStatusMessage = "Preparing spawn area..."
+                    }
                 }
                 cleanLine.contains("Connecting tunnel", ignoreCase = true) ||
                     cleanLine.contains("Opening internet relay", ignoreCase = true) -> {
                     startupStatusMessage = "Opening internet relay..."
+                    startupProgressPercent = maxOf(startupProgressPercent, 95)
                 }
             }
         }
+
 
         if (!isPingLine) {
             if (logsQueue.size >= 2000) {

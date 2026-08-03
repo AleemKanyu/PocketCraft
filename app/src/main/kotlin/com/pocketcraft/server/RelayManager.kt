@@ -71,7 +71,8 @@ class RelayManager(private val context: Context) {
         private const val IDLE_REPLENISH_DELAY_MS = 500L
         private const val SOCKET_OPEN_STAGGER_MS = 50L
         // Heartbeat every 20s instead of 10s — reduces network request traffic while keeping session alive.
-        private const val TUNNEL_HEARTBEAT_INTERVAL_MS = 20_000L
+        private const val TUNNEL_HEARTBEAT_INTERVAL_MS = 60_000L
+
         private const val IDLE_SOCKET_REFRESH_INTERVAL_MS = 5 * 60_000L
         private const val SOCKET_IDLE_TIMEOUT_MS = 8 * 60_000L
         private const val SOCKET_IDLE_TIMEOUT_JITTER_MS = 90_000L
