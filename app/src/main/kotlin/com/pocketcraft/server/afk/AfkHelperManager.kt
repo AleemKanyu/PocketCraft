@@ -49,7 +49,8 @@ class AfkHelperManager(
     companion object {
         private const val DUMMY_PREFIX = "AFK_"
         private const val DUMMY_PLUGIN_NAME = "DummyPlayers.jar"
-        private const val POLL_INTERVAL_MS = 15_000L
+        private const val POLL_INTERVAL_MS = 60_000L
+
         private const val HOT_RELOAD_WAIT_MS = 4_000L
     }
 

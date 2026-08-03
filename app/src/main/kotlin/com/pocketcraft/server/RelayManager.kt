@@ -52,9 +52,10 @@ class RelayManager(private val context: Context) {
         const val PHONE_TUNNEL_PORT = 9000
         // Bound kernel queues so chunks backpressure Paper before keepalives sit
         // behind seconds of unsent data on constrained mobile relay routes.
-        private const val SOCKET_BUFFER_SIZE = 128 * 1024
-        private const val PLAYER_BRIDGE_BUFFER_SIZE = 64 * 1024
-        private const val PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE = 64 * 1024
+        private const val SOCKET_BUFFER_SIZE = 32 * 1024
+        private const val PLAYER_BRIDGE_BUFFER_SIZE = 32 * 1024
+        private const val PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE = 32 * 1024
+
         private const val BEDROCK_TX_BUFFER_SIZE = 8 * 1024
         private const val BEDROCK_SMALL_FRAME_MAX_BYTES = 3072
         private const val BEDROCK_LARGE_FRAME_BATCH_MAX = 4
@@ -1245,8 +1246,8 @@ class RelayManager(private val context: Context) {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = 64 * 1024
-            socket.receiveBufferSize = 64 * 1024
+            socket.sendBufferSize = 32 * 1024
+            socket.receiveBufferSize = 32 * 1024
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
         }
@@ -1257,12 +1258,13 @@ class RelayManager(private val context: Context) {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = 64 * 1024
-            socket.receiveBufferSize = 64 * 1024
+            socket.sendBufferSize = 32 * 1024
+            socket.receiveBufferSize = 32 * 1024
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
         }
     }
+
 
     /**
      * Closes the tunnel sockets.

@@ -1668,12 +1668,7 @@ class ServerStateHolder(
             sessionPlayers.add(mergedPlayer)
         }
 
-        scope.launch(Dispatchers.IO) {
-            delay(500)
-            if (isRunning && !isStopping) {
-                applyPingUpdatesFromRcon()
-            }
-        }
+
     }
 
     private fun applyPersistedRuntimeState(state: PersistedRuntimeState) {
