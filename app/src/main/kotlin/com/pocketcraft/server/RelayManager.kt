@@ -1247,8 +1247,8 @@ class RelayManager(private val context: Context) {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = 32 * 1024
-            socket.receiveBufferSize = 32 * 1024
+            socket.sendBufferSize = 128 * 1024
+            socket.receiveBufferSize = 128 * 1024
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
         }
@@ -1259,12 +1259,13 @@ class RelayManager(private val context: Context) {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = 32 * 1024
-            socket.receiveBufferSize = 32 * 1024
+            socket.sendBufferSize = 128 * 1024
+            socket.receiveBufferSize = 128 * 1024
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
         }
     }
+
 
 
     /**
