@@ -776,8 +776,7 @@ class ServerLauncher(private val context: Context) {
             "-DPaper.IgnoreJavaVersion=true",
             "-Dpaper.disable-update-check=true",
             "-Dpaper.disable-plugin-update-check=true",
-            "-Dsun.net.client.defaultConnectTimeout=1000",
-            "-Dsun.net.client.defaultReadTimeout=1000",
+
             "-Dsun.zip.disableMemoryMapping=true",
             "-Djdk.attach.allowAttachSelf=true",
             "-Djna.nosys=true",
@@ -1315,8 +1314,12 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", concurrentLoads.toString())
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-sends", concurrentSends.toString())
 
-        // Dynamically scale chunk I/O and worker threads based on available CPU cores (4 to 8)
-        val threads = (Runtime.getRuntime().availableProcessors() - 1).coerceIn(4, 8)
+        // Cap Moonrise chunk I/O and worker threads to max 3 on mobile.
+        // The Pixel 5 has 8 cores but 7 worker + 7 I/O threads (14 total) starve the server
+        // main tick thread of CPU time, causing tick lag and high relay ping (400-1000ms).
+        // 2-3 threads is sufficient for chunk loading while keeping the tick thread responsive.
+        val cores = Runtime.getRuntime().availableProcessors()
+        val threads = if (cores <= 4) 2 else 3
 
         updated = removeYamlPathKey(updated, listOf("misc"), "io-threads")
         updated = removeYamlPathKey(updated, listOf("misc"), "worker-threads")

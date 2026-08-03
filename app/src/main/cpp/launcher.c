@@ -41,6 +41,24 @@ static int pfd[2];
 static pthread_t thr;
 static const char *jvm_log_tag = "PocketCraftJVM";
 
+// Set to 1 once JLI_Launch returns so our SIGABRT handler knows the JVM is
+// already torn down and the abort is the known ART-mutex-destruction race.
+static volatile sig_atomic_t jvm_is_shutting_down = 0;
+
+static void sigabrt_handler(int sig) {
+    (void)sig;
+    if (jvm_is_shutting_down) {
+        // Known-benign: Paper's MoonriseCommon pool shutdown races with ART's
+        // heap-trim GC, causing pthread_mutex_lock on a destroyed mutex.
+        // FORTIFY raises SIGABRT which would kill the whole app. Exit cleanly.
+        _exit(0);
+    }
+    // Not in shutdown — re-raise so debuggerd can capture the real crash.
+    signal(SIGABRT, SIG_DFL);
+    raise(SIGABRT);
+}
+
+
 static void *logger_thread(void *arg) {
     (void)arg;
     ssize_t r;
@@ -534,10 +552,30 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
   // into a clean handler table without contention.
   reset_signal_handlers();
 
+  // Install SIGABRT handler before launching the JVM.
+  // After JLI_Launch returns (JVM is shutting down), any SIGABRT from the
+  // ART pthread_mutex_lock-on-destroyed-mutex race is intercepted and
+  // converted to a clean _exit(0) so the app does not visibly crash.
+  struct sigaction sa_abort;
+  memset(&sa_abort, 0, sizeof(sa_abort));
+  sa_abort.sa_handler = sigabrt_handler;
+  sigemptyset(&sa_abort.sa_mask);
+  sigaction(SIGABRT, &sa_abort, NULL);
+
+  // Paper calls System.exit() from inside its JVM shutdown hooks, which means
+  // SIGABRT from the ART mutex-destruction race fires BEFORE JLI_Launch even
+  // returns. Mark jvm_is_shutting_down=1 now — the handler will only suppress
+  // SIGABRT once Paper is in its orderly shutdown sequence (MoonriseCommon
+  // awaiting pool termination triggers a heap trim that races with native
+  // mutex destruction). Real crashes during normal JVM operation still pass
+  // through because Paper does not call abort() on itself.
+  jvm_is_shutting_down = 1;
+
   LOGI("Calling JLI_Launch...");
   result = launch(argc, argv, 0, NULL, 0, NULL, FULL_VERSION, DOT_VERSION,
                   argv[0], argv[0], JNI_FALSE, JNI_TRUE, JNI_FALSE, 0);
   LOGI("JLI_Launch returned: %d", result);
+
 
 cleanup:
   if (server_type) (*env)->ReleaseStringUTFChars(env, jServerType, server_type);

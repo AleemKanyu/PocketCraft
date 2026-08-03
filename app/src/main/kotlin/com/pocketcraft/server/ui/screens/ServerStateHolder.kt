@@ -512,14 +512,20 @@ class ServerStateHolder(
             isRunning = true
             isStopping = false
             startupProgressPercent = 100
+            startupStatusMessage = "Server ready!"
             stopStartupProgressTracking(reset = false)
 
             markServerReady()
             markJoinable()
             bedrockBridgeEnabled = bridgeEnabled
+
+            // Force UI state to RUNNING immediately so the loading card dismisses without
+            // waiting for the async refreshAll() disk read to complete.
+            updateServerUiState()
             refreshAll()
         }
     }
+
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
