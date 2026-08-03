@@ -48,19 +48,18 @@ static volatile sig_atomic_t jvm_is_shutting_down = 0;
 
 static void jvm_shutdown_signal_handler(int sig) {
     if (jvm_is_shutting_down) {
-        // Known-benign: Native GPU driver teardown (libGLESv2_adreno.so SIGSEGV) or
-        // Bionic FORTIFY pthread_mutex_lock on a destroyed mutex during JVM teardown.
-        // Terminate the crashing background thread cleanly with pthread_exit(NULL)
-        // so the main Android app process remains completely alive and stable.
-        LOGI("Intercepted shutdown signal %d in background thread. Terminating thread cleanly.", sig);
+        // Known-benign: Bionic FORTIFY __fortify_fatal calling tgkill(SIGABRT) or
+        // Adreno GPU driver unmap (SIGSEGV) during JVM teardown.
+        // Ignore the signal so the main process stays 100% alive.
+        LOGI("Intercepted shutdown signal %d during JVM teardown. Ignoring.", sig);
         signal(sig, SIG_IGN);
-        pthread_exit(NULL);
         return;
     }
     // Not in shutdown — re-raise so debuggerd can capture the real crash.
     signal(sig, SIG_DFL);
     raise(sig);
 }
+
 
 
 
