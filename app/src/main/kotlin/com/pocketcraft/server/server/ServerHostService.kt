@@ -2170,7 +2170,7 @@ class ServerHostService : Service() {
             }
         }
 
-        if (looksLikeServerReady(line)) {
+        if (!isBacklog && looksLikeServerReady(line)) {
             onServerReady()
         }
 
