@@ -151,9 +151,7 @@ class ServerHostService : Service() {
         super.onCreate()
         isServiceRunning = true
         autoRestartEnabled = AppPreferences(applicationContext).autoRestart
-        serverStartTimeMillis = runBlocking {
-            AppPreferencesStore.getServerStartedAtMillis(applicationContext)
-        }
+        serverStartTimeMillis = AppPreferences(applicationContext).lastStartTimestamp
     }
 
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
@@ -188,17 +186,13 @@ class ServerHostService : Service() {
             updateNotification(initialText, force = true)
         }
 
+        val appPrefs = AppPreferences(applicationContext)
+
         if (action == ACTION_START_LISTENER) {
             keepListenerRunningManual = false
             val requestedVersionId = intent?.getStringExtra(EXTRA_VERSION_ID).orEmpty().trim()
-            val versionId = if (requestedVersionId.isBlank()) {
-                runBlocking { AppPreferencesStore.getSelectedVersionFlow(applicationContext).first().orEmpty() }
-            } else {
-                requestedVersionId
-            }
-            val worldName = intent?.getStringExtra(EXTRA_WORLD_NAME).orEmpty().trim().takeIf { it.isNotBlank() }
-                ?: runBlocking { AppPreferencesStore.getSelectedWorldFlow(applicationContext).first() }
-                ?: "world"
+            val versionId = requestedVersionId.ifBlank { getPersistedActiveVersion(applicationContext) }
+            val worldName = intent?.getStringExtra(EXTRA_WORLD_NAME).orEmpty().trim().ifBlank { appPrefs.selectedWorld.ifBlank { "world" } }
             currentVersionId = versionId
             currentWorldName = worldName
             
@@ -277,7 +271,7 @@ class ServerHostService : Service() {
         val hasExplicitStart = intent?.action == ACTION_START && versionId.isNotBlank()
         val requestedWorldName = intent?.getStringExtra(EXTRA_WORLD_NAME).orEmpty().trim()
         val selectedWorld = if (intent?.action == ACTION_START && requestedWorldName.isBlank()) {
-            runBlocking { AppPreferencesStore.getSelectedWorldFlow(applicationContext).first() }
+            appPrefs.selectedWorld
         } else {
             ""
         }
@@ -1759,9 +1753,7 @@ class ServerHostService : Service() {
                 ?.takeIf { it.isNotBlank() }
                 ?: "world"
         }
-        val world = kotlinx.coroutines.runBlocking {
-            AppPreferencesStore.getSelectedWorldFlow(applicationContext).first().trim().ifBlank { "world" }
-        }
+        val world = AppPreferences(applicationContext).selectedWorld.trim().ifBlank { "world" }
         currentWorldName = world
         return world
     }
@@ -1890,9 +1882,7 @@ class ServerHostService : Service() {
         startLogcatBridge(versionId)
         val serverPort = resolveServerPort(worldName)
         currentServerPort = serverPort
-        val existingServerDetected = runBlocking(Dispatchers.IO) {
-            waitForLocalServerPort(serverPort, timeoutMs = 12_000L)
-        }
+        val existingServerDetected = isLocalServerPortOpen(serverPort)
         if (existingServerDetected) {
             isLaunching = false
             currentVersionId = null
