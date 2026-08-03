@@ -883,34 +883,10 @@ class ServerHostService : Service() {
         serverProcess = null
 
         val extPid = getExternalJvmPid(applicationContext)
-        if (extPid > 0) {
+        if (extPid > 0 && extPid != android.os.Process.myPid().toLong()) {
             android.util.Log.i("ServerHostService", "Force-killing persisted external JVM process: $extPid")
             runCatching { android.os.Process.killProcess(extPid.toInt()) }
             persistExternalJvmPid(applicationContext, -1L)
-        }
-
-        killOrphanedJvmProcesses(applicationContext)
-    }
-
-    private fun killOrphanedJvmProcesses(context: Context) {
-        runCatching {
-            val process = Runtime.getRuntime().exec(arrayOf("ps"))
-            process.inputStream.bufferedReader().useLines { lines ->
-                lines.forEach { line ->
-                    val trimmed = line.trim()
-                    if (trimmed.contains("java") || trimmed.contains("serverwrap")) {
-                        val parts = trimmed.split(Regex("\\s+"))
-                        for (part in parts) {
-                            val pid = part.toIntOrNull()
-                            if (pid != null && pid != android.os.Process.myPid() && pid > 0) {
-                                android.util.Log.i("ServerHostService", "Killing orphaned process from ps: $trimmed ($pid)")
-                                android.os.Process.killProcess(pid)
-                                break
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 
