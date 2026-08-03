@@ -102,23 +102,26 @@ object ConsoleParser {
         if (!clean.contains("Done (", ignoreCase = true)) return false
         
         // Ignore plugin loading & level prep completion lines (e.g. Geyser, ViaVersion, floodgate, "Done preparing level")
-        if (clean.contains("Geyser", ignoreCase = true) ||
-            clean.contains("ViaVersion", ignoreCase = true) ||
-            clean.contains("floodgate", ignoreCase = true) ||
-            clean.contains("Companion", ignoreCase = true) ||
+        if (clean.contains("[Geyser", ignoreCase = true) ||
+            clean.contains("Geyser-Spigot", ignoreCase = true) ||
+            clean.contains("[ViaVersion", ignoreCase = true) ||
+            clean.contains("[floodgate", ignoreCase = true) ||
+            clean.contains("[Companion", ignoreCase = true) ||
+            clean.contains("[dummyplayers", ignoreCase = true) ||
             clean.contains("preparing level", ignoreCase = true) ||
             clean.contains("preparing spawn", ignoreCase = true)) {
             return false
         }
 
-        
         val afterThread = clean.substringAfter("]: ", clean)
-        if (afterThread.startsWith("[") && !afterThread.startsWith("[Server thread")) {
+        if (afterThread.startsWith("[")) {
             return false
         }
         val text = stripLogDecorations(clean)
+        if (text.contains("geyser", ignoreCase = true)) return false
         return DONE_PREFIX_REGEX.containsMatchIn(text) || (text.startsWith("Done (", ignoreCase = true) && text.contains("help", ignoreCase = true))
     }
+
 
     fun parseEvent(line: String): ServerEvent? =
         if (isDone(line)) ServerEvent.ServerFullyReady else null
