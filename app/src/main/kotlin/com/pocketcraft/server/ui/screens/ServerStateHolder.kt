@@ -1717,6 +1717,10 @@ class ServerStateHolder(
             startPeriodicLocationPolling()
             startPeriodicPingPolling()
             markJoinable()
+        } else if (isStarting) {
+            // During active server boot, NEVER adopt stale isRunning = true from disk state
+            isRunning = false
+            resetJoinable()
         } else if (!state.isStarting && isStarting && !isRunning && (lastStartRequestedRealtime > 0L && SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 180000L)) {
             // Keep isStarting = true during startup grace period; prevent brief flickering to OFFLINE
             isStarting = true
@@ -1725,6 +1729,7 @@ class ServerStateHolder(
             isStarting = state.isStarting
             isRunning = state.isRunning
         }
+
         if (state.isRunning || state.isStarting) {
             consoleVisibleAfterStart = true
             if (logs.isEmpty()) {

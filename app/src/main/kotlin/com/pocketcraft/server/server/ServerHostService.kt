@@ -214,6 +214,11 @@ class ServerHostService : Service() {
         } else {
             requestedVersionId
         }
+        if (intent?.action == ACTION_START && versionId.isNotBlank()) {
+            val startWorld = intent.getStringExtra(EXTRA_WORLD_NAME).orEmpty().trim().ifBlank { appPrefs.selectedWorld.ifBlank { "world" } }
+            persistRuntimeState(applicationContext, versionId, startWorld, RUNTIME_STATE_STARTING)
+        }
+
         if (intent?.action == ACTION_STOP) {
             keepListenerRunningManual = intent.getBooleanExtra("keep_listener_alive", false)
             stopReason = "user"
