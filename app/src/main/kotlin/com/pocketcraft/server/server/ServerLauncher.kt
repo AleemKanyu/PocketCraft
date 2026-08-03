@@ -732,21 +732,6 @@ class ServerLauncher(private val context: Context) {
             "-Dpaper.disable-hardware-info=true",
             "-Doshi.os.disabled=true",
             "-Doshi.architecture=aarch64",
-            "-Dhttp.proxyHost=127.0.0.1",
-            "-Dhttp.proxyPort=65534",
-            "-Dhttps.proxyHost=127.0.0.1",
-            "-Dhttps.proxyPort=65534",
-            "-Dsun.net.client.defaultConnectTimeout=50",
-            "-Dsun.net.client.defaultReadTimeout=50",
-            "-Dyggdrasil.service.host=http://127.0.0.1/",
-            "-Dyggdrasil.session.host=http://127.0.0.1/",
-            "-Dyggdrasil.services.host=http://127.0.0.1/",
-            "-Dyggdrasil.profiles.host=http://127.0.0.1/",
-            "-Dmojang.services.host=http://127.0.0.1/",
-            "-Dmojang.sessionserver.url=http://127.0.0.1/",
-            "-Dmojang.services.url=http://127.0.0.1/",
-            "-Dmojang.profiles.url=http://127.0.0.1/",
-            "-Dpaper.mojang.sessionserver.url=http://127.0.0.1/",
             "-Djava.home=$jrePath",
             "-Djava.security.egd=file:/dev/urandom",
             "-Djava.io.tmpdir=$tmpDir",
@@ -806,7 +791,7 @@ class ServerLauncher(private val context: Context) {
                 add("-XX:-UseContainerSupport")
                 add("-XX:ErrorFile=$errorFilePattern")
                 // Cap worker & I/O threads on mobile ARM to prevent 100% CPU core pinning and phone overheating
-                val nettyLoopThreads = cores.coerceIn(2, 4)
+                val nettyLoopThreads = cores.coerceIn(4, 8)
                 add("-Dio.netty.eventLoopThreads=$nettyLoopThreads")
                 add("-Dpaper.maxChunkIOThreads=2")
                 add("-Dpaper.maxChunkThreads=2")
