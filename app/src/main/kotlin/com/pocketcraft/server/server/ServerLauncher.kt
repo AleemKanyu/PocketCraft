@@ -301,7 +301,7 @@ class ServerLauncher(private val context: Context) {
             else -> 512
         }
         val availRamCap = (availRam * 0.85f).toInt().coerceAtLeast(deviceProfile.minHeapFloorMb)
-        val maxHeapCapForAndroid = if (preferInProcessJvm) 1536 else maxAllowedRam
+        val maxHeapCapForAndroid = 1536
         val maxRamMb = requestedMaxRamMb
             .coerceAtMost(availRamCap)
             .coerceAtMost(maxHeapCapForAndroid)
@@ -722,8 +722,15 @@ class ServerLauncher(private val context: Context) {
             "-XX:TieredStopAtLevel=1",
             "-Dca.spottedleaf.dataconverter.parallel=true",
             "-Dca.spottedleaf.dataconverter.threads=4",
-            "-Dyggdrasil.service.host=127.0.0.1",
-            "-Dmojang.services.host=127.0.0.1",
+            "-Dyggdrasil.service.host=http://127.0.0.1/",
+            "-Dyggdrasil.session.host=http://127.0.0.1/",
+            "-Dyggdrasil.services.host=http://127.0.0.1/",
+            "-Dyggdrasil.profiles.host=http://127.0.0.1/",
+            "-Dmojang.services.host=http://127.0.0.1/",
+            "-Dmojang.sessionserver.url=http://127.0.0.1/",
+            "-Dmojang.services.url=http://127.0.0.1/",
+            "-Dmojang.profiles.url=http://127.0.0.1/",
+            "-Dpaper.mojang.sessionserver.url=http://127.0.0.1/",
             "-Djava.home=$jrePath",
             "-Djava.security.egd=file:/dev/urandom",
             "-Djava.io.tmpdir=$tmpDir",
