@@ -503,11 +503,17 @@ class ServerStateHolder(
         private set
 
     private fun attemptTransitionToOnline() {
-        if (!isStarting && !isRestartingCycle) return
-
         if (isJavaServerDone && areSpawnChunksLoaded) {
             isGeyserDone = true
             val bridgeEnabled = try { PluginManager.isBedrockBridgeEnabled(appContext, activeWorld.ifBlank { "world" }) } catch (e: Exception) { false }
+            
+            // Transition state from STARTING to RUNNING
+            isStarting = false
+            isRunning = true
+            isStopping = false
+            startupProgressPercent = 100
+            stopStartupProgressTracking(reset = false)
+
             markServerReady()
             markJoinable()
             bedrockBridgeEnabled = bridgeEnabled
