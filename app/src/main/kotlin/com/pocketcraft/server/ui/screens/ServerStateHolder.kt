@@ -1355,35 +1355,31 @@ class ServerStateHolder(
                     startupStatusMessage = "Starting Paper 1.21.11..."
                     startupProgressPercent = maxOf(startupProgressPercent, 10)
                 }
+                cleanLine.contains("PluginInitializerManager] Initializing plugins", ignoreCase = true) -> {
+                    startupStatusMessage = "Initializing plugins..."
+                    startupProgressPercent = maxOf(startupProgressPercent, 20)
+                }
+                cleanLine.contains("boot Floodgate", ignoreCase = true) ||
+                    cleanLine.contains("Loading server plugin floodgate", ignoreCase = true) -> {
+                    startupStatusMessage = "Initializing Floodgate..."
+                    startupProgressPercent = maxOf(startupProgressPercent, 35)
+                }
                 cleanLine.contains("Environment: Environment", ignoreCase = true) -> {
                     startupStatusMessage = "Loading environment..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 20)
+                    startupProgressPercent = maxOf(startupProgressPercent, 45)
                 }
                 cleanLine.contains("recipes", ignoreCase = true) && cleanLine.contains("Loaded", ignoreCase = true) -> {
                     startupStatusMessage = "Loaded recipes & advancements..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 35)
+                    startupProgressPercent = maxOf(startupProgressPercent, 55)
                 }
                 cleanLine.contains("Initialising converters", ignoreCase = true) -> {
                     startupStatusMessage = "Initialising DataConverters..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 45)
-                }
-                cleanLine.contains("PluginInitializerManager] Initializing plugins", ignoreCase = true) -> {
-                    startupStatusMessage = "Initializing plugins..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 55)
-                }
-                cleanLine.contains("Starting minecraft server version", ignoreCase = true) -> {
-                    startupStatusMessage = "Starting Minecraft server..."
                     startupProgressPercent = maxOf(startupProgressPercent, 65)
-                }
-                cleanLine.contains("Loading server plugin floodgate", ignoreCase = true) ||
-                    cleanLine.contains("boot Floodgate", ignoreCase = true) -> {
-                    startupStatusMessage = "Loading Floodgate..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 75)
                 }
                 cleanLine.contains("Via-Mappingloader", ignoreCase = true) ||
                     cleanLine.contains("Loading server plugin ViaVersion", ignoreCase = true) -> {
                     startupStatusMessage = "Loading ViaVersion mappings..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 80)
+                    startupProgressPercent = maxOf(startupProgressPercent, 75)
                 }
                 cleanLine.contains("Loading server plugin Geyser", ignoreCase = true) ||
                     cleanLine.contains("Loaded 1 extension", ignoreCase = true) -> {
@@ -1413,6 +1409,7 @@ class ServerStateHolder(
                 }
             }
         }
+
 
 
         if (!isPingLine) {
