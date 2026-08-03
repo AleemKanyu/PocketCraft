@@ -1463,7 +1463,7 @@ class ServerStateHolder(
             areSpawnChunksLoaded = true
         }
 
-        if (ConsoleParser.isDone(cleanLine)) {
+        if ((isStarting || isRestartingCycle) && ConsoleParser.isDone(cleanLine)) {
             areSpawnChunksLoaded = true
             isJavaServerDone = true
             markServerReady()
