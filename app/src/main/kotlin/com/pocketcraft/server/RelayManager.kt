@@ -1172,10 +1172,9 @@ class RelayManager(private val context: Context) {
 
                     val startTime = System.nanoTime()
                     output.write(buffer, 0, bytesRead)
-                    if (relayInput.available() == 0) {
-                        runCatching { output.flush() }
-                    }
+                    runCatching { output.flush() }
                     totalBytes += bytesRead
+
 
                     val durationMicros = (System.nanoTime() - startTime) / 1000
                     if (durationMicros > 100_000) {
@@ -1207,10 +1206,9 @@ class RelayManager(private val context: Context) {
                     if (bytesRead <= 0) break
 
                     output.write(buffer, 0, bytesRead)
-                    if (input.available() == 0) {
-                        runCatching { output.flush() }
-                    }
+                    runCatching { output.flush() }
                     totalBytes += bytesRead
+
                 }
                 android.util.Log.d("RelayManager", "LocalToRelay: End of stream. Total upstream: $totalBytes bytes")
             } catch (e: Exception) {

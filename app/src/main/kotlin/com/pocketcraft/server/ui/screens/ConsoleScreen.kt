@@ -1821,7 +1821,11 @@ private fun ServerIdentityCard(
             stateHolder.isServerFullyReady &&
             !stateHolder.isStarting &&
             stateHolder.areSpawnChunksLoaded &&
-            stateHolder.isJavaServerDone
+            stateHolder.isJavaServerDone &&
+            !relayConnecting &&
+            (relayReady || stateHolder.tunnelError != null)
+
+
 
 
         val joinCardShadowColor = pocketCardShadowColor()
