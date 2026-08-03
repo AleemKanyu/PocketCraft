@@ -57,8 +57,9 @@ class BedrockUdpBridge(
                 ?: GEYSER_LOCAL_HOST
             try {
                 DatagramSocket().also { datagramSocket ->
-                    datagramSocket.receiveBufferSize = 4 * 1024 * 1024  // 4 MB
-                    datagramSocket.sendBufferSize   = 2 * 1024 * 1024        // 2 MB
+                    datagramSocket.receiveBufferSize = 256 * 1024  // 256 KB (low-latency queue)
+                    datagramSocket.sendBufferSize   = 256 * 1024  // 256 KB
+
                     datagramSocket.soTimeout = 30000 // 30s timeout
                     runCatching { datagramSocket.trafficClass = 0x10 } // IPTOS_LOWDELAY
                     datagramSocket.reuseAddress = true

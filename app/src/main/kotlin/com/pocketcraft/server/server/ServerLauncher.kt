@@ -1130,12 +1130,15 @@ class ServerLauncher(private val context: Context) {
         flightModeEnabled: Boolean
     ): Triple<Int, Int, Int> {
         // Returns Triple(concurrentGenerates, concurrentLoads, concurrentSends)
+        // Cap concurrentGenerates to 3-4 so terrain generation on mobile ARM CPU never starves
+        // the main server tick thread of CPU resources.
         return if (flightModeEnabled) {
-            if (cellularRelay) Triple(8, 12, 4) else Triple(12, 20, 10)
+            if (cellularRelay) Triple(3, 12, 4) else Triple(4, 20, 10)
         } else {
-            if (cellularRelay) Triple(6, 10, 3) else Triple(10, 16, 8)
+            if (cellularRelay) Triple(2, 10, 3) else Triple(3, 16, 8)
         }
     }
+
 
     private fun computeRelayChunkPipelineRates(
         chunkSendRate: Int,
