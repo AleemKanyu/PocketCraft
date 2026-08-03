@@ -3787,10 +3787,10 @@ class ServerStateHolder(
                         break
                     }
                     val nextProgress = when {
-                        elapsedMs < 8_000L -> ((elapsedMs / 8_000f) * 20f)
-                        elapsedMs < 20_000L -> 20f + (((elapsedMs - 8_000L) / 12_000f) * 32f)
-                        elapsedMs < 35_000L -> 52f + (((elapsedMs - 20_000L) / 15_000f) * 26f)
-                        elapsedMs < 55_000L -> 78f + (((elapsedMs - 35_000L) / 20_000f) * 20f)
+                        elapsedMs < 30_000L -> ((elapsedMs / 30_000f) * 25f)
+                        elapsedMs < 75_000L -> 25f + (((elapsedMs - 30_000L) / 45_000f) * 30f)
+                        elapsedMs < 135_000L -> 55f + (((elapsedMs - 75_000L) / 60_000f) * 25f)
+                        elapsedMs < 180_000L -> 80f + (((elapsedMs - 135_000L) / 45_000f) * 18f)
                         else -> 98f
                     }.toInt().coerceIn(minOf(startupProgressPercent, 98), 98)
 
