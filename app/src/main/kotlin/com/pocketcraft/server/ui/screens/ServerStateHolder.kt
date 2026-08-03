@@ -3774,7 +3774,8 @@ class ServerStateHolder(
 
     private fun startStartupProgressTracking() {
         startupProgressJob?.cancel()
-        startupProgressJob = scope.launch {
+        startupProgressJob = scope.launch(Dispatchers.IO) {
+            var lastPersistedProgress = -1
             while (isStarting && !isRunning) {
                 if (!isStopping) {
                     val elapsedMs = (SystemClock.elapsedRealtime() - (startupStartedAtRealtime ?: SystemClock.elapsedRealtime())).coerceAtLeast(0L)
@@ -3794,14 +3795,20 @@ class ServerStateHolder(
 
                     if (!isStarting || isRunning) break
 
-                    startupProgressPercent = nextProgress
-                    ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, "STARTING ($nextProgress%)")
-                    ServerHostService.pushWidgetUpdate(appContext, "STARTING ($nextProgress%)")
-                    if (startupStatusMessage.isBlank() || startupStatusMessage == "Initializing..." || startupStatusMessage == "Preparing server...") {
-                        startupStatusMessage = naturalStartupStatus(elapsedMs)
+                    withContext(Dispatchers.Main) {
+                        startupProgressPercent = nextProgress
+                        if (startupStatusMessage.isBlank() || startupStatusMessage == "Initializing..." || startupStatusMessage == "Preparing server...") {
+                            startupStatusMessage = naturalStartupStatus(elapsedMs)
+                        }
+                    }
+
+                    if (nextProgress - lastPersistedProgress >= 10 || lastPersistedProgress == -1) {
+                        lastPersistedProgress = nextProgress
+                        ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, "STARTING ($nextProgress%)")
+                        ServerHostService.pushWidgetUpdate(appContext, "STARTING ($nextProgress%)")
                     }
                 }
-                delay(700)
+                delay(1000)
             }
         }
     }
