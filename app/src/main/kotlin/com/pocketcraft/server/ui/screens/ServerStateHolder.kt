@@ -1330,10 +1330,19 @@ class ServerStateHolder(
         val parsedPings = ConsoleParser.parsePing(cleanLine)
         val isPingLine = parsedPings.isNotEmpty()
         
+        // Filter out harmless oshi/JNA Android hardware probe warnings that flood log with false stacktraces
+        if (cleanLine.contains("oshi.software.os.linux", ignoreCase = true) ||
+            cleanLine.contains("com.sun.jna", ignoreCase = true) ||
+            cleanLine.contains("Did not find udev library", ignoreCase = true) ||
+            cleanLine.contains("Failed retrieving info for group", ignoreCase = true)) {
+            return
+        }
+
         // Debug: log important lines
         if (cleanLine.contains("Done", ignoreCase = true) || cleanLine.contains("Server port", ignoreCase = true)) {
             android.util.Log.d("ServerStateHolder", "appendLog received: $cleanLine")
         }
+
 
         // Track startup progress with exact Paper boot log milestones
         if (isStarting) {
