@@ -722,7 +722,6 @@ class ServerLauncher(private val context: Context) {
             "-Xmx${maxRamMb}m",
             "-Xms${minRamMb}m",
             "-XX:+TieredCompilation",
-            "-Djava.home=$jrePath",
             "-Xverify:none",
             "-XX:+UnlockDiagnosticVMOptions",
             "-XX:TieredStopAtLevel=1",
@@ -748,7 +747,6 @@ class ServerLauncher(private val context: Context) {
             "-Dos.version=Android-${Build.VERSION.RELEASE}",
             "-Djava.net.preferIPv4Stack=true",
             "-Djava.net.preferIPv6Addresses=false",
-            "-Dio.netty.eventLoopThreads=$nettyThreads",
             "-Dfile.encoding=UTF-8",
             "-Dusing.aikars.flags=https://mcflags.emc.gs",
             "-Dpaper.playerconnection.keepalive=90",
@@ -757,6 +755,7 @@ class ServerLauncher(private val context: Context) {
             "-Dorg.jline.terminal.jni=false",
             "-Dorg.jline.terminal.dumb=true",
             "-Djava.awt.headless=true",
+            "-Dsun.java2d.opengl=false",
             "-Djava.library.path=$javaLibraryPath",
             "-Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false",
             "-Dpaper.chunk-system.async-chunk-unloading=true",
@@ -767,7 +766,6 @@ class ServerLauncher(private val context: Context) {
             "-DPaper.IgnoreJavaVersion=true",
             "-Dpaper.disable-update-check=true",
             "-Dpaper.disable-plugin-update-check=true",
-
             "-Dsun.zip.disableMemoryMapping=true",
             "-Djdk.attach.allowAttachSelf=true",
             "-Djna.nosys=true",
@@ -790,14 +788,11 @@ class ServerLauncher(private val context: Context) {
                 add("-XX:-UsePerfData")
                 add("-XX:-UseContainerSupport")
                 add("-XX:ErrorFile=$errorFilePattern")
-                // Cap worker & I/O threads on mobile ARM to prevent 100% CPU core pinning and phone overheating
                 val nettyLoopThreads = cores.coerceIn(4, 8)
                 add("-Dio.netty.eventLoopThreads=$nettyLoopThreads")
                 add("-Dpaper.maxChunkIOThreads=2")
                 add("-Dpaper.maxChunkThreads=2")
                 add("-Dio.netty.allocator.maxOrder=8")
-                // Tighten recycler pools: the default 262144 cap was holding ~100MB of
-                // pooled byte buffers in swap, causing page-in latency on packet sends.
                 add("-Dio.netty.recycler.maxCapacity=4096")
                 add("-Dio.netty.recycler.maxCapacityPerThread=256")
                 add("-Dio.netty.recycler.linkCapacity=256")
@@ -805,8 +800,8 @@ class ServerLauncher(private val context: Context) {
                 add("-Dio.netty.leakDetection.level=disabled")
                 add("-Dio.netty.noPreferDirect=false")
                 add("-Dio.netty.noUnsafe=false")
-                add("-Djdk.lang.Process.launchMechanism=FORK")
             })
+
             when (launchMode) {
                 ServerFileManager.LaunchMode.JAR -> {
                     add("-jar")
