@@ -129,6 +129,9 @@ class ServerHostService : Service() {
     private var lastNotificationUpdateMs: Long = 0L
     private var serverReadyNotificationShown = false
     private var serverStartTimeMillis: Long = 0L
+    @Volatile private var serviceLaunchRealtimeMs: Long = 0L
+    @Volatile private var hasSeenServerStarting = false
+
     private var pendingRestartVersionId: String? = null
     private var pendingRestartWorldName: String? = null
     private val relayStatusPlayerCount = AtomicInteger(0)
@@ -1216,6 +1219,7 @@ class ServerHostService : Service() {
 
     private fun startLogcatBridge(versionId: String) {
         if (logcatRunning.getAndSet(true)) return
+        val bridgeStartTime = SystemClock.elapsedRealtime()
         logcatThread = Thread {
             val process = ProcessBuilder(
                 "logcat",
@@ -1246,7 +1250,8 @@ class ServerHostService : Service() {
                     ) {
                         return@forEach
                     }
-                    handleObservedOutputLine(versionId, line)
+                    val isBacklog = (SystemClock.elapsedRealtime() - bridgeStartTime) < 3000L
+                    handleObservedOutputLine(versionId, line, isBacklog)
                 }
             }
         }.apply {
@@ -1372,6 +1377,7 @@ class ServerHostService : Service() {
 
     @Keep
     private fun looksLikeServerReady(line: String): Boolean {
+        if (!hasSeenServerStarting) return false
         return ConsoleParser.isDone(line)
     }
 
@@ -1849,8 +1855,16 @@ class ServerHostService : Service() {
         }
 
         isLaunching = true
+        serviceLaunchRealtimeMs = SystemClock.elapsedRealtime()
+        hasSeenServerStarting = false
         currentVersionId = versionId
         currentWorldName = worldName
+        runCatching {
+            val latestLog = File(ServerFileManager.getServerDir(applicationContext, worldName), "logs/latest.log")
+            if (latestLog.exists()) {
+                latestLog.delete()
+            }
+        }
         stopReason = "unknown"
         serverReadyNotificationShown = false
         serverReadyHandled.set(false)
@@ -2090,6 +2104,15 @@ class ServerHostService : Service() {
                 sendEvent(versionId, EVENT_OUTPUT, msg)
             }
         }
+        if (line.contains("Starting minecraft server", ignoreCase = true) ||
+            line.contains("Loading Paper", ignoreCase = true) ||
+            line.contains("Preparing level", ignoreCase = true) ||
+            line.contains("Running Java", ignoreCase = true) ||
+            line.contains("Initializing plugins", ignoreCase = true) ||
+            ConsoleParser.isPreparingStartRegion(line)) {
+            hasSeenServerStarting = true
+        }
+
         addLogLine(line)
         sendEvent(versionId, EVENT_OUTPUT, line)
         if (isBacklog) return
@@ -2156,7 +2179,8 @@ class ServerHostService : Service() {
             }
         }
 
-        if (!isBacklog && looksLikeServerReady(line)) {
+        val elapsedSinceLaunch = SystemClock.elapsedRealtime() - serviceLaunchRealtimeMs
+        if (!isBacklog && (serviceLaunchRealtimeMs == 0L || elapsedSinceLaunch >= 3000L) && looksLikeServerReady(line)) {
             onServerReady()
         }
 

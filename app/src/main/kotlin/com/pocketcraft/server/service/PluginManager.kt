@@ -248,18 +248,34 @@ object PluginManager {
         }
 
         removeIncompatiblePlugins(context, worldName)
-        onProgress("Installing bundled Bedrock bridge plugins...")
         val serverDir = ServerFileManager.getServerDir(context, worldName)
         BundledPluginInstaller.installBundledPlugins(context, serverDir)
 
-        ensureManagedPluginEnabled(context, worldName, "geyser")
-        ensureManagedPluginEnabled(context, worldName, "floodgate")
-        ensureManagedPluginEnabled(context, worldName, "viaversion")
-        preserveFloodgateKey(context, worldName)
-
-        enforceBedrockBridgeLocalConfig(context, worldName)
+        if (isBedrockBridgeEnabled(context, worldName)) {
+            onProgress("Enabling bundled Bedrock bridge plugins...")
+            ensureManagedPluginEnabled(context, worldName, "geyser")
+            ensureManagedPluginEnabled(context, worldName, "floodgate")
+            ensureManagedPluginEnabled(context, worldName, "viaversion")
+            preserveFloodgateKey(context, worldName)
+            enforceBedrockBridgeLocalConfig(context, worldName)
+        } else {
+            onProgress("Bedrock crossplay disabled. Skipping Geyser & Floodgate...")
+            disableManagedPlugin(context, worldName, "geyser")
+            disableManagedPlugin(context, worldName, "floodgate")
+        }
 
         Result.success(Unit)
+    }
+
+    fun setBedrockBridgeEnabled(context: Context, worldName: String, enabled: Boolean) {
+        val crossplayPlugins = listOf("geyser", "floodgate", "viaversion", "viabackwards", "geyserreversion")
+        if (enabled) {
+            crossplayPlugins.forEach { ensureManagedPluginEnabled(context, worldName, it) }
+            preserveFloodgateKey(context, worldName)
+            enforceBedrockBridgeLocalConfig(context, worldName)
+        } else {
+            crossplayPlugins.forEach { disableManagedPlugin(context, worldName, it) }
+        }
     }
 
     suspend fun autoUpdateBundledPlugins(
@@ -815,6 +831,7 @@ object PluginManager {
         val version = props.getProperty("pocketcraft-game-version").orEmpty()
         return when (serverType) {
             com.pocketcraft.server.data.model.ServerType.FABRIC -> "fabric-$version"
+            com.pocketcraft.server.data.model.ServerType.FORGE -> "forge-$version"
             com.pocketcraft.server.data.model.ServerType.PAPER -> "paper-$version"
             com.pocketcraft.server.data.model.ServerType.PURPUR -> "purpur-$version"
             com.pocketcraft.server.data.model.ServerType.MODPACK -> {
@@ -1144,7 +1161,7 @@ object PluginManager {
     ): List<RemoteCatalogItem> {
         throttleProvider(MODRINTH_PROVIDER, minimumGapMs = 250L)
 
-        val facets = buildModrinthFacets(type)
+        val facets = buildModrinthFacets(type, runtimeKey)
         val encodedQuery = URLEncoder.encode(query, "UTF-8")
         val encodedFacets = URLEncoder.encode(facets, "UTF-8")
         val index = "downloads"
@@ -1649,10 +1666,18 @@ object PluginManager {
         return name
     }
 
-    private fun buildModrinthFacets(type: ContentType): String {
+    private fun buildModrinthFacets(type: ContentType, runtimeKey: String = ""): String {
         return when (type) {
             ContentType.PLUGINS -> """[["project_type:plugin"]]"""
-            ContentType.MODS -> """[["project_type:mod"]]"""
+            ContentType.MODS -> {
+                val loaders = compatibleModLoadersForRuntime(runtimeKey)
+                if (loaders.isNotEmpty()) {
+                    val loaderFacets = loaders.joinToString(",") { """"categories:$it"""" }
+                    """[["project_type:mod"],[$loaderFacets]]"""
+                } else {
+                    """[["project_type:mod"]]"""
+                }
+            }
             ContentType.RESOURCE_PACKS -> """[["project_type:resourcepack"]]"""
         }
     }
@@ -1892,7 +1917,7 @@ object PluginManager {
         val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
         return when (ServerType.fromString(props.getProperty("pocketcraft-server-type"))) {
             ServerType.PAPER, ServerType.PURPUR -> true
-            ServerType.FABRIC, ServerType.MODPACK -> false
+            ServerType.FABRIC, ServerType.FORGE, ServerType.MODPACK -> false
         }
     }
 

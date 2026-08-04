@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.material3.Switch
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -240,7 +241,7 @@ fun ConsoleScreen(
     }
     val animatedStartupProgress by animateFloatAsState(
         targetValue = (stateHolder.startupProgressPercent / 100f).coerceIn(0f, 1f),
-        animationSpec = tween(durationMillis = 700),
+        animationSpec = tween(durationMillis = 150, easing = androidx.compose.animation.core.LinearEasing),
         label = "startup_progress"
     )
     val uiState = stateHolder.serverUiState
@@ -368,6 +369,7 @@ fun ConsoleScreen(
                 )
             }
         }
+
         if (stateHolder.status == ServerStatus.STARTING && !stateHolder.firstBootComplete && !firstBootWarningSessionDismissed) {
             item(key = "first_boot_warning") {
                 val dismissState = rememberSwipeToDismissBoxState(
@@ -541,10 +543,6 @@ fun ConsoleScreen(
                             },
                             onClick = {
                                 try {
-                                    if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
-                                        Toast.makeText(context, "No internet connection. Please check your network.", Toast.LENGTH_LONG).show()
-                                        return@PremiumHomeButton
-                                    }
                                     if (isVersionDownloaded) {
                                         stateHolder.startServer()
                                     } else if (effectiveServerType == ServerType.MODPACK) {
@@ -617,10 +615,6 @@ fun ConsoleScreen(
                                     icon = Icons.Default.Refresh,
                                     onClick = {
                                         try {
-                                            if (!com.pocketcraft.server.util.NetworkUtils.isOnline(context)) {
-                                                Toast.makeText(context, "No internet connection. Please check your network.", Toast.LENGTH_LONG).show()
-                                                return@PremiumHomeButton
-                                            }
                                             stateHolder.restartServer()
                                         } catch (e: Exception) {
                                             android.util.Log.e("ConsoleScreen", "Restart error", e)
@@ -1804,14 +1798,15 @@ private fun ServerIdentityCard(
         val publicAddress = stateHolder.publicAddress?.takeIf { it.isNotBlank() }
         val relayConnecting = stateHolder.tunnelConnecting
         val relaySwitching = relayConnecting && stateHolder.relaySwitchInProgress
+        val isOfflineMode = !com.pocketcraft.server.util.NetworkUtils.isOnline(context)
         val internetRelayAddress = when {
+            isOfflineMode -> "Offline Mode (Local Wi-Fi / LAN Only)"
             relaySwitching -> "Switching relay connection..."
             relayConnecting && stateHolder.isRunning -> "Reconnecting to the servers..."
             relayConnecting -> "Opening internet relay..."
             !publicAddress.isNullOrBlank() -> publicAddress
             else -> "No internet"
         }
-
 
         val localWifiAddress = stateHolder.localIp
             .takeIf(::isShareableLanIp)
@@ -1822,8 +1817,7 @@ private fun ServerIdentityCard(
             !stateHolder.isStarting &&
             stateHolder.areSpawnChunksLoaded &&
             stateHolder.isJavaServerDone &&
-            !relayConnecting &&
-            (relayReady || stateHolder.tunnelError != null)
+            (relayReady || stateHolder.tunnelError != null || isOfflineMode)
 
 
 

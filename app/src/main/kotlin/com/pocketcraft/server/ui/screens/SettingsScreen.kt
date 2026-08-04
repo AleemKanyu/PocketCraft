@@ -328,7 +328,7 @@ fun SettingsScreen(
 
     LaunchedEffect(stateHolder.config, isPremium) {
         withContext(Dispatchers.IO) {
-            val maxPlayersLimit = if (isPremium) 50 else 10
+            val maxPlayersLimit = if (isPremium) 50 else 15
             val forceGamemodeVal = stateHolder.readServerProperty("force-gamemode")?.toBoolean() ?: false
             val broadcastConsoleVal = stateHolder.readServerProperty("broadcast-console-to-ops")?.toBoolean() ?: false
             val hideOnlineVal = stateHolder.readServerProperty("hide-online-players")?.toBoolean() ?: false
@@ -502,7 +502,20 @@ fun SettingsScreen(
             if (activeTab == 0) {
                 item {
                     AnimatedEntranceContainer(index = 0) {
-                        SettingsSection(activeS.performance, Icons.Default.Memory, isFirstSection = true)
+                        SettingsToggleRow(
+                            vectorIcon = Icons.Default.Devices,
+                            label = "Bedrock Crossplay Support (Geyser & Floodgate)",
+                            description = if (stateHolder.bedrockBridgeEnabled) "ENABLED — Allows Bedrock (Mobile & Console) players to join." else "DISABLED — Server boots faster and uses less memory (Java players only).",
+                            checked = stateHolder.bedrockBridgeEnabled,
+                            onToggle = { enabled ->
+                                stateHolder.toggleBedrockBridge(enabled)
+                            }
+                        )
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 0) {
+                        SettingsSection(activeS.performance, Icons.Default.Memory, isFirstSection = false)
                     }
                 }
                 item {
@@ -770,12 +783,26 @@ fun SettingsScreen(
                             min = 1, max = 50,
                             value = currentState.config.maxPlayers,
                             onValueChange = { 
-                                if (it > 10 && !isPremium) {
+                                if (it > 15 && !isPremium) {
                                     showPremiumBottomSheet = true
-                                    currentState = currentState.copy(config = currentState.config.copy(maxPlayers = 10))
+                                    currentState = currentState.copy(config = currentState.config.copy(maxPlayers = 15))
                                 } else {
                                     currentState = currentState.copy(config = currentState.config.copy(maxPlayers = it))
                                 }
+                            }
+                        )
+                    }
+                }
+
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        SettingsToggleRow(
+                            vectorIcon = Icons.Default.Devices,
+                            label = "Bedrock Crossplay Support",
+                            description = if (stateHolder.bedrockBridgeEnabled) "Geyser & Floodgate enabled. Bedrock mobile and console players can join." else "Disabled. Server boots faster and saves memory (Java players only).",
+                            checked = stateHolder.bedrockBridgeEnabled,
+                            onToggle = { enabled ->
+                                stateHolder.toggleBedrockBridge(enabled)
                             }
                         )
                     }
@@ -2989,7 +3016,8 @@ private fun SettingsLinkRow(
 
 @Composable
 private fun SettingsToggleRow(
-    icon: String,
+    icon: String = "",
+    vectorIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     label: String,
     description: String? = null,
     checked: Boolean,
@@ -3011,7 +3039,11 @@ private fun SettingsToggleRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                FlatEmojiIcon(icon, modifier = Modifier.size(24.dp), tint = PocketColors.PrimaryDark)
+                if (vectorIcon != null) {
+                    Icon(vectorIcon, contentDescription = null, tint = PocketColors.PrimaryDark, modifier = Modifier.size(24.dp))
+                } else if (icon.isNotBlank()) {
+                    FlatEmojiIcon(icon, modifier = Modifier.size(24.dp), tint = PocketColors.PrimaryDark)
+                }
                 Column {
                     Text(text = label, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
                     description?.let {

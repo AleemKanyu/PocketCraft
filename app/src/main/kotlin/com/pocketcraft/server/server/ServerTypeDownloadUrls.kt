@@ -13,6 +13,7 @@ object ServerTypeDownloadUrls {
             ServerType.PAPER   -> "https://papermc.io/downloads/paper"
             ServerType.PURPUR  -> "https://purpurmc.org/downloads"
             ServerType.FABRIC  -> fabricServerJarUrl(version, loaderVersion = null, installerVersion = null)
+            ServerType.FORGE   -> "https://files.minecraftforge.net/net/minecraftforge/forge/index_$version.html"
             ServerType.MODPACK -> "https://modrinth.com/modpacks"
         }
     }
@@ -52,6 +53,7 @@ object ServerTypeDownloadUrls {
                     serverDefault.getString("url")
                 }
                 ServerType.PURPUR  -> "https://api.purpurmc.org/v2/purpur/$version/latest/download"
+                ServerType.FORGE   -> "https://files.minecraftforge.net/net/minecraftforge/forge/index_$version.html"
                 ServerType.MODPACK -> "https://modrinth.com/modpacks"
 
                 ServerType.FABRIC -> {
@@ -98,6 +100,7 @@ object ServerTypeDownloadUrls {
                 ServerType.PAPER   -> "https://papermc.io/downloads/paper"
                 ServerType.PURPUR  -> "https://purpurmc.org/downloads"
                 ServerType.FABRIC  -> fabricServerJarUrl(cleanVersion, "0.16.10", "1.0.1")
+                ServerType.FORGE   -> "https://files.minecraftforge.net/net/minecraftforge/forge/index_$cleanVersion.html"
                 ServerType.MODPACK -> "https://modrinth.com/modpacks"
             }
         }

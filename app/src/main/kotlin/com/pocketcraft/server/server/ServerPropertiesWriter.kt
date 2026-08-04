@@ -85,7 +85,7 @@ object ServerPropertiesWriter {
         } else desiredLevelName
         props["level-name"] = actualLevelName
         props["level-seed"] = prefs.worldSeed
-        val maxLimit = if (isPremium) 50 else 10
+        val maxLimit = if (isPremium) 50 else 15
         props["max-players"] = prefs.maxPlayers.coerceIn(1, maxLimit).toString()
 
         props["server-port"] = "25565"

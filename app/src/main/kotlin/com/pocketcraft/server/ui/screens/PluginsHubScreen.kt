@@ -158,6 +158,7 @@ fun PluginsHubScreen(
     val availableTabs = remember(stateHolder.config.serverType) {
         when (stateHolder.config.serverType) {
             com.pocketcraft.server.data.model.ServerType.FABRIC,
+            com.pocketcraft.server.data.model.ServerType.FORGE,
             com.pocketcraft.server.data.model.ServerType.MODPACK -> listOf(ContentTab.MODS, ContentTab.PACKS)
             com.pocketcraft.server.data.model.ServerType.PAPER,
             com.pocketcraft.server.data.model.ServerType.PURPUR -> listOf(ContentTab.PLUGINS, ContentTab.PACKS)

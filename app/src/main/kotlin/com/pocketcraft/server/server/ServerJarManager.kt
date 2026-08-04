@@ -65,6 +65,7 @@ object ServerJarManager {
             )
             ServerType.PURPUR -> fetchPurpurVersions()
             ServerType.FABRIC -> fetchFabricVersions()
+            ServerType.FORGE -> fetchForgeVersions()
             ServerType.MODPACK -> emptyList()
         }
 
@@ -73,6 +74,35 @@ object ServerJarManager {
             VersionCacheManager.put(context, cacheKey, filtered)
         }
         filtered
+    }
+
+    private fun fetchForgeVersions(): List<String> {
+        return runCatching {
+            val req = Request.Builder()
+                .url("https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json")
+                .header("Accept", "application/json")
+                .header("User-Agent", USER_AGENT)
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) throw Exception("Forge API error ${resp.code}")
+                val body = resp.body?.string() ?: throw Exception("Empty response")
+                val json = JSONObject(body)
+                val promos = json.getJSONObject("promos")
+                val list = mutableListOf<String>()
+                val keys = promos.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val ver = key.substringBefore('-')
+                    if (ver.isNotBlank() && !list.contains(ver)) {
+                        list.add(ver)
+                    }
+                }
+                list.sortedWith(versionComparator)
+            }
+        }.getOrElse { e ->
+            Log.e(TAG, "Failed to fetch Forge versions: ${e.message}", e)
+            listOf("1.20.4", "1.20.2", "1.20.1", "1.19.4", "1.19.2", "1.18.2", "1.17.1", "1.16.5", "1.12.2")
+        }
     }
 
     private fun fetchPaperVersions(): List<String> {

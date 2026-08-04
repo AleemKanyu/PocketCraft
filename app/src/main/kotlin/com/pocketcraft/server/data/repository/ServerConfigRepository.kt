@@ -282,12 +282,12 @@ class ServerConfigRepository @Inject constructor(
         val defaultName = if (fallbackName == "server") "world" else fallbackName
 
         val isPremium = com.pocketcraft.server.data.preferences.AppPreferences(context).let { it.isPremiumUser || it.debugPremiumOverride }
-        val maxPlayersLimit = if (isPremium) 50 else 10
+        val maxPlayersLimit = if (isPremium) 50 else 15
 
         return ServerConfig(
             worldName = props["level-name"] ?: defaultName,
             worldSeed = props["level-seed"] ?: "",
-            maxPlayers = (props["max-players"]?.toIntOrNull() ?: 10).coerceIn(1, maxPlayersLimit),
+            maxPlayers = (props["max-players"]?.toIntOrNull() ?: 15).coerceIn(1, maxPlayersLimit),
             port = 25565,
             difficulty = props["difficulty"] ?: "normal",
             gameMode = props["gamemode"] ?: "survival",

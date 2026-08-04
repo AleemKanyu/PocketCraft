@@ -36,7 +36,8 @@ object BundledPluginInstaller {
 
         BUNDLED_PLUGINS.forEach { pluginName ->
             val destFile = File(pluginsDir, pluginName)
-            if (!destFile.exists()) {
+            val disabledFile = File(pluginsDir, "$pluginName.disabled")
+            if (!destFile.exists() && !disabledFile.exists()) {
                 copyAssetPlugin(context, pluginName, destFile)
             }
         }
@@ -51,7 +52,10 @@ object BundledPluginInstaller {
         removeLegacyPlugins(pluginsDir)
         BUNDLED_PLUGINS.forEach { pluginName ->
             val destFile = File(pluginsDir, pluginName)
-            copyAssetPlugin(context, pluginName, destFile)
+            val disabledFile = File(pluginsDir, "$pluginName.disabled")
+            if (!disabledFile.exists()) {
+                copyAssetPlugin(context, pluginName, destFile)
+            }
         }
     }
 
@@ -67,8 +71,8 @@ object BundledPluginInstaller {
         val bundledNamesLower = BUNDLED_PLUGINS.map { it.lowercase() }.toSet()
         pluginsDir.listFiles()?.forEach { file ->
             if (!file.isFile) return@forEach
-            val nameLower = file.name.lowercase()
-            if (nameLower in bundledNamesLower && file.name !in BUNDLED_PLUGINS) {
+            val nameLower = file.name.lowercase().removeSuffix(".disabled")
+            if (nameLower in bundledNamesLower && file.name !in BUNDLED_PLUGINS && !file.name.endsWith(".disabled")) {
                 if (!file.delete()) {
                     Log.w(TAG, "Could not delete duplicate bundled plugin ${file.name}")
                 }
@@ -79,7 +83,12 @@ object BundledPluginInstaller {
     private fun removeOutdatedBundledPlugins(context: Context, pluginsDir: File) {
         BUNDLED_PLUGINS.forEach { pluginName ->
             val existingFile = File(pluginsDir, pluginName)
-            if (!existingFile.exists()) return@forEach
+            val disabledFile = File(pluginsDir, "$pluginName.disabled")
+            val targetFile = when {
+                existingFile.exists() -> existingFile
+                disabledFile.exists() -> disabledFile
+                else -> return@forEach
+            }
 
             runCatching {
                 val assetPath = if (pluginName == "PocketCraftCompanion.jar") "default_plugins/$pluginName" else "plugins/$pluginName"
@@ -92,9 +101,9 @@ object BundledPluginInstaller {
                     }
                     size
                 }
-                if (existingFile.length() != assetSize) {
-                    if (!existingFile.delete()) {
-                        Log.w(TAG, "Could not delete stale bundled plugin ${existingFile.name}")
+                if (targetFile.length() != assetSize) {
+                    if (!targetFile.delete()) {
+                        Log.w(TAG, "Could not delete stale bundled plugin ${targetFile.name}")
                     }
                 }
             }.onFailure { error ->

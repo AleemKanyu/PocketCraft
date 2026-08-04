@@ -65,11 +65,123 @@ static void jvm_shutdown_signal_handler(int sig) {
 
 
 
+#include <link.h>
+#include <sys/mman.h>
+
+static void apply_exit_plt_hooks(void);
+
 JNIEXPORT void JNICALL Java_com_pocketcraft_server_NativeLauncher_notifyShutdownStarted(JNIEnv *env, jobject thiz) {
     (void)env;
     (void)thiz;
     jvm_is_shutting_down = 1;
+    apply_exit_plt_hooks();
 }
+
+_Noreturn void exit(int status) {
+    LOGI("Intercepted exit(%d) from in-process JVM runtime.", status);
+    jvm_is_shutting_down = 1;
+    pthread_exit(NULL);
+}
+
+_Noreturn void _exit(int status) {
+    LOGI("Intercepted _exit(%d) from in-process JVM runtime.", status);
+    jvm_is_shutting_down = 1;
+    pthread_exit(NULL);
+}
+
+_Noreturn void quick_exit(int status) {
+    LOGI("Intercepted quick_exit(%d) from in-process JVM runtime.", status);
+    jvm_is_shutting_down = 1;
+    pthread_exit(NULL);
+}
+
+#if defined(__LP64__) || defined(__aarch64__) || defined(__x86_64__)
+#define GET_R_SYM(info) ELF64_R_SYM(info)
+#else
+#define GET_R_SYM(info) ELF32_R_SYM(info)
+#endif
+
+static int plt_hook_callback(struct dl_phdr_info *info, size_t size, void *data) {
+    (void)size;
+    (void)data;
+    if (!info->dlpi_name || !info->dlpi_name[0]) return 0;
+
+    if (strstr(info->dlpi_name, "liblauncher.so")) {
+        return 0;
+    }
+
+    ElfW(Addr) base = info->dlpi_addr;
+    const ElfW(Phdr) *phdr = info->dlpi_phdr;
+
+    const ElfW(Dyn) *dyn = NULL;
+    for (int i = 0; i < info->dlpi_phnum; i++) {
+        if (phdr[i].p_type == PT_DYNAMIC) {
+            dyn = (const ElfW(Dyn) *)(base + phdr[i].p_vaddr);
+            break;
+        }
+    }
+    if (!dyn) return 0;
+
+    const ElfW(Sym) *symtab = NULL;
+    const char *strtab = NULL;
+    const ElfW(Rel) *rel = NULL;
+    const ElfW(Rela) *rela = NULL;
+    size_t relsz = 0, relasz = 0;
+
+    for (const ElfW(Dyn) *d = dyn; d->d_tag != DT_NULL; d++) {
+        switch (d->d_tag) {
+            case DT_SYMTAB: symtab = (const ElfW(Sym) *)(base + d->d_un.d_ptr); break;
+            case DT_STRTAB: strtab = (const char *)(base + d->d_un.d_ptr); break;
+            case DT_JMPREL: rel = (const ElfW(Rel) *)(base + d->d_un.d_ptr); break;
+            case DT_PLTRELSZ: relsz = d->d_un.d_val; break;
+            case DT_RELA: rela = (const ElfW(Rela) *)(base + d->d_un.d_ptr); break;
+            case DT_RELASZ: relasz = d->d_un.d_val; break;
+        }
+    }
+
+    if (!symtab || !strtab) return 0;
+
+    long pagesize = sysconf(_SC_PAGESIZE);
+
+    if (rel && relsz > 0) {
+        size_t count = relsz / sizeof(ElfW(Rel));
+        for (size_t i = 0; i < count; i++) {
+            size_t sym_idx = GET_R_SYM(rel[i].r_info);
+            const char *sym_name = strtab + symtab[sym_idx].st_name;
+            if (strcmp(sym_name, "exit") == 0 || strcmp(sym_name, "_exit") == 0 || strcmp(sym_name, "quick_exit") == 0) {
+                ElfW(Addr) *got_entry = (ElfW(Addr) *)(base + rel[i].r_offset);
+                uintptr_t page_start = (uintptr_t)got_entry & ~(pagesize - 1);
+                mprotect((void *)page_start, pagesize, PROT_READ | PROT_WRITE);
+                *got_entry = (ElfW(Addr))exit;
+                mprotect((void *)page_start, pagesize, PROT_READ);
+                LOGI("PLT hooked %s in %s", sym_name, info->dlpi_name);
+            }
+        }
+    }
+
+    if (rela && relasz > 0) {
+        size_t count = relasz / sizeof(ElfW(Rela));
+        for (size_t i = 0; i < count; i++) {
+            size_t sym_idx = GET_R_SYM(rela[i].r_info);
+            const char *sym_name = strtab + symtab[sym_idx].st_name;
+            if (strcmp(sym_name, "exit") == 0 || strcmp(sym_name, "_exit") == 0 || strcmp(sym_name, "quick_exit") == 0) {
+                ElfW(Addr) *got_entry = (ElfW(Addr) *)(base + rela[i].r_offset);
+                uintptr_t page_start = (uintptr_t)got_entry & ~(pagesize - 1);
+                mprotect((void *)page_start, pagesize, PROT_READ | PROT_WRITE);
+                *got_entry = (ElfW(Addr))exit;
+                mprotect((void *)page_start, pagesize, PROT_READ);
+                LOGI("PLT hooked %s in %s", sym_name, info->dlpi_name);
+            }
+        }
+    }
+
+    return 0;
+}
+
+static void apply_exit_plt_hooks(void) {
+    dl_iterate_phdr(plt_hook_callback, NULL);
+}
+
 
 
 
@@ -413,6 +525,7 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
   preload_library(libfreetype_path, "libfreetype.so");
   preload_library(libfontmanager_path, "libfontmanager.so");
   preload_runtime_tree(runtime_lib_dir);
+  apply_exit_plt_hooks();
 
   JLI_Launch_fn *launch = (JLI_Launch_fn *)dlsym(jli_handle, "JLI_Launch");
   if (!launch) {

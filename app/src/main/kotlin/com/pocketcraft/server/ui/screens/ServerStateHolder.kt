@@ -175,6 +175,7 @@ class ServerStateHolder(
     private var receiverRegistered = false
     private var startedAtRealtime: Long? = null
     private var startupStartedAtRealtime: Long? = null
+    private var targetStartupProgressPercent = 1
     private var jvmStartedTracking = false
     private var startupProgressJob: Job? = null
     private var startupLaunchJob: Job? = null
@@ -505,9 +506,11 @@ class ServerStateHolder(
     private fun attemptTransitionToOnline() {
         if (!isStarting && !isRestartingCycle) return
 
-        if (isJavaServerDone && areSpawnChunksLoaded) {
+        val isRelayPending = tunnelConnecting && publicAddress.isNullOrBlank() && tunnelError == null
+        if (isJavaServerDone && !isRelayPending) {
 
             isGeyserDone = true
+            areSpawnChunksLoaded = true
             val bridgeEnabled = try { PluginManager.isBedrockBridgeEnabled(appContext, activeWorld.ifBlank { "world" }) } catch (e: Exception) { false }
             
             // Transition state from STARTING to RUNNING
@@ -526,6 +529,9 @@ class ServerStateHolder(
             // waiting for the async refreshAll() disk read to complete.
             updateServerUiState()
             refreshAll()
+        } else if (isJavaServerDone && isRelayPending) {
+            startupStatusMessage = "Opening internet relay..."
+            startupProgressPercent = 95
         }
     }
 
@@ -844,6 +850,16 @@ class ServerStateHolder(
         }
     }
 
+    fun toggleBedrockBridge(enabled: Boolean) {
+        scope.launch(Dispatchers.IO) {
+            PluginManager.setBedrockBridgeEnabled(appContext, activeWorld, enabled)
+            val updatedState = PluginManager.isBedrockBridgeEnabled(appContext, activeWorld)
+            withContext(Dispatchers.Main) {
+                bedrockBridgeEnabled = updatedState
+            }
+        }
+    }
+
     private fun observeOpenServerRiskAcknowledgement() {
         scope.launch {
             AppPreferencesStore.isOpenServerRiskAcknowledgedFlow(appContext).collect { acknowledged ->
@@ -862,7 +878,7 @@ class ServerStateHolder(
     val status: ServerStatus
         get() = when {
             isRestarting -> ServerStatus.RESTARTING
-            isRunning && isJavaServerDone && serverJoinable -> ServerStatus.ONLINE
+            isRunning && isJavaServerDone && serverJoinable && !isStarting -> ServerStatus.ONLINE
             isStarting || isRunning -> ServerStatus.STARTING
             else -> ServerStatus.OFFLINE
         }
@@ -1190,13 +1206,13 @@ class ServerStateHolder(
                     PlayerDataManager.fixOfflineUuids(serverDir, currentActiveWorld)
 
                     val isPremium = prefs.isPremiumUser || prefs.debugPremiumOverride
-                    val maxPlayersLimit = if (isPremium) 50 else 10
+                    val maxPlayersLimit = if (isPremium) 50 else 15
                     val propsFile = File(serverDir, "server.properties")
                     if (propsFile.exists()) {
                         try {
                             val props = java.util.Properties()
                             propsFile.inputStream().use { props.load(it) }
-                            val currentMax = props.getProperty("max-players")?.toIntOrNull() ?: 10
+                            val currentMax = props.getProperty("max-players")?.toIntOrNull() ?: 15
                             if (currentMax > maxPlayersLimit) {
                                 props["max-players"] = maxPlayersLimit.toString()
                                 propsFile.outputStream().use { props.store(it, "Managed by PocketCraft") }
@@ -1352,43 +1368,43 @@ class ServerStateHolder(
             when {
                 cleanLine.contains("Running Java 21", ignoreCase = true) ||
                     cleanLine.contains("Loading Paper", ignoreCase = true) -> {
-                    startupStatusMessage = "Starting Paper 1.21.11..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 10)
+                    startupStatusMessage = "Starting Paper 1.21.11 runtime..."
+                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 12)
                 }
                 cleanLine.contains("PluginInitializerManager] Initializing plugins", ignoreCase = true) -> {
                     startupStatusMessage = "Initializing plugins..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 20)
+                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 22)
                 }
                 cleanLine.contains("boot Floodgate", ignoreCase = true) ||
                     cleanLine.contains("Loading server plugin floodgate", ignoreCase = true) -> {
-                    startupStatusMessage = "Initializing Floodgate..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 35)
+                    startupStatusMessage = "Initializing Floodgate Bedrock auth..."
+                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 35)
                 }
                 cleanLine.contains("Environment: Environment", ignoreCase = true) -> {
-                    startupStatusMessage = "Loading environment..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 45)
+                    startupStatusMessage = "Loading game environment & registry..."
+                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 45)
                 }
                 cleanLine.contains("recipes", ignoreCase = true) && cleanLine.contains("Loaded", ignoreCase = true) -> {
-                    startupStatusMessage = "Loaded recipes & advancements..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 55)
+                    startupStatusMessage = "Loaded 1,470 recipes & 1,584 advancements..."
+                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 55)
                 }
                 cleanLine.contains("Initialising converters", ignoreCase = true) -> {
-                    startupStatusMessage = "Initialising DataConverters..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 65)
+                    startupStatusMessage = "Initializing DataConverters..."
+                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 65)
                 }
                 cleanLine.contains("Via-Mappingloader", ignoreCase = true) ||
                     cleanLine.contains("Loading server plugin ViaVersion", ignoreCase = true) -> {
-                    startupStatusMessage = "Loading ViaVersion mappings..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 75)
+                    startupStatusMessage = "Loading ViaVersion protocol mappings..."
+                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 75)
                 }
                 cleanLine.contains("Loading server plugin Geyser", ignoreCase = true) ||
                     cleanLine.contains("Loaded 1 extension", ignoreCase = true) -> {
                     startupStatusMessage = "Loading Geyser Bedrock bridge..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 85)
+                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 85)
                 }
                 cleanLine.contains("Preparing level", ignoreCase = true) -> {
-                    startupStatusMessage = "Loading world level..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 90)
+                    startupStatusMessage = "Loading world level 'world'..."
+                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 90)
                 }
                 cleanLine.contains("Preparing spawn area", ignoreCase = true) -> {
                     val pctMatch = Regex("""Preparing spawn area:\s*(\d+)%""", RegexOption.IGNORE_CASE).find(cleanLine)
@@ -1396,8 +1412,8 @@ class ServerStateHolder(
                         val pct = pctMatch.groupValues[1]
                         startupStatusMessage = "Preparing spawn area ($pct%)..."
                         val rawPct = pct.toIntOrNull() ?: 0
-                        val mapped = 90 + ((rawPct * 8) / 100)
-                        startupProgressPercent = maxOf(startupProgressPercent, mapped)
+                        val mapped = 90 + ((rawPct * 5) / 100)
+                        targetStartupProgressPercent = maxOf(targetStartupProgressPercent, mapped)
                     } else {
                         startupStatusMessage = "Preparing spawn area..."
                     }
@@ -1405,7 +1421,7 @@ class ServerStateHolder(
                 cleanLine.contains("Connecting tunnel", ignoreCase = true) ||
                     cleanLine.contains("Opening internet relay", ignoreCase = true) -> {
                     startupStatusMessage = "Opening internet relay..."
-                    startupProgressPercent = maxOf(startupProgressPercent, 95)
+                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 96)
                 }
             }
         }
@@ -1555,10 +1571,8 @@ class ServerStateHolder(
     }
 
     private fun markServerReady() {
-        stopStartupProgressTracking(reset = false)
-        isStarting = false
-        isRestartingCycle = false
-        isRunning = true
+        targetStartupProgressPercent = 100
+        startupStatusMessage = "Server ready!"
         lastStartRequestedRealtime = 0L
         ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_RUNNING)
         ServerHostService.pushWidgetUpdate(appContext)
@@ -1569,8 +1583,6 @@ class ServerStateHolder(
         startPeriodicWorldSave()
         startPeriodicLocationPolling()
         startPeriodicPingPolling()
-        startupProgressPercent = 100
-        startupStatusMessage = "Server ready!"
         if (tps <= 0f) tps = 20f
         if (startedAtRealtime == null) startedAtRealtime = SystemClock.elapsedRealtime()
         if (!hasAnnouncedServerOnline) {
@@ -1583,6 +1595,15 @@ class ServerStateHolder(
             scope.launch {
                 AppPreferencesStore.setFirstBootComplete(appContext, true)
             }
+        }
+        scope.launch {
+            while (startupProgressPercent < 100) {
+                delay(50)
+            }
+            stopStartupProgressTracking(reset = false)
+            isStarting = false
+            isRestartingCycle = false
+            isRunning = true
         }
     }
 
@@ -1754,7 +1775,8 @@ class ServerStateHolder(
             return
         }
 
-        if (isJavaServerDone && areSpawnChunksLoaded) {
+        val isRelayPending = tunnelConnecting && publicAddress.isNullOrBlank() && tunnelError == null
+        if (isJavaServerDone && areSpawnChunksLoaded && !isRelayPending) {
             isStarting = false
             isRestartingCycle = false
             isRunning = true
@@ -1769,8 +1791,8 @@ class ServerStateHolder(
             startPeriodicLocationPolling()
             startPeriodicPingPolling()
             markJoinable()
-        } else if (isStarting) {
-            // During active server boot, NEVER adopt stale isRunning = true from disk state
+        } else if (isStarting || (isJavaServerDone && areSpawnChunksLoaded && isRelayPending)) {
+            // During active server boot or relay opening, NEVER adopt stale isRunning = true from disk state
             isRunning = false
             resetJoinable()
         } else if (!state.isStarting && isStarting && !isRunning && (lastStartRequestedRealtime > 0L && SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 180000L)) {
@@ -1860,19 +1882,20 @@ class ServerStateHolder(
         val portOpen = isServerPortOpen(config.port)
         val processAlive = isServerProcessAlive()
 
-        // Server is ONLY truly RUNNING if Java server boot is done AND spawn chunks are loaded AND process is alive.
-        if (isJavaServerDone && areSpawnChunksLoaded && processAlive) {
+        val isRelayPending = tunnelConnecting && publicAddress.isNullOrBlank() && tunnelError == null
+        // Server is ONLY truly RUNNING if Java server boot is done AND spawn chunks are loaded AND process is alive AND relay is not pending.
+        if (isJavaServerDone && areSpawnChunksLoaded && !isRelayPending && processAlive) {
             return PersistedRuntimeState(isRunning = true, publicAddress = address)
         }
 
-        val startingGracePeriod = !isJavaServerDone && (isStarting || (lastStartRequestedRealtime > 0 && SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 120000L))
+        val startingGracePeriod = (!isJavaServerDone || isRelayPending) && (isStarting || (lastStartRequestedRealtime > 0 && SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 120000L))
 
         if (startingGracePeriod && processAlive) {
             return PersistedRuntimeState(isStarting = true, publicAddress = address)
         }
 
         if (rawState == ServerHostService.RUNTIME_STATE_RUNNING || isRunning) {
-            if ((portOpen || processAlive) && isJavaServerDone && areSpawnChunksLoaded) {
+            if ((portOpen || processAlive) && isJavaServerDone && areSpawnChunksLoaded && !isRelayPending) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
             if (startingGracePeriod && processAlive) {
@@ -1883,7 +1906,7 @@ class ServerStateHolder(
         }
 
         if (rawState == ServerHostService.RUNTIME_STATE_STARTING || isStarting || rawState.startsWith("STARTING")) {
-            if ((portOpen || processAlive) && isJavaServerDone && areSpawnChunksLoaded) {
+            if ((portOpen || processAlive) && isJavaServerDone && areSpawnChunksLoaded && !isRelayPending) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
             if (startingGracePeriod && processAlive) {
@@ -3700,28 +3723,7 @@ class ServerStateHolder(
     }
 
     private fun isServerProcessAlive(): Boolean {
-        val extPid = ServerHostService.getExternalJvmPid(appContext)
-        if (extPid > 0) {
-            return try {
-                android.system.Os.kill(extPid.toInt(), 0)
-                true
-            } catch (e: android.system.ErrnoException) {
-                e.errno != android.system.OsConstants.ESRCH
-            } catch (e: Exception) {
-                false
-            }
-        }
-        val serverPid = ServerHostService.getServerPid(appContext)
-        if (serverPid <= 0) return false
-
-        return try {
-            android.system.Os.kill(serverPid, 0)
-            true
-        } catch (e: android.system.ErrnoException) {
-            e.errno != android.system.OsConstants.ESRCH
-        } catch (e: Exception) {
-            false
-        }
+        return ServerHostService.isServiceRunning(appContext)
     }
 
     private fun startStopWatchdog() {
@@ -3843,8 +3845,12 @@ class ServerStateHolder(
 
     private fun startStartupProgressTracking() {
         startupProgressJob?.cancel()
+        targetStartupProgressPercent = 1
         startupProgressJob = scope.launch(Dispatchers.IO) {
+            var currentFloat = 1.0f
+            var targetFloat = 1.0f
             var lastPersistedProgress = -1
+
             while (isStarting && !isRunning) {
                 if (!isStopping) {
                     val elapsedMs = (SystemClock.elapsedRealtime() - (startupStartedAtRealtime ?: SystemClock.elapsedRealtime())).coerceAtLeast(0L)
@@ -3854,30 +3860,47 @@ class ServerStateHolder(
                         recordServerFailure("Server startup timed out (exceeded 12 minutes). Please verify your JRE settings or check the console log for errors.", duringStartup = true)
                         break
                     }
-                    val nextProgress = when {
-                        elapsedMs < 30_000L -> ((elapsedMs / 30_000f) * 25f)
-                        elapsedMs < 75_000L -> 25f + (((elapsedMs - 30_000L) / 45_000f) * 30f)
-                        elapsedMs < 135_000L -> 55f + (((elapsedMs - 75_000L) / 60_000f) * 25f)
-                        elapsedMs < 180_000L -> 80f + (((elapsedMs - 135_000L) / 45_000f) * 18f)
-                        else -> 98f
-                    }.toInt().coerceIn(minOf(startupProgressPercent, 98), 98)
 
-                    if (!isStarting || isRunning) break
+                    // Time-based fallback minimum progress curve (gradually crawls up to 95% over 3 minutes)
+                    val timeBasedMinFloat = when {
+                        elapsedMs < 15_000L -> 1f + ((elapsedMs / 15_000f) * 15f)
+                        elapsedMs < 45_000L -> 16f + (((elapsedMs - 15_000L) / 30_000f) * 25f)
+                        elapsedMs < 90_000L -> 41f + (((elapsedMs - 45_000L) / 45_000f) * 30f)
+                        elapsedMs < 150_000L -> 71f + (((elapsedMs - 90_000L) / 60_000f) * 20f)
+                        else -> 95f
+                    }
+
+                    val maxCap = if (targetStartupProgressPercent >= 100) 100f else 98f
+                    val desiredTarget = maxOf(targetStartupProgressPercent.toFloat(), timeBasedMinFloat).coerceIn(1f, maxCap)
+                    targetFloat = maxOf(targetFloat, desiredTarget)
+
+                    // Smoothly crawl currentFloat toward targetFloat
+                    if (currentFloat < targetFloat) {
+                        val stepRate = if (targetStartupProgressPercent >= 100) 1.5f else 0.35f
+                        val step = minOf((targetFloat - currentFloat) * 0.15f + 0.05f, stepRate)
+                        currentFloat = (currentFloat + step).coerceAtMost(targetFloat)
+                    }
+
+                    val displayPct = currentFloat.toInt().coerceIn(1, 100)
+
+                    if (!isStarting || (isRunning && displayPct >= 100)) break
 
                     withContext(Dispatchers.Main) {
-                        startupProgressPercent = nextProgress
-                        if (startupStatusMessage.isBlank() || startupStatusMessage == "Initializing..." || startupStatusMessage == "Preparing server...") {
+                        startupProgressPercent = displayPct
+                        if (displayPct >= 100) {
+                            startupStatusMessage = "Server ready!"
+                        } else if (startupStatusMessage.isBlank() || startupStatusMessage == "Initializing..." || startupStatusMessage == "Preparing server...") {
                             startupStatusMessage = naturalStartupStatus(elapsedMs)
                         }
                     }
 
-                    if (nextProgress - lastPersistedProgress >= 10 || lastPersistedProgress == -1) {
-                        lastPersistedProgress = nextProgress
-                        ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, "STARTING ($nextProgress%)")
-                        ServerHostService.pushWidgetUpdate(appContext, "STARTING ($nextProgress%)")
+                    if (displayPct - lastPersistedProgress >= 10 || lastPersistedProgress == -1) {
+                        lastPersistedProgress = displayPct
+                        ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, "STARTING ($displayPct%)")
+                        ServerHostService.pushWidgetUpdate(appContext, "STARTING ($displayPct%)")
                     }
                 }
-                delay(1000)
+                delay(100)
             }
         }
     }
@@ -3978,7 +4001,7 @@ class ServerStateHolder(
     private fun saveConfig(config: ServerConfig, targetDir: File = serverDir) {
         val prefs = com.pocketcraft.server.data.preferences.AppPreferences(appContext)
         val isPremium = prefs.isPremiumUser || prefs.debugPremiumOverride
-        val maxPlayersLimit = if (isPremium) 50 else 10
+        val maxPlayersLimit = if (isPremium) 50 else 15
         val enforcedConfig = config.copy(
             maxPlayers = config.maxPlayers.coerceIn(1, maxPlayersLimit),
             viewDistance = config.viewDistance.coerceIn(3, 32),

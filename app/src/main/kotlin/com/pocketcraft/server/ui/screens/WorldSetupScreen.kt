@@ -583,8 +583,8 @@ fun WorldSetupScreen(
                         value = maxPlayersValue,
                         onValueChange = { newValue ->
                             val rounded = newValue.roundToInt()
-                            if (rounded > 10 && !isPremium) {
-                                maxPlayersValue = 10f
+                            if (rounded > 15 && !isPremium) {
+                                maxPlayersValue = 15f
                                 showPremiumBottomSheet = true
                             } else {
                                 maxPlayersValue = newValue

@@ -7,7 +7,7 @@ package com.pocketcraft.server.data.model
 data class ServerConfig(
     val worldName: String = "world",
     val worldSeed: String = "",
-    val maxPlayers: Int = 10,
+    val maxPlayers: Int = 15,
     val port: Int = 25565,
     val difficulty: String = "normal",
     val gameMode: String = "survival",

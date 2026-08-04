@@ -167,7 +167,7 @@ fun ServerTypeVersionBottomSheet(
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     ServerType.values().filter { it != ServerType.MODPACK }.forEach { type ->
                         val isSelected = selectedType == type
@@ -179,13 +179,13 @@ fun ServerTypeVersionBottomSheet(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(56.dp)
-                                .clip(RoundedCornerShape(16.dp))
+                                .height(52.dp)
+                                .clip(RoundedCornerShape(14.dp))
                                 .background(cardBg)
                                 .raisedBorder(
                                     color = cardBorder,
                                     depthColor = cardDepth,
-                                    cornerRadius = 16.dp,
+                                    cornerRadius = 14.dp,
                                     borderWidth = 1.5.dp,
                                     depthWidth = 3.dp
                                 )
@@ -197,7 +197,7 @@ fun ServerTypeVersionBottomSheet(
                             Row(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(horizontal = 10.dp),
+                                    .padding(horizontal = 4.dp),
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -205,16 +205,17 @@ fun ServerTypeVersionBottomSheet(
                                     Icon(
                                         Icons.Default.Check,
                                         contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
+                                        modifier = Modifier.size(14.dp),
                                         tint = cardText
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
                                 }
                                 Text(
                                     text = type.displayName,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
                                     color = cardText
                                 )
                             }
