@@ -1813,11 +1813,7 @@ private fun ServerIdentityCard(
             ?.let { "$it:${stateHolder.config.port}" }
         val relayReady = !publicAddress.isNullOrBlank()
         val canShareAddresses = stateHolder.status == ServerStatus.ONLINE &&
-            stateHolder.isServerFullyReady &&
-            !stateHolder.isStarting &&
-            stateHolder.areSpawnChunksLoaded &&
-            stateHolder.isJavaServerDone &&
-            (relayReady || stateHolder.tunnelError != null || isOfflineMode)
+            (stateHolder.isServerFullyReady || stateHolder.isJavaServerDone)
 
 
 
@@ -1886,6 +1882,7 @@ private fun ServerIdentityCard(
                                         relayConnecting && stateHolder.isRunning -> "Reconnecting"
                                         relayConnecting -> "Relay Connecting"
                                         relayReady -> "Relay Ready"
+                                        stateHolder.tunnelError != null -> "Relay Error"
                                         else -> "Relay Offline"
                                     },
                                     fontSize = 10.sp,
@@ -1934,7 +1931,7 @@ private fun ServerIdentityCard(
                                 lanAddress = localWifiAddress.takeIf { stateHolder.isServerFullyReady }
                             )
                         },
-                        enabled = canShareAddresses,
+                        enabled = canShareAddresses && (!publicAddress.isNullOrBlank() || localWifiAddress != null),
                         modifier = Modifier.fillMaxWidth(),
                         style = PremiumHomeButtonStyle.Secondary
                     )

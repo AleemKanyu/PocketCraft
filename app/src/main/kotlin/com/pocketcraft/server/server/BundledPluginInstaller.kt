@@ -81,6 +81,16 @@ object BundledPluginInstaller {
     }
 
     private fun removeOutdatedBundledPlugins(context: Context, pluginsDir: File) {
+        val prefs = context.getSharedPreferences("bundled_plugins_meta", Context.MODE_PRIVATE)
+        val lastInstalledVersion = prefs.getInt("installed_app_version_code", -1)
+        val currentVersion = try {
+            com.pocketcraft.server.BuildConfig.VERSION_CODE
+        } catch (e: Throwable) {
+            1
+        }
+
+        val appUpdated = lastInstalledVersion != currentVersion
+
         BUNDLED_PLUGINS.forEach { pluginName ->
             val existingFile = File(pluginsDir, pluginName)
             val disabledFile = File(pluginsDir, "$pluginName.disabled")
@@ -90,25 +100,18 @@ object BundledPluginInstaller {
                 else -> return@forEach
             }
 
-            runCatching {
-                val assetPath = if (pluginName == "PocketCraftCompanion.jar") "default_plugins/$pluginName" else "plugins/$pluginName"
-                val assetSize = context.assets.open(assetPath).use { input ->
-                    var size = 0L
-                    val buffer = ByteArray(8192)
-                    var read: Int
-                    while (input.read(buffer).also { read = it } >= 0) {
-                        size += read
-                    }
-                    size
+            // Only delete if app was updated to a new version, or if the file is truncated/corrupted on disk (< 100KB).
+            // Paper's in-process remapper modifies plugin JAR byte counts after first boot — comparing raw assetSize
+            // causes remapped plugins to be repeatedly deleted on every startup.
+            if (appUpdated || targetFile.length() < 100_000L) {
+                if (!targetFile.delete()) {
+                    Log.w(TAG, "Could not delete stale bundled plugin ${targetFile.name}")
                 }
-                if (targetFile.length() != assetSize) {
-                    if (!targetFile.delete()) {
-                        Log.w(TAG, "Could not delete stale bundled plugin ${targetFile.name}")
-                    }
-                }
-            }.onFailure { error ->
-                Log.w(TAG, "Could not compare bundled plugin $pluginName: ${error.message}")
             }
+        }
+
+        if (appUpdated) {
+            prefs.edit().putInt("installed_app_version_code", currentVersion).apply()
         }
     }
 

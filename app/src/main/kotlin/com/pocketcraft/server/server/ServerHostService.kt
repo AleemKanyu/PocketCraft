@@ -353,8 +353,8 @@ class ServerHostService : Service() {
             return abortStartForEula(versionId, worldName)
         }
 
-        if (isLaunching) {
-            sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] Server is already starting.")
+        if (isLaunching || stopInProgress.get()) {
+            sendEvent(versionId, EVENT_OUTPUT, if (stopInProgress.get()) "[PocketCraft] Server is stopping. Please wait for shutdown to finish." else "[PocketCraft] Server is already starting.")
             return START_STICKY
         }
 
@@ -628,7 +628,7 @@ class ServerHostService : Service() {
         // This avoids races where user-initiated shutdown is misread as a crash/restart flow.
         val isUserStopped = AppPreferences(applicationContext).isUserStopped
         val isServerActive = (serverProcess?.isAlive == true || serverReadyHandled.get()) && !stopInProgress.get() && stopReason != "user" && !isUserStopped
-        if (keepListenerRunning && isServerActive) {
+        if (isServerActive || (keepListenerRunning && !isUserStopped)) {
             val restartServiceIntent = Intent(applicationContext, ServerHostService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_VERSION_ID, currentVersionId.orEmpty())
@@ -670,7 +670,7 @@ class ServerHostService : Service() {
         launchJob = null
         serverReadyFallbackJob?.cancel()
         serverReadyFallbackJob = null
-        markServerOfflineImmediately()
+        markServerStoppingState()
         CoroutineScope(Dispatchers.IO).launch {
             val inProcessRuntime = !ServerLauncher.hasActiveExternalProcess()
             try {
@@ -788,6 +788,30 @@ class ServerHostService : Service() {
                 stopInProgress.set(false)
             }
         }
+    }
+
+    private fun markServerStoppingState() {
+        relayReconnectJob?.cancel()
+        relayReconnectJob = null
+        relayJob?.cancel()
+        relayJob = null
+        relayStatusJob?.cancel()
+        relayStatusJob = null
+        tunnelStarted.set(false)
+        relayManager.disconnect()
+        setServerReadyState(false)
+        serverReadyHandled.set(false)
+        stopReason = "user"
+        AppPreferences(applicationContext).isUserStopped = true
+        persistPublicAddress(applicationContext, "")
+        currentVersionId?.let { versionId ->
+            persistRuntimeState(applicationContext, versionId, activeWorldNameOrDefault(), RUNTIME_STATE_STOPPING)
+            persistPlayerCount(applicationContext, 0)
+            sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] Server stopping...")
+        }
+        serviceScope.launch { AppPreferencesStore.setServerStartedAtMillis(applicationContext, 0L) }
+        serverStartTimeMillis = 0L
+        pushWidgetUpdate("stopping")
     }
 
     private fun markServerOfflineImmediately() {
@@ -1388,10 +1412,11 @@ class ServerHostService : Service() {
     }
 
     private fun onRelayReadyToStart(versionId: String) {
-        if (tunnelStarted.getAndSet(true)) {
-            android.util.Log.d("ServerHostService", "onRelayReadyToStart: Tunnel already started, skipping.")
+        if (relayJob?.isActive == true) {
+            android.util.Log.d("ServerHostService", "onRelayReadyToStart: Tunnel already running, skipping.")
             return
         }
+        tunnelStarted.set(true)
 
         resolveLanEndpoint(currentServerPort)?.let { endpoint ->
             sendEvent(versionId, EVENT_OUTPUT, "[PocketCraft] LAN address: $endpoint")
@@ -1399,101 +1424,105 @@ class ServerHostService : Service() {
         sendEvent(versionId, EVENT_TUNNEL_CONNECTING, "[PocketCraft] Opening internet relay...")
 
         relayJob = serviceScope.launch(Dispatchers.IO) {
-            var registrationAttempts = 0
-            val maxRegistrationAttempts = 5
-            relayManager.disconnect()
-            relayManager.startBedrockBridge()
+            try {
+                var registrationAttempts = 0
+                val maxRegistrationAttempts = 5
+                relayManager.disconnect()
+                relayManager.startBedrockBridge()
 
-            while (isActive) {
-                try {
-                    val alreadyKnownPort = relayManager.assignedPort
+                while (isActive) {
+                    try {
+                        val alreadyKnownPort = relayManager.assignedPort
 
-                    registrationAttempts++
-                    android.util.Log.i("ServerHostService", "Relay registration attempt $registrationAttempts/$maxRegistrationAttempts")
-                    sendEvent(
-                        versionId,
-                        EVENT_OUTPUT,
-                        "[PocketCraft] Relay attempt $registrationAttempts/$maxRegistrationAttempts..."
-                    )
-
-                    val address = relayManager.register()
-                    sendEvent(
-                        versionId,
-                        EVENT_OUTPUT,
-                        "[PocketCraft] Relay registered: $address"
-                    )
-                    publishRelayStatus(versionId)
-                    relayManager.initPool(currentServerPort)
-                    if (!relayManager.isPoolReady.value) {
+                        registrationAttempts++
+                        android.util.Log.i("ServerHostService", "Relay registration attempt $registrationAttempts/$maxRegistrationAttempts")
                         sendEvent(
                             versionId,
                             EVENT_OUTPUT,
-                            "[PocketCraft] Relay registered, but tunnel sockets did not become ready."
+                            "[PocketCraft] Relay attempt $registrationAttempts/$maxRegistrationAttempts..."
                         )
-                        throw java.io.IOException("Relay tunnel pool did not become ready")
-                    }
-                    sendEvent(
-                        versionId,
-                        EVENT_OUTPUT,
-                        "[PocketCraft] Relay tunnel is ready."
-                    )
 
-                    val publicAddress = resolvePublicRelayAddress(address)
-                    persistPublicAddress(applicationContext, publicAddress)
-                    relayHealthFailures.set(0)
-
-                    registrationAttempts = 0
-
-                    val intent = Intent(ACTION_SERVER_EVENT).apply {
-                        setPackage(packageName)
-                        putExtra(EXTRA_VERSION_ID, currentVersionId ?: "unknown")
-                        putExtra(EXTRA_EVENT_TYPE, EVENT_TUNNEL_CONNECTED)
-                        putExtra(EXTRA_LINE, publicAddress)
-                        putExtra(EXTRA_IS_FALLBACK, address.isFallback)
-                    }
-                    sendBroadcast(intent)
-                    publishRelayStatus(versionId)
-                    startRelayStatusHeartbeat(versionId)
-
-
-
-                    while (isActive) {
-                        delay(60_000)
-                    }
-                } catch (e: Exception) {
-                    if (!isActive) break
-
-                    android.util.Log.e("ServerHostService", "Relay Error (attempt $registrationAttempts): ${e.message}")
-                    sendEvent(
-                        versionId,
-                        EVENT_OUTPUT,
-                        "[PocketCraft] Relay attempt $registrationAttempts failed: ${e.message ?: "unknown error"}"
-                    )
-                    relayStatusJob?.cancel()
-                    relayStatusJob = null
-
-                    // Ensure failed attempts do not keep stale sockets around.
-                    relayManager.disconnect()
-                    relayManager.startBedrockBridge()
-
-                    if (registrationAttempts >= maxRegistrationAttempts) {
-                        android.util.Log.e("ServerHostService", "Max registration attempts reached. Stopping retry loop.")
-                        currentVersionId?.let {
+                        val address = relayManager.register()
+                        sendEvent(
+                            versionId,
+                            EVENT_OUTPUT,
+                            "[PocketCraft] Relay registered: $address"
+                        )
+                        publishRelayStatus(versionId)
+                        relayManager.initPool(currentServerPort)
+                        if (!relayManager.isPoolReady.value) {
                             sendEvent(
-                                it,
-                                EVENT_TUNNEL_FAILED,
-                                "Internet relay is unavailable right now. Players on the same Wi-Fi can still join with the LAN address."
+                                versionId,
+                                EVENT_OUTPUT,
+                                "[PocketCraft] Relay registered, but tunnel sockets did not become ready."
                             )
+                            throw java.io.IOException("Relay tunnel pool did not become ready")
                         }
-                        updateNotification("LAN only: internet relay unavailable", force = true)
-                        break
-                    }
+                        sendEvent(
+                            versionId,
+                            EVENT_OUTPUT,
+                            "[PocketCraft] Relay tunnel is ready."
+                        )
 
-                    delay(5000)
+                        val publicAddress = resolvePublicRelayAddress(address)
+                        persistPublicAddress(applicationContext, publicAddress)
+                        relayHealthFailures.set(0)
+
+                        registrationAttempts = 0
+
+                        val intent = Intent(ACTION_SERVER_EVENT).apply {
+                            setPackage(packageName)
+                            putExtra(EXTRA_VERSION_ID, currentVersionId ?: "unknown")
+                            putExtra(EXTRA_EVENT_TYPE, EVENT_TUNNEL_CONNECTED)
+                            putExtra(EXTRA_LINE, publicAddress)
+                            putExtra(EXTRA_IS_FALLBACK, address.isFallback)
+                        }
+                        sendBroadcast(intent)
+                        publishRelayStatus(versionId)
+                        startRelayStatusHeartbeat(versionId)
+
+
+
+                        while (isActive) {
+                            delay(60_000)
+                        }
+                    } catch (e: Exception) {
+                        if (!isActive) break
+
+                        android.util.Log.e("ServerHostService", "Relay Error (attempt $registrationAttempts): ${e.message}")
+                        sendEvent(
+                            versionId,
+                            EVENT_OUTPUT,
+                            "[PocketCraft] Relay attempt $registrationAttempts failed: ${e.message ?: "unknown error"}"
+                        )
+                        relayStatusJob?.cancel()
+                        relayStatusJob = null
+
+                        // Ensure failed attempts do not keep stale sockets around.
+                        relayManager.disconnect()
+                        relayManager.startBedrockBridge()
+
+                        if (registrationAttempts >= maxRegistrationAttempts) {
+                            android.util.Log.e("ServerHostService", "Max registration attempts reached. Stopping retry loop.")
+                            currentVersionId?.let {
+                                sendEvent(
+                                    it,
+                                    EVENT_TUNNEL_FAILED,
+                                    "Internet relay is unavailable right now. Players on the same Wi-Fi can still join with the LAN address."
+                                )
+                            }
+                            updateNotification("LAN only: internet relay unavailable", force = true)
+                            break
+                        }
+
+                        delay(5000)
+                    }
                 }
+            } finally {
+                tunnelStarted.set(false)
+                relayManager.disconnect()
+                android.util.Log.i("ServerHostService", "Relay job ended (isActive=$isActive)")
             }
-            relayManager.disconnect()
-            android.util.Log.i("ServerHostService", "Relay job ended (isActive=$isActive)")
         }
     }
 
@@ -1627,7 +1656,20 @@ class ServerHostService : Service() {
     }
 
     private fun shouldScheduleAutoRecover(versionId: String): Boolean {
-        return false
+        if (stopReason == "user" || stopInProgress.get() || AppPreferences(applicationContext).isUserStopped) {
+            return false
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (autoRecoverWindowStartMs == 0L || (now - autoRecoverWindowStartMs) > AUTO_RECOVER_WINDOW_MS) {
+            autoRecoverWindowStartMs = now
+            autoRecoverAttempts = 0
+        }
+        if (autoRecoverAttempts >= AUTO_RECOVER_MAX_ATTEMPTS) {
+            android.util.Log.w("ServerHostService", "Auto-recover limit reached ($AUTO_RECOVER_MAX_ATTEMPTS attempts in 20m).")
+            return false
+        }
+        autoRecoverAttempts++
+        return true
     }
 
     private fun acquireWakeLock() {
@@ -2754,6 +2796,7 @@ class ServerHostService : Service() {
         const val RUNTIME_STATE_OFFLINE = "offline"
         const val RUNTIME_STATE_STARTING = "starting"
         const val RUNTIME_STATE_RUNNING = "running"
+        const val RUNTIME_STATE_STOPPING = "stopping"
         @Keep
         var isServiceRunning = false
 

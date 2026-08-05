@@ -4,6 +4,9 @@ object NativeLauncher {
     private var libraryLoaded = false
     private var loadError: Throwable? = null
 
+    @Volatile
+    var hasInProcessJvmRunInThisProcess: Boolean = false
+
     fun loadLibrary(): Boolean {
         if (libraryLoaded) return true
         if (loadError != null) throw loadError!!

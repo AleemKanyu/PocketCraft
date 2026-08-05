@@ -247,7 +247,7 @@ class ServerLauncher(private val context: Context) {
         ServerFileManager.ensureDirectoryPermissions(shimDir)
         ensureSystemShims(shimDir, File(tmpDir), onOutput)
         val deviceProfile = buildDeviceStabilityProfile(totalRamMb = getTotalRamMb(context), availableRamMb = com.pocketcraft.server.util.RamUtils.getAvailableRamMb(context))
-        val forceExternal = AppPreferences(context).forceExternalJvm || deviceProfile.forceExternalJvm
+        val forceExternal = AppPreferences(context).forceExternalJvm || deviceProfile.forceExternalJvm || NativeLauncher.hasInProcessJvmRunInThisProcess
         val preferInProcessJvm = launchMode == ServerFileManager.LaunchMode.JAR && !forceExternal && NativeLauncher.loadLibrary()
 
         val resolvedRuntime = ensureLaunchableRuntime(
@@ -385,6 +385,7 @@ class ServerLauncher(private val context: Context) {
                 } else {
                     result = runCatching {
                         onOutput("[PocketCraft] Launching in-process JVM on Android ${Build.VERSION.RELEASE}.")
+                        NativeLauncher.hasInProcessJvmRunInThisProcess = true
                         NativeLauncher.launchJVM(
                             jrePath = jrePath,
                             jarPath = normalizedJarPath,
@@ -724,13 +725,18 @@ class ServerLauncher(private val context: Context) {
             "-XX:+TieredCompilation",
             "-Xverify:none",
             "-XX:+UnlockDiagnosticVMOptions",
-            "-XX:TieredStopAtLevel=1",
+            "-XX:CICompilerCount=2",
             "-Dca.spottedleaf.dataconverter.parallel=true",
             "-Dca.spottedleaf.dataconverter.threads=4",
             "-Dpaper.oshi.disabled=true",
             "-Dpaper.disable-hardware-info=true",
             "-Doshi.os.disabled=true",
+            "-Doshi.os=unknown",
             "-Doshi.architecture=aarch64",
+            "-Doshi.util.memoizer.expiration=0",
+            "-Djna.nosys=true",
+            "-Djna.loaded=true",
+            "-Djna.nounpack=true",
             "-Djava.home=$jrePath",
             "-Djava.security.egd=file:/dev/urandom",
             "-Djava.io.tmpdir=$tmpDir",
@@ -739,7 +745,6 @@ class ServerLauncher(private val context: Context) {
             "-Dio.netty.native.workdir=$tmpDir",
             "-Djna.boot.library.path=$jnaBootPath",
             "-Djna.library.path=$jnaLibraryPath",
-            "-Djna.nounpack=true",
             "-Duser.home=$serverDir",
             "-Duser.language=${System.getProperty("user.language").orEmpty()}",
             "-Duser.timezone=${java.util.TimeZone.getDefault().id}",
@@ -768,7 +773,6 @@ class ServerLauncher(private val context: Context) {
             "-Dpaper.disable-plugin-update-check=true",
             "-Dsun.zip.disableMemoryMapping=true",
             "-Djdk.attach.allowAttachSelf=true",
-            "-Djna.nosys=true",
             "-Xshare:off",
             "-XX:MaxGCPauseMillis=40",
             "-XX:+DisableExplicitGC",

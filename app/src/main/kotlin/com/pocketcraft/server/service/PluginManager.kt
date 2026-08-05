@@ -360,6 +360,8 @@ object PluginManager {
         updated = ensureTopLevelYamlValue(updated, "allow-third-party-ears", "false")
         updated = ensureTopLevelYamlValue(updated, "custom-block-overrides", "false")
         updated = ensureTopLevelYamlValue(updated, "custom-item-overrides", "false")
+        updated = ensureYamlSectionValue(updated, "custom-blocks", "enabled", "false")
+        updated = ensureYamlSectionValue(updated, "custom-items", "enabled", "false")
         updated = ensureTopLevelYamlValue(updated, "ignore-third-party-patches", "true")
         updated = ensureYamlSectionValue(updated, "bedrock", "validate-bedrock-login", "false")
         updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "validate-bedrock-login", "false")
