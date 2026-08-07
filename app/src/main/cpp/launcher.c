@@ -398,6 +398,8 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
   (void)thiz;
   start_logger();
   LOGI("NativeLauncher starting...");
+  setenv("JAVA_TOOL_OPTIONS", "-Djava.specification.version=26 -Djava.version=26.0.0 -DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true", 1);
+  setenv("_JAVA_OPTIONS", "-Djava.specification.version=26 -Djava.version=26.0.0 -DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true", 1);
 
   jint result = 0;
   const char *jre_path = (*env)->GetStringUTFChars(env, jJrePath, NULL);
@@ -693,9 +695,11 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
 
   jvm_is_shutting_down = 0;
 
+  const char *full_version = (strstr(jre_path, "26") != NULL) ? "26-internal" : FULL_VERSION;
+  const char *dot_version = (strstr(jre_path, "26") != NULL) ? "26" : DOT_VERSION;
 
-  LOGI("Calling JLI_Launch...");
-  result = launch(argc, argv, 0, NULL, 0, NULL, FULL_VERSION, DOT_VERSION,
+  LOGI("Calling JLI_Launch with version=%s (dot=%s)...", full_version, dot_version);
+  result = launch(argc, argv, 0, NULL, 0, NULL, full_version, dot_version,
                   argv[0], argv[0], JNI_FALSE, JNI_TRUE, JNI_FALSE, 0);
   jvm_is_shutting_down = 1;
   LOGI("JLI_Launch returned: %d", result);

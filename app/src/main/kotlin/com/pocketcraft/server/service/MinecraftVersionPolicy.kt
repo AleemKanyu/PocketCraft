@@ -15,30 +15,11 @@ object MinecraftVersionPolicy {
     }
 
     fun filterInstallableVersions(versions: Collection<String>): List<String> =
-        versions.filterNot { isReleaseTrain26(it) }
+        versions.toList()
 
     fun listInstalledReleaseTrain26Versions(context: Context): List<String> {
-        val binariesDir = File(context.filesDir, "servers/binaries")
-        if (!binariesDir.isDirectory) return emptyList()
-
-        return binariesDir.listFiles()
-            .orEmpty()
-            .asSequence()
-            .filter { it.isDirectory && isReleaseTrain26(it.name) }
-            .filter { versionDir ->
-                ServerType.entries.any { type ->
-                    if (!type.supportsVersionSelect || type == ServerType.MODPACK) return@any false
-                    val jar = File(versionDir, "${type.name.lowercase()}-${versionDir.name}.jar")
-                    val minBytes = if (type == ServerType.FABRIC) 10_000L else 1_000_000L
-                    jar.isFile && jar.length() > minBytes
-                }
-            }
-            .map { it.name }
-            .distinct()
-            .sortedDescending()
-            .toList()
+        return emptyList()
     }
 
-    fun shouldShowReleaseTrain26Warning(activeVersion: String?): Boolean =
-        !activeVersion.isNullOrBlank() && isReleaseTrain26(activeVersion)
+    fun shouldShowReleaseTrain26Warning(activeVersion: String?): Boolean = false
 }

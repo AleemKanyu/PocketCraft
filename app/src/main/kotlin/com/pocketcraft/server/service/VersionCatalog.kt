@@ -8,9 +8,8 @@ import org.json.JSONObject
 
 object VersionCatalog {
 
-    // Accept stable semantic Minecraft version identifiers from providers that expose either
-    // classic 1.x releases or the newer 26.x-style release train.
-    private val minecraftVersionRegex = Regex("^\\d+\\.\\d+(\\.\\d+)?$")
+    // Accept stable semantic Minecraft version identifiers including 26.x-style release train.
+    private val minecraftVersionRegex = Regex("^(?:\\d+\\.\\d+(?:\\.\\d+)?|26(?:\\.\\d+)*)$")
     private val userAgent = "PocketCraft/1.0"
 
     suspend fun fetchStableVersions(limit: Int = 60): List<String> = withContext(Dispatchers.IO) {

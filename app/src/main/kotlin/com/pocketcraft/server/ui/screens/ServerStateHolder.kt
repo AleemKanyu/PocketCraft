@@ -1328,7 +1328,7 @@ class ServerStateHolder(
         restartFallbackJob = scope.launch {
             delay(3500L)
             if (!pendingRestart && !isRestartingCycle) return@launch
-            if (isRunning) return@launch
+            if (isRunning || isStarting) return@launch
             if (isServerProcessAlive()) return@launch
 
             pendingRestart = false
