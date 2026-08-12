@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,12 +62,12 @@ private data class SplashMascot(
 )
 
 private val splashMascots = listOf(
-    SplashMascot(R.drawable.ic_launcher_creeper, 36.dp, 24.dp, 96.dp, -14f, 0.07f),
+    SplashMascot(R.drawable.ic_launcher_foreground_circle, 36.dp, 24.dp, 96.dp, -14f, 0.07f),
     SplashMascot(R.drawable.ic_mods_pixel, 28.dp, 300.dp, 140.dp, 18f, 0.06f),
     SplashMascot(R.drawable.ic_world_pixel, 32.dp, 16.dp, 520.dp, 10f, 0.06f),
     SplashMascot(R.drawable.ic_pickaxe_pixel, 30.dp, 280.dp, 580.dp, -20f, 0.07f),
     SplashMascot(R.drawable.ic_netherite_chestplate_hd, 26.dp, 48.dp, 660.dp, 8f, 0.05f),
-    SplashMascot(R.drawable.ic_launcher_creeper, 40.dp, 220.dp, 720.dp, 16f, 0.06f)
+    SplashMascot(R.drawable.ic_launcher_foreground_circle, 40.dp, 220.dp, 720.dp, 16f, 0.06f)
 )
 
 @Composable
@@ -229,7 +231,7 @@ fun SplashScreen(
                 )
         ) {
             Image(
-                painter = painterResource(id = R.drawable.minecraft_api_diamond_pickaxe_hd),
+                painter = painterResource(id = R.drawable.ic_diamond_pickaxe),
                 contentDescription = null,
                 modifier = Modifier
                     .size(96.dp)
@@ -241,14 +243,43 @@ fun SplashScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Text(
-                text = "PocketCraft",
-                fontFamily = Monocraft,
-                fontWeight = FontWeight.Black,
-                fontSize = 32.sp,
-                color = titleColor,
-                letterSpacing = 0.sp
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "PocketCraft",
+                    fontFamily = Monocraft,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 32.sp,
+                    color = titleColor,
+                    letterSpacing = 0.sp
+                )
+
+                Spacer(modifier = Modifier.size(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .rotate(-8f)
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(Color(0xFF10B981), Color(0xFF059669), Color(0xFF047857))
+                            ),
+                            shape = RoundedCornerShape(6.dp)
+                        )
+                        .border(1.5.dp, Color(0xFFA7F3D0), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "PC",
+                        fontFamily = Monocraft,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 14.sp,
+                        color = Color.White,
+                        letterSpacing = 1.sp
+                    )
+                }
+            }
 
             Text(
                 text = status,

@@ -72,6 +72,8 @@ fun ServerTypeVersionBottomSheet(
     var selectedModpackId by remember { mutableStateOf<String?>(null) }
     var versionToDelete by remember { mutableStateOf<String?>(null) }
     var versionToImport by remember { mutableStateOf<String?>(null) }
+    var downloadingVersion by remember { mutableStateOf<String?>(null) }
+    var downloadingProgressText by remember { mutableStateOf("") }
     var selectedModpackPageUrl by remember { mutableStateOf<String?>(null) }
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val accentTextColor = if (isDarkTheme) PocketColors.PrimaryLight else PocketColors.PrimaryDark
@@ -95,6 +97,59 @@ fun ServerTypeVersionBottomSheet(
             showServerTypeGuide = true
         } else {
             confirmSelection()
+        }
+    }
+
+    fun startDownloadAndInstall(versionToDl: String, autoConfirm: Boolean = false) {
+        if (downloadingVersion != null) return
+        downloadingVersion = versionToDl
+        downloadingProgressText = "Connecting…"
+        scope.launch {
+            val appPrefs = com.pocketcraft.server.data.preferences.AppPreferences(context)
+            val relayHost = appPrefs.relayHost
+            val downloadUrl = com.pocketcraft.server.server.ServerTypeDownloadUrls.resolveDownloadUrl(selectedType, versionToDl, relayHost)
+            val tempJarFile = java.io.File(context.cacheDir, "temp_${selectedType.name.lowercase()}_$versionToDl.jar")
+
+            val dlResult = com.pocketcraft.server.network.InAppDownloader.downloadFile(
+                url = downloadUrl,
+                targetFile = tempJarFile,
+                onProgress = { bytesRead, total, pct ->
+                    val readMB = String.format("%.1f", bytesRead / (1024f * 1024f))
+                    val totalMB = if (total > 0) String.format("%.1f MB", total / (1024f * 1024f)) else "MB"
+                    downloadingProgressText = "$readMB / $totalMB (${pct.toInt()}%)"
+                }
+            )
+
+            dlResult.onSuccess { jarFile ->
+                val targetFile = ServerFileManager.getServerJarFile(
+                    context = context.applicationContext,
+                    gameVersion = versionToDl,
+                    serverType = selectedType
+                )
+                val importResult = ServerJarImporter.importServerJar(
+                    context = context.applicationContext,
+                    uri = android.net.Uri.fromFile(jarFile),
+                    targetFile = targetFile,
+                    serverType = selectedType
+                )
+                downloadingVersion = null
+                when (importResult) {
+                    is ServerJarImporter.ImportResult.Success -> {
+                        viewModel.onServerJarImported(versionToDl)
+                        viewModel.setSelectedVersion(versionToDl)
+                        Toast.makeText(context, "${selectedType.displayName} $versionToDl installed!", Toast.LENGTH_SHORT).show()
+                        if (autoConfirm) {
+                            confirmWithGuideIfNeeded()
+                        }
+                    }
+                    is ServerJarImporter.ImportResult.Error -> {
+                        Toast.makeText(context, importResult.message, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }.onFailure { err ->
+                downloadingVersion = null
+                Toast.makeText(context, "Download failed: ${err.message}", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -169,7 +224,7 @@ fun ServerTypeVersionBottomSheet(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    ServerType.values().filter { it != ServerType.MODPACK }.forEach { type ->
+                    ServerType.values().filter { it != ServerType.MODPACK && it != ServerType.FORGE }.forEach { type ->
                         val isSelected = selectedType == type
                         val cardBg = if (isSelected) PocketColors.primaryBg else PocketColors.InactiveBg
                         val cardBorder = if (isSelected) PocketColors.primaryBorder else PocketColors.InactiveBorder
@@ -406,10 +461,9 @@ fun ServerTypeVersionBottomSheet(
                                                 depthWidth = 3.dp
                                             )
                                             .clickable {
-                                                if (isDownloaded) {
-                                                    viewModel.setSelectedVersion(version)
-                                                } else {
-                                                    versionToImport = version
+                                                viewModel.setSelectedVersion(version)
+                                                if (!isDownloaded && downloadingVersion == null) {
+                                                    startDownloadAndInstall(version, autoConfirm = false)
                                                 }
                                             }
                                     ) {
@@ -419,16 +473,24 @@ fun ServerTypeVersionBottomSheet(
                                                 .padding(10.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Icon(
-                                                imageVector = when {
-                                                    isSelected -> Icons.Default.Check
-                                                    isDownloaded -> Icons.Default.Download
-                                                    else -> Icons.Default.AutoAwesome
-                                                },
-                                                contentDescription = null,
-                                                tint = itemText,
-                                                modifier = Modifier.size(20.dp)
-                                            )
+                                            if (downloadingVersion == version) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(20.dp),
+                                                    strokeWidth = 2.dp,
+                                                    color = PocketColors.Primary
+                                                )
+                                            } else {
+                                                Icon(
+                                                    imageVector = when {
+                                                        isSelected -> Icons.Default.Check
+                                                        isDownloaded -> Icons.Default.Download
+                                                        else -> Icons.Default.AutoAwesome
+                                                    },
+                                                    contentDescription = null,
+                                                    tint = itemText,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
@@ -437,7 +499,14 @@ fun ServerTypeVersionBottomSheet(
                                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                                     color = itemText
                                                 )
-                                                if (isDownloaded) {
+                                                if (downloadingVersion == version) {
+                                                    Text(
+                                                        text = "Downloading: $downloadingProgressText",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = PocketColors.Primary
+                                                    )
+                                                } else if (isDownloaded) {
                                                     Text(
                                                         text = "Imported",
                                                         style = MaterialTheme.typography.bodySmall,
@@ -446,7 +515,7 @@ fun ServerTypeVersionBottomSheet(
                                                     )
                                                 }
                                             }
-                                            if (isDownloaded) {
+                                            if (isDownloaded && downloadingVersion != version) {
                                                 IconButton(onClick = { versionToDelete = version }) {
                                                     Icon(
                                                         imageVector = Icons.Default.Delete,
@@ -759,12 +828,23 @@ fun ServerTypeVersionBottomSheet(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                val isConfirmEnabled = if (selectedType.supportsVersionSelect) {
-                    selectedVersion != null && downloadedVersions.contains(selectedVersion)
-                } else {
-                    // MODPACK: requires a modpack to be selected
-                    selectedModpackId != null
+                val isSelectedVersionDownloaded = selectedVersion != null && downloadedVersions.contains(selectedVersion)
+                val isDownloadingThisVersion = downloadingVersion != null
+
+                val buttonText = when {
+                    isDownloadingThisVersion -> "DOWNLOADING…"
+                    selectedType.supportsVersionSelect && selectedVersion != null && !isSelectedVersionDownloaded -> "DOWNLOAD & SELECT"
+                    selectedType.supportsVersionSelect && isSelectedVersionDownloaded -> "CONFIRM"
+                    selectedType == ServerType.MODPACK -> "CONFIRM"
+                    else -> "SELECT A VERSION"
                 }
+
+                val isConfirmEnabled = when {
+                    isDownloadingThisVersion -> false
+                    selectedType.supportsVersionSelect -> selectedVersion != null
+                    else -> selectedModpackId != null
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -773,16 +853,20 @@ fun ServerTypeVersionBottomSheet(
                         text = "CANCEL",
                         onClick = onDismissRequest,
                         variant = DuoButtonVariant.Danger,
-                        modifier = Modifier
-                            .weight(1f),
+                        modifier = Modifier.weight(1f),
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     DuoButton(
-                        text = "CONFIRM",
-                        onClick = { confirmWithGuideIfNeeded() },
+                        text = buttonText,
+                        onClick = {
+                            if (selectedType.supportsVersionSelect && selectedVersion != null && !isSelectedVersionDownloaded) {
+                                startDownloadAndInstall(selectedVersion!!, autoConfirm = true)
+                            } else {
+                                confirmWithGuideIfNeeded()
+                            }
+                        },
                         enabled = isConfirmEnabled,
-                        modifier = Modifier
-                            .weight(1f),
+                        modifier = Modifier.weight(1.3f),
                     )
                 }
             }
@@ -847,36 +931,6 @@ fun ServerTypeVersionBottomSheet(
             },
             containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(24.dp)
-        )
-    }
-
-    versionToImport?.let { version ->
-        ServerJarPickerBottomSheet(
-            serverType = selectedType,
-            version = version,
-            onDismiss = { versionToImport = null },
-            onJarSelected = { uri ->
-                val targetFile = ServerFileManager.getServerJarFile(
-                    context = context.applicationContext,
-                    gameVersion = version,
-                    serverType = selectedType
-                )
-                when (val result = ServerJarImporter.importServerJar(
-                    context = context.applicationContext,
-                    uri = uri,
-                    targetFile = targetFile,
-                    serverType = selectedType
-                )) {
-                    is ServerJarImporter.ImportResult.Success -> {
-                        viewModel.onServerJarImported(version)
-                        versionToImport = null
-                        Toast.makeText(context, "${selectedType.displayName} $version imported.", Toast.LENGTH_SHORT).show()
-                    }
-                    is ServerJarImporter.ImportResult.Error -> {
-                        Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
-                    }
-                }
-            }
         )
     }
 }

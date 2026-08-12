@@ -1643,7 +1643,7 @@ fun AddPlayerDialog(
         ) {
             Text("Add Player to Whitelist", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text(
-                "Enter the exact Minecraft username",
+                "Enter the exact player username",
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(0.7f)
             )

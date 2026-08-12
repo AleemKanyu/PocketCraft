@@ -136,7 +136,7 @@ fun themeFor(
 ): WidgetColorScheme {
     return when (themeKey) {
         WidgetThemePrefs.THEME_CREEPER -> scheme(
-            backgroundDrawableRes = R.drawable.widget_bg_creeper,
+            backgroundDrawableRes = R.drawable.widget_bg_emerald,
             backgroundColor = Color(0xFF171C13),
             borderColor = Color(0x332A4422),
             cardGlowTint = Color(0x223D5F2A),
@@ -159,7 +159,7 @@ fun themeFor(
             buttonDisabledTint = Color(0x80586551)
         )
         WidgetThemePrefs.THEME_CREEPER_DARK -> scheme(
-            backgroundDrawableRes = R.drawable.widget_bg_creeper_dark,
+            backgroundDrawableRes = R.drawable.widget_bg_emerald_dark,
             backgroundColor = Color(0xFF11150F),
             borderColor = Color(0x33253C21),
             cardGlowTint = Color(0x1E355226),

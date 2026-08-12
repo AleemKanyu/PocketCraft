@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pocketcraft.server.service.PluginManager
 import com.pocketcraft.server.ui.theme.PocketColors
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,10 +134,20 @@ fun PluginInstallBottomSheet(
             ) {
                 // ── Step 1 – Download Main ───────────────────────────────────────────
                 item {
+                    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+                    var isDownloading by remember { mutableStateOf(false) }
+                    var downloadProgress by remember { mutableStateOf(0f) }
+                    var downloadStatusText by remember { mutableStateOf("") }
+                    var downloadError by remember { mutableStateOf<String?>(null) }
+
                     PluginInstallStep(
                         stepNumber = 1,
                         title = "Download $contentTypeLabel File",
-                        description = "Tap below to open the official download page in your browser. Download the version compatible with Minecraft 1.21.11."
+                        description = when {
+                            isDownloading -> "Downloading $contentTypeLabel directly: $downloadStatusText"
+                            downloadError != null -> "Download error: $downloadError. Tap to retry."
+                            else -> "Download the $contentTypeLabel file directly inside PocketCraft."
+                        }
                     ) {
                         Box(
                             modifier = Modifier
@@ -147,21 +158,66 @@ fun PluginInstallBottomSheet(
                                         listOf(PocketColors.Primary, Color(0xFF4CAF50))
                                     )
                                 )
-                                .clickable {
-                                    activeFilePickerTarget = null
-                                    runCatching {
-                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(itemPageUrl)))
+                                .clickable(enabled = !isDownloading) {
+                                    isDownloading = true
+                                    downloadError = null
+                                    downloadProgress = 0f
+                                    downloadStatusText = "Connecting…"
+
+                                    val sanitizedName = itemName.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                                    val fileName = "$sanitizedName.jar"
+
+                                    coroutineScope.launch {
+                                        val result = com.pocketcraft.server.network.InAppDownloader.downloadToPublicDownloads(
+                                            context = context,
+                                            url = itemPageUrl,
+                                            fileName = fileName,
+                                            onProgress = { bytesRead, total, pct ->
+                                                downloadProgress = (pct / 100f).coerceIn(0f, 1f)
+                                                val readMB = String.format("%.1f", bytesRead / (1024f * 1024f))
+                                                val totalMB = if (total > 0) String.format("%.1f MB", total / (1024f * 1024f)) else "MB"
+                                                downloadStatusText = "$readMB MB / $totalMB"
+                                            }
+                                        )
+
+                                        isDownloading = false
+                                        result.onSuccess { file ->
+                                            activeFilePickerTarget = null
+                                            onFileSelected(Uri.fromFile(file))
+                                        }.onFailure { err ->
+                                            downloadError = err.message ?: "Download failed"
+                                        }
                                     }
                                 }
                                 .padding(vertical = 15.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "⬇  Open Download Page",
-                                color = Color.White,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 15.sp
-                            )
+                            if (isDownloading) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        progress = { downloadProgress },
+                                        modifier = Modifier.size(18.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.5.dp,
+                                    )
+                                    Text(
+                                        text = "Downloading… (${(downloadProgress * 100).toInt()}%)",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = if (downloadError != null) "⚡ Retry Direct Download" else "⬇  Download $contentTypeLabel In-App",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 15.sp
+                                )
+                            }
                         }
                     }
                 }

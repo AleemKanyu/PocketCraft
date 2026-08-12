@@ -174,8 +174,8 @@ class ServerStateHolder(
     private val logsQueue = ArrayDeque<String>(2000)
     private var receiverRegistered = false
     private var startedAtRealtime: Long? = null
-    private var startupStartedAtRealtime: Long? = null
-    private var targetStartupProgressPercent = 1
+    @Volatile private var startupStartedAtRealtime: Long? = null
+    @Volatile private var targetStartupProgressPercent = 1
     private var jvmStartedTracking = false
     private var startupProgressJob: Job? = null
     private var startupLaunchJob: Job? = null
@@ -504,7 +504,13 @@ class ServerStateHolder(
         private set
 
     private fun attemptTransitionToOnline() {
-        if (!isStarting && !isRestartingCycle) return
+        if (!isStarting && !isRestartingCycle && !isRunning) return
+
+        val persistedAddr = ServerHostService.getPersistedPublicAddress(appContext, versionId)
+        if (!persistedAddr.isNullOrBlank() && publicAddress.isNullOrBlank()) {
+            publicAddress = persistedAddr
+            tunnelConnecting = false
+        }
 
         val isRelayPending = tunnelConnecting && publicAddress.isNullOrBlank() && tunnelError == null
         if (isJavaServerDone && !isRelayPending) {
@@ -1571,7 +1577,11 @@ class ServerStateHolder(
     }
 
     private fun markServerReady() {
-        targetStartupProgressPercent = 100
+        stopStartupProgressTracking(reset = false)
+        isStarting = false
+        isRestartingCycle = false
+        isRunning = true
+        startupProgressPercent = 100
         startupStatusMessage = "Server ready!"
         lastStartRequestedRealtime = 0L
         ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_RUNNING)
@@ -1596,15 +1606,7 @@ class ServerStateHolder(
                 AppPreferencesStore.setFirstBootComplete(appContext, true)
             }
         }
-        scope.launch {
-            while (startupProgressPercent < 100) {
-                delay(50)
-            }
-            stopStartupProgressTracking(reset = false)
-            isStarting = false
-            isRestartingCycle = false
-            isRunning = true
-        }
+        updateServerUiState()
     }
 
     fun markJoinable() {
@@ -1775,6 +1777,12 @@ class ServerStateHolder(
             return
         }
 
+        val persistedAddr = ServerHostService.getPersistedPublicAddress(appContext, versionId)
+        if (!persistedAddr.isNullOrBlank() && publicAddress.isNullOrBlank()) {
+            publicAddress = persistedAddr
+            tunnelConnecting = false
+        }
+
         val isRelayPending = tunnelConnecting && publicAddress.isNullOrBlank() && tunnelError == null
         if (isJavaServerDone && areSpawnChunksLoaded && !isRelayPending) {
             isStarting = false
@@ -1879,6 +1887,10 @@ class ServerStateHolder(
     private fun readPersistedRuntimeState(): PersistedRuntimeState {
         val rawState = ServerHostService.getPersistedRuntimeState(appContext, versionId)
         val address = ServerHostService.getPersistedPublicAddress(appContext, versionId)
+        if (!address.isNullOrBlank() && publicAddress.isNullOrBlank()) {
+            publicAddress = address
+            tunnelConnecting = false
+        }
         val portOpen = isServerPortOpen(config.port)
         val processAlive = isServerProcessAlive()
 
@@ -3876,8 +3888,8 @@ class ServerStateHolder(
 
                     // Smoothly crawl currentFloat toward targetFloat
                     if (currentFloat < targetFloat) {
-                        val stepRate = if (targetStartupProgressPercent >= 100) 1.5f else 0.35f
-                        val step = minOf((targetFloat - currentFloat) * 0.15f + 0.05f, stepRate)
+                        val stepRate = if (targetStartupProgressPercent >= 100) 1.5f else 1.0f
+                        val step = minOf((targetFloat - currentFloat) * 0.25f + 0.1f, stepRate)
                         currentFloat = (currentFloat + step).coerceAtMost(targetFloat)
                     }
 
@@ -4897,12 +4909,25 @@ class ServerStateHolder(
             }
         }
 
-        if (!base.exists()) {
-            base.mkdirs()
+        // Rescue any dimension folders that were accidentally trapped inside the nested overworld directory
+        listOf("_nether", "_the_end").forEach { suffix ->
+            val dimName = "${targetName}$suffix"
+            val defaultDimName = "world$suffix"
+            val trappedInNested = File(base, dimName)
+            val trappedDefaultInNested = File(base, defaultDimName)
+            val trappedDim1InNested = File(base, if (suffix == "_nether") "DIM-1" else "DIM1")
+            
+            val targetDimDir = File(targetServerDir, dimName)
+
+            listOf(trappedInNested, trappedDefaultInNested, trappedDim1InNested).forEach { trapped ->
+                if (trapped.exists() && trapped.isDirectory && trapped.absolutePath != targetDimDir.absolutePath) {
+                    android.util.Log.w("PocketCraft", "Rescuing dimension folder ${trapped.name} from inside ${base.name} -> ${targetDimDir.name}")
+                    if (!targetDimDir.exists()) targetDimDir.mkdirs()
+                    trapped.copyRecursively(targetDimDir, overwrite = true)
+                    trapped.deleteRecursively()
+                }
+            }
         }
-        pluginProfileDir(worldName).mkdirs()
-        modsProfileDir(worldName).mkdirs()
-        resourcePacksProfileDir(worldName).mkdirs()
 
         // Mark migration as completed so it never runs again for this worldName
         runCatching {
@@ -4921,7 +4946,10 @@ class ServerStateHolder(
             "config", "libraries", "binaries", "backups", "crash-reports", "bundler", "versions")
         serverDir.listFiles()?.forEach { file ->
             val name = file.name
-            if (name.startsWith("pocketcraft-") || name in skip || name in systemDirs || name == nestedDir.name) return@forEach
+            val isDimensionDir = name.endsWith("_nether") || name.endsWith("_the_end") ||
+                                 name == "world_nether" || name == "world_the_end" ||
+                                 name == "DIM-1" || name == "DIM1" || name == "nether" || name == "the_end"
+            if (name.startsWith("pocketcraft-") || name in skip || name in systemDirs || name == nestedDir.name || isDimensionDir) return@forEach
             val target = File(nestedDir, name)
             if (file.isDirectory) {
                 file.copyRecursively(target, overwrite = true)

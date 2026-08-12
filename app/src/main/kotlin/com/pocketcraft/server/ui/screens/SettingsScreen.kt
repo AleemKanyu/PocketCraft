@@ -907,7 +907,7 @@ fun SettingsScreen(
                         SettingsToggleRow(
                             icon = "🔒",
                             label = activeS.onlineMode,
-                            description = "Verify players with Mojang (Auth)",
+                            description = "Online Mode (Mojang Authentication)",
                             checked = currentState.config.onlineMode,
                             onToggle = { currentState = currentState.copy(config = currentState.config.copy(onlineMode = it)) }
                         )
@@ -938,7 +938,7 @@ fun SettingsScreen(
                         SettingsDropdownRow(
                             icon = Icons.Default.Palette,
                             label = "Mob Theme",
-                            description = "Choose the app's Minecraft mob color palette",
+                            description = "Choose the app's theme color palette",
                             options = MobTheme.entries.map { it.id },
                             optionLabels = MobTheme.entries.associate { it.id to it.themeName },
                             selected = currentMobTheme.id,
@@ -1954,7 +1954,9 @@ fun SettingsScreen(
                                         }
                                     }
                                 }
-                                Text("Run full Minecraft Java Edition servers directly on your Android device.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Run full Java Edition multiplayer servers directly on your Android device.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(6.dp))
+                                Text("PocketCraft is an independent software application and is not affiliated with, authorized, maintained, sponsored, or endorsed by Mojang AB, Microsoft Corporation, or any of their affiliates.", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), lineHeight = 13.sp)
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
                                 DuoButton(
                                     text = if (checkingForUpdate) "CHECKING..." else "CHECK FOR UPDATE",

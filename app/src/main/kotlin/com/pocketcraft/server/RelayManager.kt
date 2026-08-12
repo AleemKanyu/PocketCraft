@@ -52,15 +52,15 @@ class RelayManager(private val context: Context) {
         const val PHONE_TUNNEL_PORT = 9000
         // Bound kernel queues so chunks backpressure Paper before keepalives sit
         // behind seconds of unsent data on constrained mobile relay routes.
-        private const val SOCKET_BUFFER_SIZE = 128 * 1024
-        private const val PLAYER_BRIDGE_BUFFER_SIZE = 64 * 1024
-        private const val PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE = 64 * 1024
+        private const val SOCKET_BUFFER_SIZE = 64 * 1024
+        private const val PLAYER_BRIDGE_BUFFER_SIZE = 8 * 1024
+        private const val PLAYER_BRIDGE_UPSTREAM_BUFFER_SIZE = 8 * 1024
 
 
         private const val BEDROCK_TX_BUFFER_SIZE = 8 * 1024
         private const val BEDROCK_SMALL_FRAME_MAX_BYTES = 3072
-        private const val BEDROCK_LARGE_FRAME_BATCH_MAX = 4
-        private const val BEDROCK_MAX_BYTES_PER_CYCLE = 16 * 1024
+        private const val BEDROCK_LARGE_FRAME_BATCH_MAX = 2
+        private const val BEDROCK_MAX_BYTES_PER_CYCLE = 8 * 1024
         private const val BEDROCK_PING_CHANNEL_CAPACITY = 512
         private const val BEDROCK_CHUNK_CHANNEL_CAPACITY = 1024
         private const val UPSTREAM_YIELD_EVERY_FULL_READS = 2
@@ -209,16 +209,11 @@ class RelayManager(private val context: Context) {
         val isUserOverridden = prefs.relayHostUserOverridden
         val currentPreferredHost = prefs.relayHost
         val preferredRelayHost = if (!isUserOverridden) {
-            val measured = com.pocketcraft.server.config.RelayLatencySelector.measureRelayLatency(currentPreferredHost)
-            if (measured > 180L) {
-                val fastest = com.pocketcraft.server.config.RelayLatencySelector.pickFastestRelay(
-                    com.pocketcraft.server.config.RelayServers.defaultRegions()
-                )
-                android.util.Log.i("RelayManager", "Preferred host $currentPreferredHost latency high (${measured}ms > 180ms). Auto-selected low-latency relay ${fastest.host}")
-                fastest.host
-            } else {
-                currentPreferredHost
-            }
+            val fastest = com.pocketcraft.server.config.RelayLatencySelector.pickFastestRelay(
+                com.pocketcraft.server.config.RelayServers.defaultRegions()
+            )
+            android.util.Log.i("RelayManager", "Auto-selected lowest-latency relay ${fastest.host}")
+            fastest.host
         } else {
             currentPreferredHost
         }
@@ -1171,17 +1166,9 @@ class RelayManager(private val context: Context) {
                     bytesRead = try { relayInput.read(buffer) } catch (e: Exception) { -1 }
                     if (bytesRead <= 0) break
 
-                    val startTime = System.nanoTime()
                     output.write(buffer, 0, bytesRead)
-                    if (relayInput.available() == 0) {
-                        runCatching { output.flush() }
-                    }
+                    runCatching { output.flush() }
                     totalBytes += bytesRead
-
-                    val durationMicros = (System.nanoTime() - startTime) / 1000
-                    if (durationMicros > 100_000) {
-                         android.util.Log.w("RelayManager", "RelayToLocal stall! Wrote $bytesRead bytes in ${durationMicros}μs")
-                    }
                 }
                 android.util.Log.d("RelayManager", "RelayToLocal: End of stream. Total downstream: $totalBytes bytes")
             } catch (e: Exception) {
@@ -1195,7 +1182,7 @@ class RelayManager(private val context: Context) {
         relayToLocalThread.priority = Thread.MAX_PRIORITY
 
         val localToRelayThread = Thread {
-            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE)
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
             var totalBytes = 0L
             try {
                 val input = localSocket.getInputStream()
@@ -1208,9 +1195,7 @@ class RelayManager(private val context: Context) {
                     if (bytesRead <= 0) break
 
                     output.write(buffer, 0, bytesRead)
-                    if (input.available() == 0) {
-                        runCatching { output.flush() }
-                    }
+                    runCatching { output.flush() }
                     totalBytes += bytesRead
 
                 }
@@ -1249,8 +1234,8 @@ class RelayManager(private val context: Context) {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = 64 * 1024
-            socket.receiveBufferSize = 64 * 1024
+            socket.sendBufferSize = SOCKET_BUFFER_SIZE
+            socket.receiveBufferSize = SOCKET_BUFFER_SIZE
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
         }
@@ -1261,8 +1246,8 @@ class RelayManager(private val context: Context) {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = 64 * 1024
-            socket.receiveBufferSize = 64 * 1024
+            socket.sendBufferSize = SOCKET_BUFFER_SIZE
+            socket.receiveBufferSize = SOCKET_BUFFER_SIZE
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
         }

@@ -913,13 +913,13 @@ fun EulaDialog(onAccept: () -> Unit, onDismiss: () -> Unit) {
                     Text("⚖️", fontSize = 32.sp)
                 }
                 Text(
-                    text = "Minecraft EULA",
+                    text = "Game EULA",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.ExtraBold,
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "You must accept the Minecraft End User License Agreement to run a server.",
+                    text = "You must accept Mojang's End User License Agreement to start this server.",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -1601,7 +1601,7 @@ fun BatteryOptimizationDialog(onAccept: () -> Unit, onDismiss: () -> Unit) {
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "To keep your Minecraft server running reliably in the background when players are connected, Android requires disabling battery optimization for PocketCraft.",
+                    text = "To keep your server running reliably in the background when players are connected, Android requires disabling battery optimization for PocketCraft.",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,

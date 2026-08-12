@@ -5,50 +5,35 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Safe zone: 21-87 (66x66 area) -->
-    <!-- Circular background - fills safe zone diameter (66dp) -->
+    <!-- Circular container background -->
     <path
-        android:fillColor="#4A8F50"
-        android:pathData="M54,21 C71,21 84,34 84,51 C84,68 71,81 54,81 C37,81 24,68 24,51 C24,34 37,21 54,21 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillAlpha="0.08"
-        android:pathData="M54,21 C71,21 84,34 84,51 L54,51 Z" />
+        android:fillColor="#182A1D"
+        android:strokeColor="#34D399"
+        android:strokeWidth="2.5"
+        android:pathData="M54,21 C70.56,21 84,34.44 84,51 C84,67.56 70.56,81 54,81 C37.44,81 24,67.56 24,51 C24,34.44 37.44,21 54,21 Z" />
 
-    <!-- Left eye -->
+    <!-- Top LED Status Bar -->
     <path
-        android:fillColor="#1A3E1C"
-        android:pathData="M34,36 Q34,33 37,33 L47,33 Q50,33 50,36 L50,46 Q50,49 47,49 L37,49 Q34,49 34,46 Z" />
+        android:fillColor="#10B981"
+        android:pathData="M42,32 A2,2 0 1,0 46,32 A2,2 0 1,0 42,32 Z" />
+    <path
+        android:fillColor="#3B82F6"
+        android:pathData="M52,32 A2,2 0 1,0 56,32 A2,2 0 1,0 52,32 Z" />
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M62,32 A2,2 0 1,0 66,32 A2,2 0 1,0 62,32 Z" />
 
-    <!-- Left eye highlight -->
+    <!-- Stylized Monogram "PC" -->
+    <!-- 'P' Stem & Loop -->
     <path
-        android:fillColor="#FFFFFF"
-        android:fillAlpha="0.12"
-        android:pathData="M36,35 L40,35 L40,39 L36,39 Z" />
+        android:fillColor="#6EE7B7"
+        android:pathData="M35,42 L51,42 C56,42 56,53 51,53 L42,53 L42,70 L35,70 Z" />
+    <path
+        android:fillColor="#182A1D"
+        android:pathData="M42,47 L49,47 Q51,47 51,48.5 Q51,50 49,50 L42,50 Z" />
 
-    <!-- Right eye -->
+    <!-- 'C' Curved Arc -->
     <path
-        android:fillColor="#1A3E1C"
-        android:pathData="M58,36 Q58,33 61,33 L71,33 Q74,33 74,36 L74,46 Q74,49 71,49 L61,49 Q58,49 58,46 Z" />
-
-    <!-- Right eye highlight -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillAlpha="0.12"
-        android:pathData="M60,35 L64,35 L64,39 L60,39 Z" />
-
-    <!-- Mouth top center -->
-    <path
-        android:fillColor="#1A3E1C"
-        android:pathData="M41,56 Q41,53 44,53 L64,53 Q67,53 67,56 L67,63 Q67,66 64,66 L44,66 Q41,66 41,63 Z" />
-
-    <!-- Mouth bottom left -->
-    <path
-        android:fillColor="#1A3E1C"
-        android:pathData="M34,67 Q34,64 37,64 L47,64 Q50,64 50,67 L50,76 Q50,79 47,79 L37,79 Q34,79 34,76 Z" />
-
-    <!-- Mouth bottom right -->
-    <path
-        android:fillColor="#1A3E1C"
-        android:pathData="M58,67 Q58,64 61,64 L71,64 Q74,64 74,67 L74,76 Q74,79 71,79 L61,79 Q58,79 58,76 Z" />
+        android:fillColor="#34D399"
+        android:pathData="M73,46 L65,42 Q56,42 56,56 Q56,70 65,70 L73,66 L73,60 L66,62 Q62,62 62,56 Q62,50 66,50 L73,52 Z" />
 </vector>

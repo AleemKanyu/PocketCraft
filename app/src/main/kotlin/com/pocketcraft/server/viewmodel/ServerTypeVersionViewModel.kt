@@ -116,6 +116,7 @@ class ServerTypeVersionViewModel @Inject constructor(
 
     fun onServerJarImported(version: String) {
         _selectedVersion.value = version
+        _downloadedVersions.value = _downloadedVersions.value + version
         refreshDownloadedVersions()
     }
 

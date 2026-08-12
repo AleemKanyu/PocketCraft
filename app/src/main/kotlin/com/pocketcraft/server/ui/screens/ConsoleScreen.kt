@@ -802,7 +802,7 @@ fun ConsoleScreen(
             ) {
                 Text("No version downloaded", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                 Text(
-                    "Download a compatible Minecraft version from the Home screen before starting the server.",
+                    "Download a compatible game version from the Home screen before starting the server.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 TextButton(
@@ -992,7 +992,7 @@ fun ConsoleScreen(
                     )
 
                     Text(
-                        text = "To let other players join your Minecraft server, share the connection details below:",
+                        text = "To let other players join your server, share the connection details below:",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 16.sp
@@ -1069,7 +1069,7 @@ fun ConsoleScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    text = "⚠️ Bedrock players: The Port MUST be entered separately in the Port option inside Minecraft!",
+                                    text = "⚠️ Bedrock players: Enter the Port in your game client options!",
                                     modifier = Modifier.padding(10.dp),
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.error,
@@ -1399,7 +1399,7 @@ private fun ServerIdentityCard(
                                 )
                             } else {
                                 Image(
-                                    painter = painterResource(id = R.drawable.minecraft_api_diamond_pickaxe_hd),
+                                    painter = painterResource(id = R.drawable.ic_diamond_pickaxe),
                                     contentDescription = "Server logo",
                                     modifier = Modifier.size(28.dp)
                                 )

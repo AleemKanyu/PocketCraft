@@ -16,10 +16,8 @@ val Outfit = FontFamily(
     Font(R.font.outfit_extrabold, weight = FontWeight.ExtraBold)
 )
 
-/** Pixel font for all in-app buttons. */
-val Monocraft = FontFamily(
-    Font(R.font.monocraft, weight = FontWeight.Normal)
-)
+/** Non-trademarked font for UI components (redirected from deleted monocraft.ttf). */
+val Monocraft = Outfit
 
 /** Playfair Display — headings (serif fallback on device). */
 val PlayfairDisplay = Outfit

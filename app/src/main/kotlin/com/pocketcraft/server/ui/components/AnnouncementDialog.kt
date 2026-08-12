@@ -103,7 +103,7 @@ object AnnouncementDialog {
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
-                        painter = painterResource(R.drawable.ic_launcher_creeper),
+                        painter = painterResource(R.drawable.ic_launcher_foreground_circle),
                         contentDescription = null,
                         modifier = Modifier.size(48.dp),
                         contentScale = ContentScale.Fit

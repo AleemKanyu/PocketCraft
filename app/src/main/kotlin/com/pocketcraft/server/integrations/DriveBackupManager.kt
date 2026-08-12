@@ -263,7 +263,9 @@ object DriveBackupManager {
                     }
                 }
             }
-            nextPageToken = jsonObj.optString("nextPageToken", null).takeIf { it.isNotBlank() }
+            nextPageToken = if (jsonObj.has("nextPageToken") && !jsonObj.isNull("nextPageToken")) {
+                jsonObj.optString("nextPageToken").takeIf { it.isNotBlank() }
+            } else null
         } while (nextPageToken != null)
     }
 

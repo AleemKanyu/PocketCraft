@@ -212,7 +212,7 @@ fun PocketTopBar(
                         .padding(5.dp)
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.ic_launcher_creeper),
+                        painter = painterResource(id = R.drawable.ic_launcher_foreground_circle),
                         contentDescription = "PocketCraft icon",
                         modifier = Modifier
                             .fillMaxSize()

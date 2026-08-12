@@ -48,6 +48,7 @@ import com.pocketcraft.server.data.model.ServerType
 import com.pocketcraft.server.data.preferences.AppPreferences
 import com.pocketcraft.server.server.ServerTypeDownloadUrls
 import com.pocketcraft.server.ui.theme.PocketColors
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,6 +70,12 @@ fun ServerJarPickerBottomSheet(
         isResolving = false
     }
 
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+    var isDownloading by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableStateOf(0f) }
+    var downloadStatusText by remember { mutableStateOf("") }
+    var downloadError by remember { mutableStateOf<String?>(null) }
+
     val jarPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -77,7 +84,7 @@ fun ServerJarPickerBottomSheet(
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val downloadBtnAlpha by animateFloatAsState(
-        targetValue = if (isResolving) 0.55f else 1f,
+        targetValue = if (isResolving || isDownloading) 0.85f else 1f,
         animationSpec = tween(300),
         label = "dlBtnAlpha"
     )
@@ -138,10 +145,7 @@ fun ServerJarPickerBottomSheet(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = when {
-                        isFabric -> "Tap below to download the Fabric server JAR directly — ready to import into PocketCraft."
-                        else     -> "Download the server JAR, then bring it back here."
-                    },
+                    text = "Download the server JAR directly in-app — PocketCraft will handle the rest.",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -160,9 +164,9 @@ fun ServerJarPickerBottomSheet(
                 },
                 description = when {
                     isResolving -> "Looking up the latest ${serverType.displayName} $version build…"
-                    isFabric    -> "The Fabric server JAR will download directly to your Downloads folder. " +
-                                   "It's ready to use — just pick it in Step 2 to import into PocketCraft."
-                    else        -> "Tap to download directly — the file will be saved to your Downloads."
+                    isDownloading -> "Downloading directly in-app: $downloadStatusText"
+                    downloadError != null -> "Download failed: $downloadError. Tap to retry."
+                    else -> "Tap to download directly inside PocketCraft."
                 }
             ) {
                 Box(
@@ -176,12 +180,33 @@ fun ServerJarPickerBottomSheet(
                             )
                         )
                         .then(
-                            if (!isResolving) Modifier.clickable {
-                                runCatching {
-                                    context.startActivity(
-                                        Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
-                                    )
-                                }
+                            if (!isResolving && !isDownloading) Modifier.clickable {
+                                isDownloading = true
+                                downloadError = null
+                                downloadProgress = 0f
+                                downloadStatusText = "Connecting…"
+
+                                val jarFileName = "${serverType.displayName.lowercase()}-$version.jar"
+                                coroutineScope.launch {
+                                    val result = com.pocketcraft.server.network.InAppDownloader.downloadToPublicDownloads(
+                                            context = context,
+                                            url = downloadUrl,
+                                            fileName = jarFileName,
+                                            onProgress = { bytesRead, total, pct ->
+                                                downloadProgress = (pct / 100f).coerceIn(0f, 1f)
+                                                val readMB = String.format("%.1f", bytesRead / (1024f * 1024f))
+                                                val totalMB = if (total > 0) String.format("%.1f MB", total / (1024f * 1024f)) else "MB"
+                                                downloadStatusText = "$readMB MB / $totalMB"
+                                            }
+                                        )
+
+                                        isDownloading = false
+                                        result.onSuccess { downloadedFile ->
+                                            onJarSelected(Uri.fromFile(downloadedFile))
+                                        }.onFailure { err ->
+                                            downloadError = err.message ?: "Unknown error"
+                                        }
+                                    }
                             } else Modifier
                         )
                         .padding(vertical = 15.dp),
@@ -204,9 +229,27 @@ fun ServerJarPickerBottomSheet(
                                 fontSize = 14.sp
                             )
                         }
+                    } else if (isDownloading) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                progress = { downloadProgress },
+                                modifier = Modifier.size(18.dp),
+                                color = Color.White,
+                                strokeWidth = 2.5.dp,
+                            )
+                            Text(
+                                text = "Downloading… (${(downloadProgress * 100).toInt()}%)",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
                     } else {
                         Text(
-                            text = "⬇  Download ${serverType.displayName} $version",
+                            text = if (downloadError != null) "⚡ Retry Direct Download" else "⬇  Download ${serverType.displayName} $version",
                             color = Color.White,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 15.sp
@@ -218,8 +261,8 @@ fun ServerJarPickerBottomSheet(
             // ── Step 2 – Select ───────────────────────────────────────────────────
             InstallStep(
                 stepNumber = 2,
-                title = "Select the Downloaded JAR",
-                description = "Come back after downloading and choose the file from your device."
+                title = "Or Select Existing JAR",
+                description = "Already downloaded? Choose a JAR file directly from your device storage."
             ) {
                 Box(
                     modifier = Modifier
@@ -237,7 +280,7 @@ fun ServerJarPickerBottomSheet(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "📂  Select Downloaded JAR",
+                        text = "📂  Select File From Device",
                         color = PocketColors.PrimaryDark,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 15.sp

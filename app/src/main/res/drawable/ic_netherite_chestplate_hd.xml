@@ -5,38 +5,11 @@
     android:viewportWidth="128"
     android:viewportHeight="128">
 
+    <!-- Generic Armor / Shield Icon -->
     <path
-        android:fillColor="#00000000"
-        android:pathData="M24,20 L46,20 L56,34 L72,34 L82,20 L104,20 L110,52 L96,62 L96,112 L32,112 L32,62 L18,52 Z"
-        android:strokeColor="#1B1F24"
-        android:strokeLineJoin="miter"
-        android:strokeWidth="4" />
-
+        android:fillColor="#4A4A4A"
+        android:pathData="M64,16 L24,32 L24,64 C24,92 64,112 64,112 C64,112 104,92 104,64 L104,32 Z" />
     <path
-        android:fillColor="#4B4F57"
-        android:pathData="M28,24 L44,24 L52,36 L76,36 L84,24 L100,24 L105,50 L92,58 L92,108 L36,108 L36,58 L23,50 Z" />
-
-    <path
-        android:fillColor="#5E6470"
-        android:pathData="M44,24 L52,36 L76,36 L84,24 L92,24 L92,58 L36,58 L36,24 Z" />
-
-    <path
-        android:fillColor="#727987"
-        android:pathData="M52,40 L76,40 L76,56 L52,56 Z" />
-
-    <path
-        android:fillColor="#8E95A3"
-        android:pathData="M40,64 L88,64 L88,104 L40,104 Z" />
-
-    <path
-        android:fillColor="#3A3F47"
-        android:pathData="M44,68 L84,68 L84,100 L44,100 Z" />
-
-    <path
-        android:fillColor="#A0A8B8"
-        android:pathData="M50,72 L78,72 L78,96 L50,96 Z" />
-
-    <path
-        android:fillColor="#C5CCD8"
-        android:pathData="M56,78 L72,78 L72,90 L56,90 Z" />
+        android:fillColor="#7B8D9E"
+        android:pathData="M64,24 L32,38 L32,64 C32,86 64,102 64,102 C64,102 96,86 96,64 L96,38 Z" />
 </vector>

@@ -26,6 +26,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.pocketcraft.server.ui.theme.PocketColors
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,24 +45,12 @@ fun ServerModpackPickerBottomSheet(
         if (uri != null) onZipSelected(uri)
     }
 
+    val coroutineScope = rememberCoroutineScope()
+    var isDownloading by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableStateOf(0f) }
+    var downloadStatusText by remember { mutableStateOf("") }
+    var downloadError by remember { mutableStateOf<String?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var launchedDownload by remember { mutableStateOf(false) }
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                if (launchedDownload) {
-                    launchedDownload = false
-                    zipPickerLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*"))
-                }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -114,7 +103,7 @@ fun ServerModpackPickerBottomSheet(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "Download the pre-assembled Server Pack ZIP for '$modpackId', then pick it here to install.",
+                    text = "Download the Server Pack for '$modpackId' directly inside PocketCraft.",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -127,8 +116,12 @@ fun ServerModpackPickerBottomSheet(
             // ── Step 1 – Download ─────────────────────────────────────────────────
             ModpackInstallStep(
                 stepNumber = 1,
-                title = "Download Server Pack ZIP",
-                description = "Tap to open the modpack page in your browser. Look for the 'Server Pack' or 'Server Files' download option under the version files."
+                title = "Download Server Pack",
+                description = when {
+                    isDownloading -> "Downloading modpack directly: $downloadStatusText"
+                    downloadError != null -> "Download error: $downloadError. Tap to retry."
+                    else -> "Download the Modpack file directly in-app."
+                }
             ) {
                 Box(
                     modifier = Modifier
@@ -139,31 +132,71 @@ fun ServerModpackPickerBottomSheet(
                                 listOf(PocketColors.Primary, Color(0xFF4CAF50))
                             )
                         )
-                        .clickable {
-                            launchedDownload = true
-                            runCatching {
-                                context.startActivity(
-                                    Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
+                        .clickable(enabled = !isDownloading) {
+                            isDownloading = true
+                            downloadError = null
+                            downloadProgress = 0f
+                            downloadStatusText = "Connecting…"
+
+                            val fileName = "modpack-$modpackId.zip"
+                            coroutineScope.launch {
+                                val result = com.pocketcraft.server.network.InAppDownloader.downloadToPublicDownloads(
+                                    context = context,
+                                    url = downloadUrl,
+                                    fileName = fileName,
+                                    onProgress = { bytesRead, total, pct ->
+                                        downloadProgress = (pct / 100f).coerceIn(0f, 1f)
+                                        val readMB = String.format("%.1f", bytesRead / (1024f * 1024f))
+                                        val totalMB = if (total > 0) String.format("%.1f MB", total / (1024f * 1024f)) else "MB"
+                                        downloadStatusText = "$readMB MB / $totalMB"
+                                    }
                                 )
+
+                                isDownloading = false
+                                result.onSuccess { file ->
+                                    onZipSelected(Uri.fromFile(file))
+                                }.onFailure { err ->
+                                    downloadError = err.message ?: "Download failed"
+                                }
                             }
                         }
                         .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "⬇  Open Modpack Page",
-                        color = Color.White,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 15.sp
-                    )
+                    if (isDownloading) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                progress = { downloadProgress },
+                                modifier = Modifier.size(18.dp),
+                                color = Color.White,
+                                strokeWidth = 2.5.dp,
+                            )
+                            Text(
+                                text = "Downloading… (${(downloadProgress * 100).toInt()}%)",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = if (downloadError != null) "⚡ Retry Direct Download" else "⬇  Download Modpack Pack In-App",
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 15.sp
+                        )
+                    }
                 }
             }
 
             // ── Step 2 – Select ───────────────────────────────────────────────────
             ModpackInstallStep(
                 stepNumber = 2,
-                title = "Select Downloaded Server Pack ZIP",
-                description = "Come back after downloading the Server Pack ZIP and choose it from your device storage."
+                title = "Or Select Existing File",
+                description = "Choose a previously downloaded Server Pack ZIP file from your device storage."
             ) {
                 Box(
                     modifier = Modifier
@@ -181,7 +214,7 @@ fun ServerModpackPickerBottomSheet(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "📂  Select Modpack ZIP",
+                        text = "📂  Select Modpack File From Device",
                         color = PocketColors.PrimaryDark,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 15.sp

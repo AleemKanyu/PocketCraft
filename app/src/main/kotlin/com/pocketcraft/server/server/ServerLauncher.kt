@@ -247,7 +247,7 @@ class ServerLauncher(private val context: Context) {
         ServerFileManager.ensureDirectoryPermissions(shimDir)
         ensureSystemShims(shimDir, File(tmpDir), onOutput)
         val deviceProfile = buildDeviceStabilityProfile(totalRamMb = getTotalRamMb(context), availableRamMb = com.pocketcraft.server.util.RamUtils.getAvailableRamMb(context))
-        val forceExternal = AppPreferences(context).forceExternalJvm || deviceProfile.forceExternalJvm || NativeLauncher.hasInProcessJvmRunInThisProcess
+        val forceExternal = AppPreferences(context).forceExternalJvm || deviceProfile.forceExternalJvm
         val preferInProcessJvm = launchMode == ServerFileManager.LaunchMode.JAR && !forceExternal && NativeLauncher.loadLibrary()
 
         val resolvedRuntime = ensureLaunchableRuntime(
@@ -385,7 +385,6 @@ class ServerLauncher(private val context: Context) {
                 } else {
                     result = runCatching {
                         onOutput("[PocketCraft] Launching in-process JVM on Android ${Build.VERSION.RELEASE}.")
-                        NativeLauncher.hasInProcessJvmRunInThisProcess = true
                         NativeLauncher.launchJVM(
                             jrePath = jrePath,
                             jarPath = normalizedJarPath,
@@ -725,18 +724,13 @@ class ServerLauncher(private val context: Context) {
             "-XX:+TieredCompilation",
             "-Xverify:none",
             "-XX:+UnlockDiagnosticVMOptions",
-            "-XX:CICompilerCount=2",
+            "-XX:TieredStopAtLevel=1",
             "-Dca.spottedleaf.dataconverter.parallel=true",
             "-Dca.spottedleaf.dataconverter.threads=4",
             "-Dpaper.oshi.disabled=true",
             "-Dpaper.disable-hardware-info=true",
             "-Doshi.os.disabled=true",
-            "-Doshi.os=unknown",
             "-Doshi.architecture=aarch64",
-            "-Doshi.util.memoizer.expiration=0",
-            "-Djna.nosys=true",
-            "-Djna.loaded=true",
-            "-Djna.nounpack=true",
             "-Djava.home=$jrePath",
             "-Djava.security.egd=file:/dev/urandom",
             "-Djava.io.tmpdir=$tmpDir",
@@ -745,6 +739,7 @@ class ServerLauncher(private val context: Context) {
             "-Dio.netty.native.workdir=$tmpDir",
             "-Djna.boot.library.path=$jnaBootPath",
             "-Djna.library.path=$jnaLibraryPath",
+            "-Djna.nounpack=true",
             "-Duser.home=$serverDir",
             "-Duser.language=${System.getProperty("user.language").orEmpty()}",
             "-Duser.timezone=${java.util.TimeZone.getDefault().id}",
@@ -773,6 +768,7 @@ class ServerLauncher(private val context: Context) {
             "-Dpaper.disable-plugin-update-check=true",
             "-Dsun.zip.disableMemoryMapping=true",
             "-Djdk.attach.allowAttachSelf=true",
+            "-Djna.nosys=true",
             "-Xshare:off",
             "-XX:MaxGCPauseMillis=40",
             "-XX:+DisableExplicitGC",
@@ -792,11 +788,14 @@ class ServerLauncher(private val context: Context) {
                 add("-XX:-UsePerfData")
                 add("-XX:-UseContainerSupport")
                 add("-XX:ErrorFile=$errorFilePattern")
+                // Cap worker & I/O threads on mobile ARM to prevent 100% CPU core pinning and phone overheating
                 val nettyLoopThreads = cores.coerceIn(4, 8)
                 add("-Dio.netty.eventLoopThreads=$nettyLoopThreads")
                 add("-Dpaper.maxChunkIOThreads=2")
                 add("-Dpaper.maxChunkThreads=2")
                 add("-Dio.netty.allocator.maxOrder=8")
+                // Tighten recycler pools: the default 262144 cap was holding ~100MB of
+                // pooled byte buffers in swap, causing page-in latency on packet sends.
                 add("-Dio.netty.recycler.maxCapacity=4096")
                 add("-Dio.netty.recycler.maxCapacityPerThread=256")
                 add("-Dio.netty.recycler.linkCapacity=256")
@@ -805,7 +804,6 @@ class ServerLauncher(private val context: Context) {
                 add("-Dio.netty.noPreferDirect=false")
                 add("-Dio.netty.noUnsafe=false")
             })
-
             when (launchMode) {
                 ServerFileManager.LaunchMode.JAR -> {
                     add("-jar")
@@ -1100,13 +1098,13 @@ class ServerLauncher(private val context: Context) {
     ): Int {
         val vd = viewDistance.coerceIn(4, 32)
         if (flightModeEnabled) {
-            val base = if (cellularRelay) 100 else 280
+            val base = if (cellularRelay) 80 else 180
             val viewScale = (7.0 / vd).pow(0.4).coerceIn(0.7, 1.0)
-            return (base * viewScale + 10).toInt().coerceIn(if (cellularRelay) 80 else 180, if (cellularRelay) 180 else 400)
+            return (base * viewScale + 10).toInt().coerceIn(if (cellularRelay) 60 else 120, if (cellularRelay) 120 else 240)
         }
-        val base = if (cellularRelay) 80 else 220
+        val base = if (cellularRelay) 60 else 140
         val viewScale = (7.0 / vd).pow(0.35).coerceIn(0.75, 1.0)
-        return (base * viewScale).toInt().coerceIn(if (cellularRelay) 60 else 140, if (cellularRelay) 140 else 350)
+        return (base * viewScale).toInt().coerceIn(if (cellularRelay) 50 else 90, if (cellularRelay) 100 else 180)
     }
 
     private fun computeRelayChunkConcurrency(
@@ -1114,12 +1112,9 @@ class ServerLauncher(private val context: Context) {
         flightModeEnabled: Boolean
     ): Triple<Int, Int, Int> {
         // Returns Triple(concurrentGenerates, concurrentLoads, concurrentSends)
-        // 1 generate, 4 loads, 2 sends keeps mobile ARM CPU usage ultra-light and ping low
-        return Triple(1, 4, 2)
+        // 1 generate, 2 loads, 1 send keeps mobile CPU usage ultra-light and eliminates chunk ping spikes
+        return Triple(1, 2, 1)
     }
-
-
-
 
     private fun computeRelayChunkPipelineRates(
         chunkSendRate: Int,
@@ -1127,13 +1122,13 @@ class ServerLauncher(private val context: Context) {
     ): Pair<Int, Int> {
         return if (flightModeEnabled) {
             Pair(
-                (chunkSendRate * 2).coerceIn(120, 350),
-                (chunkSendRate * 3).coerceIn(250, 600)
+                (chunkSendRate * 1.3).toInt().coerceIn(80, 200),
+                (chunkSendRate * 1.8).toInt().coerceIn(150, 320)
             )
         } else {
             Pair(
-                (chunkSendRate * 2).coerceIn(100, 300),
-                (chunkSendRate * 3).coerceIn(200, 500)
+                (chunkSendRate * 1.2).toInt().coerceIn(60, 150),
+                (chunkSendRate * 1.5).toInt().coerceIn(100, 240)
             )
         }
     }
@@ -1304,12 +1299,9 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-loads", concurrentLoads.toString())
         updated = ensureYamlSectionValue(updated, "chunk-loading-advanced", "player-max-concurrent-chunk-sends", concurrentSends.toString())
 
-        // Cap Moonrise chunk I/O and worker threads on mobile to avoid tick-thread starvation.
-        // Previously capped at 2-3, but now that RCON location polling is batched and reduced
-        // from 3x/min to 1x/min, the tick thread has headroom for 4 chunk threads.
-        // 4 threads gives noticeably faster chunk loading without degrading ping.
-        val cores = Runtime.getRuntime().availableProcessors()
-        val threads = if (cores <= 4) 2 else 4
+        // Cap Moonrise chunk I/O and worker threads on mobile to 2 threads.
+        // 2 threads ensures steady background chunk generation & loading without CPU starvation or ping spikes.
+        val threads = 2
 
         updated = removeYamlPathKey(updated, listOf("misc"), "io-threads")
         updated = removeYamlPathKey(updated, listOf("misc"), "worker-threads")
@@ -1398,9 +1390,12 @@ class ServerLauncher(private val context: Context) {
         val paperGlobalFile = File(configDir, "paper-global.yml")
         var globalYaml = runCatching { paperGlobalFile.readText() }.getOrDefault("")
         val origGlobal = globalYaml
-        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "player-max-concurrent-loads", "4")
-        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "global-max-concurrent-loads", "8")
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "player-max-concurrent-loads", "2")
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "global-max-concurrent-loads", "4")
         globalYaml = ensureYamlPathValue(globalYaml, listOf("chunk-loading"), "target-background-loads", "1")
+
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("timings"), "enabled", "false")
+        globalYaml = ensureYamlPathValue(globalYaml, listOf("timings"), "really-enabled", "false")
 
         globalYaml = ensureYamlPathValue(globalYaml, listOf("packet-limiter", "all-packets"), "max-packet-rate", "1000.0")
         globalYaml = ensureYamlPathValue(globalYaml, listOf("packet-limiter", "all-packets"), "interval", "1.0")
@@ -1812,7 +1807,7 @@ class ServerLauncher(private val context: Context) {
             val javaBin = File(context.filesDir, "jre-runtime/bin/java")
             if (javaBin.exists()) {
                 android.system.Os.chmod(javaBin.absolutePath, 0x1ED)
-                val jreLibDir = File(javaBin.parentFile.parentFile, "lib")
+                val jreLibDir = File(javaBin.parentFile?.parentFile, "lib")
                 val pb = ProcessBuilder(javaBin.absolutePath, "-version").redirectErrorStream(true)
                 pb.environment()["LD_LIBRARY_PATH"] = "$jreLibDir/server:$jreLibDir:$jreLibDir/jli"
                 val p = pb.start()
@@ -1865,7 +1860,7 @@ class ServerLauncher(private val context: Context) {
                 canonical.parentFile?.parentFile?.walkTopDown()?.forEach { file ->
                     android.system.Os.chmod(file.absolutePath, 0x1ED)
                 }
-                val jreLibDir = File(canonical.parentFile.parentFile, "lib")
+                val jreLibDir = File(canonical.parentFile?.parentFile, "lib")
                 val pb = ProcessBuilder(canonical.absolutePath, "-Xshare:off", "-version")
                     .redirectErrorStream(true)
                 pb.environment()["LD_LIBRARY_PATH"] = "$jreLibDir/server:$jreLibDir:$jreLibDir/jli"
@@ -1935,7 +1930,7 @@ class ServerLauncher(private val context: Context) {
 
             // Verify the copy is actually executable (probe with a quick exec test).
             val execSafe = runCatching {
-                val jreLibDir = File(canonical.parentFile.parentFile, "lib")
+                val jreLibDir = File(canonical.parentFile?.parentFile, "lib")
                 val pb = ProcessBuilder(copy.absolutePath, "-Xshare:off", "-version")
                     .redirectErrorStream(true)
                 pb.environment()["LD_LIBRARY_PATH"] = "$jreLibDir/server:$jreLibDir:$jreLibDir/jli"

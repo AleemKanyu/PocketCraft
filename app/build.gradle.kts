@@ -299,3 +299,8 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     implementation("androidx.graphics:graphics-path:1.0.1")
 }
+
+tasks.matching { it.name.startsWith("uploadCrashlyticsMappingFile") }.configureEach {
+    enabled = false
+}
+

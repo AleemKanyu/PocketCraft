@@ -1298,7 +1298,7 @@ private fun WelcomeScreen(
 
         // ── Headline ──────────────────────────────────────────────────────────
         Text(
-            text = "Your phone is now\na Minecraft server",
+            text = "Your phone is now\na dedicated game server",
             fontSize = 25.sp.scaledSp(scale),
             lineHeight = 30.sp.scaledSp(scale),
             color = onboardingTextPrimary(),
@@ -1315,6 +1315,15 @@ private fun WelcomeScreen(
             color = onboardingTextSecondary(),
             textAlign = TextAlign.Center,
             maxLines = 3
+        )
+
+        Text(
+            text = "PocketCraft is an independent software application and is not affiliated with, authorized, maintained, sponsored, or endorsed by Mojang AB, Microsoft Corporation, or any of their affiliates.",
+            fontSize = 10.sp.scaledSp(scale),
+            lineHeight = 13.sp.scaledSp(scale),
+            color = onboardingTextSecondary().copy(alpha = 0.7f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
 
         // ── Feature cards: icon + label ───────────────────────────────────────

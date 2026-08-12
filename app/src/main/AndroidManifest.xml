@@ -87,7 +87,7 @@
             android:stopWithTask="false">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps a Minecraft server process running in the foreground so the user can host an active game session on their device." />
+                android:value="Keeps a server process running in the foreground for connected players." />
         </service>
 
         <service

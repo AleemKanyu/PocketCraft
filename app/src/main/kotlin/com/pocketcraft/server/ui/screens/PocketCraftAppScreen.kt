@@ -1428,69 +1428,73 @@ fun PocketCraftApp(
 
     // Disabled: NewFeaturesPopup.Content is removed.
 
-    if (showModpackImportDialog) {
-        val importId = pendingModpackImportId.orEmpty()
-        val importUrl = pendingModpackImportPageUrl.orEmpty()
-        ServerModpackPickerBottomSheet(
-            modpackId = importId,
-            pageUrl = importUrl,
-            onDismiss = {
-                showModpackImportDialog = false
-                pendingModpackImportId = null
-                pendingModpackImportPageUrl = null
-            },
-            onZipSelected = { uri ->
-                showModpackImportDialog = false
-                scope.launch {
-                    modpackImportInProgress = true
-                    modpackImportError = null
-                    modpackImportId = importId
-                    modpackImportStatus = "Starting modpack import..."
-                    modpackImportProgress = 1
-                    val activeWorld = stateHolder.activeWorld.ifBlank { "world" }
-                    val result = ModpackManager.importModpackZip(
-                        context = context,
-                        zipUri = uri,
-                        worldName = activeWorld,
-                        modpackId = importId,
-                        onStatus = { status ->
-                            scope.launch {
-                                modpackImportStatus = status
-                            }
-                        },
-                        onProgress = { progress ->
-                            scope.launch {
-                                modpackImportProgress = progress.coerceIn(0, 100)
-                            }
-                        }
-                    )
-                    if (result.isSuccess) {
-                        Toast.makeText(context, "Modpack imported successfully!", Toast.LENGTH_LONG).show()
-                        modpackImportProgress = 100
-                        modpackImportStatus = "Import complete. Preparing server..."
-                        val currentConfig = stateHolder.config
-                        val newConfig = currentConfig.copy(
-                            serverType = ServerType.MODPACK,
-                            gameVersion = importId,
-                            customJarPath = importId
-                        )
-                        stateHolder.saveSettings(newConfig)
-                        AppPreferencesStore.setSelectedServerType(context, ServerType.MODPACK.name)
-                        AppPreferencesStore.setSelectedVersion(context, importId)
-                        downloadedVersions = scanDownloadedRuntimeKeys(context.applicationContext)
-                        requestVersionChange(ServerType.MODPACK, importId)
-                        delay(1_500)
-                        modpackImportInProgress = false
-                        modpackImportId = null
-                    } else {
-                        val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
-                        modpackImportError = "Import failed: $errorMsg"
-                        modpackImportInProgress = false
-                        Toast.makeText(context, "Import failed. Check progress card for details.", Toast.LENGTH_LONG).show()
-                    }
+    LaunchedEffect(showModpackImportDialog) {
+        if (showModpackImportDialog) {
+            val importId = pendingModpackImportId.orEmpty()
+            val importUrl = pendingModpackImportPageUrl.orEmpty()
+            showModpackImportDialog = false
+
+            modpackImportInProgress = true
+            modpackImportError = null
+            modpackImportId = importId
+            modpackImportStatus = "Downloading modpack '$importId' directly in-app..."
+            modpackImportProgress = 1
+
+            val tempZipFile = java.io.File(context.cacheDir, "modpack_$importId.zip")
+            val dlResult = com.pocketcraft.server.network.InAppDownloader.downloadFile(
+                url = importUrl,
+                targetFile = tempZipFile,
+                onProgress = { bytesRead, total, pct ->
+                    val readMB = String.format("%.1f", bytesRead / (1024f * 1024f))
+                    val totalMB = if (total > 0) String.format("%.1f MB", total / (1024f * 1024f)) else "MB"
+                    modpackImportStatus = "Downloading modpack: $readMB / $totalMB (${pct.toInt()}%)"
+                    modpackImportProgress = (pct * 0.5f).toInt().coerceIn(1, 50)
                 }
+            )
+
+            dlResult.onSuccess { downloadedZip ->
+                val activeWorld = stateHolder.activeWorld.ifBlank { "world" }
+                val result = ModpackManager.importModpackZip(
+                    context = context,
+                    zipUri = android.net.Uri.fromFile(downloadedZip),
+                    worldName = activeWorld,
+                    modpackId = importId,
+                    onStatus = { status ->
+                        modpackImportStatus = status
+                    },
+                    onProgress = { progress ->
+                        modpackImportProgress = 50 + (progress * 0.5f).toInt().coerceIn(0, 50)
+                    }
+                )
+                if (result.isSuccess) {
+                    Toast.makeText(context, "Modpack imported successfully!", Toast.LENGTH_LONG).show()
+                    modpackImportProgress = 100
+                    modpackImportStatus = "Import complete. Preparing server..."
+                    val currentConfig = stateHolder.config
+                    val newConfig = currentConfig.copy(
+                        serverType = ServerType.MODPACK,
+                        gameVersion = importId,
+                        customJarPath = importId
+                    )
+                    stateHolder.saveSettings(newConfig)
+                    AppPreferencesStore.setSelectedServerType(context, ServerType.MODPACK.name)
+                    AppPreferencesStore.setSelectedVersion(context, importId)
+                    downloadedVersions = scanDownloadedRuntimeKeys(context.applicationContext)
+                    requestVersionChange(ServerType.MODPACK, importId)
+                    delay(1_500)
+                    modpackImportInProgress = false
+                    modpackImportId = null
+                } else {
+                    val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+                    modpackImportError = "Import failed: $errorMsg"
+                    modpackImportInProgress = false
+                    Toast.makeText(context, "Import failed. Check progress card for details.", Toast.LENGTH_LONG).show()
+                }
+            }.onFailure { err ->
+                modpackImportError = "Download failed: ${err.message}"
+                modpackImportInProgress = false
             }
-        )
+        }
     }
 
     if (showVersionPickerDialog) {

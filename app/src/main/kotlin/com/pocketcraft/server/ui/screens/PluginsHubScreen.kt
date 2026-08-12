@@ -218,6 +218,53 @@ fun PluginsHubScreen(
         }
     }
 
+    fun performDirectInstall(remote: PluginManager.RemoteCatalogItem) {
+        scope.launch {
+            isUploading = true
+            uploadProgress = 0
+            downloadingCatalogKey = remote.catalogKey
+            onMessage("Downloading & installing ${remote.title} directly in-app…")
+
+            val downloadUrl = PluginSourceUrls.getContentPage(remote, currentTab().type)
+            val sanitizedTitle = remote.title.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+            val isPack = currentTab().type == PluginManager.ContentType.RESOURCE_PACKS
+            val ext = if (isPack) ".zip" else ".jar"
+            val tempFile = java.io.File(context.cacheDir, "$sanitizedTitle$ext")
+
+            val dlResult = com.pocketcraft.server.network.InAppDownloader.downloadFile(
+                url = downloadUrl,
+                targetFile = tempFile,
+                onProgress = { _, _, pct ->
+                    if (pct > 0) uploadProgress = pct.toInt().coerceIn(0, 100)
+                }
+            )
+
+            dlResult.onSuccess { downloadedFile ->
+                val uri = android.net.Uri.fromFile(downloadedFile)
+                val installRes = PluginManager.installFromUri(
+                    context = context,
+                    uri = uri,
+                    worldName = stateHolder.activeWorld,
+                    type = currentTab().type,
+                    runtimeKey = runtimeKey,
+                    onProgress = { uploadProgress = it.coerceIn(0, 100) }
+                )
+                isUploading = false
+                downloadingCatalogKey = null
+                installRes.onSuccess {
+                    onMessage("Successfully installed ${remote.title}!")
+                    refreshDownloadedItems()
+                }.onFailure { err ->
+                    onMessage("Installation error: ${err.message}")
+                }
+            }.onFailure { err ->
+                isUploading = false
+                downloadingCatalogKey = null
+                onMessage("Direct download error: ${err.message}")
+            }
+        }
+    }
+
     val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         if (uris.isNullOrEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
@@ -491,7 +538,7 @@ fun PluginsHubScreen(
                             )
                         },
                         onUpdateClick = { resolvedItem ->
-                            pendingRemoteInstall = resolvedItem
+                            performDirectInstall(resolvedItem)
                         }
                     )
                 }
@@ -582,7 +629,7 @@ fun PluginsHubScreen(
                             },
                             onInstall = {
                                 if (!installed && remote.canInstall) {
-                                    pendingRemoteInstall = remote
+                                    performDirectInstall(remote)
                                 }
                             }
                         )
@@ -728,87 +775,53 @@ fun PluginsHubScreen(
                             scope.launch {
                                 val cleanUrl = urlInput.trim()
                                 if (cleanUrl.isNotBlank()) {
-                                    runCatching {
-                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(cleanUrl)))
+                                    onMessage("Downloading file directly in-app…")
+                                    val fileName = cleanUrl.substringAfterLast("/").takeIf { it.isNotBlank() && it.contains(".") } ?: "downloaded_plugin.jar"
+                                    val result = com.pocketcraft.server.network.InAppDownloader.downloadToPublicDownloads(
+                                        context = context,
+                                        url = cleanUrl,
+                                        fileName = fileName,
+                                        onProgress = { bytesRead, _, pct ->
+                                            if (pct > 0) {
+                                                onMessage("Downloading in-app: ${pct.toInt()}% (${bytesRead / (1024 * 1024)} MB)")
+                                            }
+                                        }
+                                    )
+                                    result.onSuccess { downloadedFile ->
+                                        onMessage("Downloaded ${downloadedFile.name}! Importing…")
+                                        addSheetState.hide()
+                                        showAddDialog = false
+                                        val downloadedUri = Uri.fromFile(downloadedFile)
+                                        val installRes = PluginManager.installFromUri(
+                                            context = context,
+                                            uri = downloadedUri,
+                                            worldName = stateHolder.activeWorld,
+                                            type = currentTab().type,
+                                            runtimeKey = runtimeKey,
+                                            onProgress = { }
+                                        )
+                                        installRes.onSuccess {
+                                            onMessage("Successfully installed ${downloadedFile.name}!")
+                                            refreshDownloadedItems()
+                                        }.onFailure { err ->
+                                            onMessage("Installation failed: ${err.message}")
+                                        }
+                                    }.onFailure { err ->
+                                        onMessage("In-app download failed: ${err.message}")
                                     }
                                 }
-                                onMessage("Download the file in your browser, then use Upload from device.")
                             }
                         },
                         enabled = urlInput.isNotBlank()
                     ) {
-                        Text("Open URL")
+                        Text("Download In-App")
                     }
                 }
             }
         }
     }
 
-    pendingRemoteInstall?.let { item ->
-        PluginInstallBottomSheet(
-            itemName = item.title,
-            itemPageUrl = PluginSourceUrls.getContentPage(item, currentTab().type),
-            pickerMimeTypes = when (currentTab().type) {
-                PluginManager.ContentType.RESOURCE_PACKS -> arrayOf("application/zip", "*/*")
-                else -> arrayOf("application/java-archive", "*/*")
-            },
-            onDismiss = { pendingRemoteInstall = null },
-            onFileSelected = { uri ->
-                scope.launch {
-                    isUploading = true
-                    uploadProgress = 0
-                    val fileName = PluginManager.getFileNameFromUri(context, uri) ?: item.title
-                    val result = PluginManager.installFromUri(
-                        context = context,
-                        uri = uri,
-                        worldName = stateHolder.activeWorld,
-                        type = currentTab().type,
-                        runtimeKey = runtimeKey,
-                        onProgress = { uploadProgress = it.coerceIn(0, 100) }
-                    )
-                    isUploading = false
-                    result.onSuccess {
-                        pendingRemoteInstall = null
-                        refreshDownloadedItems()
-                        Toast.makeText(context, "${s.hubInstalled}: $fileName", Toast.LENGTH_SHORT).show()
-                    }.onFailure {
-                        onMessage(it.message ?: "Could not add file.")
-                    }
-                }
-            },
-            dependencies = dependenciesList,
-            isLoadingDependencies = isLoadingDependencies,
-            contentTypeLabel = when (currentTab().type) {
-                PluginManager.ContentType.PLUGINS -> "PLUGIN"
-                PluginManager.ContentType.MODS -> "MOD"
-                PluginManager.ContentType.RESOURCE_PACKS -> "PACK"
-            },
-            worldName = stateHolder.activeWorld,
-            onDependencyFileSelected = { dep, uri, onComplete ->
-                scope.launch {
-                    isUploading = true
-                    uploadProgress = 0
-                    val fileName = PluginManager.getFileNameFromUri(context, uri) ?: dep.title
-                    val result = PluginManager.installFromUri(
-                        context = context,
-                        uri = uri,
-                        worldName = stateHolder.activeWorld,
-                        type = currentTab().type,
-                        runtimeKey = runtimeKey,
-                        onProgress = { uploadProgress = it.coerceIn(0, 100) }
-                    )
-                    isUploading = false
-                    result.onSuccess {
-                        refreshDownloadedItems()
-                        onComplete()
-                        Toast.makeText(context, "${s.hubInstalled}: $fileName", Toast.LENGTH_SHORT).show()
-                    }.onFailure {
-                        onMessage(it.message ?: "Could not add file.")
-                    }
-                }
-            }
-        )
-    }
+
 
     detailCard?.let { activeDetail ->
         ContentDetailDialog(
