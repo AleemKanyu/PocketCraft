@@ -395,6 +395,8 @@ class RelayManager(private val context: Context) {
             0xC0,           // ACK — acknowledgement, critical for RakNet reliability
             0xA0,           // NACK — triggers retransmit
             0x00,           // ConnectedPing
+            0x01,           // UnconnectedPing
+            0x02,           // UnconnectedPingOpenConnections
             0x03,           // ConnectedPong
             0x05,           // OpenConnectionRequest1
             0x06,           // OpenConnectionReply1
@@ -1154,9 +1156,26 @@ class RelayManager(private val context: Context) {
                 // A Bedrock-to-Java handoff must keep using the BufferedInputStream.
                 val relayInput = relayInputOverride ?: relaySocket.getInputStream()
 
-                // Manually push the first byte to the server
-                output.write(firstByte)
-                totalBytes += 1
+                // Combine firstByte with any available initial handshake bytes to prevent packet splitting
+                val avail = runCatching { relayInput.available() }.getOrDefault(0)
+                if (avail > 0) {
+                    val initialBuf = ByteArray(1 + avail)
+                    initialBuf[0] = firstByte.toByte()
+                    val read = runCatching { relayInput.read(initialBuf, 1, avail) }.getOrDefault(-1)
+                    if (read > 0) {
+                        output.write(initialBuf, 0, 1 + read)
+                        runCatching { output.flush() }
+                        totalBytes += (1 + read)
+                    } else {
+                        output.write(firstByte)
+                        runCatching { output.flush() }
+                        totalBytes += 1
+                    }
+                } else {
+                    output.write(firstByte)
+                    runCatching { output.flush() }
+                    totalBytes += 1
+                }
 
                 // Continue streaming normally
                 val buffer = ByteArray(PLAYER_BRIDGE_BUFFER_SIZE)
@@ -1226,18 +1245,10 @@ class RelayManager(private val context: Context) {
     }
 
     private fun configureLocalSocket(socket: Socket) {
-        tuneLowLatencySocket(socket)
-    }
-
-    private fun tuneLowLatencySocket(socket: Socket) {
         runCatching {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = SOCKET_BUFFER_SIZE
-            socket.receiveBufferSize = SOCKET_BUFFER_SIZE
-            socket.trafficClass = 0x10 // IPTOS_LOWDELAY
-            socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
         }
     }
 
@@ -1246,8 +1257,6 @@ class RelayManager(private val context: Context) {
             socket.tcpNoDelay = true
             socket.keepAlive = true
             socket.reuseAddress = true
-            socket.sendBufferSize = SOCKET_BUFFER_SIZE
-            socket.receiveBufferSize = SOCKET_BUFFER_SIZE
             socket.trafficClass = 0x10 // IPTOS_LOWDELAY
             socket.setPerformancePreferences(0, 2, 0) // latency > bandwidth > connection time
         }

@@ -1030,7 +1030,66 @@ object PluginManager {
         runtimeKey: String = worldName,
         onProgress: (Int) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
-        Result.failure(Exception("Direct in-app downloads are disabled. Open the official page in your browser, download the file there, then import it from device storage."))
+        try {
+            val client = getHttpClient(context)
+            val request = Request.Builder()
+                .url(sourceUrl)
+                .header("User-Agent", userAgent())
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(Exception("HTTP ${response.code} download failed"))
+            }
+
+            val body = response.body ?: return@withContext Result.failure(Exception("Empty download response"))
+            val totalBytes = body.contentLength()
+            val targetDir = getContentDir(context, worldName, type)
+
+            var name = fileNameHint
+            if (name.isNullOrBlank()) {
+                val cd = response.header("Content-Disposition")
+                if (cd != null && cd.contains("filename=")) {
+                    name = cd.substringAfter("filename=").trim('"').trim('\'')
+                }
+            }
+            if (name.isNullOrBlank()) {
+                name = sourceUrl.substringAfterLast('/').substringBefore('?')
+            }
+            if (name.isBlank()) name = "downloaded_content_${System.currentTimeMillis()}"
+            if (!name.endsWith(".jar") && (type == ContentType.PLUGINS || type == ContentType.MODS)) {
+                name = "$name.jar"
+            }
+
+            val destFile = File(targetDir, sanitizeFileName(name))
+
+            body.byteStream().use { input ->
+                FileOutputStream(destFile).use { output ->
+                    val buffer = ByteArray(16 * 1024)
+                    var downloaded = 0L
+                    var bytes = input.read(buffer)
+                    while (bytes != -1) {
+                        output.write(buffer, 0, bytes)
+                        downloaded += bytes
+                        if (totalBytes > 0) {
+                            withContext(Dispatchers.Main) {
+                                onProgress(((downloaded * 100) / totalBytes).toInt().coerceIn(0, 100))
+                            }
+                        }
+                        bytes = input.read(buffer)
+                    }
+                }
+            }
+
+            validateInstalledFile(destFile, type, runtimeKey)?.let { error ->
+                destFile.delete()
+                return@withContext Result.failure(Exception(error))
+            }
+
+            Result.success(destFile)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     suspend fun installRemoteItem(
@@ -1042,7 +1101,28 @@ object PluginManager {
         minecraftVersion: String? = null,
         onProgress: (Int) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
-        Result.failure(Exception("Direct in-app downloads are disabled. Open ${item.title}'s official page, download the file in your browser, then import it from device storage."))
+        if (!item.canInstall) {
+            return@withContext Result.failure(Exception(item.supportMessage ?: "This item is not compatible with the current server runtime."))
+        }
+
+        val resolvedVersion = minecraftVersion 
+            ?: com.pocketcraft.server.data.repository.ServerConfigRepository(context).loadConfig().gameVersion.ifBlank { "1.20.4" }
+
+        val candidate = when (item.source) {
+            MODRINTH_PROVIDER -> resolveModrinthDownload(context, item, type, resolvedVersion, runtimeKey)
+            HANGAR_PROVIDER -> resolveHangarDownload(context, item, worldName)
+            else -> null
+        } ?: return@withContext Result.failure(Exception("Could not find a compatible download for ${item.title}."))
+
+        installFromUrl(
+            context = context,
+            sourceUrl = candidate.downloadUrl,
+            worldName = worldName,
+            type = type,
+            fileNameHint = candidate.fileName,
+            runtimeKey = runtimeKey,
+            onProgress = onProgress
+        )
     }
 
     suspend fun fetchRemoteCatalog(
@@ -1758,8 +1838,17 @@ object PluginManager {
             ensureManagedPluginEnabled(context, worldName, item.projectId)
             return Result.success(Unit)
         }
-        onProgress("${item.title} must be imported manually.")
-        return Result.failure(Exception("${item.title} is not bundled and cannot be downloaded in-app."))
+        onProgress("Installing ${item.title} bridge plugin…")
+        Log.d("PluginManager", "Installing managed plugin: ${item.title} (${item.projectId})")
+        return withTimeoutOrNull(20000L) {
+            installRemoteItem(
+                context = context,
+                item = item,
+                worldName = worldName,
+                type = ContentType.PLUGINS,
+                onProgress = {}
+            ).map { Unit }
+        } ?: Result.failure(Exception("Timeout installing ${item.title}"))
     }
 
     private suspend fun installManagedPluginFromCandidatesIfMissing(
@@ -1796,8 +1885,15 @@ object PluginManager {
             ensureManagedPluginEnabled(context, worldName, projectId)
             return Result.success(Unit)
         }
-        onProgress("$title must be imported manually.")
-        return Result.failure(Exception("$title is not bundled and cannot be downloaded in-app."))
+        onProgress("Installing $title bridge plugin…")
+        return installFromUrl(
+            context = context,
+            sourceUrl = downloadUrl,
+            worldName = worldName,
+            type = ContentType.PLUGINS,
+            fileNameHint = fileNameHint,
+            onProgress = {}
+        ).map { Unit }
     }
 
     private suspend fun replaceManagedPluginFromUrl(
@@ -1816,7 +1912,26 @@ object PluginManager {
         }
         existing?.forEach { it.delete() }
 
-        return Result.failure(Exception("$title cannot be updated in-app. Bundle a newer version with an app update."))
+        return if (downloadUrl != null) {
+            installFromUrl(
+                context = context,
+                sourceUrl = downloadUrl,
+                worldName = worldName,
+                type = ContentType.PLUGINS,
+                fileNameHint = fileNameHint,
+                onProgress = {}
+            ).map { Unit }
+        } else if (catalogItem != null) {
+            installRemoteItem(
+                context = context,
+                item = catalogItem,
+                worldName = worldName,
+                type = ContentType.PLUGINS,
+                onProgress = {}
+            ).map { Unit }
+        } else {
+            Result.failure(Exception("No download source for $title"))
+        }
     }
 
     private fun ensureManagedPluginEnabled(context: Context, worldName: String, projectId: String) {

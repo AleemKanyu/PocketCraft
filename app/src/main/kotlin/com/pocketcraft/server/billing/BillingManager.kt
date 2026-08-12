@@ -307,6 +307,12 @@ class BillingManager private constructor(private val context: Context) {
         _isPremium.value = _entitlement.value.isPremium || preferences.debugPremiumOverride
     }
 
+    fun setDebugPremiumOverride(enabled: Boolean) {
+        preferences.debugPremiumOverride = enabled
+        preferences.isPremiumUser = enabled || _entitlement.value.isPremium
+        _isPremium.value = enabled || _entitlement.value.isPremium
+    }
+
     fun clearMessage() {
         _lastMessage.value = null
     }

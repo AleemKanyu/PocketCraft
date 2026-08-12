@@ -15,6 +15,14 @@
 #define PR_SET_TAGGED_ADDR_CTRL 55
 #endif
 
+#ifndef M_BIONIC_SET_HEAP_TAGGING_LEVEL
+#define M_BIONIC_SET_HEAP_TAGGING_LEVEL (-201)
+#endif
+
+#ifndef M_HEAP_TAGGING_LEVEL_NONE
+#define M_HEAP_TAGGING_LEVEL_NONE 0
+#endif
+
 static void disable_heap_tagging(void) {
 #if defined(__aarch64__)
     if (prctl(PR_SET_TAGGED_ADDR_CTRL, 0, 0, 0, 0) != 0) {
@@ -24,13 +32,15 @@ static void disable_heap_tagging(void) {
     }
 #endif
 
-#if defined(M_BIONIC_SET_HEAP_TAGGING_LEVEL) && defined(__ANDROID_API__) && (__ANDROID_API__ >= 30)
     if (mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, M_HEAP_TAGGING_LEVEL_NONE) == 0) {
-        LOGE("mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, NONE) failed");
+        LOGE("mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, NONE) failed: %s", strerror(errno));
     } else {
         LOGI("Heap tagging disabled");
     }
-#endif
+}
+
+__attribute__((constructor)) static void on_preload_untag(void) {
+    disable_heap_tagging();
 }
 
 int main(int argc, char** argv) {

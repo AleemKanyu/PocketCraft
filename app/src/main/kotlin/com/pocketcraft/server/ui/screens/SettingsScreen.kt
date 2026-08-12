@@ -1386,6 +1386,41 @@ fun SettingsScreen(
                                         textAlign = TextAlign.Center
                                     )
                                 }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Debug Premium Override",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = Monocraft,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "Enable all premium & pro features instantly",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Switch(
+                                        checked = preferences.debugPremiumOverride,
+                                        onCheckedChange = { isChecked ->
+                                            billingManager.setDebugPremiumOverride(isChecked)
+                                            onMessage(if (isChecked) "Debug Premium Enabled!" else "Debug Premium Disabled.")
+                                        }
+                                    )
+                                }
                             }
                         }
                     }

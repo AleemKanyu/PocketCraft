@@ -256,7 +256,46 @@ class RateLimitedModrinthClient(context: Context) {
     }
 
     suspend fun downloadMod(projectId: String, versionNumber: String): Result<ByteArray> = withContext(Dispatchers.IO) {
-        Result.failure(Exception("Direct in-app mod/plugin downloads are disabled. Download in a browser, then import the file from device storage."))
+        try {
+            val versionUrl = "$baseUrl/project/$projectId/version"
+            val request = Request.Builder()
+                .url(versionUrl)
+                .header("User-Agent", "PocketCraft-App/1.0.0")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+            }
+
+            val body = response.body?.string() ?: return@withContext Result.failure(Exception("Empty response"))
+            val versions = gson.fromJson(body, JsonArray::class.java)
+
+            for (element in versions) {
+                val obj = element.asJsonObject
+                val vNum = obj.get("version_number")?.asString.orEmpty()
+                if (versionNumber.isBlank() || vNum.equals(versionNumber, ignoreCase = true)) {
+                    val files = obj.getAsJsonArray("files")
+                    if (files != null && files.size() > 0) {
+                        val fileObj = files.get(0).asJsonObject
+                        val downloadUrl = fileObj.get("url")?.asString.orEmpty()
+                        if (downloadUrl.isNotBlank()) {
+                            val dlReq = Request.Builder()
+                                .url(downloadUrl)
+                                .header("User-Agent", "PocketCraft-App/1.0.0")
+                                .build()
+                            val dlResp = client.newCall(dlReq).execute()
+                            if (dlResp.isSuccessful && dlResp.body != null) {
+                                return@withContext Result.success(dlResp.body!!.bytes())
+                            }
+                        }
+                    }
+                }
+            }
+            Result.failure(Exception("No downloadable file found for $projectId ($versionNumber)"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     /**

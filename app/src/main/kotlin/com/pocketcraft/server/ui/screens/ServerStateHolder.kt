@@ -3972,14 +3972,17 @@ class ServerStateHolder(
         val worldDetails = readWorldServerDetails(properties, levelName)
 
         val now = System.currentTimeMillis()
-        val worldSize = if (cachedWorldSizeMb > 0L && (now - lastWorldSizeCalcTime) < 60_000L) {
-            cachedWorldSizeMb
-        } else {
-            val size = bytesToDisplayMb(worldDirectoryCandidates(activeWorld).sumOf(::directorySize))
-            cachedWorldSizeMb = size
+        if ((now - lastWorldSizeCalcTime) >= 60_000L) {
             lastWorldSizeCalcTime = now
-            size
+            val activeWorldCopy = activeWorld
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val size = bytesToDisplayMb(worldDirectoryCandidates(activeWorldCopy).sumOf(::directorySize))
+                    cachedWorldSizeMb = size
+                }
+            }
         }
+        val worldSize = cachedWorldSizeMb
         
         val knownPlayers = readKnownPlayers(activeWorld)
         

@@ -603,6 +603,10 @@ class ServerLauncher(private val context: Context) {
             ProcessBuilder(rawCommand)
                 .redirectErrorStream(true)
                 .apply {
+                    val wrapperBin = File(normalizeAndroidPath(File(context.applicationInfo.nativeLibraryDir, "libserverwrap.so").absolutePath))
+                    if (wrapperBin.exists()) {
+                        environment()["LD_PRELOAD"] = wrapperBin.absolutePath
+                    }
                     environment()["JAVA_HOME"] = jrePath
                     environment()["TMPDIR"] = tmpDir
                     environment()["HOME"] = homeDir
@@ -618,6 +622,10 @@ class ServerLauncher(private val context: Context) {
             ProcessBuilder("/system/bin/sh", "-c", shellCmd)
                 .redirectErrorStream(true)
                 .apply {
+                    val wrapperBin = File(normalizeAndroidPath(File(context.applicationInfo.nativeLibraryDir, "libserverwrap.so").absolutePath))
+                    if (wrapperBin.exists()) {
+                        environment()["LD_PRELOAD"] = wrapperBin.absolutePath
+                    }
                     environment()["JAVA_HOME"] = jrePath
                     environment()["TMPDIR"] = tmpDir
                     environment()["HOME"] = homeDir
@@ -863,6 +871,9 @@ class ServerLauncher(private val context: Context) {
                 .redirectErrorStream(true)
                 .apply {
                     environment()["POJAV_NATIVEDIR"] = nativeLibDir
+                    if (wrapperBin.exists()) {
+                        environment()["LD_PRELOAD"] = wrapperBin.absolutePath
+                    }
                     environment()["JAVA_HOME"] = jrePath
                     environment()["HOME"] = serverDir
                     environment()["TMPDIR"] = tmpDir
@@ -881,6 +892,9 @@ class ServerLauncher(private val context: Context) {
                 .redirectErrorStream(true)
                 .apply {
                     environment()["POJAV_NATIVEDIR"] = nativeLibDir
+                    if (wrapperBin.exists()) {
+                        environment()["LD_PRELOAD"] = wrapperBin.absolutePath
+                    }
                     environment()["JAVA_HOME"] = jrePath
                     environment()["HOME"] = serverDir
                     environment()["TMPDIR"] = tmpDir
@@ -1098,13 +1112,13 @@ class ServerLauncher(private val context: Context) {
     ): Int {
         val vd = viewDistance.coerceIn(4, 32)
         if (flightModeEnabled) {
-            val base = if (cellularRelay) 80 else 180
+            val base = if (cellularRelay) 18 else 22
             val viewScale = (7.0 / vd).pow(0.4).coerceIn(0.7, 1.0)
-            return (base * viewScale + 10).toInt().coerceIn(if (cellularRelay) 60 else 120, if (cellularRelay) 120 else 240)
+            return (base * viewScale).toInt().coerceIn(if (cellularRelay) 16 else 20, if (cellularRelay) 20 else 26)
         }
-        val base = if (cellularRelay) 60 else 140
+        val base = if (cellularRelay) 15 else 18
         val viewScale = (7.0 / vd).pow(0.35).coerceIn(0.75, 1.0)
-        return (base * viewScale).toInt().coerceIn(if (cellularRelay) 50 else 90, if (cellularRelay) 100 else 180)
+        return (base * viewScale).toInt().coerceIn(if (cellularRelay) 13 else 15, if (cellularRelay) 17 else 20)
     }
 
     private fun computeRelayChunkConcurrency(
@@ -1112,25 +1126,18 @@ class ServerLauncher(private val context: Context) {
         flightModeEnabled: Boolean
     ): Triple<Int, Int, Int> {
         // Returns Triple(concurrentGenerates, concurrentLoads, concurrentSends)
-        // 1 generate, 2 loads, 1 send keeps mobile CPU usage ultra-light and eliminates chunk ping spikes
-        return Triple(1, 2, 1)
+        // MUST enforce concurrentSends = 1 so Paper sends chunks sequentially without saturating the TCP pipe
+        return if (cellularRelay) Triple(1, 3, 1) else Triple(1, 4, 1)
     }
 
     private fun computeRelayChunkPipelineRates(
         chunkSendRate: Int,
         flightModeEnabled: Boolean
     ): Pair<Int, Int> {
-        return if (flightModeEnabled) {
-            Pair(
-                (chunkSendRate * 1.3).toInt().coerceIn(80, 200),
-                (chunkSendRate * 1.8).toInt().coerceIn(150, 320)
-            )
-        } else {
-            Pair(
-                (chunkSendRate * 1.2).toInt().coerceIn(60, 150),
-                (chunkSendRate * 1.5).toInt().coerceIn(100, 240)
-            )
-        }
+        return Pair(
+            (chunkSendRate * 2).coerceIn(20, 50),
+            (chunkSendRate * 3).coerceIn(40, 90)
+        )
     }
 
     // Relay runtime tuning applied at server start. Java ping is dominated by bridge
@@ -1319,7 +1326,7 @@ class ServerLauncher(private val context: Context) {
         updated = ensureYamlPathValue(updated, listOf("timings"), "server-name-privacy", "true")
 
         // Keep-alive: 10s interval for low-ping packet flow without timeout disconnects.
-        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-timeout", "30")
+        updated = ensureYamlSectionValue(updated, "misc", "keep-alive-timeout", "60")
         updated = ensureYamlSectionValue(updated, "misc", "keep-alive-interval", "10")
         // Compression level 1 is the fastest compression level (~75% less CPU overhead than level 4).
         // This eliminates CPU spikes on the tick thread per packet, keeping server ping ultra-low.

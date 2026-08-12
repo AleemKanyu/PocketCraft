@@ -223,16 +223,15 @@ static bool has_suffix(const char *value, const char *suffix) {
          strcmp(value + value_len - suffix_len, suffix) == 0;
 }
 
+#ifndef M_BIONIC_SET_HEAP_TAGGING_LEVEL
+#define M_BIONIC_SET_HEAP_TAGGING_LEVEL (-201)
+#endif
+
+#ifndef M_HEAP_TAGGING_LEVEL_NONE
+#define M_HEAP_TAGGING_LEVEL_NONE 0
+#endif
+
 static void disable_heap_tagging(void) {
-  // Do NOT call prctl(PR_SET_TAGGED_ADDR_CTRL, 0) here!
-  // That disables TBI (Top Byte Ignore), which causes the CPU to reject
-  // ANY address with non-zero high bits — including the JVM's own G1GC heap
-  // which legitimately lives at 0x000000070... (bit 59 set). Disabling TBI
-  // causes SEGV_MAPERR in JVM_DesiredAssertionStatus when the JVM dereferences
-  // its own heap OOPs.
-  //
-  // Instead, only disable Scudo's active pointer tagging so that malloc()
-  // allocations return clean addresses without tag bytes.
 #if defined(__ANDROID__)
   char api_str[8] = {0};
   __system_property_get("ro.build.version.sdk", api_str);
