@@ -247,7 +247,7 @@ class ServerLauncher(private val context: Context) {
         ServerFileManager.ensureDirectoryPermissions(shimDir)
         ensureSystemShims(shimDir, File(tmpDir), onOutput)
         val deviceProfile = buildDeviceStabilityProfile(totalRamMb = getTotalRamMb(context), availableRamMb = com.pocketcraft.server.util.RamUtils.getAvailableRamMb(context))
-        val forceExternal = AppPreferences(context).forceExternalJvm || deviceProfile.forceExternalJvm
+        val forceExternal = (AppPreferences(context).forceExternalJvm || deviceProfile.forceExternalJvm || NativeLauncher.hasInProcessJvmRunInThisProcess) && !isFilesdirNoexec()
         val preferInProcessJvm = launchMode == ServerFileManager.LaunchMode.JAR && !forceExternal && NativeLauncher.loadLibrary()
 
         val resolvedRuntime = ensureLaunchableRuntime(
@@ -320,25 +320,35 @@ class ServerLauncher(private val context: Context) {
         onOutput("[PocketCraft] JVM memory: mode=$ramModeFromProps, heap=${minRamMb}MB..${maxRamMb}MB, available=${availRam}MB, total=${totalRam}MB")
 
         // Use exec-safe java binary path — falls back to codeCacheDir copy on noexec devices.
+        val isJava26 = resolvedRuntime.id == "java26"
         val javaBin = ensureExecSafeJavaBin(context, resolvedRuntime)
         val libjli = File(jrePath, "lib/libjli.so")
         val libjvm = File(jrePath, "lib/server/libjvm.so")
-        if (!javaBin.exists()) {
-            onError("java binary not found — JRE may not be extracted correctly"); return
-        }
-        if (!libjli.exists()) {
-            onError("libjli.so not found — JRE may not be extracted correctly"); return
-        }
-        if (!libjvm.exists()) {
-            onError("libjvm.so not found — JRE may not be extracted correctly"); return
+        val modules = File(jrePath, "lib/modules")
+
+        if (!isJava26) {
+            if (!javaBin.exists()) {
+                onError("java binary not found — JRE may not be extracted correctly"); return
+            }
+            if (!libjli.exists()) {
+                onError("libjli.so not found — JRE may not be extracted correctly"); return
+            }
+            if (!libjvm.exists()) {
+                onError("libjvm.so not found — JRE may not be extracted correctly"); return
+            }
+        } else {
+            if (!modules.exists()) {
+                onError("lib/modules not found — Java 26 JRE may not be extracted correctly"); return
+            }
         }
 
         runCatching {
+            patchPaperclipJavaVersionCheck(File(normalizedJarPath), onOutput)
             if (extractAndPatchJnaLibrary(normalizedJarPath, serverDirFile, shimDir)) {
                 onOutput("[PocketCraft] Patched JNA native dispatch library for Android")
             }
         }.onFailure { e ->
-            onOutput("[PocketCraft] JNA patching skipped: ${e.message}")
+            onOutput("[PocketCraft] JNA / Paperclip patching skipped: ${e.message}")
         }
 
         onOutput("[PocketCraft] Starting world '$worldName' (version $versionId)...")
@@ -385,6 +395,10 @@ class ServerLauncher(private val context: Context) {
                 } else {
                     result = runCatching {
                         onOutput("[PocketCraft] Launching in-process JVM on Android ${Build.VERSION.RELEASE}.")
+                        NativeLauncher.hasInProcessJvmRunInThisProcess = true
+                        val bypassFlags = "-Djava.specification.version=26 -Djava.version=26.0.0 -DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true"
+                        runCatching { android.system.Os.setenv("JAVA_TOOL_OPTIONS", bypassFlags, true) }
+                        runCatching { android.system.Os.setenv("_JAVA_OPTIONS", bypassFlags, true) }
                         NativeLauncher.launchJVM(
                             jrePath = jrePath,
                             jarPath = normalizedJarPath,
@@ -481,8 +495,19 @@ class ServerLauncher(private val context: Context) {
         onOutput: (String) -> Unit
     ): Boolean {
         chmodJreRuntime(context, runtime)
-        val javaBin = JreExtractor.getJavaBinary(context, runtime)
         val jreDir = JreExtractor.getJreDir(context, runtime)
+
+        if (runtime.id == "java26") {
+            val hasModules = File(jreDir, "lib/modules").exists()
+            if (hasModules) {
+                onOutput("[PocketCraft] ${runtime.displayName} verified for in-process JVM launch.")
+                return true
+            }
+            onOutput("[PocketCraft] ${runtime.displayName} lib/modules is missing.")
+            return false
+        }
+
+        val javaBin = JreExtractor.getJavaBinary(context, runtime)
         val libjli = File(jreDir, "lib/libjli.so")
         val libjvm = File(jreDir, "lib/server/libjvm.so")
 
@@ -771,7 +796,12 @@ class ServerLauncher(private val context: Context) {
             "-Dpaper.anticheat.moved-too-quickly-threshold=100.0",
             "-Dpaper.watchdog.early-warning-delay=60000",
             "-Dpaper.watchdog.early-warning-every=60000",
+            "-Djava.specification.version=26",
+            "-Djava.version=26.0.0",
             "-DPaper.IgnoreJavaVersion=true",
+            "-Dpaper.ignoreJavaVersion=true",
+            "-Dpaper.bypass-java-check=true",
+            "-Dpaper.ignore-java-version=true",
             "-Dpaper.disable-update-check=true",
             "-Dpaper.disable-plugin-update-check=true",
             "-Dsun.zip.disableMemoryMapping=true",
@@ -1964,6 +1994,56 @@ class ServerLauncher(private val context: Context) {
         android.util.Log.e("ServerLauncher",
             "ALL storage locations are noexec — Samsung Knox total lockdown detected. Cannot exec java binary.")
         return canonical // Return canonical so error surfaces from the actual exec attempt
+    }
+
+    private fun patchPaperclipJavaVersionCheck(jarFile: File, onOutput: (String) -> Unit) {
+        runCatching {
+            if (!jarFile.exists() || !jarFile.isFile) return
+            val tempJar = File(jarFile.parentFile, jarFile.name + ".tmp")
+            var patched = false
+
+            java.util.zip.ZipFile(jarFile).use { zipIn ->
+                java.util.zip.ZipOutputStream(java.io.FileOutputStream(tempJar)).use { zipOut ->
+                    val entries = zipIn.entries()
+                    while (entries.hasMoreElements()) {
+                        val entry = entries.nextElement()
+                        val newEntry = java.util.zip.ZipEntry(entry.name)
+                        zipOut.putNextEntry(newEntry)
+                        val bytes = zipIn.getInputStream(entry).readBytes()
+
+                        if (entry.name == "io/papermc/paperclip/Main.class") {
+                            for (i in 0 until bytes.size - 7) {
+                                if (bytes[i] == 0xb8.toByte() &&
+                                    bytes[i + 1] == 0x00.toByte() &&
+                                    bytes[i + 2] == 0x02.toByte() &&
+                                    bytes[i + 3] == 0x10.toByte() &&
+                                    bytes[i + 4] == 0x19.toByte() &&
+                                    bytes[i + 5] == 0xa2.toByte() &&
+                                    bytes[i + 6] == 0x00.toByte() &&
+                                    bytes[i + 7] == 0x0f.toByte()
+                                ) {
+                                    bytes[i + 4] = 0x00.toByte() // Change bipush 25 to bipush 0
+                                    patched = true
+                                    break
+                                }
+                            }
+                        }
+                        zipOut.write(bytes)
+                        zipOut.closeEntry()
+                    }
+                }
+            }
+
+            if (patched) {
+                tempJar.copyTo(jarFile, overwrite = true)
+                tempJar.delete()
+                onOutput("[PocketCraft] Patched Paperclip Java 25+ version check in ${jarFile.name}")
+            } else {
+                tempJar.delete()
+            }
+        }.onFailure { e ->
+            onOutput("[PocketCraft] Paperclip patch warning: ${e.message}")
+        }
     }
 
     private fun extractAndPatchJnaLibrary(paperJarPath: String, serverDir: File, shimDir: File): Boolean {

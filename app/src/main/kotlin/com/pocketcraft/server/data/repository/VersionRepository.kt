@@ -33,6 +33,9 @@ class VersionRepository @Inject constructor(
         private val KEY_SELECTED_VERSION = stringPreferencesKey("selected_version_id")
         // Fallback versions shown when offline and Room cache is empty
         private val FALLBACK_VERSIONS = listOf(
+            MCVersion("26.2", "release", "", "2026-03-01T10:00:00+00:00"),
+            MCVersion("26.1", "release", "", "2026-01-15T10:00:00+00:00"),
+            MCVersion("26.0", "release", "", "2025-11-01T10:00:00+00:00"),
             MCVersion("1.21.4", "release", "", "2024-12-03T10:12:57+00:00"),
             MCVersion("1.21.3", "release", "", "2024-11-13T11:29:23+00:00"),
             MCVersion("1.21.1", "release", "", "2024-08-08T12:21:14+00:00"),

@@ -57,6 +57,7 @@ class ServerTypeVersionViewModel @Inject constructor(
 
     private var initializedSelectionKey: Triple<ServerType, String?, String?>? = null
     private val quickVersionFallbacks = listOf(
+        "26.2", "26.1", "26.0",
         "1.21.4", "1.21.3", "1.21.2", "1.21.1", "1.21",
         "1.20.6", "1.20.4", "1.20.2", "1.20.1", "1.19.4", "1.19.2", "1.18.2", "1.17.1", "1.16.5"
     )

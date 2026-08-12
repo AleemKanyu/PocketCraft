@@ -19,6 +19,14 @@ object JreExtractor {
         val displayName: String
     )
 
+    val RUNTIME_JAVA_26 = RuntimeSpec(
+        id = "java26",
+        assetDir = "jre-26",
+        extractedDirName = "jre-26",
+        markerName = "jre_v26_extracted",
+        displayName = "Java 26"
+    )
+
     private val RUNTIME_JAVA_21 = RuntimeSpec(
         id = "java21",
         assetDir = "jre-runtime",
@@ -28,19 +36,27 @@ object JreExtractor {
     )
 
     /** Last-resort fallback used in internal error paths. */
-    private val DEFAULT_RUNTIME = RUNTIME_JAVA_21
+    private val DEFAULT_RUNTIME = RUNTIME_JAVA_26
 
     /** Returns the best available runtime for the current device ABI. */
     fun defaultRuntimeForDevice(): RuntimeSpec {
-        return RUNTIME_JAVA_21
+        return RUNTIME_JAVA_26
     }
 
     fun runtimeForVersion(versionId: String): RuntimeSpec {
-        return RUNTIME_JAVA_21
+        val trimmed = versionId.trim()
+        val javaMajor = parseMinecraftJavaMajor(trimmed)
+        return when {
+            trimmed.startsWith("26.") || trimmed == "26" -> RUNTIME_JAVA_26
+            javaMajor != null && javaMajor >= 26 -> RUNTIME_JAVA_26
+            else -> RUNTIME_JAVA_21
+        }
     }
 
     fun findExtractedRuntime(context: Context): RuntimeSpec? {
-        return if (isExtracted(context, RUNTIME_JAVA_21)) RUNTIME_JAVA_21 else null
+        return if (isExtracted(context, RUNTIME_JAVA_26)) RUNTIME_JAVA_26
+        else if (isExtracted(context, RUNTIME_JAVA_21)) RUNTIME_JAVA_21
+        else null
     }
 
     private fun normalizeAndroidPath(path: String): String {
@@ -70,13 +86,16 @@ object JreExtractor {
         runtime: RuntimeSpec = defaultRuntimeForDevice(),
         onProgress: (Int, String) -> Unit = { _, _ -> }
     ) {
+        if (runtime == RUNTIME_JAVA_26 && !isExtracted(context, RUNTIME_JAVA_21)) {
+            runCatching { extractIfNeeded(context, RUNTIME_JAVA_21, onProgress) }
+        }
         val jreDir = getJreDir(context, runtime)
         val marker = File(context.filesDir, runtime.markerName)
         onProgress(0, "Checking Minecraft Runtime...")
 
         if (marker.exists() && hasRequiredRuntimeFiles(jreDir)) {
-            // Even on a cache-hit, guarantee the java binary is executable.
-            // If the app was updated or the filesystem remounted, permissions may be lost.
+            // Even on a cache-hit, guarantee native libraries and java binary permissions are set.
+            normalizeRuntimeLayout(context, jreDir)
             fixPermissions(File(jreDir, "bin"))
             onProgress(100, "Minecraft Runtime Ready")
             return
@@ -132,7 +151,7 @@ object JreExtractor {
         onProgress(76, "Optimizing Minecraft Runtime...")
         flattenSingleRootDir(jreDir)
         onProgress(82, "Finalizing Minecraft Runtime...")
-        normalizeRuntimeLayout(jreDir)
+        normalizeRuntimeLayout(context, jreDir)
         onProgress(88, "Applying Runtime Permissions...")
         fixPermissions(jreDir)
 
@@ -159,14 +178,20 @@ object JreExtractor {
     }
 
     private fun hasRequiredRuntimeFiles(jreDir: File): Boolean {
+        val modules = File(jreDir, "lib/modules")
         val libjli = File(jreDir, "lib/libjli.so")
         val libjvm = File(jreDir, "lib/server/libjvm.so")
         val jvmCfg = File(jreDir, "lib/jvm.cfg")
-        return libjli.exists() && libjvm.exists() && jvmCfg.exists()
+        return (modules.exists() || (libjli.exists() && jvmCfg.exists()))
     }
 
     fun launchCandidatesForVersion(versionId: String): List<RuntimeSpec> {
-        return listOf(RUNTIME_JAVA_21)
+        val primary = runtimeForVersion(versionId)
+        return if (primary == RUNTIME_JAVA_26) {
+            listOf(RUNTIME_JAVA_26, RUNTIME_JAVA_21)
+        } else {
+            listOf(RUNTIME_JAVA_21, RUNTIME_JAVA_26)
+        }
     }
 
     private fun resetRuntime(context: Context, runtime: RuntimeSpec) {
@@ -185,7 +210,7 @@ object JreExtractor {
 
     private fun hasExpandedRuntimeLayout(assets: AssetManager, assetDir: String): Boolean {
         val entries = assets.list(assetDir).orEmpty().toSet()
-        return "bin" in entries && "lib" in entries
+        return "bin" in entries || "lib" in entries
     }
 
     private fun hasComponentRuntimeLayout(assets: AssetManager, assetDir: String): Boolean {
@@ -413,7 +438,7 @@ object JreExtractor {
         return count
     }
 
-    private fun normalizeRuntimeLayout(jreDir: File) {
+    private fun normalizeRuntimeLayout(context: Context, jreDir: File) {
         val libDir = File(jreDir, "lib")
         val archDir = File(libDir, runtimeArchDirName())
         val archJli = File(archDir, "jli/libjli.so")
@@ -426,6 +451,29 @@ object JreExtractor {
 
         if (archJvm.exists()) {
             copyFileIfMissing(archJvm, File(libDir, "server/libjvm.so"))
+        }
+
+        // Copy native JRE libraries from APK nativeLibraryDir if missing from extracted JRE
+        val nativeLibDir = File(context.applicationInfo.nativeLibraryDir)
+        val nativeJli = File(nativeLibDir, "libjli.so")
+        val nativeJvm = File(nativeLibDir, "libjvm.so")
+        if (nativeJli.exists()) {
+            copyFileIfMissing(nativeJli, File(libDir, "libjli.so"))
+            copyFileIfMissing(nativeJli, File(libDir, "jli/libjli.so"))
+        }
+        if (nativeJvm.exists()) {
+            copyFileIfMissing(nativeJvm, File(libDir, "server/libjvm.so"))
+        }
+
+        // Copy all native shared runtime libraries and configs from jre-runtime into target libDir if missing
+        val java21Dir = getJreDir(context, RUNTIME_JAVA_21)
+        val j21LibDir = File(java21Dir, "lib")
+        if (j21LibDir.exists() && jreDir != java21Dir) {
+            j21LibDir.walkTopDown().filter { it.isFile && it.name != "modules" }.forEach { file ->
+                val relativePath = file.relativeTo(j21LibDir).path
+                val targetFile = File(libDir, relativePath)
+                copyFileIfMissing(file, targetFile)
+            }
         }
     }
 
@@ -444,6 +492,8 @@ object JreExtractor {
         if (children.size != 1 || !children[0].isDirectory) return
 
         val root = children[0]
+        if (root.name == "lib" || root.name == "bin") return
+
         root.listFiles().orEmpty().forEach { child ->
             child.renameTo(File(dir, child.name))
         }
