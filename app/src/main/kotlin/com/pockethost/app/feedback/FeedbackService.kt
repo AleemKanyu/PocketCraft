@@ -179,7 +179,7 @@ private fun createFeedbackLogDump(context: Context, serverVersion: String): Feed
     }.getOrDefault("Could not read latest.log")
 
     val report = buildString {
-        appendLine("PocketCraft Feedback Log Dump")
+        appendLine("PocketHost Feedback Log Dump")
         appendLine("timestamp=$stamp")
         appendLine("serverVersion=$serverVersion")
         appendLine("appVersion=${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")

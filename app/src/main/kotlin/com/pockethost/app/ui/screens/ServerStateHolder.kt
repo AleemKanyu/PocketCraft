@@ -170,7 +170,7 @@ class ServerStateHolder(
         get() = ServerFileManager.getServerDir(appContext, activeWorld.ifBlank { "world" })
     private val serverPhotosDir: File
         get() = File(serverDir, "server_photos").also { it.mkdirs() }
-    private val backupsDir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "PocketCraft Server Backups").also { it.mkdirs() }
+    private val backupsDir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "PocketHost Server Backups").also { it.mkdirs() }
     private val logsQueue = ArrayDeque<String>(2000)
     private var receiverRegistered = false
     private var startedAtRealtime: Long? = null
@@ -301,7 +301,7 @@ class ServerStateHolder(
         private set
     var localIp by mutableStateOf("127.0.0.1")
         private set
-    var serverName by mutableStateOf("PocketCraft")
+    var serverName by mutableStateOf("PocketHost")
         private set
     var serverPhotoUrl by mutableStateOf("")
         private set
@@ -764,17 +764,17 @@ class ServerStateHolder(
             val marker = File(appContext.filesDir, ".emergency_playerdata_recovery_done")
             if (marker.exists()) return@launch
 
-            android.util.Log.i("PocketCraft", "Running emergency playerdata recovery...")
+            android.util.Log.i("PocketHost", "Running emergency playerdata recovery...")
             val backupDir = File("/sdcard/Download/PocketCraftWorldBackups/Mainworld")
             if (!backupDir.exists()) {
-                android.util.Log.w("PocketCraft", "Emergency recovery: Backup dir not found")
+                android.util.Log.w("PocketHost", "Emergency recovery: Backup dir not found")
                 return@launch
             }
 
             val backupFiles = backupDir.listFiles()?.filter { it.name.endsWith(".zip") }
                 ?.sortedByDescending { it.lastModified() }
             if (backupFiles.isNullOrEmpty()) {
-                android.util.Log.w("PocketCraft", "Emergency recovery: No backup zips found")
+                android.util.Log.w("PocketHost", "Emergency recovery: No backup zips found")
                 return@launch
             }
 
@@ -782,7 +782,7 @@ class ServerStateHolder(
             val targetZip = backupFiles.firstOrNull { it.name.contains("20260718-202719") }
                 ?: backupFiles.first()
 
-            android.util.Log.i("PocketCraft", "Emergency recovery: Extracting playerdata from zip: ${targetZip.absolutePath}")
+            android.util.Log.i("PocketHost", "Emergency recovery: Extracting playerdata from zip: ${targetZip.absolutePath}")
             val targetServerDir = ServerFileManager.getServerDir(appContext, "Mainworld")
             val baseWorldDir = File(targetServerDir, "Mainworld")
 
@@ -827,10 +827,10 @@ class ServerStateHolder(
                     }
                 }
                 marker.createNewFile()
-                android.util.Log.i("PocketCraft", "Emergency playerdata recovery completed successfully!")
+                android.util.Log.i("PocketHost", "Emergency playerdata recovery completed successfully!")
                 refreshAll()
             }.onFailure {
-                android.util.Log.e("PocketCraft", "Emergency recovery failed: ${it.message}", it)
+                android.util.Log.e("PocketHost", "Emergency recovery failed: ${it.message}", it)
             }
         }
     }
@@ -1978,7 +1978,7 @@ class ServerStateHolder(
                             uuid = resolvedUuid,
                             extra = JSONObject().apply {
                                 put("created", isoNow())
-                                put("source", "PocketCraft")
+                                put("source", "PocketHost")
                                 put("expires", "forever")
                                 put("reason", "Banned from PocketCraft")
                             }
@@ -3864,7 +3864,6 @@ class ServerStateHolder(
         targetStartupProgressPercent = 1
         startupProgressJob = scope.launch(Dispatchers.IO) {
             var currentFloat = 1.0f
-            var targetFloat = 1.0f
             var lastPersistedProgress = -1
 
             while (isStarting && !isRunning) {
@@ -3877,33 +3876,26 @@ class ServerStateHolder(
                         break
                     }
 
-                    // Time-based fallback minimum progress curve (gradually crawls up to 95% over 3 minutes)
-                    val timeBasedMinFloat = when {
-                        elapsedMs < 15_000L -> 1f + ((elapsedMs / 15_000f) * 15f)
-                        elapsedMs < 45_000L -> 16f + (((elapsedMs - 15_000L) / 30_000f) * 25f)
-                        elapsedMs < 90_000L -> 41f + (((elapsedMs - 45_000L) / 45_000f) * 30f)
-                        elapsedMs < 150_000L -> 71f + (((elapsedMs - 90_000L) / 60_000f) * 20f)
-                        else -> 95f
-                    }
+                    // Realistic, continuous easing progress over 3 minutes (180s), smoothly decelerating towards 99%
+                    val t = (elapsedMs.toDouble() / 180_000.0).coerceIn(0.0, 1.0)
+                    // Deceleration easing curve: faster in the beginning, easing smoothly toward 99%
+                    val curveProgress = 99.0 * (1.0 - Math.pow(1.0 - t, 2.2))
 
-                    val maxCap = if (targetStartupProgressPercent >= 100) 100f else 98f
-                    val desiredTarget = maxOf(targetStartupProgressPercent.toFloat(), timeBasedMinFloat).coerceIn(1f, maxCap)
-                    targetFloat = maxOf(targetFloat, desiredTarget)
+                    val isServerActuallyReady = isJavaServerDone || serverJoinable || targetStartupProgressPercent >= 100
+                    val maxCap = if (isServerActuallyReady) 100f else 99f
+                    val desiredTarget = if (isServerActuallyReady) 100f else maxOf(targetStartupProgressPercent.toFloat(), curveProgress.toFloat()).coerceIn(1f, 99f)
 
-                    // Smoothly crawl currentFloat toward targetFloat
-                    if (currentFloat < targetFloat) {
-                        val stepRate = if (targetStartupProgressPercent >= 100) 1.5f else 1.0f
-                        val step = minOf((targetFloat - currentFloat) * 0.25f + 0.1f, stepRate)
-                        currentFloat = (currentFloat + step).coerceAtMost(targetFloat)
-                    }
+                    // Advance smoothly and continuously toward desiredTarget
+                    val step = (desiredTarget - currentFloat) * 0.15f + 0.05f
+                    currentFloat = (currentFloat + step).coerceIn(1f, maxCap)
 
-                    val displayPct = currentFloat.toInt().coerceIn(1, 100)
+                    val displayPct = currentFloat.toInt().coerceIn(1, if (maxCap >= 100f) 100 else 99)
 
                     if (!isStarting || (isRunning && displayPct >= 100)) break
 
                     withContext(Dispatchers.Main) {
                         startupProgressPercent = displayPct
-                        if (displayPct >= 100) {
+                        if (displayPct >= 100 || isServerActuallyReady) {
                             startupStatusMessage = "Server ready!"
                         } else if (startupStatusMessage.isBlank() || startupStatusMessage == "Initializing..." || startupStatusMessage == "Preparing server...") {
                             startupStatusMessage = naturalStartupStatus(elapsedMs)
@@ -4892,7 +4884,7 @@ class ServerStateHolder(
             }
 
             if (shouldOverwriteBase) {
-                android.util.Log.w("PocketCraft", "Migrating old default nested 'world' folder to '$targetName'")
+                android.util.Log.w("PocketHost", "Migrating old default nested 'world' folder to '$targetName'")
                 if (base.exists()) {
                     base.deleteRecursively()
                 }
@@ -4928,7 +4920,7 @@ class ServerStateHolder(
 
             listOf(trappedInNested, trappedDefaultInNested, trappedDim1InNested).forEach { trapped ->
                 if (trapped.exists() && trapped.isDirectory && trapped.absolutePath != targetDimDir.absolutePath) {
-                    android.util.Log.w("PocketCraft", "Rescuing dimension folder ${trapped.name} from inside ${base.name} -> ${targetDimDir.name}")
+                    android.util.Log.w("PocketHost", "Rescuing dimension folder ${trapped.name} from inside ${base.name} -> ${targetDimDir.name}")
                     if (!targetDimDir.exists()) targetDimDir.mkdirs()
                     trapped.copyRecursively(targetDimDir, overwrite = true)
                     trapped.deleteRecursively()
@@ -4941,7 +4933,7 @@ class ServerStateHolder(
             val marker = File(targetServerDir, ".migration_done")
             if (!marker.exists()) {
                 marker.createNewFile()
-                android.util.Log.i("PocketCraft", "Migration marker written for worldName: $worldName")
+                android.util.Log.i("PocketHost", "Migration marker written for worldName: $worldName")
             }
         }
     }
@@ -5754,11 +5746,11 @@ class ServerStateHolder(
                 // Guard: if the worldDir root already has its own level.dat the structure is
                 // already correct — skip flattening to avoid overwriting good restored content.
                 if (File(worldDir, "level.dat").exists()) {
-                    android.util.Log.i("PocketCraft", "Skipping flatten for $worldName — root level.dat already present")
+                    android.util.Log.i("PocketHost", "Skipping flatten for $worldName — root level.dat already present")
                     return@forEach
                 }
 
-                android.util.Log.i("PocketCraft", "Auto-flattening nested world: ${realRoot.absolutePath} -> ${worldDir.absolutePath}")
+                android.util.Log.i("PocketHost", "Auto-flattening nested world: ${realRoot.absolutePath} -> ${worldDir.absolutePath}")
                 
                 // 1. Move all contents up
                 realRoot.listFiles()?.forEach { file ->
@@ -5782,7 +5774,7 @@ class ServerStateHolder(
                                 File(sibling, "DIM1").isDirectory) {
                                 val target = File(serverDir, sibling.name)
                                 if (!target.exists()) {
-                                    android.util.Log.i("PocketCraft", "Auto-migrating nested dimension: ${sibling.name}")
+                                    android.util.Log.i("PocketHost", "Auto-migrating nested dimension: ${sibling.name}")
                                     sibling.renameTo(target)
                                 }
                             }

@@ -289,7 +289,7 @@ private fun HeaderRow(
     ) {
         Image(
             provider = ImageProvider(R.drawable.ic_launcher_foreground_circle),
-            contentDescription = "PocketCraft server",
+            contentDescription = "PocketHost server",
             modifier = GlanceModifier.width(42.dp).height(42.dp)
         )
 

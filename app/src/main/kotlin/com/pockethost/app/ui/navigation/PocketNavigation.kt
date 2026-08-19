@@ -213,7 +213,7 @@ fun PocketTopBar(
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.ic_launcher_foreground_circle),
-                        contentDescription = "PocketCraft icon",
+                        contentDescription = "PocketHost icon",
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(RoundedCornerShape(10.dp)),

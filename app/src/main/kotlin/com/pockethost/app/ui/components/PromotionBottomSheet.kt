@@ -128,7 +128,7 @@ fun PromotionBottomSheet(
                         }
 
                         Text(
-                            text = "PocketCraft Membership",
+                            text = "PocketHost Membership",
                             fontFamily = Monocraft,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,

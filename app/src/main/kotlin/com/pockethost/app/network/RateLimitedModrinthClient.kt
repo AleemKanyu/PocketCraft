@@ -155,7 +155,7 @@ class RateLimitedModrinthClient(context: Context) {
             val url = "$baseUrl/search?query=$query&facets=$facets&limit=$limit&offset=$offset"
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "PocketCraft-App")
+                .header("User-Agent", "PocketHost-App")
                 .cacheControl(okhttp3.CacheControl.Builder().maxAge(5, TimeUnit.MINUTES).build())
                 .build()
 
@@ -227,7 +227,7 @@ class RateLimitedModrinthClient(context: Context) {
             val url = "$baseUrl/project/$projectId/versions"
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "PocketCraft-App")
+                .header("User-Agent", "PocketHost-App")
                 .cacheControl(okhttp3.CacheControl.Builder().maxAge(10, TimeUnit.MINUTES).build())
                 .build()
 
@@ -260,7 +260,7 @@ class RateLimitedModrinthClient(context: Context) {
             val versionUrl = "$baseUrl/project/$projectId/version"
             val request = Request.Builder()
                 .url(versionUrl)
-                .header("User-Agent", "PocketCraft-App/1.0.0")
+                .header("User-Agent", "PocketHost-App/1.0.0")
                 .build()
 
             val response = client.newCall(request).execute()
@@ -282,7 +282,7 @@ class RateLimitedModrinthClient(context: Context) {
                         if (downloadUrl.isNotBlank()) {
                             val dlReq = Request.Builder()
                                 .url(downloadUrl)
-                                .header("User-Agent", "PocketCraft-App/1.0.0")
+                                .header("User-Agent", "PocketHost-App/1.0.0")
                                 .build()
                             val dlResp = client.newCall(dlReq).execute()
                             if (dlResp.isSuccessful && dlResp.body != null) {

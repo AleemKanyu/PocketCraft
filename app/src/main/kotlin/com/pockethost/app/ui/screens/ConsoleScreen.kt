@@ -2450,7 +2450,7 @@ private fun shareServerAddresses(
         putExtra(
             Intent.EXTRA_TEXT,
             buildString {
-                appendLine("PocketCraft join addresses")
+                appendLine("PocketHost join addresses")
                 appendLine()
                 appendLine("Internet: ${internetAddress?.takeIf { it.isNotBlank() } ?: "Unavailable right now"}")
                 append("Wi-Fi: ${lanAddress?.takeIf { it.isNotBlank() } ?: "Unavailable right now"}")
@@ -2513,7 +2513,7 @@ private fun ConsoleCard(
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                         val logsToCopy = stateHolder.logs
-                        val clip = android.content.ClipData.newPlainText("PocketCraft Logs", logsToCopy.joinToString("\n"))
+                        val clip = android.content.ClipData.newPlainText("PocketHost Logs", logsToCopy.joinToString("\n"))
                         clipboard.setPrimaryClip(clip)
                         Toast.makeText(context, "Logs copied to clipboard", Toast.LENGTH_SHORT).show()
                     },

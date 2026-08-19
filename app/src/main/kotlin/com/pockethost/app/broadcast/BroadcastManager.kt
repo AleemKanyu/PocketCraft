@@ -229,7 +229,7 @@ object BroadcastManager {
                             BroadcastMessage(
                                 id = json.optString("id").ifBlank { "cached_broadcast_$index" },
                                 title = json.optString("title").ifBlank { "Important Broadcast" },
-                                body = json.optString("body").ifBlank { "Hosted on PocketCraft !" },
+                                body = json.optString("body").ifBlank { "Hosted on PocketHost !" },
                                 type = json.optString("type").normalizeType(default = "warning"),
                                 createdAt = createdAt,
                                 targetMinVersion = targetMinVersion,

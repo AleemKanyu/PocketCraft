@@ -93,7 +93,7 @@ open class PocketHostApp : Application(), Configuration.Provider {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 "pocketcraft_broadcast",
-                "PocketCraft Announcements",
+                "PocketHost Announcements",
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Server updates and announcements from PocketCraft"

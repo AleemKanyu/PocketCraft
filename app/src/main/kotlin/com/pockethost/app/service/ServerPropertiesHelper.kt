@@ -157,7 +157,7 @@ object ServerPropertiesHelper {
             parent.mkdirs()
         }
         file.outputStream().use { 
-            props.store(it, "PocketCraft Server Properties")
+            props.store(it, "PocketHost Server Properties")
         }
     }
 

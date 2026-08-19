@@ -319,7 +319,7 @@ class ServerHostService : Service() {
                 try {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                 } catch (e: Exception) {
-                    android.util.Log.e("PocketCraft", "Error stopping foreground: ${e.message}")
+                    android.util.Log.e("PocketHost", "Error stopping foreground: ${e.message}")
                 }
                 stopSelf()
                 return START_NOT_STICKY
@@ -337,7 +337,7 @@ class ServerHostService : Service() {
                 try {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                 } catch (e: Exception) {
-                    android.util.Log.e("PocketCraft", "Error stopping foreground: ${e.message}")
+                    android.util.Log.e("PocketHost", "Error stopping foreground: ${e.message}")
                 }
                 stopSelf()
                 return START_NOT_STICKY
@@ -593,7 +593,7 @@ class ServerHostService : Service() {
         forceTerminateHostedServer()
         val inProcessRuntime = !ServerLauncher.hasActiveExternalProcess()
         if (inProcessRuntime && isLaunching) {
-            android.util.Log.e("PocketCraft", "Service destroyed while JVM thread active. Killing :server process to prevent leak.")
+            android.util.Log.e("PocketHost", "Service destroyed while JVM thread active. Killing :server process to prevent leak.")
             currentVersionId?.let { persistRuntimeState(applicationContext, it, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE) }
             android.os.Process.killProcess(android.os.Process.myPid())
         }
@@ -698,7 +698,7 @@ class ServerHostService : Service() {
                             signalFile.createNewFile()
                         }
                     } catch (e: Exception) {
-                        android.util.Log.e("PocketCraft", "Failed to write stop signal: " + e.message)
+                        android.util.Log.e("PocketHost", "Failed to write stop signal: " + e.message)
                     }
                     runCatching { sendRconStop() }
                     ServerLauncher.sendCommand("stop")
@@ -715,7 +715,7 @@ class ServerHostService : Service() {
                 }
 
             } catch (e: Exception) {
-                android.util.Log.e("PocketCraft", "Error during stop: ${e.message}")
+                android.util.Log.e("PocketHost", "Error during stop: ${e.message}")
             } finally {
                 forceTerminateHostedServer()
                 waitForLocalServerPortClosed(currentServerPort, 15_000L)
@@ -779,7 +779,7 @@ class ServerHostService : Service() {
                     try {
                         stopForeground(STOP_FOREGROUND_REMOVE)
                     } catch (e: Throwable) {
-                        android.util.Log.e("PocketCraft", "Error stopping foreground: ${e.message}")
+                        android.util.Log.e("PocketHost", "Error stopping foreground: ${e.message}")
                     }
                     try {
                         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
@@ -789,7 +789,7 @@ class ServerHostService : Service() {
                     try {
                         stopSelf()
                     } catch (e: Throwable) {
-                        android.util.Log.e("PocketCraft", "Error in stopSelf: ${e.message}")
+                        android.util.Log.e("PocketHost", "Error in stopSelf: ${e.message}")
                     }
                 }
 
@@ -1077,9 +1077,9 @@ class ServerHostService : Service() {
         val maxPlayers = currentMaxPlayers()
         val playerSummary = "$playerCount/$maxPlayers players online"
         val title = when (runtimeState) {
-            RUNTIME_STATE_RUNNING -> "PocketCraft Server Online"
-            RUNTIME_STATE_STARTING -> "PocketCraft Server Starting"
-            else -> "PocketCraft Server"
+            RUNTIME_STATE_RUNNING -> "PocketHost Server Online"
+            RUNTIME_STATE_STARTING -> "PocketHost Server Starting"
+            else -> "PocketHost Server"
         }
         val body = when (runtimeState) {
             RUNTIME_STATE_RUNNING -> playerSummary
@@ -1683,7 +1683,7 @@ class ServerHostService : Service() {
     private fun acquireWakeLock() {
         if (wakeLock != null) return
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PocketCraft:ServerWakeLock").apply {
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PocketHost:ServerWakeLock").apply {
             setReferenceCounted(false)
             acquire(Long.MAX_VALUE)
         }
@@ -1699,7 +1699,7 @@ class ServerHostService : Service() {
                 @Suppress("DEPRECATION")
                 wifiLock = wm.createWifiLock(
                     WifiManager.WIFI_MODE_FULL_HIGH_PERF,
-                    "PocketCraft:ServerWifiLockHighPerf"
+                    "PocketHost:ServerWifiLockHighPerf"
                 ).also {
                     it.setReferenceCounted(false)
                     it.acquire()
@@ -1715,7 +1715,7 @@ class ServerHostService : Service() {
                 val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
                 wifiLowLatencyLock = wm.createWifiLock(
                     WifiManager.WIFI_MODE_FULL_LOW_LATENCY,
-                    "PocketCraft:ServerWifiLockLowLatency"
+                    "PocketHost:ServerWifiLockLowLatency"
                 ).also {
                     it.setReferenceCounted(false)
                     it.acquire()
@@ -1730,7 +1730,7 @@ class ServerHostService : Service() {
         if (multicastLock == null) {
             runCatching {
                 val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-                multicastLock = wm.createMulticastLock("PocketCraft:ServerMulticastLock").also {
+                multicastLock = wm.createMulticastLock("PocketHost:ServerMulticastLock").also {
                     it.setReferenceCounted(false)
                     it.acquire()
                     android.util.Log.i("ServerHostService", "MulticastLock acquired.")
@@ -1889,7 +1889,7 @@ class ServerHostService : Service() {
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (e: Exception) {
-            android.util.Log.e("PocketCraft", "Error stopping foreground: ${e.message}")
+            android.util.Log.e("PocketHost", "Error stopping foreground: ${e.message}")
         }
         stopSelf()
         return START_NOT_STICKY

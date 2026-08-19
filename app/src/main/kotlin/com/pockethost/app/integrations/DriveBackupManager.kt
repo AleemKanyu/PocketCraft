@@ -38,9 +38,9 @@ data class RemoteDriveBackup(
 )
 
 object DriveBackupManager {
-    private const val APPLICATION_NAME = "PocketCraft"
-    private const val LEGACY_BACKUP_FOLDER = "PocketCraft Server Backups"
-    private const val EXPORTED_BACKUP_FOLDER = "PocketCraftWorldBackups"
+    private const val APPLICATION_NAME = "PocketHost"
+    private const val LEGACY_BACKUP_FOLDER = "PocketHost Server Backups"
+    private const val EXPORTED_BACKUP_FOLDER = "PocketHostWorldBackups"
 
     suspend fun uploadLatestWorldBackup(
         context: Context,

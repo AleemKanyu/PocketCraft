@@ -25,7 +25,7 @@ class PocketHostMessagingService : FirebaseMessagingService() {
         }
         val title = message.notification?.title
             ?: message.data["title"]
-            ?: "PocketCraft"
+            ?: "PocketHost"
         val body = message.notification?.body
             ?: message.data["body"]
             ?: return
@@ -55,7 +55,7 @@ class PocketHostMessagingService : FirebaseMessagingService() {
         val popupType = message.data["popup_type"]?.trim()?.lowercase() ?: return false
         if (popupType != "feedback_prompt") return false
 
-        val title = message.data["title"]?.trim().orEmpty().ifBlank { "Help improve PocketCraft" }
+        val title = message.data["title"]?.trim().orEmpty().ifBlank { "Help improve PocketHost" }
         val body = message.data["body"]?.trim().orEmpty().ifBlank {
             "Tell us what is working well and what we should fix next."
         }
@@ -71,7 +71,7 @@ class PocketHostMessagingService : FirebaseMessagingService() {
     }
 
     companion object {
-        private const val TAG = "PocketCraftFCM"
+        private const val TAG = "PocketHostFCM"
 
         fun subscribeToAllUsers() {
             FirebaseMessaging.getInstance().subscribeToTopic("all_users")

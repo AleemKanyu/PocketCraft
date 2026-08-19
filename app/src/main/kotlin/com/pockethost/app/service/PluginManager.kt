@@ -348,7 +348,7 @@ object PluginManager {
         updated = ensureYamlSectionValue(updated, "bedrock", "broadcast-port", "19132")
         updated = ensureYamlSectionValue(updated, "bedrock", "enable-proxy-protocol", "false")
         updated = ensureYamlSectionValue(updated, "bedrock", "compression-level", "1") // 1 = ultra fast zlib (was 6)
-        updated = ensureYamlSectionValue(updated, "bedrock", "motd1", "PocketCraft Server")
+        updated = ensureYamlSectionValue(updated, "bedrock", "motd1", "PocketHost Server")
         updated = ensureYamlSectionValue(updated, "bedrock", "motd2", "Tap to join")
         // Geyser status passthrough every second is unnecessary for relay hosting and adds
         // extra background status queries while the phone is already bandwidth-constrained.

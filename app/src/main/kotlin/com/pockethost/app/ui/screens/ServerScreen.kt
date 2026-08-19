@@ -23,6 +23,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -75,6 +79,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -613,11 +618,22 @@ fun ServerScreen(
                 // Pulse only on first server start (discovery hint) — stops permanently after first tap
                 val showAttentionPulse = isServerActive && !isFloatingChatFirstTimeShown && chatNotificationCount == 0 && !showFloatingChatSheet
 
+                var chatDragOffsetX by remember { mutableFloatStateOf(0f) }
+                var chatDragOffsetY by remember { mutableFloatStateOf(0f) }
+
                 if (!isSubPageOpen) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
+                            .offset { IntOffset(chatDragOffsetX.roundToInt(), chatDragOffsetY.roundToInt()) }
                             .padding(end = 20.dp, bottom = bottomPadding + 88.dp + fabOffsetY)
+                            .pointerInput(Unit) {
+                                detectDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    chatDragOffsetX += dragAmount.x
+                                    chatDragOffsetY += dragAmount.y
+                                }
+                            }
                     ) {
                         // Attention pulse ring
                         if (showAttentionPulse) {
@@ -1088,7 +1104,7 @@ fun ServerFailureDialog(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "PocketCraft paused retries so you can fix the cause first.",
+                            text = "PocketHost paused retries so you can fix the cause first.",
                             fontSize = 12.5.sp,
                             color = mutedTextColor,
                             lineHeight = 18.sp
@@ -1245,7 +1261,7 @@ fun ServerFailureDialog(
                                 logs.takeLast(100).forEach { appendLine(it) }
                             }
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            val clip = android.content.ClipData.newPlainText("PocketCraft Server Failure Log", logContent)
+                            val clip = android.content.ClipData.newPlainText("PocketHost Server Failure Log", logContent)
                             clipboard.setPrimaryClip(clip)
                             Toast.makeText(context, "Server logs copied to clipboard!", Toast.LENGTH_LONG).show()
                         },
@@ -1323,7 +1339,7 @@ fun ServerFailureDialog(
                                             ticketNumber = ticket
                                             isSending = false
                                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                            val clip = android.content.ClipData.newPlainText("PocketCraft Ticket", ticket)
+                                            val clip = android.content.ClipData.newPlainText("PocketHost Ticket", ticket)
                                             clipboard.setPrimaryClip(clip)
                                             Toast.makeText(context, "Ticket $ticket created & copied to clipboard!", Toast.LENGTH_LONG).show()
                                         }
@@ -1335,7 +1351,7 @@ fun ServerFailureDialog(
                                                 ticketNumber = ticket
                                                 isSending = false
                                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                                val clip = android.content.ClipData.newPlainText("PocketCraft Ticket", ticket)
+                                                val clip = android.content.ClipData.newPlainText("PocketHost Ticket", ticket)
                                                 clipboard.setPrimaryClip(clip)
                                                 Toast.makeText(context, "Ticket $ticket created & copied to clipboard!", Toast.LENGTH_LONG).show()
                                             }
@@ -1347,7 +1363,7 @@ fun ServerFailureDialog(
                                                 isSending = false
                                                 val fullReport = "Ticket: $ticket\nReason: $reason\nDetails: $details\nLogs:\n${logs.takeLast(25).joinToString("\n")}"
                                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                                val clip = android.content.ClipData.newPlainText("PocketCraft Ticket $ticket", fullReport)
+                                                val clip = android.content.ClipData.newPlainText("PocketHost Ticket $ticket", fullReport)
                                                 clipboard.setPrimaryClip(clip)
                                                 Toast.makeText(context, "Ticket $ticket generated! Log report copied to clipboard.", Toast.LENGTH_LONG).show()
                                             }
@@ -1392,7 +1408,7 @@ fun ServerFailureDialog(
                         androidx.compose.material3.OutlinedButton(
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                val clip = android.content.ClipData.newPlainText("PocketCraft Ticket", ticketNumber!!)
+                                val clip = android.content.ClipData.newPlainText("PocketHost Ticket", ticketNumber!!)
                                 clipboard.setPrimaryClip(clip)
                                 Toast.makeText(context, "Ticket copied!", Toast.LENGTH_SHORT).show()
                             },
@@ -1499,11 +1515,11 @@ private fun serverFailureSummary(
             fix = "Tap Install Modpack on the Home screen, wait for it to finish, then start the server again."
         )
         "modpack files are missing" in combined || (mentionsModpack && mentionsLaunchTarget) -> ServerFailureSummary(
-            reason = "PocketCraft could not find the modpack files needed to launch this world.",
+            reason = "PocketHost could not find the modpack files needed to launch this world.",
             fix = "Re-install the modpack from the Home screen so the missing launch files are restored."
         )
         "launch target not found" in combined || "server jar could not be resolved" in combined || mentionsLaunchTarget -> ServerFailureSummary(
-            reason = "PocketCraft could not find the server launch files needed for this world.",
+            reason = "PocketHost could not find the server launch files needed for this world.",
             fix = "Re-select or re-install the server version from the version card, then start the server again."
         )
         "outofmemory" in combined || "heap" in combined || "cannot allocate" in combined -> ServerFailureSummary(

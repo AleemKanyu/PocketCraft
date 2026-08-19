@@ -13,7 +13,7 @@ import java.security.spec.InvalidKeySpecException
 import java.security.spec.X509EncodedKeySpec
 
 object Security {
-    private const val TAG = "PocketCraft/Security"
+    private const val TAG = "PocketHost/Security"
     private const val KEY_FACTORY_ALGORITHM = "RSA"
     private const val SIGNATURE_ALGORITHM = "SHA1withRSA"
 

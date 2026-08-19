@@ -215,12 +215,12 @@ class DashboardCommandListener(
             }
             "kick" -> {
                 val playerName = payload["playerName"] as? String ?: throw IllegalArgumentException("Missing playerName parameter")
-                val response = sendRconCommand?.invoke("kick @a[name=\"${escapeSelectorName(playerName)}\",limit=1] Removed by PocketCraft Web Dashboard") ?: "RCON not available."
+                val response = sendRconCommand?.invoke("kick @a[name=\"${escapeSelectorName(playerName)}\",limit=1] Removed by PocketHost Web Dashboard") ?: "RCON not available."
                 updateCommandResult(uid, commandId, status = "done", result = response)
             }
             "ban" -> {
                 val playerName = payload["playerName"] as? String ?: throw IllegalArgumentException("Missing playerName parameter")
-                val reason = payload["reason"] as? String ?: "Banned from PocketCraft Web Dashboard"
+                val reason = payload["reason"] as? String ?: "Banned from PocketHost Web Dashboard"
                 val response = sendRconCommand?.invoke("ban $playerName $reason") ?: "RCON not available."
                 updateCommandResult(uid, commandId, status = "done", result = response)
             }

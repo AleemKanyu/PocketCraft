@@ -38,7 +38,7 @@ object InAppDownloader {
 
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "PocketCraft/1.8.5 (Android)")
+                .header("User-Agent", "PocketHost/1.8.5 (Android)")
                 .build()
 
             client.newCall(request).execute().use { response ->

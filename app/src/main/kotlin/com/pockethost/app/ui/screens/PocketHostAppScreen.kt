@@ -485,7 +485,7 @@ fun PocketHostApp(
         val body = preferences.pendingFeedbackPromptBody
         if (title.isNotBlank() || body.isNotBlank()) {
             pendingFeedbackPrompt = FeedbackPromptPayload(
-                title = title.ifBlank { "Help improve PocketCraft" },
+                title = title.ifBlank { "Help improve PocketHost" },
                 body = body.ifBlank { "Tell us what is working well and what we should fix next." },
                 ctaLabel = preferences.pendingFeedbackPromptCta.ifBlank { "Send feedback" }
             )

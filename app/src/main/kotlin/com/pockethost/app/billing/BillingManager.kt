@@ -260,7 +260,7 @@ class BillingManager private constructor(private val context: Context) {
     ) {
         val user = FirebaseAuth.getInstance().currentUser
         if (user == null) {
-            onResult("Sign in to your PocketCraft account before subscribing.")
+            onResult("Sign in to your PocketHost account before subscribing.")
             return
         }
 
@@ -495,7 +495,7 @@ class BillingManager private constructor(private val context: Context) {
                 }
             }
 
-            _lastMessage.value = "Subscription linked to your PocketCraft account."
+            _lastMessage.value = "Subscription linked to your PocketHost account."
         }.onFailure { error ->
             Log.e(TAG, "verifyPurchase failed", error)
             _lastMessage.value = error.message ?: "Purchase verification failed."
