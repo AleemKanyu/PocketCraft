@@ -101,6 +101,12 @@ License: GPL-2.0-only with Classpath Exception
 URL: https://github.com/PaperMC/Paper
 
 ---
+
+OpenJDK (The OpenJDK Community)
+License: GPL-2.0 with Classpath Exception
+URL: https://openjdk.org
+
+---
 GPL-2.0-only with Classpath Exception TEXT
 
 The GNU General Public License (GPL) Version 2, June 1991

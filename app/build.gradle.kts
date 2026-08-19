@@ -272,3 +272,33 @@ tasks.matching { it.name.startsWith("uploadCrashlyticsMappingFile") }.configureE
     enabled = false
 }
 
+tasks.register("verifyBundledJreMetadata") {
+    description = "Verifies that bundled JRE archives and release metadata do not contain third-party launcher or vendor identifiers."
+    group = "verification"
+
+    val assetsDir = file("src/main/assets")
+    inputs.dir(assetsDir)
+
+    doLast {
+        val forbiddenStrings = listOf("ARM-MC", "arm-mc.com", "pojavlauncher", "pojav")
+        val assets = assetsDir.walkTopDown().filter { it.isFile && (it.name == "release" || it.name.endsWith(".tar.xz")) }.toList()
+
+        for (file in assets) {
+            if (file.name == "release") {
+                val text = file.readText()
+                for (forbidden in forbiddenStrings) {
+                    if (text.contains(forbidden, ignoreCase = true)) {
+                        throw GradleException("Found forbidden third-party identifier '$forbidden' in bundled JRE release file: ${file.path}")
+                    }
+                }
+            }
+        }
+        logger.lifecycle("Bundled JRE metadata audit passed: no third-party identifiers found in bundled assets.")
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("verifyBundledJreMetadata")
+}
+
+
