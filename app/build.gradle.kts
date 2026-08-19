@@ -28,14 +28,28 @@ val localProperties = Properties().apply {
     }
 }
 
-val configuredReleaseKeystorePath = localProperties.getProperty("releaseKeystorePath")
+val keystoreProperties = Properties().apply {
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use(::load)
+    }
+}
+
+val configuredReleaseKeystorePath = keystoreProperties.getProperty("storeFile")
+    ?: localProperties.getProperty("releaseKeystorePath")
     ?: System.getenv("POCKETCRAFT_RELEASE_KEYSTORE")
-val configuredReleaseStorePassword = localProperties.getProperty("releaseStorePassword")
+    ?: if (rootProject.file("upload-keystore.jks").exists()) rootProject.file("upload-keystore.jks").absolutePath else null
+val configuredReleaseStorePassword = keystoreProperties.getProperty("storePassword")
+    ?: localProperties.getProperty("releaseStorePassword")
     ?: System.getenv("POCKETCRAFT_RELEASE_STORE_PASSWORD")
-val configuredReleaseKeyAlias = localProperties.getProperty("releaseKeyAlias")
+val configuredReleaseKeyAlias = keystoreProperties.getProperty("keyAlias")
+    ?: localProperties.getProperty("releaseKeyAlias")
     ?: System.getenv("POCKETCRAFT_RELEASE_KEY_ALIAS")
-val configuredReleaseKeyPassword = localProperties.getProperty("releaseKeyPassword")
+    ?: "upload"
+val configuredReleaseKeyPassword = keystoreProperties.getProperty("keyPassword")
+    ?: localProperties.getProperty("releaseKeyPassword")
     ?: System.getenv("POCKETCRAFT_RELEASE_KEY_PASSWORD")
+    ?: configuredReleaseStorePassword
 
 val configuredPrivacyPolicyUrl = localProperties.getProperty("privacyPolicyUrl")
     ?: System.getenv("POCKETCRAFT_PRIVACY_POLICY_URL")

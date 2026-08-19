@@ -46,3 +46,7 @@ window_dump.xml
 
 # Secrets
 *service-account.json
+*.jks
+*.keystore
+keystore.properties
+upload-keystore.jks
