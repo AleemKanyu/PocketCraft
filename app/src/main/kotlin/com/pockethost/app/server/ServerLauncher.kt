@@ -238,6 +238,14 @@ class ServerLauncher(private val context: Context) {
         PluginManager.enforceBedrockBridgeLocalConfig(context, worldName)
         PlayerDataManager.warnIfFloodgateUsernamePrefixChanged(serverDirFileLocal)
 
+        // Paper 1.17+ crashes if it finds a legacy world/players/ directory alongside world/playerdata/
+        // This is a leftover from pre-1.7.6 Minecraft. Remove it if it is empty (no .dat files inside).
+        try {
+            removeLegacyPlayersDir(worldDir, onOutput)
+        } catch (e: Exception) {
+            onOutput("[PocketHost] Warning: Could not clean legacy players/ dir: ${e.message}")
+        }
+
         val serverDirFile = File(normalizeAndroidPath(ServerFileManager.getServerDir(context, worldName).absolutePath))
         val serverDir = serverDirFile.absolutePath
         val tmpDir    = normalizeAndroidPath(File(context.filesDir, "runtime-tmp").also { it.mkdirs() }.absolutePath)
@@ -2397,6 +2405,32 @@ class ServerLauncher(private val context: Context) {
         var end = i
         while (end < data.size && data[end] != 0.toByte()) end++
         return if (end > i) String(data.copyOfRange(i, end)) else ""
+    }
+
+    /**
+     * Paper 1.17+ crashes with "DETECTED OLD PLAYER DIRECTORY IN THE WORLD SAVE" and
+     * "Failed to initialize server" when a legacy world/players/ directory exists alongside
+     * world/playerdata/. The old format was used before Minecraft 1.7.6.
+     *
+     * If players/ contains no .dat files (player save files), it is safe to delete.
+     * If it contains .dat files, rename it to players_legacy/ to preserve data while
+     * removing the conflict that causes Paper to crash.
+     */
+    private fun removeLegacyPlayersDir(worldDir: File, onOutput: (String) -> Unit) {
+        val playersDir = File(worldDir, "players")
+        if (!playersDir.exists() || !playersDir.isDirectory) return
+
+        val datFiles = playersDir.walkTopDown().filter { it.isFile && it.extension == "dat" }.toList()
+        if (datFiles.isEmpty()) {
+            // Completely empty — safe to delete
+            playersDir.deleteRecursively()
+            onOutput("[PocketHost] Removed empty legacy players/ directory (Paper 1.17+ compatibility fix).")
+        } else {
+            // Has player .dat files — rename to preserve data, remove the conflict
+            val legacyDir = File(worldDir, "players_legacy")
+            playersDir.renameTo(legacyDir)
+            onOutput("[PocketHost] Renamed legacy players/ to players_legacy/ (${datFiles.size} player files preserved).")
+        }
     }
 
     private fun validateAndRecoverLevelDat(serverDir: File, props: java.util.Properties, onOutput: (String) -> Unit) {
