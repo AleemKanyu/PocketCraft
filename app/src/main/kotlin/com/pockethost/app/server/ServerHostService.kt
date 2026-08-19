@@ -2515,7 +2515,7 @@ class ServerHostService : Service() {
                     "spawnMonsters" to props.getProperty("spawn-monsters", "true"),
                     "generateStructures" to props.getProperty("generate-structures", "true"),
                     "worldDisplayName" to props.getProperty("pocketcraft-world-display.$worldName", worldName),
-                    "worldDescription" to props.getProperty("pocketcraft-world-description.$worldName", "Hosted on Pocketcraft")
+                    "worldDescription" to props.getProperty("pocketcraft-world-description.$worldName", "Hosted on PocketHost")
                 )
             } else {
                 emptyMap()
@@ -2800,7 +2800,7 @@ class ServerHostService : Service() {
         private const val KEY_PUBLIC_ADDRESS = "public_address"
         private const val KEY_PLAYER_COUNT = "player_count"
         private const val POCKETCRAFT_JOIN_TELLRAW =
-            """tellraw @a ["",{"text":"hosted on Pocketcraft","color":"green","bold":true},{"text":"\nJoin our Discord: ","color":"white"},{"text":"https://discord.gg/7xw3Rd2vs2","color":"aqua","underlined":true}]"""
+            """tellraw @a ["",{"text":"hosted on PocketHost","color":"green","bold":true},{"text":"\nJoin our Discord: ","color":"white"},{"text":"https://discord.gg/7xw3Rd2vs2","color":"aqua","underlined":true}]"""
         const val RUNTIME_STATE_OFFLINE = "offline"
         const val RUNTIME_STATE_STARTING = "starting"
         const val RUNTIME_STATE_RUNNING = "running"

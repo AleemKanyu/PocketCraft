@@ -54,6 +54,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
+import android.net.Uri
+import kotlinx.coroutines.launch
+import com.pockethost.app.data.preferences.AppPreferences
+import com.pockethost.app.data.preferences.AppPreferencesStore
 import com.pockethost.app.billing.PremiumEntitlement
 import com.pockethost.app.billing.PremiumTier
 import com.pockethost.app.ui.theme.Monocraft
@@ -330,6 +338,82 @@ fun UpgradeCelebrationDialog(
                                 fontWeight = FontWeight.Medium
                             )
                         }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // ── Discord Perks Section ──
+                val context = LocalContext.current
+                val scope = rememberCoroutineScope()
+                var discordUsername by remember { mutableStateOf(AppPreferences(context).supporterDiscordId) }
+                var discordSaved by remember { mutableStateOf(discordUsername.isNotBlank()) }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("🌟", fontSize = 16.sp)
+                        Text(
+                            text = "Claim Discord Supporter Role",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = Monocraft,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Text(
+                        text = "Enter your Discord Username / ID to claim your exclusive Supporter role and perks in our official Discord community:",
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 16.sp
+                    )
+                    OutlinedTextField(
+                        value = discordUsername,
+                        onValueChange = {
+                            discordUsername = it
+                            discordSaved = false
+                        },
+                        placeholder = { Text("e.g. username or username#1234", fontSize = 12.sp) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (discordUsername.isNotBlank() && !discordSaved) {
+                        DuoButton(
+                            text = "Save & Join Discord 💬",
+                            onClick = {
+                                AppPreferences(context).supporterDiscordId = discordUsername.trim()
+                                scope.launch {
+                                    AppPreferencesStore.setSupporterDiscordId(context, discordUsername.trim())
+                                }
+                                discordSaved = true
+                                runCatching {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.gg/7xw3Rd2vs2"))
+                                    context.startActivity(intent)
+                                }
+                            },
+                            variant = DuoButtonVariant.Warning,
+                            modifier = Modifier.fillMaxWidth(),
+                            minHeight = 40.dp
+                        )
+                    } else if (discordSaved) {
+                        Text(
+                            text = "✓ Discord ID linked! Join our server to claim your role.",
+                            fontSize = 11.sp,
+                            color = Color(0xFF4CAF50),
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
 

@@ -1390,7 +1390,54 @@ fun SettingsScreen(
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(12.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
+                                val supporterDiscordId by AppPreferencesStore.supporterDiscordIdFlow(context).collectAsState(initial = "")
+                                var showDiscordIdDialog by remember { mutableStateOf(false) }
+
+                                if (showDiscordIdDialog) {
+                                    var tempDiscordId by remember { mutableStateOf(supporterDiscordId) }
+                                    AlertDialog(
+                                        onDismissRequest = { showDiscordIdDialog = false },
+                                        title = { Text("Discord Supporter Perks", fontFamily = Monocraft, fontWeight = FontWeight.Bold) },
+                                        text = {
+                                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Text("Enter your Discord username or ID to claim your exclusive Supporter role and perks in our official Discord server.")
+                                                OutlinedTextField(
+                                                    value = tempDiscordId,
+                                                    onValueChange = { tempDiscordId = it },
+                                                    label = { Text("Discord Username / ID") },
+                                                    placeholder = { Text("e.g. username or username#1234") },
+                                                    singleLine = true,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            }
+                                        },
+                                        confirmButton = {
+                                            Button(
+                                                onClick = {
+                                                    scope.launch {
+                                                        AppPreferencesStore.setSupporterDiscordId(context, tempDiscordId)
+                                                        preferences.supporterDiscordId = tempDiscordId
+                                                    }
+                                                    showDiscordIdDialog = false
+                                                    onMessage("Discord ID saved! Join our Discord to claim your role.")
+                                                    runCatching {
+                                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.gg/7xw3Rd2vs2"))
+                                                        context.startActivity(intent)
+                                                    }
+                                                }
+                                            ) {
+                                                Text("Save & Join Discord")
+                                            }
+                                        },
+                                        dismissButton = {
+                                            TextButton(onClick = { showDiscordIdDialog = false }) {
+                                                Text("Cancel")
+                                            }
+                                        }
+                                    )
+                                }
+
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1398,30 +1445,30 @@ fun SettingsScreen(
                                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                             shape = RoundedCornerShape(8.dp)
                                         )
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        .clickable { showDiscordIdDialog = true }
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "Debug Premium Override",
+                                            text = if (supporterDiscordId.isNotBlank()) "Linked Discord: $supporterDiscordId" else "Claim Discord Supporter Role",
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
                                             fontFamily = Monocraft,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
-                                            text = "Enable all premium & pro features instantly",
+                                            text = if (supporterDiscordId.isNotBlank()) "Tap to update your Discord ID" else "Link your Discord username to get supporter perks",
                                             fontSize = 10.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
-                                    Switch(
-                                        checked = preferences.debugPremiumOverride,
-                                        onCheckedChange = { isChecked ->
-                                            billingManager.setDebugPremiumOverride(isChecked)
-                                            onMessage(if (isChecked) "Debug Premium Enabled!" else "Debug Premium Disabled.")
-                                        }
+                                    Text(
+                                        text = if (supporterDiscordId.isNotBlank()) "EDIT ✏️" else "LINK 🔗",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PocketColors.Primary
                                     )
                                 }
                             }

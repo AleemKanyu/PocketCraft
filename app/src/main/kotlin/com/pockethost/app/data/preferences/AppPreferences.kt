@@ -67,6 +67,7 @@ object AppPreferencesKeys {
     val WIDGET_CUSTOM_ICON_TINT = intPreferencesKey("widget_custom_icon_tint")
     val SERVER_STARTED_AT_MILLIS = longPreferencesKey("server_started_at_millis")
     val ALWAYS_ALIVE_BACKGROUND = booleanPreferencesKey("always_alive_background")
+    val SUPPORTER_DISCORD_ID = stringPreferencesKey("supporter_discord_id")
 }
 
 data class WidgetThemeSettings(
@@ -477,6 +478,10 @@ class AppPreferences(context: Context) {
     var isPremiumUser: Boolean
         get() = prefs.getBoolean("is_premium_user", false)
         set(value) = prefs.edit().putBoolean("is_premium_user", value).apply()
+
+    var supporterDiscordId: String
+        get() = prefs.getString("supporter_discord_id", "").orEmpty()
+        set(value) = prefs.edit().putString("supporter_discord_id", value).apply()
 
     var lastSeenMembershipTier: String
         get() = prefs.getString("last_seen_membership_tier", "none").orEmpty()
@@ -1048,6 +1053,17 @@ object AppPreferencesStore {
     suspend fun setAlwaysAliveBackground(context: Context, enabled: Boolean) {
         context.appPreferencesDataStore.edit { prefs ->
             prefs[AppPreferencesKeys.ALWAYS_ALIVE_BACKGROUND] = enabled
+        }
+    }
+
+    fun supporterDiscordIdFlow(context: Context): Flow<String> =
+        context.appPreferencesDataStore.data.map { prefs ->
+            prefs[AppPreferencesKeys.SUPPORTER_DISCORD_ID].orEmpty()
+        }
+
+    suspend fun setSupporterDiscordId(context: Context, discordId: String) {
+        context.appPreferencesDataStore.edit { prefs ->
+            prefs[AppPreferencesKeys.SUPPORTER_DISCORD_ID] = discordId.trim()
         }
     }
 

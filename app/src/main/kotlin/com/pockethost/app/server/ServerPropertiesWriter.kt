@@ -144,7 +144,7 @@ object ServerPropertiesWriter {
         }
         props["pocketcraft-game-version"] = prefs.gameVersion
         props["pocketcraft-join-message-enabled"] = "true"
-        props["pocketcraft-join-message-text"] = prefs.joinMessageText.ifBlank { "hosted on Pocketcraft" }
+        props["pocketcraft-join-message-text"] = prefs.joinMessageText.ifBlank { "hosted on PocketHost" }
         props["pocketcraft-join-message-url"] = prefs.joinMessageUrl.ifBlank { "https://discord.gg/7xw3Rd2vs2" }
         if (prefs.customJarPath.isNullOrBlank()) {
             if (!preserveModpackMetadata) {
@@ -164,11 +164,12 @@ object ServerPropertiesWriter {
             gameMode = config.gameMode,
             onlineMode = config.onlineMode,
             motd = if (config.motd.isBlank()) {
-                "Hosted on Pocketcraft"
-            } else if (config.motd.contains("Hosted on Pocketcraft", ignoreCase = true)) {
+                "Hosted on PocketHost"
+            } else if (config.motd.contains("Hosted on PocketHost", ignoreCase = true)) {
                 config.motd
             } else {
-                "${config.motd} - Hosted on Pocketcraft"
+                val cleanedMotd = config.motd.removeSuffix(" - Hosted on Pocketcraft").removeSuffix(" - Hosted on PocketHost").trim()
+                "$cleanedMotd - Hosted on PocketHost"
             },
             pvp = config.pvp,
             viewDistance = config.viewDistance,

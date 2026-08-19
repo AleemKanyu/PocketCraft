@@ -117,9 +117,9 @@ class ServerStateHolder(
     initialWorld: String = "world"
 ) {
     companion object {
-        const val DEFAULT_SERVER_DESCRIPTION = "Hosted on Pocketcraft"
+        const val DEFAULT_SERVER_DESCRIPTION = "Hosted on PocketHost"
         private const val POCKETCRAFT_JOIN_MESSAGE_TEXT =
-            "hosted on Pocketcraft"
+            "hosted on PocketHost"
         private const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/7xw3Rd2vs2"
         private const val MAX_REALISTIC_WIFI_PING_MS = 5_000
 
@@ -4275,9 +4275,13 @@ class ServerStateHolder(
         val normalized = sanitizeWorldName(worldName).ifBlank { "world" }
         val displayName = properties.getProperty(worldDisplayNameKey(normalized), normalized).trim().ifBlank { normalized }
         val photoUrl = properties.getProperty(worldPhotoKey(normalized), "").trim()
-        val description = properties.getProperty(worldDescriptionKey(normalized), DEFAULT_SERVER_DESCRIPTION)
+        val rawDesc = properties.getProperty(worldDescriptionKey(normalized), DEFAULT_SERVER_DESCRIPTION)
             .trim()
-            .ifBlank { DEFAULT_SERVER_DESCRIPTION }
+        val description = if (rawDesc.isBlank() || rawDesc.equals("Hosted on Pocketcraft", ignoreCase = true) || rawDesc.equals("Hosted on PocketCraft", ignoreCase = true) || rawDesc.equals("hosted on pocketcraft", ignoreCase = true)) {
+            DEFAULT_SERVER_DESCRIPTION
+        } else {
+            rawDesc
+        }
         return Triple(displayName, photoUrl, description)
     }
 

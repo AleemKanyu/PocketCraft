@@ -1424,7 +1424,11 @@ private fun ServerIdentityCard(
 
                             }
                             Text(
-                                text = stateHolder.serverDescription.ifBlank { "Hosted on PocketCraft" },
+                                text = if (stateHolder.serverDescription.isBlank() || stateHolder.serverDescription.contains("Pocketcraft", ignoreCase = true) || stateHolder.serverDescription.contains("PocketCraft", ignoreCase = true)) {
+                                    "Hosted on PocketHost"
+                                } else {
+                                    stateHolder.serverDescription
+                                },
                                 fontSize = 12.sp,
                                 lineHeight = 14.sp,
                                 maxLines = 1,
