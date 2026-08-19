@@ -2415,17 +2415,14 @@ class ServerLauncher(private val context: Context) {
                 val bytes = java.util.zip.GZIPInputStream(file.inputStream()).use { gzip ->
                     gzip.readBytes()
                 }
-                if (bytes.size < 50) return false
+                // A minimal valid modern level.dat (Paper 1.17+) is typically 3KB+ uncompressed.
+                // Files under 1000 bytes uncompressed are stub/legacy files missing WorldGenSettings.
+                if (bytes.size < 1000) return false
                 val contentStr = String(bytes, Charsets.ISO_8859_1)
-                // Minecraft level.dat root compound must contain "Data" tag and world properties
-                contentStr.contains("Data") && (
-                    contentStr.contains("WorldGenSettings") ||
-                    contentStr.contains("LevelName") ||
-                    contentStr.contains("generatorName") ||
-                    contentStr.contains("RandomSeed") ||
-                    contentStr.contains("version") ||
-                    contentStr.contains("Difficulty")
-                )
+                // Must contain the root Data compound AND the modern world generator settings.
+                // Paper 1.17+ requires WorldGenSettings; older level.dat without it causes:
+                // "No key dimensions in MapLike[{}]; No key seed in MapLike[{}]"
+                contentStr.contains("Data") && contentStr.contains("WorldGenSettings")
             } catch (e: Exception) {
                 false
             }
@@ -2435,7 +2432,8 @@ class ServerLauncher(private val context: Context) {
             return
         }
 
-        onOutput("[PocketHost] ALERT: Detected corrupted or empty level.dat (${levelDat.length()} bytes). Recovering...")
+        val levelDatSizeKb = levelDat.length() / 1024
+        onOutput("[PocketHost] ALERT: level.dat is invalid or missing WorldGenSettings (${levelDat.length()} bytes, ${levelDatSizeKb}KB). Recovering...")
 
         if (isValidLevelDat(levelDatOld)) {
             onOutput("[PocketHost] Attempting to restore level.dat from level.dat_old...")
@@ -2450,17 +2448,17 @@ class ServerLauncher(private val context: Context) {
             }
         }
 
-        onOutput("[PocketHost] Moving invalid level.dat aside so server can generate a healthy world...")
+        onOutput("[PocketHost] Moving invalid level.dat aside so Paper can generate a fresh compatible world...")
         val timestamp = System.currentTimeMillis()
         if (levelDat.exists()) {
             val movedLevelDat = File(worldDir, "level.dat.corrupt_$timestamp")
             levelDat.renameTo(movedLevelDat)
-            onOutput("[PocketHost] Moved corrupt level.dat to ${movedLevelDat.name}")
+            onOutput("[PocketHost] Moved incompatible level.dat to ${movedLevelDat.name}")
         }
         if (levelDatOld.exists()) {
             val movedLevelDatOld = File(worldDir, "level.dat_old.corrupt_$timestamp")
             levelDatOld.renameTo(movedLevelDatOld)
-            onOutput("[PocketHost] Moved corrupt level.dat_old to ${movedLevelDatOld.name}")
+            onOutput("[PocketHost] Moved incompatible level.dat_old to ${movedLevelDatOld.name}")
         }
     }
 }
