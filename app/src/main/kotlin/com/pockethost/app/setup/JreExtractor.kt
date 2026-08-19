@@ -41,7 +41,7 @@ object JreExtractor {
         id = "java17",
         assetDir = "java/jre17",
         extractedDirName = "jre17",
-        markerName = "jre_v17_extracted",
+        markerName = "jre_v17_2_extracted",
         displayName = "Java 17"
     )
 

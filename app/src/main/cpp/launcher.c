@@ -322,6 +322,10 @@ static void preload_shims(const char *shim_dir) {
 }
 
 static void preload_library(const char *path, const char *label) {
+  if (strstr(label, "libjsig.so") != NULL) {
+    LOGI("Skipping %s preload to preserve Android ART signal handlers.", label);
+    return;
+  }
   void *handle = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
   if (!handle) {
     LOGI("preload_library: %s absolute path failed, trying default loader path...", label);
@@ -461,6 +465,9 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
                        runtime_jvm_dir, sizeof(runtime_jvm_dir));
 
   snprintf(libjli_path, sizeof(libjli_path), "%s/libjli.so", runtime_lib_dir);
+  if (!path_exists(libjli_path)) {
+    snprintf(libjli_path, sizeof(libjli_path), "%s/jli/libjli.so", runtime_lib_dir);
+  }
   snprintf(libjvm_path, sizeof(libjvm_path), "%s/libjvm.so", runtime_jvm_dir);
   snprintf(libverify_path, sizeof(libverify_path), "%s/libverify.so",
            runtime_lib_dir);
