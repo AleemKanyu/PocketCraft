@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Zerbitzaria martxan</string>
     <string name="server_stopped">Zerbitzaria Gelditua</string>
     <string name="server_starting">Zerbitzaria hasten...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d jokalariak</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Epea: %1$s</string>
-    <string name="announcement_title">PocketCraft-ren ohar bat</string>
-    <string name="announcement_body">PocketCraft doakoa izango da betirako guztiontzat, baina eginbide batzuk Pro-n daude gure zerbitzariaren kostuak eta aplikazioen funtzionamendu-kostuak onar ditzazun. Merkeak dira, eta horregatik daude hor, balio gehiagorako hori barne. 
+    <string name="announcement_title">PocketHost-ren ohar bat</string>
+    <string name="announcement_body">PocketHost doakoa izango da betirako guztiontzat, baina eginbide batzuk Pro-n daude gure zerbitzariaren kostuak eta aplikazioen funtzionamendu-kostuak onar ditzazun. Merkeak dira, eta horregatik daude hor, balio gehiagorako hori barne. 
  
  Lagundu nahi badiguzu, edo taldearekin txateatu nahi baduzu, sartu gure Discord — gustatuko litzaiguke zu izatea.</string>
     <string name="announcement_join_discord">Sartu Discord</string>

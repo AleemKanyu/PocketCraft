@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">E Rere ana te Tūmau</string>
     <string name="server_stopped">Tūmau Tūmau</string>
     <string name="server_starting">Ka timata te Tūmau…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d kaitākaro</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Wā mahi: %1$s</string>
-    <string name="announcement_title">He tuhipoka na PocketCraft</string>
-    <string name="announcement_body">Ka noho kore utu a PocketCraft mo ake tonu atu mo te katoa, engari ko etahi ahuatanga kei roto i te Pro kia taea ai e koe te tautoko i a maatau utu tūmau me nga utu whakahaere taupānga. He iti te utu, no reira kei roto ratou, tae atu ki tera mo te utu nui ake. 
+    <string name="announcement_title">He tuhipoka na PocketHost</string>
+    <string name="announcement_body">Ka noho kore utu a PocketHost mo ake tonu atu mo te katoa, engari ko etahi ahuatanga kei roto i te Pro kia taea ai e koe te tautoko i a maatau utu tūmau me nga utu whakahaere taupānga. He iti te utu, no reira kei roto ratou, tae atu ki tera mo te utu nui ake. 
  
  Mena kei te pirangi koe ki te awhina i a matou, ki te hiahia noa ranei ki te korerorero ki te roopu, uru mai ki ta matou Discord — kei te pirangi matou ki a koe.</string>
     <string name="announcement_join_discord">Hono atu ki Discord</string>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server mandeha</string>
     <string name="server_stopped">Niato ny mpizara</string>
     <string name="server_starting">Server manomboka…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d mpilalao</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Fotoana misokatra: %1$s</string>
-    <string name="announcement_title">Naoty avy amin\'ny PocketCraft</string>
-    <string name="announcement_body">Ny PocketCraft dia ho maimaim-poana mandrakizay ho an\'ny rehetra, fa misy endri-javatra sasany ao amin\'ny Pro mba hahafahanao manohana ny vidin\'ny mpizara sy ny vidin\'ny fampiharana. Mora izy ireo, ary izany no mahatonga azy ireo ao, anisan\'izany ny vidiny bebe kokoa. 
+    <string name="announcement_title">Naoty avy amin\'ny PocketHost</string>
+    <string name="announcement_body">Ny PocketHost dia ho maimaim-poana mandrakizay ho an\'ny rehetra, fa misy endri-javatra sasany ao amin\'ny Pro mba hahafahanao manohana ny vidin\'ny mpizara sy ny vidin\'ny fampiharana. Mora izy ireo, ary izany no mahatonga azy ireo ao, anisan\'izany ny vidiny bebe kokoa. 
  
  Raha te hanampy anay ianao, na te hiresaka amin\'ny ekipa fotsiny, dia midira ao amin\'ny Discordy — tianay ny manana anao.</string>
     <string name="announcement_join_discord">Midira ao amin\'ny Discord</string>

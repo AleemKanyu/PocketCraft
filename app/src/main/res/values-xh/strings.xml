@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">I-PocketCraft</string>
+    <string name="app_name">I-PocketHost</string>
     <string name="server_running">Umncedisi osebenzayo</string>
     <string name="server_stopped">Umncedisi umisiwe</string>
     <string name="server_starting">Iseva IyaQalisa...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d abadlali</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Ixesha lokuphumla: %1$s</string>
-    <string name="announcement_title">Inqaku elisuka kwi-PocketCraft</string>
-    <string name="announcement_body">I-PocketCraft iza kukhululeka ngonaphakade kuye wonke umntu, kodwa ezinye iifitsha zikwiPro ukuze ukwazi ukuxhasa iindleko zeseva yethu kunye neendleko zokuqhuba iapp. Amaxabiso aphantsi, kwaye yiyo loo nto belapho, kubandakanya nexabiso elingaphezulu. 
+    <string name="announcement_title">Inqaku elisuka kwi-PocketHost</string>
+    <string name="announcement_body">I-PocketHost iza kukhululeka ngonaphakade kuye wonke umntu, kodwa ezinye iifitsha zikwiPro ukuze ukwazi ukuxhasa iindleko zeseva yethu kunye neendleko zokuqhuba iapp. Amaxabiso aphantsi, kwaye yiyo loo nto belapho, kubandakanya nexabiso elingaphezulu. 
  
  Ukuba ungathanda ukusinceda, okanye ufuna nje ukuncokola neqela, ukujoyina iDiscord yethu — singathanda ukuba nawe.</string>
     <string name="announcement_join_discord">Joyina iDiscord</string>

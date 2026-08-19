@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">د سرور چلول</string>
     <string name="server_stopped">سرور بند شو</string>
     <string name="server_starting">سرور پیل کیږي…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d لوبغاړي</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">د وخت وخت: %1$s</string>
-    <string name="announcement_title">د PocketCraft څخه یو یادښت</string>
-    <string name="announcement_body">PocketCraft به د هرچا لپاره د تل لپاره وړیا وي، مګر ځینې ځانګړتیاوې په پرو کې دي نو تاسو کولی شئ زموږ د سرور لګښتونو او د ایپ چلولو لګښتونو ملاتړ وکړئ. دوی ارزانه دي، او له همدې امله دوی هلته دي، په شمول د ډیر ارزښت لپاره. 
+    <string name="announcement_title">د PocketHost څخه یو یادښت</string>
+    <string name="announcement_body">PocketHost به د هرچا لپاره د تل لپاره وړیا وي، مګر ځینې ځانګړتیاوې په پرو کې دي نو تاسو کولی شئ زموږ د سرور لګښتونو او د ایپ چلولو لګښتونو ملاتړ وکړئ. دوی ارزانه دي، او له همدې امله دوی هلته دي، په شمول د ډیر ارزښت لپاره. 
  
  که تاسو غواړئ له موږ سره مرسته وکړئ، یا یوازې د ټیم سره خبرې کول غواړئ، زموږ د Discord سره یوځای شئ — موږ خوښ یو چې تاسو یې ولرو.</string>
     <string name="announcement_join_discord">د ګډوډۍ سره یوځای شئ</string>

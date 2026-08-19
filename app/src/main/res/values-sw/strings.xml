@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Kuendesha Seva</string>
     <string name="server_stopped">Seva Imesimamishwa</string>
     <string name="server_starting">Seva Inaanza...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d / wachezaji %2$d</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Muda wa ziada: %1$s</string>
-    <string name="announcement_title">Dokezo kutoka kwa PocketCraft</string>
-    <string name="announcement_body">PocketCraft itakuwa bila malipo kwa kila mtu milele, lakini baadhi ya vipengele viko katika Pro ili tu uweze kuhimili gharama za seva na gharama za uendeshaji wa programu. Wao ni nafuu, na ndiyo sababu wako ndani, ikiwa ni pamoja na hiyo kwa thamani zaidi. 
+    <string name="announcement_title">Dokezo kutoka kwa PocketHost</string>
+    <string name="announcement_body">PocketHost itakuwa bila malipo kwa kila mtu milele, lakini baadhi ya vipengele viko katika Pro ili tu uweze kuhimili gharama za seva na gharama za uendeshaji wa programu. Wao ni nafuu, na ndiyo sababu wako ndani, ikiwa ni pamoja na hiyo kwa thamani zaidi. 
  
  Ikiwa ungependa kutusaidia, au ungependa tu kuzungumza na timu, jiunge na Discord yetu — tungependa kuwa nawe.</string>
     <string name="announcement_join_discord">Jiunge na Discord</string>

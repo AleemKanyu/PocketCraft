@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Διακομιστής σε λειτουργία</string>
     <string name="server_stopped">Ο διακομιστής σταμάτησε</string>
     <string name="server_starting">Έναρξη διακομιστή…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d παίκτες</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Χρόνος λειτουργίας: %1$s</string>
-    <string name="announcement_title">Μια σημείωση από το PocketCraft</string>
-    <string name="announcement_body">Το PocketCraft θα είναι δωρεάν για πάντα για όλους, αλλά ορισμένες λειτουργίες είναι στο Pro μόνο και μόνο για να μπορείτε να υποστηρίξετε το κόστος του διακομιστή μας και το κόστος λειτουργίας της εφαρμογής. Είναι φθηνά, και γι\' αυτό είναι εκεί, συμπεριλαμβανομένου αυτού για μεγαλύτερη αξία. 
+    <string name="announcement_title">Μια σημείωση από το PocketHost</string>
+    <string name="announcement_body">Το PocketHost θα είναι δωρεάν για πάντα για όλους, αλλά ορισμένες λειτουργίες είναι στο Pro μόνο και μόνο για να μπορείτε να υποστηρίξετε το κόστος του διακομιστή μας και το κόστος λειτουργίας της εφαρμογής. Είναι φθηνά, και γι\' αυτό είναι εκεί, συμπεριλαμβανομένου αυτού για μεγαλύτερη αξία. 
  
  Εάν θέλετε να μας βοηθήσετε ή απλά θέλετε να συνομιλήσετε με την ομάδα, εγγραφείτε στο Discord μας — θα θέλαμε πολύ να σας έχουμε.</string>
     <string name="announcement_join_discord">Εγγραφείτε στο Discord</string>

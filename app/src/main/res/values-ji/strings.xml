@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">סערווירער פליסנדיק</string>
     <string name="server_stopped">סערווירער סטאַפּט</string>
     <string name="server_starting">סערווירער סטאַרטינג ...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d פּלייַערס</string>
     <string name="tps_label">טפּס: %1$.1f</string>
     <string name="uptime_label">ופּטימע: %1$s</string>
-    <string name="announcement_title">א צעטל פון PocketCraft</string>
-    <string name="announcement_body">PocketCraft וועט זיין פריי אויף אייביק פֿאַר אַלעמען, אָבער עטלעכע פֿעיִקייטן זענען אין פּראָ נאָר אַזוי איר קענען שטיצן אונדזער סערווער קאָס און אַפּ פליסנדיק קאָס. זיי זענען ביליק, און אַז ס וואָס זיי זענען דאָרט, אַרייַנגערעכנט אַז פֿאַר מער ווערט. 
+    <string name="announcement_title">א צעטל פון PocketHost</string>
+    <string name="announcement_body">PocketHost וועט זיין פריי אויף אייביק פֿאַר אַלעמען, אָבער עטלעכע פֿעיִקייטן זענען אין פּראָ נאָר אַזוי איר קענען שטיצן אונדזער סערווער קאָס און אַפּ פליסנדיק קאָס. זיי זענען ביליק, און אַז ס וואָס זיי זענען דאָרט, אַרייַנגערעכנט אַז פֿאַר מער ווערט. 
  
  אויב איר ווילט העלפֿן אונדז, אָדער נאָר ווילן צו שמועסן מיט די מאַנשאַפֿט, פאַרבינדן אונדזער דיסקאָרד - מיר וואָלט ווי צו האָבן איר.</string>
     <string name="announcement_join_discord">פאַרבינדן דיסקאָרד</string>

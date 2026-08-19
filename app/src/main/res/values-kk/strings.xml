@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Сервер жұмыс істейді</string>
     <string name="server_stopped">Сервер тоқтатылды</string>
     <string name="server_starting">Сервер іске қосылуда…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d ойыншылар</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Жұмыс уақыты: %1$s</string>
-    <string name="announcement_title">PocketCraft жазбасынан</string>
-    <string name="announcement_body">PocketCraft барлық адамдар үшін мәңгі тегін болады, бірақ кейбір мүмкіндіктер Pro жүйесінде бар, осылайша сіз біздің сервер шығындарын және қолданбаны іске қосу шығындарын қамтамасыз ете аласыз. Олар арзан, сондықтан олар сонда, соның ішінде құндылығы жоғары. 
+    <string name="announcement_title">PocketHost жазбасынан</string>
+    <string name="announcement_body">PocketHost барлық адамдар үшін мәңгі тегін болады, бірақ кейбір мүмкіндіктер Pro жүйесінде бар, осылайша сіз біздің сервер шығындарын және қолданбаны іске қосу шығындарын қамтамасыз ете аласыз. Олар арзан, сондықтан олар сонда, соның ішінде құндылығы жоғары. 
  
  Бізге көмектескіңіз келсе немесе жай ғана командамен сөйлескіңіз келсе, біздің Discord-қа қосылыңыз — біз сізді жақсы көреміз.</string>
     <string name="announcement_join_discord">Discord-қа қосылыңыз</string>

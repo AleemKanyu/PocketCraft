@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">伺服器運行</string>
     <string name="server_stopped">伺服器已停止</string>
     <string name="server_starting">伺服器正在啟動...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d 球員</string>
     <string name="tps_label">TPS：%1$.1f</string>
     <string name="uptime_label">正常運作時間：%1$s</string>
-    <string name="announcement_title">來自 PocketCraft 的註釋</string>
-    <string name="announcement_body">PocketCraft將對所有人永久免費，但專業版中的某些功能只是為了讓您能夠支援我們的伺服器成本和應用程式運行成本。它們很便宜，這就是它們存在的原因，包括為了獲得更多價值。 
+    <string name="announcement_title">來自 PocketHost 的註釋</string>
+    <string name="announcement_body">PocketHost將對所有人永久免費，但專業版中的某些功能只是為了讓您能夠支援我們的伺服器成本和應用程式運行成本。它們很便宜，這就是它們存在的原因，包括為了獲得更多價值。 
  
  如果您想幫助我們，或只是想與團隊聊天，請加入我們的 Discord — 我們很樂意加入您。</string>
     <string name="announcement_join_discord">加入不和諧</string>

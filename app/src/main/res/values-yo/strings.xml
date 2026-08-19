@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server Nṣiṣẹ</string>
     <string name="server_stopped">Server Duro</string>
     <string name="server_starting">Olupin Bibẹrẹ…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d awọn ẹrọ orin</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Akoko ipari: %1$s</string>
-    <string name="announcement_title">Akọsilẹ kan lati PocketCraft</string>
-    <string name="announcement_body">PocketCraft yoo jẹ ọfẹ lailai fun gbogbo eniyan, ṣugbọn diẹ ninu awọn ẹya wa ni Pro kan ki o le ṣe atilẹyin awọn idiyele olupin wa ati awọn idiyele ṣiṣe app. Wọn jẹ olowo poku, ati idi idi ti wọn fi wa nibẹ, pẹlu iyẹn fun iye diẹ sii. 
+    <string name="announcement_title">Akọsilẹ kan lati PocketHost</string>
+    <string name="announcement_body">PocketHost yoo jẹ ọfẹ lailai fun gbogbo eniyan, ṣugbọn diẹ ninu awọn ẹya wa ni Pro kan ki o le ṣe atilẹyin awọn idiyele olupin wa ati awọn idiyele ṣiṣe app. Wọn jẹ olowo poku, ati idi idi ti wọn fi wa nibẹ, pẹlu iyẹn fun iye diẹ sii. 
  
  Ti o ba fẹ ran wa lọwọ, tabi o kan fẹ lati ba ẹgbẹ sọrọ, darapọ mọ Discord wa - a yoo nifẹ lati ni ọ.</string>
     <string name="announcement_join_discord">Darapọ mọ Discord</string>

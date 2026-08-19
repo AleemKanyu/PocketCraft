@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Nagdagan ang Server</string>
     <string name="server_stopped">Server Mihunong</string>
     <string name="server_starting">Nagsugod ang Server…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d magdudula</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Uptime: %1$s</string>
-    <string name="announcement_title">Usa ka nota gikan sa PocketCraft</string>
-    <string name="announcement_body">Ang PocketCraft mahimong libre hangtod sa hangtod alang sa tanan, apan ang pipila nga mga bahin naa sa Pro aron lang masuportahan nimo ang among mga gasto sa server ug gasto sa pagpadagan sa app. Barato sila, ug mao nga naa sila didto, lakip kana alang sa dugang nga kantidad. 
+    <string name="announcement_title">Usa ka nota gikan sa PocketHost</string>
+    <string name="announcement_body">Ang PocketHost mahimong libre hangtod sa hangtod alang sa tanan, apan ang pipila nga mga bahin naa sa Pro aron lang masuportahan nimo ang among mga gasto sa server ug gasto sa pagpadagan sa app. Barato sila, ug mao nga naa sila didto, lakip kana alang sa dugang nga kantidad. 
  
  Kung gusto nimo nga tabangan kami, o gusto lang makig-chat sa team, apil sa among Discord — gusto ka namon.</string>
     <string name="announcement_join_discord">Apil sa Discord</string>

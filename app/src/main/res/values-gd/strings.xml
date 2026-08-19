@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Ruith an fhrithealaiche</string>
     <string name="server_stopped">Sguir am frithealaiche</string>
     <string name="server_starting">Frithealaiche a’ tòiseachadh…</string>
@@ -22,8 +22,8 @@
     <string name="players_online">%1$d/%2$d cluicheadairean</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Uptime: %1$s</string>
-    <string name="announcement_title">Nòta o PocketCraft</string>
-    <string name="announcement_body">Bidh PocketCraft an-asgaidh gu bràth airson a h-uile duine, ach tha cuid de fheartan ann am Pro dìreach gus an urrainn dhut taic a thoirt do chosgaisean an fhrithealaiche againn agus cosgaisean ruith na h-aplacaid. Tha iad saor, agus is ann air sgàth sin a tha iad ann, a’ toirt a-steach sin airson barrachd luach. 
+    <string name="announcement_title">Nòta o PocketHost</string>
+    <string name="announcement_body">Bidh PocketHost an-asgaidh gu bràth airson a h-uile duine, ach tha cuid de fheartan ann am Pro dìreach gus an urrainn dhut taic a thoirt do chosgaisean an fhrithealaiche againn agus cosgaisean ruith na h-aplacaid. Tha iad saor, agus is ann air sgàth sin a tha iad ann, a’ toirt a-steach sin airson barrachd luach. 
  
  Ma tha thu airson ar cuideachadh, no dìreach airson cabadaich leis an sgioba, thig còmhla ris an Discord againn - bu mhath leinn do bhith againn.</string>
     <string name="announcement_join_discord">Thig còmhla ri Discord</string>

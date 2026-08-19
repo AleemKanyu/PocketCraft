@@ -21,8 +21,8 @@
     <string name="players_online">graczy %1$d/%2$d</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Czas pracy: %1$s</string>
-    <string name="announcement_title">Notatka z PocketCraft</string>
-    <string name="announcement_body">PocketCraft będzie zawsze bezpłatna dla wszystkich, ale niektóre funkcje są dostępne w wersji Pro tylko po to, abyś mógł pokryć koszty naszego serwera i koszty eksploatacji aplikacji. Są tanie i dlatego tam są, łącznie z tym, że mają większą wartość. 
+    <string name="announcement_title">Notatka z PocketHost</string>
+    <string name="announcement_body">PocketHost będzie zawsze bezpłatna dla wszystkich, ale niektóre funkcje są dostępne w wersji Pro tylko po to, abyś mógł pokryć koszty naszego serwera i koszty eksploatacji aplikacji. Są tanie i dlatego tam są, łącznie z tym, że mają większą wartość. 
  
  Jeśli chcesz nam pomóc lub po prostu porozmawiać z zespołem, dołącz do naszego Discorda — z przyjemnością Cię przyjmiemy.</string>
     <string name="announcement_join_discord">Dołącz do Discorda</string>

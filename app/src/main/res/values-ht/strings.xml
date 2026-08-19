@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Sèvè Kouri</string>
     <string name="server_stopped">Sèvè sispann</string>
     <string name="server_starting">Sèvè ap kòmanse...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d jwè yo</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Aktivite: %1$s</string>
-    <string name="announcement_title">Yon nòt ki soti nan PocketCraft</string>
-    <string name="announcement_body">PocketCraft pral gratis pou tout tan pou tout moun, men gen kèk karakteristik ki nan Pro jis pou ou ka sipòte depans sèvè nou yo ak depans pou fonksyone aplikasyon an. Yo bon mache, e se poutèt sa yo nan la, ki gen ladan sa pou plis valè. 
+    <string name="announcement_title">Yon nòt ki soti nan PocketHost</string>
+    <string name="announcement_body">PocketHost pral gratis pou tout tan pou tout moun, men gen kèk karakteristik ki nan Pro jis pou ou ka sipòte depans sèvè nou yo ak depans pou fonksyone aplikasyon an. Yo bon mache, e se poutèt sa yo nan la, ki gen ladan sa pou plis valè. 
  
  Si ou ta renmen ede nou, oswa jis vle pale ak ekip la, rantre nan Discord nou an — nou ta renmen genyen ou.</string>
     <string name="announcement_join_discord">Antre nan Diskòd</string>

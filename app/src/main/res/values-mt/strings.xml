@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server Running</string>
     <string name="server_stopped">Server Waqqaf</string>
     <string name="server_starting">Server qed jibda...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d plejers</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Uptime: %1$s</string>
-    <string name="announcement_title">Nota minn PocketCraft</string>
-    <string name="announcement_body">PocketCraft se tkun b\'xejn għal dejjem għal kulħadd, iżda xi karatteristiċi huma fi Pro biss sabiex tkun tista\' tappoġġja l-ispejjeż tas-server tagħna u l-ispejjeż tat-tħaddim tal-app. Huma rħas, u għalhekk huma hemm, inkluż dak għal aktar valur. 
+    <string name="announcement_title">Nota minn PocketHost</string>
+    <string name="announcement_body">PocketHost se tkun b\'xejn għal dejjem għal kulħadd, iżda xi karatteristiċi huma fi Pro biss sabiex tkun tista\' tappoġġja l-ispejjeż tas-server tagħna u l-ispejjeż tat-tħaddim tal-app. Huma rħas, u għalhekk huma hemm, inkluż dak għal aktar valur. 
  
  Jekk tixtieq tgħinna, jew sempliċement trid tiċċettja mat-tim, ingħaqad mad-Discord tagħna — nixtiequ li jkollna lilek.</string>
     <string name="announcement_join_discord">Ingħaqad ma\' Discord</string>

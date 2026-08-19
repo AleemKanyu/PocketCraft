@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">サーバー稼働中</string>
     <string name="server_stopped">サーバーが停止しました</string>
     <string name="server_starting">サーバー起動中…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d 選手</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">稼働時間: %1$s</string>
-    <string name="announcement_title">PocketCraft からのメモ</string>
-    <string name="announcement_body">PocketCraft は誰でも永久に無料ですが、サーバー コストとアプリの実行コストをサポートできるよう、一部の機能は Pro にあります。それらは安いので、それを含めてより価値のあるものとしてそこにあるのです。 
+    <string name="announcement_title">PocketHost からのメモ</string>
+    <string name="announcement_body">PocketHost は誰でも永久に無料ですが、サーバー コストとアプリの実行コストをサポートできるよう、一部の機能は Pro にあります。それらは安いので、それを含めてより価値のあるものとしてそこにあるのです。 
  
  私たちを手助けしたい場合、または単にチームとチャットしたい場合は、Discord に参加してください。お待ちしています。</string>
     <string name="announcement_join_discord">Discordに参加する</string>

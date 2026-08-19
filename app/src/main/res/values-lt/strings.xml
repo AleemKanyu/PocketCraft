@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Serveris veikia</string>
     <string name="server_stopped">Serveris sustabdytas</string>
     <string name="server_starting">Serveris paleidžiamas…</string>
@@ -21,9 +21,9 @@
     <string name="players_online">%1$d/%2$d žaidėjai</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Veikimo laikas: %1$s</string>
-    <string name="announcement_title">Pastaba iš PocketCraft
+    <string name="announcement_title">Pastaba iš PocketHost
 –</string>
-    <string name="announcement_body">„PocketCraft“ bus nemokama visiems, tačiau kai kurios „Pro“ funkcijos yra tik tam, kad galėtumėte padengti serverio ir programos eksploatavimo išlaidas. Jie yra pigūs, todėl jie ten yra, įskaitant ir dėl didesnės vertės. 
+    <string name="announcement_body">„PocketHost“ bus nemokama visiems, tačiau kai kurios „Pro“ funkcijos yra tik tam, kad galėtumėte padengti serverio ir programos eksploatavimo išlaidas. Jie yra pigūs, todėl jie ten yra, įskaitant ir dėl didesnės vertės. 
  
  Jei norite mums padėti arba tiesiog norite pabendrauti su komanda, prisijunkite prie mūsų „Discord“ – norėtume jūsų.</string>
     <string name="announcement_join_discord">Prisijunkite prie „Discord“.</string>

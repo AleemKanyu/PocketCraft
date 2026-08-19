@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Freastalaí ar Rith</string>
     <string name="server_stopped">Stopadh an Freastalaí</string>
     <string name="server_starting">Freastalaí ag Tosú…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d imreoirí</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Aga fónaimh: %1$s</string>
-    <string name="announcement_title">Nóta ó PocketCraft</string>
-    <string name="announcement_body">Beidh PocketCraft saor go deo do chách, ach tá roinnt gnéithe in Pro ionas gur féidir leat tacú lenár gcostais fhreastalaí agus lenár gcostais reatha aipe. Tá siad saor, agus sin an fáth go bhfuil siad ann, lena n-áirítear é sin le haghaidh luach níos mó. 
+    <string name="announcement_title">Nóta ó PocketHost</string>
+    <string name="announcement_body">Beidh PocketHost saor go deo do chách, ach tá roinnt gnéithe in Pro ionas gur féidir leat tacú lenár gcostais fhreastalaí agus lenár gcostais reatha aipe. Tá siad saor, agus sin an fáth go bhfuil siad ann, lena n-áirítear é sin le haghaidh luach níos mó. 
  
  Más mian leat cabhrú linn, nó díreach ag iarraidh comhrá a dhéanamh leis an bhfoireann, bí páirteach inár Discord — ba bhreá linn tú a bheith agat.</string>
     <string name="announcement_join_discord">Join Discord</string>

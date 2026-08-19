@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Máy chủ đang chạy</string>
     <string name="server_stopped">Máy chủ đã dừng</string>
     <string name="server_starting">Máy chủ đang khởi động…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d người chơi</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Thời gian hoạt động: %1$s</string>
-    <string name="announcement_title">Ghi chú từ PocketCraft</string>
-    <string name="announcement_body">PocketCraft sẽ miễn phí mãi mãi cho mọi người nhưng một số tính năng chỉ có trong bản Pro để bạn có thể hỗ trợ chi phí máy chủ và chi phí chạy ứng dụng của chúng tôi. Chúng rẻ và đó là lý do tại sao chúng có mặt ở đó, bao gồm cả thứ đó để có giá trị cao hơn. 
+    <string name="announcement_title">Ghi chú từ PocketHost</string>
+    <string name="announcement_body">PocketHost sẽ miễn phí mãi mãi cho mọi người nhưng một số tính năng chỉ có trong bản Pro để bạn có thể hỗ trợ chi phí máy chủ và chi phí chạy ứng dụng của chúng tôi. Chúng rẻ và đó là lý do tại sao chúng có mặt ở đó, bao gồm cả thứ đó để có giá trị cao hơn. 
  
  Nếu bạn muốn giúp đỡ chúng tôi hoặc chỉ muốn trò chuyện với nhóm, hãy tham gia Discord của chúng tôi — chúng tôi rất vui khi có bạn.</string>
     <string name="announcement_join_discord">Tham gia bất hòa</string>

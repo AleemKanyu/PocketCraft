@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server khiav</string>
     <string name="server_stopped">Neeg rau zaub mov nres</string>
     <string name="server_starting">Server Starting…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d players</string>
     <string name="tps_label">TSI: %1$.1f</string>
     <string name="uptime_label">Lub Sijhawm Ua Haujlwm: %1$s</string>
-    <string name="announcement_title">Ib daim ntawv los ntawm PocketCraft</string>
-    <string name="announcement_body">PocketCraft yuav pub dawb mus ib txhis rau txhua tus, tab sis qee qhov nta muaj nyob hauv Pro tsuas yog kom koj tuaj yeem pab txhawb peb cov nqi server thiab cov nqi khiav app. Lawv pheej yig, thiab yog vim li cas lawv nyob rau hauv, nrog rau cov nqi ntau dua. 
+    <string name="announcement_title">Ib daim ntawv los ntawm PocketHost</string>
+    <string name="announcement_body">PocketHost yuav pub dawb mus ib txhis rau txhua tus, tab sis qee qhov nta muaj nyob hauv Pro tsuas yog kom koj tuaj yeem pab txhawb peb cov nqi server thiab cov nqi khiav app. Lawv pheej yig, thiab yog vim li cas lawv nyob rau hauv, nrog rau cov nqi ntau dua. 
  
  Yog tias koj xav pab peb, lossis tsuas yog xav tham nrog pab pawg, koom nrog peb Discord — peb xav kom koj muaj.</string>
     <string name="announcement_join_discord">Koom nrog Discord</string>

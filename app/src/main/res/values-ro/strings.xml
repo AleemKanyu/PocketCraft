@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server rulează</string>
     <string name="server_stopped">Server oprit</string>
     <string name="server_starting">Serverul pornește...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">Jucători %1$d/%2$d</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Timp de funcționare: %1$s</string>
-    <string name="announcement_title">O notă de la PocketCraft</string>
-    <string name="announcement_body">PocketCraft va fi gratuită pentru totdeauna pentru toată lumea, dar unele funcții sunt în Pro doar pentru a putea suporta costurile serverului nostru și costurile de funcționare a aplicației. Sunt ieftine și de aceea sunt acolo, inclusiv pentru mai multă valoare. 
+    <string name="announcement_title">O notă de la PocketHost</string>
+    <string name="announcement_body">PocketHost va fi gratuită pentru totdeauna pentru toată lumea, dar unele funcții sunt în Pro doar pentru a putea suporta costurile serverului nostru și costurile de funcționare a aplicației. Sunt ieftine și de aceea sunt acolo, inclusiv pentru mai multă valoare. 
  
  Dacă doriți să ne ajutați sau doar doriți să discutați cu echipa, alăturați-vă Discordului nostru — ne-ar plăcea să vă avem.</string>
     <string name="announcement_join_discord">Alăturați-vă Discordului</string>

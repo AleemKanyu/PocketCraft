@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server ngajalankeun</string>
     <string name="server_stopped">Server dieureunkeun</string>
     <string name="server_starting">Server Dimimitian…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d pamaén</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Waktos: %1$s</string>
-    <string name="announcement_title">Catetan ti PocketCraft</string>
-    <string name="announcement_body">PocketCraft bakal gratis salamina kanggo sadayana, tapi sababaraha fitur aya dina Pro supados anjeun tiasa ngadukung biaya pangladén sareng biaya ngajalankeun aplikasi. Éta mirah, sarta éta naha maranéhna aya di dinya, kaasup nu keur nilai leuwih. 
+    <string name="announcement_title">Catetan ti PocketHost</string>
+    <string name="announcement_body">PocketHost bakal gratis salamina kanggo sadayana, tapi sababaraha fitur aya dina Pro supados anjeun tiasa ngadukung biaya pangladén sareng biaya ngajalankeun aplikasi. Éta mirah, sarta éta naha maranéhna aya di dinya, kaasup nu keur nilai leuwih. 
  
  Upami anjeun hoyong ngabantosan kami, atanapi ngan ukur hoyong ngobrol sareng tim, gabung sareng Discord kami — kami hoyong gaduh anjeun.</string>
     <string name="announcement_join_discord">Miluan Discord</string>

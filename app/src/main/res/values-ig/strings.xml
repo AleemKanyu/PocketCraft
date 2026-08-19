@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Sava na-agba ọsọ</string>
     <string name="server_stopped">Akwụsịla ihe nkesa</string>
     <string name="server_starting">Ihe nkesa na-amalite…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">Ndị egwuregwu %1$d/%2$d</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Oge njedebe: %1$s</string>
-    <string name="announcement_title">Ederede si PocketCraft</string>
-    <string name="announcement_body">PocketCraft ga-enwere onwe ya ruo mgbe ebighị ebi maka onye ọ bụla, mana ụfọdụ atụmatụ dị na Pro naanị ka ị nwee ike ịkwado ụgwọ ihe nkesa anyị yana ọnụ ahịa ngwa. Ha dị ọnụ ala, ya mere ha ji nọrọ ebe ahụ, gụnyere nke ahụ maka uru karịa. __OGE ọhụrụ____ Ọhụrụ__ Ọ bụrụ na ị ga-achọ inyere anyị aka, ma ọ bụ chọọ ka gị na ndị otu kparịta ụka, sonye na Discord anyị - ọ ga-amasị anyị ịnweta gị.</string>
+    <string name="announcement_title">Ederede si PocketHost</string>
+    <string name="announcement_body">PocketHost ga-enwere onwe ya ruo mgbe ebighị ebi maka onye ọ bụla, mana ụfọdụ atụmatụ dị na Pro naanị ka ị nwee ike ịkwado ụgwọ ihe nkesa anyị yana ọnụ ahịa ngwa. Ha dị ọnụ ala, ya mere ha ji nọrọ ebe ahụ, gụnyere nke ahụ maka uru karịa. __OGE ọhụrụ____ Ọhụrụ__ Ọ bụrụ na ị ga-achọ inyere anyị aka, ma ọ bụ chọọ ka gị na ndị otu kparịta ụka, sonye na Discord anyị - ọ ga-amasị anyị ịnweta gị.</string>
     <string name="announcement_join_discord">Soro Discord</string>
     <string name="announcement_got_it">Enwere ya</string>
     <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>

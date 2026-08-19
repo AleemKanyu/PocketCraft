@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Servo Cursor
 —</string>
     <string name="server_stopped">Servo constitit</string>
@@ -28,8 +28,8 @@
     <string name="tps_label">TPS: %1$.1f 
 - [XX] Uptime: %1$s</string>
     <string name="uptime_label">Uptime: %1$s</string>
-    <string name="announcement_title">Nota ex PocketCraft</string>
-    <string name="announcement_body">PocketCraft liberum erit omnibus in perpetuum, sed quaedam lineamenta sunt in Pro ita ut sumptibus servientis et app currentis gratuita sustinere possis. Vilia sunt, et ideo ibi sunt, etiam pluris. 
+    <string name="announcement_title">Nota ex PocketHost</string>
+    <string name="announcement_body">PocketHost liberum erit omnibus in perpetuum, sed quaedam lineamenta sunt in Pro ita ut sumptibus servientis et app currentis gratuita sustinere possis. Vilia sunt, et ideo ibi sunt, etiam pluris. 
  
  Si nos iuvare velis, aut cum theam loqui tantum vis, iunge Discordiam nostram — amamus te habere.
 —</string>

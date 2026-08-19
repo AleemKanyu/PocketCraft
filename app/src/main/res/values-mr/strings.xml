@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">सर्व्हर चालू आहे</string>
     <string name="server_stopped">सर्व्हर थांबला</string>
     <string name="server_starting">सर्व्हर सुरू होत आहे...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d खेळाडू</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">अपटाइम: %1$s</string>
-    <string name="announcement_title">PocketCraft कडून एक टीप</string>
-    <string name="announcement_body">PocketCraft सर्वांसाठी कायमस्वरूपी विनामूल्य असेल, परंतु काही वैशिष्ट्ये प्रो मध्ये आहेत जेणेकरून तुम्ही आमच्या सर्व्हर खर्च आणि ॲप चालवण्याच्या खर्चाचे समर्थन करू शकता. ते स्वस्त आहेत, आणि म्हणूनच ते तेथे आहेत, त्यासह अधिक मूल्यासाठी. 
+    <string name="announcement_title">PocketHost कडून एक टीप</string>
+    <string name="announcement_body">PocketHost सर्वांसाठी कायमस्वरूपी विनामूल्य असेल, परंतु काही वैशिष्ट्ये प्रो मध्ये आहेत जेणेकरून तुम्ही आमच्या सर्व्हर खर्च आणि ॲप चालवण्याच्या खर्चाचे समर्थन करू शकता. ते स्वस्त आहेत, आणि म्हणूनच ते तेथे आहेत, त्यासह अधिक मूल्यासाठी. 
  
  जर तुम्हाला आमची मदत करायची असेल किंवा फक्त टीमशी गप्पा मारायच्या असतील, तर आमच्या Discord मध्ये सामील व्हा — आम्हाला तुमच्यासोबत राहायला आवडेल.</string>
     <string name="announcement_join_discord">मतभेदात सामील व्हा</string>

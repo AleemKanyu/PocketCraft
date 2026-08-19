@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">ເຊີບເວີແລ່ນ</string>
     <string name="server_stopped">ເຊີບເວີຢຸດ</string>
     <string name="server_starting">ເຊີບເວີກຳລັງເລີ່ມ...</string>
@@ -28,8 +28,8 @@
     <string name="players_online">%1$d/%2$d ຜູ້ຫຼິ້ນ</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">ເວລາເຮັດວຽກ: %1$s</string>
-    <string name="announcement_title">ບັນທຶກຈາກ PocketCraft</string>
-    <string name="announcement_body">PocketCraft ຈະບໍ່ເສຍຄ່າຕະຫຼອດໄປສຳລັບທຸກຄົນ, ແຕ່ຄຸນສົມບັດບາງຢ່າງຢູ່ໃນ Pro ພຽງແຕ່ເພື່ອໃຫ້ທ່ານສາມາດຮອງຮັບຄ່າໃຊ້ຈ່າຍໃນເຊີບເວີ ແລະຄ່າໃຊ້ຈ່າຍໃນການເຮັດວຽກຂອງແອັບຯຂອງພວກເຮົາ. ພວກເຂົາມີລາຄາຖືກ, ແລະນັ້ນແມ່ນເຫດຜົນທີ່ພວກເຂົາຢູ່ໃນນັ້ນ, ລວມທັງສໍາລັບມູນຄ່າຫຼາຍ. 
+    <string name="announcement_title">ບັນທຶກຈາກ PocketHost</string>
+    <string name="announcement_body">PocketHost ຈະບໍ່ເສຍຄ່າຕະຫຼອດໄປສຳລັບທຸກຄົນ, ແຕ່ຄຸນສົມບັດບາງຢ່າງຢູ່ໃນ Pro ພຽງແຕ່ເພື່ອໃຫ້ທ່ານສາມາດຮອງຮັບຄ່າໃຊ້ຈ່າຍໃນເຊີບເວີ ແລະຄ່າໃຊ້ຈ່າຍໃນການເຮັດວຽກຂອງແອັບຯຂອງພວກເຮົາ. ພວກເຂົາມີລາຄາຖືກ, ແລະນັ້ນແມ່ນເຫດຜົນທີ່ພວກເຂົາຢູ່ໃນນັ້ນ, ລວມທັງສໍາລັບມູນຄ່າຫຼາຍ. 
  
  ຖ້າທ່ານຕ້ອງການຊ່ວຍພວກເຮົາ, ຫຼືພຽງແຕ່ຢາກສົນທະນາກັບທີມງານ, ເຂົ້າຮ່ວມ Discord ຂອງພວກເຮົາ — ພວກເຮົາຢາກມີທ່ານ.</string>
     <string name="announcement_join_discord">ເຂົ້າຮ່ວມ Discord</string>

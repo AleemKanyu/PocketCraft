@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">مۇلازىمېتىر ئىجرا</string>
     <string name="server_stopped">مۇلازىمېتىر توختىتىلدى</string>
     <string name="server_starting">مۇلازىمېتىرنى باشلاش…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d قويغۇچىلار</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">ۋاقتى: %1$s</string>
-    <string name="announcement_title">PocketCraft نىڭ ئىزاھاتى</string>
-    <string name="announcement_body">PocketCraft ھەممە ئادەم ئۈچۈن مەڭگۈ ھەقسىز بولىدۇ ، ئەمما بەزى ئىقتىدارلار Pro دا بولۇپ ، بىزنىڭ مۇلازىمېتىر چىقىمىمىزنى ۋە ئەپ ئىجرا چىقىمىمىزنى قوللىيالايسىز. ئۇلار ئەرزان ، شۇڭلاشقا ئۇلار بۇ يەردە ، تېخىمۇ كۆپ قىممەتنى ئۆز ئىچىگە ئالىدۇ. 
+    <string name="announcement_title">PocketHost نىڭ ئىزاھاتى</string>
+    <string name="announcement_body">PocketHost ھەممە ئادەم ئۈچۈن مەڭگۈ ھەقسىز بولىدۇ ، ئەمما بەزى ئىقتىدارلار Pro دا بولۇپ ، بىزنىڭ مۇلازىمېتىر چىقىمىمىزنى ۋە ئەپ ئىجرا چىقىمىمىزنى قوللىيالايسىز. ئۇلار ئەرزان ، شۇڭلاشقا ئۇلار بۇ يەردە ، تېخىمۇ كۆپ قىممەتنى ئۆز ئىچىگە ئالىدۇ. 
  
  ئەگەر بىزگە ياردەم قىلماقچى بولسىڭىز ، ياكى پەقەت كوماندا بىلەن پاراڭلاشماقچى بولسىڭىز ، بىزنىڭ Discord غا قوشۇلۇڭ - بىز سىزنى ياخشى كۆرىمىز.</string>
     <string name="announcement_join_discord">قالايمىقانچىلىققا قوشۇلۇڭ</string>

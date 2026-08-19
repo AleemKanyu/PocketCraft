@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server Dikeve</string>
     <string name="server_stopped">Server Rawestiya</string>
     <string name="server_starting">Pêşkêşkar dest pê dike…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d lîstikvan</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Dema xebatê: %1$s</string>
-    <string name="announcement_title">Nîşeyek ji PocketCraft</string>
-    <string name="announcement_body">PocketCraft dê her û her ji bo her kesî belaş be, lê hin taybetmendî di Pro de hene tenê ji bo ku hûn piştgirî bidin lêçûnên servera me û lêçûnên xebitandina sepanê. Ew erzan in, û ji ber vê yekê ew li wir in, di nav de ew ji bo nirxek bêtir. 
+    <string name="announcement_title">Nîşeyek ji PocketHost</string>
+    <string name="announcement_body">PocketHost dê her û her ji bo her kesî belaş be, lê hin taybetmendî di Pro de hene tenê ji bo ku hûn piştgirî bidin lêçûnên servera me û lêçûnên xebitandina sepanê. Ew erzan in, û ji ber vê yekê ew li wir in, di nav de ew ji bo nirxek bêtir. 
  
  Ger hûn dixwazin alîkariya me bikin, an jî tenê dixwazin bi tîmê re sohbet bikin, beşdarî Discord-a me bibin - em ji we hez dikin.</string>
     <string name="announcement_join_discord">Tevlî Discord bibin</string>

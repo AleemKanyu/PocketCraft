@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">تشغيل الخادم</string>
     <string name="server_stopped">توقف الخادم</string>
     <string name="server_starting">بدء تشغيل الخادم...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">لاعبين %1$d/%2$d</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">وقت التشغيل: %1$s</string>
-    <string name="announcement_title">ملاحظة من PocketCraft</string>
-    <string name="announcement_body">سيكون PocketCraft مجانيًا للجميع إلى الأبد، ولكن بعض الميزات موجودة في الإصدار Pro حتى تتمكن من دعم تكاليف الخادم وتكاليف تشغيل التطبيق. إنها رخيصة الثمن، ولهذا السبب فهي موجودة، بما في ذلك تلك التي توفر قيمة أكبر. 
+    <string name="announcement_title">ملاحظة من PocketHost</string>
+    <string name="announcement_body">سيكون PocketHost مجانيًا للجميع إلى الأبد، ولكن بعض الميزات موجودة في الإصدار Pro حتى تتمكن من دعم تكاليف الخادم وتكاليف تشغيل التطبيق. إنها رخيصة الثمن، ولهذا السبب فهي موجودة، بما في ذلك تلك التي توفر قيمة أكبر. 
  
  إذا كنت ترغب في مساعدتنا، أو ترغب فقط في الدردشة مع الفريق، فانضم إلى Discord - فنحن نود أن تكون معنا.</string>
     <string name="announcement_join_discord">انضم إلى الديسكورد</string>

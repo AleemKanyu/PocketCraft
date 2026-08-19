@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server radi</string>
     <string name="server_stopped">Server zaustavljen</string>
     <string name="server_starting">Pokretanje servera…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d igrača</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Vrijeme rada: %1$s</string>
-    <string name="announcement_title">Bilješka iz PocketCraft</string>
-    <string name="announcement_body">PocketCraft će biti zauvijek besplatna za sve, ali neke funkcije su u Pro samo zato da možete podržati troškove našeg servera i troškove rada aplikacije. Jeftini su i zato su tu, uključujući i one za veću vrijednost. 
+    <string name="announcement_title">Bilješka iz PocketHost</string>
+    <string name="announcement_body">PocketHost će biti zauvijek besplatna za sve, ali neke funkcije su u Pro samo zato da možete podržati troškove našeg servera i troškove rada aplikacije. Jeftini su i zato su tu, uključujući i one za veću vrijednost. 
  
  Ako nam želite pomoći, ili samo želite razgovarati s timom, pridružite se našem Discordu — voljeli bismo vas imati.</string>
     <string name="announcement_join_discord">Pridružite se Discordu</string>

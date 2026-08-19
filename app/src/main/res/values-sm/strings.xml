@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Ta\'avale Server</string>
     <string name="server_stopped">Tu\'u le Server</string>
     <string name="server_starting">Server Amata...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d tagata taaalo</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Taimi i luga: %1$s</string>
-    <string name="announcement_title">O se fa\'amatalaga mai PocketCraft</string>
-    <string name="announcement_body">PocketCraft o le a sa\'oloto e fa\'avavau mo tagata uma, ae o nisi vaega o lo\'o i totonu o le Pro ina ia mafai ai ona e lagolagoina le tau o la matou \'au\'aunaga ma tau fa\'agaoioi. E taugofie, ma o le mafuaaga lena o loʻo i ai iina, e aofia ai mo le sili atu le tau. 
+    <string name="announcement_title">O se fa\'amatalaga mai PocketHost</string>
+    <string name="announcement_body">PocketHost o le a sa\'oloto e fa\'avavau mo tagata uma, ae o nisi vaega o lo\'o i totonu o le Pro ina ia mafai ai ona e lagolagoina le tau o la matou \'au\'aunaga ma tau fa\'agaoioi. E taugofie, ma o le mafuaaga lena o loʻo i ai iina, e aofia ai mo le sili atu le tau. 
  
  Afai e te manaʻo e fesoasoani mai ia i matou, pe na o le manaʻo e talanoa ma le \'au, auai i la matou Discord — matou te fiafia e maua oe.</string>
     <string name="announcement_join_discord">Auai i Discord</string>

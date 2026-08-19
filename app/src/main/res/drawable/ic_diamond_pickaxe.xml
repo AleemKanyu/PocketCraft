@@ -5,11 +5,20 @@
     android:viewportWidth="64"
     android:viewportHeight="64">
 
-    <!-- Generic Tool Icon -->
+    <!-- Generic Server Node / Host Icon -->
     <path
-        android:fillColor="#4A90E2"
-        android:pathData="M16,12 L32,8 L48,12 L44,24 L36,20 L36,52 L28,52 L28,20 L20,24 Z" />
+        android:fillColor="#10B981"
+        android:pathData="M12,16 L52,16 Q56,16 56,20 L56,44 Q56,48 52,48 L12,48 Q8,48 8,44 L8,20 Q8,16 12,16 Z" />
     <path
-        android:fillColor="#7ED321"
-        android:pathData="M24,14 L32,12 L40,14 L38,20 L34,18 L34,48 L30,48 L30,18 L26,20 Z" />
+        android:fillColor="#064E3B"
+        android:pathData="M14,22 L50,22 L50,42 L14,42 Z" />
+    <path
+        android:fillColor="#34D399"
+        android:pathData="M18,28 A2.5,2.5 0 1,0 23,28 A2.5,2.5 0 1,0 18,28 Z" />
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M26,28 A2.5,2.5 0 1,0 31,28 A2.5,2.5 0 1,0 26,28 Z" />
+    <path
+        android:fillColor="#34D399"
+        android:pathData="M36,27 L46,27 L46,29 L36,29 Z M36,31 L46,31 L46,33 L36,33 Z" />
 </vector>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Szerver fut</string>
     <string name="server_stopped">A szerver leállt</string>
     <string name="server_starting">Szerver indul…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d játékos</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Üzemidő: %1$s</string>
-    <string name="announcement_title">Megjegyzés a PocketCraft alkalmazástól</string>
-    <string name="announcement_body">A PocketCraft örökre ingyenes lesz mindenki számára, de néhány funkció a Proban csak azért van, hogy támogatni tudja a szerverköltségeket és az alkalmazások üzemeltetési költségeit. Olcsóak, és ezért vannak benne, beleértve azt is, hogy több értéket kapjanak. 
+    <string name="announcement_title">Megjegyzés a PocketHost alkalmazástól</string>
+    <string name="announcement_body">A PocketHost örökre ingyenes lesz mindenki számára, de néhány funkció a Proban csak azért van, hogy támogatni tudja a szerverköltségeket és az alkalmazások üzemeltetési költségeit. Olcsóak, és ezért vannak benne, beleértve azt is, hogy több értéket kapjanak. 
  
  Ha segíteni szeretnél nekünk, vagy csak beszélgetni szeretnél a csapattal, csatlakozz a Discord-hoz – szívesen látunk.</string>
     <string name="announcement_join_discord">Csatlakozz a Discordhoz</string>

@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:52965868712:android:79418154f90541285e6e9d",
         "android_client_info": {
-          "package_name": "com.pocketcraft.server"
+          "package_name": "com.pockethost.app"
         }
       },
       "oauth_client": [
@@ -17,7 +17,7 @@
           "client_id": "52965868712-0ktqrqredo465t0t9nhq8u0h1fu8big7.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.pocketcraft.server",
+            "package_name": "com.pockethost.app",
             "certificate_hash": "ce271228a012376475eb45b5ac571170ad4edd06"
           }
         },
@@ -25,7 +25,7 @@
           "client_id": "52965868712-ahrli2q26ndkb5lbfd0dr29510j6cqa5.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.pocketcraft.server",
+            "package_name": "com.pockethost.app",
             "certificate_hash": "c1f36afdf7184b0606f408bc24bb87d2d8b3e2aa"
           }
         },

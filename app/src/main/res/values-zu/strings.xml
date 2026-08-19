@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">I-PocketCraft</string>
+    <string name="app_name">I-PocketHost</string>
     <string name="server_running">Ukugijima Kweseva</string>
     <string name="server_stopped">Iseva Imisiwe</string>
     <string name="server_starting">Iseva Iyaqala...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d abadlali</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Isikhathi esiphezulu: %1$s</string>
-    <string name="announcement_title">Inothi elivela ku-PocketCraft</string>
-    <string name="announcement_body">I-PocketCraft izoba mahhala kuze kube phakade kuwo wonke umuntu, kodwa ezinye izici ziku-Pro ukuze ukwazi ukusekela izindleko zeseva yethu nezindleko zokusebenzisa uhlelo lokusebenza. Ashibhile, yingakho ephakathi lapho, okuhlanganisa nalokho ngenani elithe xaxa. 
+    <string name="announcement_title">Inothi elivela ku-PocketHost</string>
+    <string name="announcement_body">I-PocketHost izoba mahhala kuze kube phakade kuwo wonke umuntu, kodwa ezinye izici ziku-Pro ukuze ukwazi ukusekela izindleko zeseva yethu nezindleko zokusebenzisa uhlelo lokusebenza. Ashibhile, yingakho ephakathi lapho, okuhlanganisa nalokho ngenani elithe xaxa. 
  
  Uma ungathanda ukusisiza, noma ufuna nje ukuxoxa nethimba, joyina i-Discord yethu — singathanda ukuba nawe.</string>
     <string name="announcement_join_discord">Joyina i-Discord</string>

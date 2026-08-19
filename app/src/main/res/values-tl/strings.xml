@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Tumatakbo ang Server</string>
     <string name="server_stopped">Huminto ang Server</string>
     <string name="server_starting">Nagsisimula ang Server…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d na mga manlalaro</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Uptime: %1$s</string>
-    <string name="announcement_title">Isang tala mula sa PocketCraft</string>
-    <string name="announcement_body">Ang PocketCraft ay magiging libre magpakailanman para sa lahat, ngunit ang ilang mga tampok ay nasa Pro para lamang masuportahan mo ang aming mga gastos sa server at mga gastos sa pagpapatakbo ng app. Ang mga ito ay mura, at iyon ang dahilan kung bakit sila naroroon, kasama iyon para sa higit na halaga. 
+    <string name="announcement_title">Isang tala mula sa PocketHost</string>
+    <string name="announcement_body">Ang PocketHost ay magiging libre magpakailanman para sa lahat, ngunit ang ilang mga tampok ay nasa Pro para lamang masuportahan mo ang aming mga gastos sa server at mga gastos sa pagpapatakbo ng app. Ang mga ito ay mura, at iyon ang dahilan kung bakit sila naroroon, kasama iyon para sa higit na halaga. 
  
  Kung gusto mo kaming tulungan, o gusto mo lang makipag-chat sa team, sumali sa aming Discord — gusto ka naming makasama.</string>
     <string name="announcement_join_discord">Sumali sa Discord</string>

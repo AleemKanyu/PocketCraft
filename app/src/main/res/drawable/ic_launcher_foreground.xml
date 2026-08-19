@@ -12,45 +12,50 @@
 
     <!-- Server Container Frame -->
     <path
-        android:fillColor="#182A1D"
-        android:strokeColor="#34D399"
+        android:fillColor="#132418"
+        android:strokeColor="#10B981"
         android:strokeWidth="2.5"
         android:pathData="M26,22 L82,22 Q86,22 86,26 L86,80 Q86,84 82,84 L26,84 Q22,84 22,80 L22,26 Q22,22 26,22 Z" />
 
     <!-- Top Server Header Bar -->
     <path
-        android:fillColor="#223C29"
-        android:pathData="M22,26 L86,26 L86,36 L22,36 Z" />
+        android:fillColor="#1E3826"
+        android:pathData="M23,26 L85,26 L85,36 L23,36 Z" />
 
     <!-- Status LEDs (Active Server Signals) -->
     <path
-        android:fillColor="#10B981"
+        android:fillColor="#34D399"
         android:pathData="M30,31 A2,2 0 1,0 34,31 A2,2 0 1,0 30,31 Z" />
     <path
-        android:fillColor="#3B82F6"
+        android:fillColor="#38BDF8"
         android:pathData="M38,31 A2,2 0 1,0 42,31 A2,2 0 1,0 38,31 Z" />
     <path
         android:fillColor="#F59E0B"
         android:pathData="M46,31 A2,2 0 1,0 50,31 A2,2 0 1,0 46,31 Z" />
 
-    <!-- Main Stylized Monogram "PC" -->
-    <!-- 'P' Stem & Loop -->
-    <path
-        android:fillColor="#6EE7B7"
-        android:pathData="M32,44 L50,44 C56,44 56,56 50,56 L40,56 L40,74 L32,74 Z M40,50 L48,50 C50,50 50,50 48,50 L40,50 Z" />
-    <path
-        android:fillColor="#182A1D"
-        android:pathData="M40,49 L48,49 Q51,49 51,51 Q51,53 48,53 L40,53 Z" />
-
-    <!-- 'C' Curved Arc -->
+    <!-- Stylized Modern 'P' & 'H' Host Symbol -->
+    <!-- Stylized P left vertical pillar -->
     <path
         android:fillColor="#34D399"
-        android:pathData="M74,48 L64,44 Q54,44 54,59 Q54,74 64,74 L74,70 L74,63 L65,66 Q61,66 61,59 Q61,52 65,52 L74,55 Z" />
+        android:pathData="M34,44 L44,44 L44,74 L34,74 Z" />
+
+    <!-- P upper loop -->
+    <path
+        android:fillColor="#6EE7B7"
+        android:pathData="M44,44 L58,44 Q66,44 66,52 Q66,60 58,60 L44,60 Z M44,50 L56,50 Q60,50 60,52 Q60,54 56,54 L44,54 Z" />
+
+    <!-- Stylized H right pillar & bridge -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M64,52 L74,52 L74,74 L64,74 Z" />
+    <path
+        android:fillColor="#60A5FA"
+        android:pathData="M52,60 L66,60 L66,66 L52,66 Z" />
 
     <!-- Neon Accent Glow Line -->
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#A7F3D0"
+        android:strokeColor="#34D399"
         android:strokeWidth="1.5"
         android:pathData="M26,80 L82,80" />
 

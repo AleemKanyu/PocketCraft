@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server Lafen</string>
     <string name="server_stopped">Server gestoppt</string>
     <string name="server_starting">Server Start ...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d Spiller</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Uptime: %1$s</string>
-    <string name="announcement_title">Eng Notiz vum PocketCraft</string>
-    <string name="announcement_body">PocketCraft wäert fir ëmmer gratis sinn fir jiddereen, awer e puer Features sinn am Pro just fir datt Dir eis Serverkäschten an App Lafkäschte ënnerstëtzen. Si sinn bëlleg, an dofir si se do dran, och dat fir méi Wäert. 
+    <string name="announcement_title">Eng Notiz vum PocketHost</string>
+    <string name="announcement_body">PocketHost wäert fir ëmmer gratis sinn fir jiddereen, awer e puer Features sinn am Pro just fir datt Dir eis Serverkäschten an App Lafkäschte ënnerstëtzen. Si sinn bëlleg, an dofir si se do dran, och dat fir méi Wäert. 
  
  Wann Dir eis hëllefe wëllt, oder just mat der Équipe wëllt chatten, da maacht mat bei eisem Discord - mir géifen dech gär hunn.</string>
     <string name="announcement_join_discord">Maacht mat bei Discord</string>

@@ -1,0 +1,42 @@
+package com.pockethost.app.data.model
+
+/**
+ * Represents a player currently connected to the server.
+ */
+data class PlayerInfo(
+    val name: String,
+    val uuid: String = "",
+    val pingMs: Int = -1,
+    val ip: String = "",
+    val isOp: Boolean = false,
+    val x: Int? = null,
+    val y: Int? = null,
+    val z: Int? = null,
+    val worldName: String = ""
+) {
+    val isBedrock: Boolean get() = name.startsWith(".")
+    val isRelayBridge: Boolean get() = !isBedrock && isLoopbackIp(ip)
+    val isBedrockBridge: Boolean get() = isBedrock && isLoopbackIp(ip)
+    val isWifiPlayer: Boolean get() = ip.isNotBlank() && !isLoopbackIp(ip)
+
+    fun pingText(unavailable: String = "Ping unavailable"): String {
+        val rawPing = pingMs.takeIf { it >= 0 } ?: return unavailable
+        if (isWifiPlayer && rawPing > MAX_REALISTIC_WIFI_PING_MS) {
+            return "Ping unavailable"
+        }
+        return "Ping: ${rawPing}ms"
+    }
+
+    companion object {
+        private const val MAX_REALISTIC_WIFI_PING_MS = 5_000
+
+        private fun isLoopbackIp(value: String): Boolean {
+            val host = value.trim().lowercase()
+            return host == "localhost" ||
+                host == "::1" ||
+                host == "0:0:0:0:0:0:0:1" ||
+                host == "127.0.0.1" ||
+                host.startsWith("127.")
+        }
+    }
+}

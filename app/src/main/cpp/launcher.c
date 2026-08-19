@@ -48,12 +48,10 @@ static volatile sig_atomic_t jvm_is_shutting_down = 0;
 
 static void jvm_shutdown_signal_handler(int sig) {
     if (jvm_is_shutting_down) {
-        // Known-benign: Bionic FORTIFY __fortify_fatal calling tgkill(SIGABRT) or
-        // Adreno GPU driver unmap (SIGSEGV) during JVM teardown.
-        // Ignore the signal so the main process stays 100% alive.
-        LOGI("Intercepted shutdown signal %d during JVM teardown. Ignoring.", sig);
-        signal(sig, SIG_IGN);
-        return;
+        LOGI("Intercepted shutdown signal %d during JVM teardown. Terminating faulting thread safely.", sig);
+        // Do not return to Bionic abort() loop which re-raises SIGABRT as SIG_DFL;
+        // Terminate the crashing JVM background thread immediately so the main Android app survives.
+        pthread_exit(NULL);
     }
     // Not in shutdown — re-raise so debuggerd can capture the real crash.
     signal(sig, SIG_DFL);
@@ -70,7 +68,7 @@ static void jvm_shutdown_signal_handler(int sig) {
 
 static void apply_exit_plt_hooks(void);
 
-JNIEXPORT void JNICALL Java_com_pocketcraft_server_NativeLauncher_notifyShutdownStarted(JNIEnv *env, jobject thiz) {
+JNIEXPORT void JNICALL Java_com_pockethost_app_NativeLauncher_notifyShutdownStarted(JNIEnv *env, jobject thiz) {
     (void)env;
     (void)thiz;
     jvm_is_shutting_down = 1;
@@ -107,6 +105,16 @@ static int plt_hook_callback(struct dl_phdr_info *info, size_t size, void *data)
     if (!info->dlpi_name || !info->dlpi_name[0]) return 0;
 
     if (strstr(info->dlpi_name, "liblauncher.so")) {
+        return 0;
+    }
+
+    // STRICT GUARD: ONLY hook JRE / JVM libraries (e.g. /jre21/, /jre25/, libjvm.so, libjli.so, libjava.so)
+    // NEVER hook Android system or ART libraries (libandroid_runtime.so, libart.so, libopenjdkjvm.so, etc.)
+    // Hooking system libraries corrupts the Android framework GOT tables, causing crashes when server stops!
+    if (!strstr(info->dlpi_name, "/jre") &&
+        !strstr(info->dlpi_name, "libjvm.so") &&
+        !strstr(info->dlpi_name, "libjli.so") &&
+        !strstr(info->dlpi_name, "libjava.so")) {
         return 0;
     }
 
@@ -390,7 +398,7 @@ static void detect_runtime_paths(const char *jre_path, char *runtime_lib_dir,
   }
 }
 
-JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
+JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
     JNIEnv *env, jobject thiz, jstring jJrePath, jstring jJarPath,
     jstring jServerDir, jstring jTmpDir, jstring jNativeLibDir,
     jstring jShimDir, jint minRamMb, jint maxRamMb, jstring jServerType, jint port) {
@@ -590,91 +598,106 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
            jre_path, shim_dir, tmp_dir, jre_path, jre_path, native_lib_dir);
   snprintf(port_str, sizeof(port_str), "%d", port);
 
-  char *argv[] = {"java",
-                  xmx_opt,
-                  xms_opt,
-                  java_home_opt,
-                  tmp_dir_opt,
-                  jna_tmp_opt,
-                  jansi_tmp_opt,
-                  netty_tmp_opt,
-                  jna_boot_opt,
-                  jna_library_opt,
-                  user_home_opt,
-                  language_opt,
-                  timezone_opt,
-                  os_name_opt,
-                  os_version_opt,
-                  "-Djava.net.preferIPv4Stack=true",
-                  "-Djava.net.preferIPv6Addresses=false",
-                  netty_threads_opt,
-                  "-Dfile.encoding=UTF-8",
-                  "-Dusing.aikars.flags=https://mcflags.emc.gs",
-                  "-Dpaper.playerconnection.keepalive=90",
-                  "-Dorg.jline.terminal.jna=false",
-                  "-Dorg.jline.terminal.jni=false",
-                  "-Dorg.jline.terminal.dumb=true",
-                  "-Djava.awt.headless=true",
-                  "-Dsun.java2d.opengl=false",
-                  "-Djdk.lang.Process.launchMechanism=FORK",
-                  lib_path_opt,
-                  "-DPaper.IgnoreJavaVersion=true",
-                  "-Dpaper.oshi.disabled=true",
-                  "-Dpaper.disable-hardware-info=true",
-                  "-Doshi.os.disabled=true",
-                  "-Doshi.os=unknown",
-                  "-Doshi.architecture=aarch64",
-                  "-Dpaper.disable-update-check=true",
-                  "-Dpaper.disable-plugin-update-check=true",
-                  "-Dsun.net.client.defaultConnectTimeout=5000",
-                  "-Dsun.net.client.defaultReadTimeout=5000",
-                  "-Dsun.zip.disableMemoryMapping=true",
-                  "-Djdk.attach.allowAttachSelf=true",
-                  "-Djna.nosys=true",
-                  "-Djna.nounpack=true",
-                  "-Djline.terminal=none",
-                  "-Xshare:off",
-                  "-XX:+UnlockExperimentalVMOptions",
-                  "-XX:+UnlockDiagnosticVMOptions",
-                  "-XX:-AlwaysPreTouch",
-                  "-XX:+UseStringDeduplication",
-                  "-XX:+UseG1GC",
-                  "-XX:+ParallelRefProcEnabled",
-                  "-XX:MaxGCPauseMillis=80",
-                  "-XX:+DisableExplicitGC",
-                  "-XX:G1NewSizePercent=30",
-                  "-XX:G1MaxNewSizePercent=40",
-                  "-XX:G1ReservePercent=20",
-                  "-XX:G1HeapWastePercent=5",
-                  "-XX:G1MixedGCCountTarget=4",
-                  "-XX:InitiatingHeapOccupancyPercent=15",
-                  "-XX:G1MixedGCLiveThresholdPercent=90",
-                  "-XX:G1RSetUpdatingPauseTimePercent=5",
-                  "-XX:SurvivorRatio=32",
-                  "-XX:MaxTenuringThreshold=1",
-                  "-XX:+PerfDisableSharedMem",
-                  "-Dio.netty.recycler.maxCapacity=262144",
-                  "-Dio.netty.recycler.maxCapacityPerThread=1024",
-                  "-Dio.netty.allocator.maxOrder=9",
-                  "-Dio.netty.recycler.linkCapacity=1024",
-                  "-Dio.netty.allocator.type=pooled",
-                  "-Dio.netty.leakDetection.level=disabled",
-                  "-Dio.netty.noPreferDirect=false",
-                  "-Dio.netty.noUnsafe=false",
-                  "-XX:-UseContainerSupport",
-                  error_file_opt,
-                  "-XX:+DisableAttachMechanism",
-                  "-jar",
-                  (char *)jar_path,
-                  "--nogui",
-                  "--port",
-                  port_str};
-
-  int argc = (int)(sizeof(argv) / sizeof(argv[0]));
-  if (server_type && strcmp(server_type, "FABRIC") == 0) {
-    // Omit --port <port> for Fabric servers (Fabric's CLI parser rejects --port)
-    argc -= 2;
+  char arg_file_opt[1024];
+  int is_arg_file = 0;
+  if (jar_path) {
+    if (jar_path[0] == '@') {
+      is_arg_file = 1;
+      snprintf(arg_file_opt, sizeof(arg_file_opt), "%s", jar_path);
+    } else if (strstr(jar_path, ".txt") != NULL) {
+      is_arg_file = 1;
+      snprintf(arg_file_opt, sizeof(arg_file_opt), "@%s", jar_path);
+    }
   }
+
+  char *argv[128];
+  int a = 0;
+  argv[a++] = "java";
+  argv[a++] = xmx_opt;
+  argv[a++] = xms_opt;
+  argv[a++] = java_home_opt;
+  argv[a++] = tmp_dir_opt;
+  argv[a++] = jna_tmp_opt;
+  argv[a++] = jansi_tmp_opt;
+  argv[a++] = netty_tmp_opt;
+  argv[a++] = jna_boot_opt;
+  argv[a++] = jna_library_opt;
+  argv[a++] = user_home_opt;
+  argv[a++] = language_opt;
+  argv[a++] = timezone_opt;
+  argv[a++] = os_name_opt;
+  argv[a++] = os_version_opt;
+  argv[a++] = "-Djava.net.preferIPv4Stack=true";
+  argv[a++] = "-Djava.net.preferIPv6Addresses=false";
+  argv[a++] = netty_threads_opt;
+  argv[a++] = "-Dfile.encoding=UTF-8";
+  argv[a++] = "-Dusing.aikars.flags=https://mcflags.emc.gs";
+  argv[a++] = "-Dpaper.playerconnection.keepalive=90";
+  argv[a++] = "-Dorg.jline.terminal.jna=false";
+  argv[a++] = "-Dorg.jline.terminal.jni=false";
+  argv[a++] = "-Dorg.jline.terminal.dumb=true";
+  argv[a++] = "-Djava.awt.headless=true";
+  argv[a++] = "-Dsun.java2d.opengl=false";
+  argv[a++] = "-Djdk.lang.Process.launchMechanism=FORK";
+  argv[a++] = lib_path_opt;
+  argv[a++] = "-DPaper.IgnoreJavaVersion=true";
+  argv[a++] = "-Dpaper.ignoreJavaVersion=true";
+  argv[a++] = "-Dpaper.bypass-java-check=true";
+  argv[a++] = "-Dpaper.ignore-java-version=true";
+  argv[a++] = "-DPurpur.IgnoreJavaVersion=true";
+  argv[a++] = "-Dpurpur.ignoreJavaVersion=true";
+  argv[a++] = "-Dpurpur.bypass-java-check=true";
+  argv[a++] = "-Dpurpur.ignore-java-version=true";
+  argv[a++] = "-Dpaper.oshi.disabled=true";
+  argv[a++] = "-Dpaper.disable-hardware-info=true";
+  argv[a++] = "-Doshi.os.disabled=true";
+  argv[a++] = "-Doshi.os=unknown";
+  argv[a++] = "-Doshi.architecture=aarch64";
+  argv[a++] = "-Dpaper.disable-update-check=true";
+  argv[a++] = "-Dpaper.disable-plugin-update-check=true";
+  argv[a++] = "-Dpurpur.disable-update-check=true";
+  argv[a++] = "-Dpurpur.disable-plugin-update-check=true";
+  argv[a++] = "-Dpurpur.watchdog.early-warning-delay=60000";
+  argv[a++] = "-Dpurpur.watchdog.early-warning-every=60000";
+  argv[a++] = "-Dsun.net.client.defaultConnectTimeout=5000";
+  argv[a++] = "-Dsun.net.client.defaultReadTimeout=5000";
+  argv[a++] = "-Dsun.zip.disableMemoryMapping=true";
+  argv[a++] = "-Djdk.attach.allowAttachSelf=true";
+  argv[a++] = "-Djna.nosys=true";
+  argv[a++] = "-Djna.nounpack=true";
+  argv[a++] = "-Djline.terminal=none";
+  argv[a++] = "-Xshare:off";
+  argv[a++] = "-XX:+UseG1GC";
+  argv[a++] = "-XX:+UseStringDeduplication";
+  argv[a++] = "-XX:-AlwaysPreTouch";
+  argv[a++] = "-XX:MaxGCPauseMillis=100";
+  argv[a++] = "-XX:+DisableExplicitGC";
+  argv[a++] = "-Dio.netty.recycler.maxCapacity=262144";
+  argv[a++] = "-Dio.netty.recycler.maxCapacityPerThread=1024";
+  argv[a++] = "-Dio.netty.allocator.maxOrder=9";
+  argv[a++] = "-Dio.netty.recycler.linkCapacity=1024";
+  argv[a++] = "-Dio.netty.allocator.type=pooled";
+  argv[a++] = "-Dio.netty.leakDetection.level=disabled";
+  argv[a++] = "-Dio.netty.noPreferDirect=false";
+  argv[a++] = "-Dio.netty.noUnsafe=false";
+  argv[a++] = "-XX:-UseContainerSupport";
+  argv[a++] = error_file_opt;
+
+  if (is_arg_file) {
+    argv[a++] = arg_file_opt;
+  } else {
+    argv[a++] = "-jar";
+    argv[a++] = (char *)jar_path;
+  }
+
+  argv[a++] = "nogui";
+
+  if (server_type && (strcmp(server_type, "PAPER") == 0 || strcmp(server_type, "PURPUR") == 0)) {
+    argv[a++] = "--port";
+    argv[a++] = port_str;
+  }
+
+  int argc = a;
   for (int i = 0; i < argc; i++) {
     LOGI("argv[%d] = %s", i, argv[i]);
   }
@@ -694,8 +717,8 @@ JNIEXPORT jint JNICALL Java_com_pocketcraft_server_NativeLauncher_launchJVM(
 
   jvm_is_shutting_down = 0;
 
-  const char *full_version = (strstr(jre_path, "26") != NULL) ? "26-internal" : FULL_VERSION;
-  const char *dot_version = (strstr(jre_path, "26") != NULL) ? "26" : DOT_VERSION;
+  const char *full_version = (strstr(jre_path, "25") != NULL) ? "25.0.3-internal" : ((strstr(jre_path, "26") != NULL) ? "26-internal" : FULL_VERSION);
+  const char *dot_version = (strstr(jre_path, "25") != NULL) ? "25" : ((strstr(jre_path, "26") != NULL) ? "26" : DOT_VERSION);
 
   LOGI("Calling JLI_Launch with version=%s (dot=%s)...", full_version, dot_version);
   result = launch(argc, argv, 0, NULL, 0, NULL, full_version, dot_version,

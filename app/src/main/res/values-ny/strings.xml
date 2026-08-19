@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Kuthamanga kwa Seva</string>
     <string name="server_stopped">Seva Yayimitsidwa</string>
     <string name="server_starting">Seva Yoyambira…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d osewera</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Nthawi yomaliza: %1$s</string>
-    <string name="announcement_title">Ndemanga yochokera ku PocketCraft</string>
-    <string name="announcement_body">PocketCraft ikhala yaulere kwa aliyense kwamuyaya, koma zina zili mu Pro kuti muthe kuthandizira mtengo wa seva yathu komanso mtengo wogwiritsa ntchito pulogalamu. Iwo ndi otchipa, ndi chifukwa chake iwo ali mmenemo, kuphatikizapo kuti mtengo kwambiri. 
+    <string name="announcement_title">Ndemanga yochokera ku PocketHost</string>
+    <string name="announcement_body">PocketHost ikhala yaulere kwa aliyense kwamuyaya, koma zina zili mu Pro kuti muthe kuthandizira mtengo wa seva yathu komanso mtengo wogwiritsa ntchito pulogalamu. Iwo ndi otchipa, ndi chifukwa chake iwo ali mmenemo, kuphatikizapo kuti mtengo kwambiri. 
  
  Ngati mukufuna kutithandiza, kapena kungofuna kucheza ndi gululi, lowani ku Discord yathu — tikufuna kukhala nanu.</string>
     <string name="announcement_join_discord">Lowani nawo Discord</string>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">சர்வர் இயங்குகிறது</string>
     <string name="server_stopped">சர்வர் நிறுத்தப்பட்டது</string>
     <string name="server_starting">சர்வர் தொடங்குகிறது…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d வீரர்கள்</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">இயக்க நேரம்: %1$s</string>
-    <string name="announcement_title">PocketCraft இடமிருந்து ஒரு குறிப்பு</string>
-    <string name="announcement_body">PocketCraft அனைவருக்கும் எப்போதும் இலவசம், ஆனால் சில அம்சங்கள் புரோவில் இருப்பதால், எங்கள் சேவையக செலவுகள் மற்றும் பயன்பாட்டின் இயக்க செலவுகளை நீங்கள் ஆதரிக்கலாம். அவை மலிவானவை, அதனால்தான் அவை அதிக மதிப்புக்கு உட்படுகின்றன. 
+    <string name="announcement_title">PocketHost இடமிருந்து ஒரு குறிப்பு</string>
+    <string name="announcement_body">PocketHost அனைவருக்கும் எப்போதும் இலவசம், ஆனால் சில அம்சங்கள் புரோவில் இருப்பதால், எங்கள் சேவையக செலவுகள் மற்றும் பயன்பாட்டின் இயக்க செலவுகளை நீங்கள் ஆதரிக்கலாம். அவை மலிவானவை, அதனால்தான் அவை அதிக மதிப்புக்கு உட்படுகின்றன. 
  
  நீங்கள் எங்களுக்கு உதவ விரும்பினால் அல்லது குழுவுடன் அரட்டையடிக்க விரும்பினால், எங்கள் டிஸ்கார்டில் சேரவும் — நாங்கள் உங்களைப் பெற விரும்புகிறோம்.</string>
     <string name="announcement_join_discord">டிஸ்கார்டில் சேரவும்</string>

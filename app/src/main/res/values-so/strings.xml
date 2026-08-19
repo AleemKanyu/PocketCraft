@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server-ku ordaya</string>
     <string name="server_stopped">Server-ku wuu istaagay</string>
     <string name="server_starting">Server ka bilaabaya…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d ciyaartoyda</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Wakhtiga shaqada: %1$s</string>
-    <string name="announcement_title">Qoraal ka yimid PocketCraft</string>
-    <string name="announcement_body">PocketCraft waligeed xor bay u ahaan doontaa qof walba, laakiin sifada qaar ayaa ku jira Pro si aad u taageerto kharashyada serferka iyo kharashyada socodsiinta abka. Way jaban yihiin, waana sababta ay halkaas ugu jiraan, oo ay ku jirto qiimo badan. 
+    <string name="announcement_title">Qoraal ka yimid PocketHost</string>
+    <string name="announcement_body">PocketHost waligeed xor bay u ahaan doontaa qof walba, laakiin sifada qaar ayaa ku jira Pro si aad u taageerto kharashyada serferka iyo kharashyada socodsiinta abka. Way jaban yihiin, waana sababta ay halkaas ugu jiraan, oo ay ku jirto qiimo badan. 
  
  Haddii aad jeclaan lahayd inaad na caawiso, ama aad rabto inaad la hadasho kooxda, ku biir Discord - waxaan jeclaan lahayn inaan ku haysano.</string>
     <string name="announcement_join_discord">Ku biir Discord</string>

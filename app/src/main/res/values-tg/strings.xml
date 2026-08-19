@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Сервер кор мекунад</string>
     <string name="server_stopped">Сервер қатъ шуд</string>
     <string name="server_starting">Сервер оғоз мешавад…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d бозигарон</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Вақти корӣ: %1$s</string>
-    <string name="announcement_title">Қайд аз PocketCraft</string>
-    <string name="announcement_body">PocketCraft барои ҳама абадӣ ройгон хоҳад буд, аммо баъзе хусусиятҳо дар Pro ҳастанд, то шумо тавонед хароҷоти сервер ва хароҷоти кори барномаро дастгирӣ кунед. Онҳо арзон ҳастанд ва аз ин рӯ онҳо дар он ҷо ҳастанд, аз ҷумла барои арзиши бештар. 
+    <string name="announcement_title">Қайд аз PocketHost</string>
+    <string name="announcement_body">PocketHost барои ҳама абадӣ ройгон хоҳад буд, аммо баъзе хусусиятҳо дар Pro ҳастанд, то шумо тавонед хароҷоти сервер ва хароҷоти кори барномаро дастгирӣ кунед. Онҳо арзон ҳастанд ва аз ин рӯ онҳо дар он ҷо ҳастанд, аз ҷумла барои арзиши бештар. 
  
  Агар шумо хоҳед, ки ба мо кӯмак расонед ё танҳо бо даста сӯҳбат кардан хоҳед, ба Discord-и мо ҳамроҳ шавед - мо мехоҳем, ки шумо бошем.</string>
     <string name="announcement_join_discord">Ба Discord ҳамроҳ шавед</string>

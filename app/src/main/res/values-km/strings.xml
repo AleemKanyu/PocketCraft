@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">ដំណើរការម៉ាស៊ីនមេ</string>
     <string name="server_stopped">ម៉ាស៊ីនមេបានឈប់</string>
     <string name="server_starting">ចាប់ផ្តើមម៉ាស៊ីនមេ…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">អ្នកលេង %1$d/%2$d</string>
     <string name="tps_label">TPS៖ %1$.1f</string>
     <string name="uptime_label">ម៉ោងធ្វើការ៖ %1$s</string>
-    <string name="announcement_title">កំណត់ចំណាំពី PocketCraft</string>
-    <string name="announcement_body">PocketCraft នឹងមិនគិតថ្លៃជារៀងរហូតសម្រាប់អ្នករាល់គ្នា ប៉ុន្តែមុខងារមួយចំនួនមាននៅក្នុង Pro ដើម្បីឱ្យអ្នកអាចផ្គត់ផ្គង់ការចំណាយលើម៉ាស៊ីនមេរបស់យើង និងតម្លៃដំណើរការកម្មវិធី។ ពួកគេមានតម្លៃថោក ហើយនោះជាមូលហេតុដែលពួកគេនៅទីនោះ រួមទាំងតម្លៃកាន់តែច្រើន។ 
+    <string name="announcement_title">កំណត់ចំណាំពី PocketHost</string>
+    <string name="announcement_body">PocketHost នឹងមិនគិតថ្លៃជារៀងរហូតសម្រាប់អ្នករាល់គ្នា ប៉ុន្តែមុខងារមួយចំនួនមាននៅក្នុង Pro ដើម្បីឱ្យអ្នកអាចផ្គត់ផ្គង់ការចំណាយលើម៉ាស៊ីនមេរបស់យើង និងតម្លៃដំណើរការកម្មវិធី។ ពួកគេមានតម្លៃថោក ហើយនោះជាមូលហេតុដែលពួកគេនៅទីនោះ រួមទាំងតម្លៃកាន់តែច្រើន។ 
  
  បើអ្នកចង់ជួយយើង ឬគ្រាន់តែចង់ជជែកជាមួយក្រុម ចូលរួម Discord របស់យើង — យើងចង់មានអ្នក។</string>
     <string name="announcement_join_discord">ចូលរួមជម្លោះ</string>

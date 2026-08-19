@@ -67,11 +67,11 @@ val fastReleaseBuild = providers.gradleProperty("pocketcraftFastRelease")
     .getOrElse(false)
 
 android {
-    namespace = "com.pocketcraft.server"
+    namespace = "com.pockethost.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.pocketcraft.server"
+        applicationId = "com.pockethost.app"
         minSdk = 26
         targetSdk = 36
         versionCode = autoVersionCode

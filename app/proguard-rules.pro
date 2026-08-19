@@ -25,21 +25,21 @@
 -keepnames class okhttp3.internal.publicsuffix.PublicSuffixDatabase
 
 # PocketCraft — Core models and services
--keep class com.pocketcraft.server.data.model.** { *; }
--keep class com.pocketcraft.server.service.** { *; }
--keep class com.pocketcraft.server.NativeLauncher { *; }
+-keep class com.pockethost.app.data.model.** { *; }
+-keep class com.pockethost.app.service.** { *; }
+-keep class com.pockethost.app.NativeLauncher { *; }
 
 # Server lifecycle — keep entire classes so broadcast routing and StateFlow
 # field names survive R8 minification in release builds.
--keep class com.pocketcraft.server.server.ServerLauncher { *; }
--keep class com.pocketcraft.server.server.ServerHostService { *; }
--keep class com.pocketcraft.server.server.ServerHostService$* { *; }
--keep class com.pocketcraft.server.server.ServerHostService$Companion { *; }
+-keep class com.pockethost.app.server.ServerLauncher { *; }
+-keep class com.pockethost.app.server.ServerHostService { *; }
+-keep class com.pockethost.app.server.ServerHostService$* { *; }
+-keep class com.pockethost.app.server.ServerHostService$Companion { *; }
 
 # Status detection — looksLikeServerReady, handleObservedOutputLine, onServerReady
 # must not be renamed; they are invoked by name via reflection in debug builds
 # and their string-match logic must survive intact in release.
--keepclassmembers class com.pocketcraft.server.server.ServerHostService {
+-keepclassmembers class com.pockethost.app.server.ServerHostService {
     private *** looksLikeServerReady(java.lang.String);
     private *** handleObservedOutputLine(java.lang.String, java.lang.String);
     private *** onServerReady();
@@ -49,24 +49,24 @@
 
 # ConsoleParser object — isDone(), parseTps(), parseJoin(), parseLeave() drive
 # all UI state transitions; the companion Regex fields must not be stripped.
--keep class com.pocketcraft.server.service.ConsoleParser { *; }
--keep class com.pocketcraft.server.service.ConsoleParser$* { *; }
+-keep class com.pockethost.app.service.ConsoleParser { *; }
+-keep class com.pockethost.app.service.ConsoleParser$* { *; }
 
 # ServerStateHolder outer class — Compose mutableStateOf fields (isRunning,
 # isStarting, serverJoinable, etc.) are accessed by Compose runtime via
 # reflection; keep all members of the outer class too.
--keep class com.pocketcraft.server.ui.screens.ServerStateHolder { *; }
--keep class com.pocketcraft.server.ui.screens.ServerStateHolder$* { *; }
--keep class com.pocketcraft.server.ui.screens.ServerStatus { *; }
+-keep class com.pockethost.app.ui.screens.ServerStateHolder { *; }
+-keep class com.pockethost.app.ui.screens.ServerStateHolder$* { *; }
+-keep class com.pockethost.app.ui.screens.ServerStatus { *; }
 
 # AppPreferences — eulaAccepted and other SharedPreferences wrappers are
 # accessed from both UI and service; ensure property names survive.
--keep class com.pocketcraft.server.data.preferences.AppPreferences { *; }
--keep class com.pocketcraft.server.data.preferences.AppPreferencesKeys { *; }
--keep class com.pocketcraft.server.data.preferences.AppPreferencesStore { *; }
+-keep class com.pockethost.app.data.preferences.AppPreferences { *; }
+-keep class com.pockethost.app.data.preferences.AppPreferencesKeys { *; }
+-keep class com.pockethost.app.data.preferences.AppPreferencesStore { *; }
 
 # ServerFileManager — prepareEula / isEulaAccepted must not be inlined away.
--keep class com.pocketcraft.server.service.ServerFileManager { *; }
+-keep class com.pockethost.app.service.ServerFileManager { *; }
 
 # Gson
 -keepattributes Signature
@@ -121,5 +121,5 @@
 -dontwarn com.google.protobuf.**
 
 # AppStrings keep rule for Gson translation mapping
--keep class com.pocketcraft.server.util.AppStrings { *; }
+-keep class com.pockethost.app.util.AppStrings { *; }
 

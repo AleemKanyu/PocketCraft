@@ -7,30 +7,34 @@
 
     <!-- Hexagonal container background -->
     <path
-        android:fillColor="#182A1D"
-        android:strokeColor="#34D399"
+        android:fillColor="#132418"
+        android:strokeColor="#10B981"
         android:strokeWidth="2.5"
         android:pathData="M54,20 L81,35 L81,67 L54,82 L27,67 L27,35 Z" />
 
     <!-- Status LEDs -->
     <path
-        android:fillColor="#10B981"
+        android:fillColor="#34D399"
         android:pathData="M42,32 A2,2 0 1,0 46,32 A2,2 0 1,0 42,32 Z" />
     <path
-        android:fillColor="#3B82F6"
-        android:pathData="M52,32 A2,2 0 1,0 56,32 A2,2 0 1,0 52,32 Z" />
+        android:fillColor="#38BDF8"
+        android:pathData="M50,32 A2,2 0 1,0 54,32 A2,2 0 1,0 50,32 Z" />
     <path
         android:fillColor="#F59E0B"
-        android:pathData="M62,32 A2,2 0 1,0 66,32 A2,2 0 1,0 62,32 Z" />
+        android:pathData="M58,32 A2,2 0 1,0 62,32 A2,2 0 1,0 58,32 Z" />
 
-    <!-- Monogram "PC" -->
-    <path
-        android:fillColor="#6EE7B7"
-        android:pathData="M35,42 L51,42 C56,42 56,53 51,53 L42,53 L42,70 L35,70 Z" />
-    <path
-        android:fillColor="#182A1D"
-        android:pathData="M42,47 L49,47 Q51,47 51,48.5 Q51,50 49,50 L42,50 Z" />
+    <!-- Stylized P & H -->
     <path
         android:fillColor="#34D399"
-        android:pathData="M73,46 L65,42 Q56,42 56,56 Q56,70 65,70 L73,66 L73,60 L66,62 Q62,62 62,56 Q62,50 66,50 L73,52 Z" />
+        android:pathData="M38,44 L46,44 L46,70 L38,70 Z" />
+    <path
+        android:fillColor="#6EE7B7"
+        android:pathData="M46,44 L56,44 Q62,44 62,51 Q62,58 56,58 L46,58 Z M46,49 L54,49 Q57,49 57,51 Q57,53 54,53 L46,53 Z" />
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M62,51 L70,51 L70,70 L62,70 Z" />
+    <path
+        android:fillColor="#60A5FA"
+        android:pathData="M52,58 L64,58 L64,63 L52,63 Z" />
+
 </vector>

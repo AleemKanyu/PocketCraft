@@ -13,14 +13,14 @@
                 android:startY="10"
                 android:endX="92"
                 android:endY="106"
-                android:startColor="#8CE35F"
-                android:centerColor="#4CAF50"
-                android:endColor="#2E7D32"
+                android:startColor="#1B382B"
+                android:centerColor="#0F241A"
+                android:endColor="#08140E"
                 android:type="linear" />
         </aapt:attr>
     </path>
 
     <path
         android:pathData="M0,68C18,75 36,79 56,79C77,79 95,75 108,69V108H0Z"
-        android:fillColor="#120A240F" />
+        android:fillColor="#1510B981" />
 </vector>

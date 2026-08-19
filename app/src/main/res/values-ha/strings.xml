@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server Gudu</string>
     <string name="server_stopped">An Kashe Sabar</string>
     <string name="server_starting">Ana Fara Sabar…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d yan wasa</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Lokaci: %1$s</string>
-    <string name="announcement_title">Bayanan kula daga PocketCraft</string>
-    <string name="announcement_body">PocketCraft zai kasance kyauta ga kowa da kowa, amma wasu fasalulluka suna cikin Pro kawai domin ku iya tallafawa farashin sabar mu da kuma farashin aikace-aikacen. Suna da arha, shi ya sa suke ciki, gami da wannan don ƙarin ƙima. 
+    <string name="announcement_title">Bayanan kula daga PocketHost</string>
+    <string name="announcement_body">PocketHost zai kasance kyauta ga kowa da kowa, amma wasu fasalulluka suna cikin Pro kawai domin ku iya tallafawa farashin sabar mu da kuma farashin aikace-aikacen. Suna da arha, shi ya sa suke ciki, gami da wannan don ƙarin ƙima. 
  
  Idan kuna son taimaka mana, ko kawai kuna son yin magana da ƙungiyar, ku shiga Discord ɗin mu - muna son samun ku.</string>
     <string name="announcement_join_discord">Shiga Discord</string>

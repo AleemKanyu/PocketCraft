@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Серверның эшләве</string>
     <string name="server_stopped">Сервер туктатылды</string>
     <string name="server_starting">Сервер башлана ...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d уенчылары</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Эш вакыты: __ВАРД__</string>
-    <string name="announcement_title">PocketCraft язмасы</string>
-    <string name="announcement_body">PocketCraft һәркем өчен мәңгегә бушлай булачак, ләкин кайбер функцияләр Pro серверында, сез безнең сервер чыгымнарын һәм кушымтаны эшләтеп җибәрү чыгымнарын тәэмин итә аласыз. Алар арзан, һәм шуңа күрә алар анда, шул исәптән кыйммәтрәк. 
+    <string name="announcement_title">PocketHost язмасы</string>
+    <string name="announcement_body">PocketHost һәркем өчен мәңгегә бушлай булачак, ләкин кайбер функцияләр Pro серверында, сез безнең сервер чыгымнарын һәм кушымтаны эшләтеп җибәрү чыгымнарын тәэмин итә аласыз. Алар арзан, һәм шуңа күрә алар анда, шул исәптән кыйммәтрәк. 
  
  Әгәр сез безгә булышырга телисез, яки команда белән аралашырга телисез икән, безнең Дискордка кушылыгыз - без сезнең белән булырга теләр идек.</string>
     <string name="announcement_join_discord">Дискордка кушылыгыз</string>

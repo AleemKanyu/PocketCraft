@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">სერვერი მუშაობს</string>
     <string name="server_stopped">სერვერი გაჩერდა</string>
     <string name="server_starting">სერვერი იწყება…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d მოთამაშეები</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">მუშაობის დრო: %1$s</string>
-    <string name="announcement_title">შენიშვნა PocketCraft-დან</string>
-    <string name="announcement_body">PocketCraft უფასო იქნება სამუდამოდ ყველასთვის, მაგრამ ზოგიერთი ფუნქცია Pro-შია მხოლოდ იმისათვის, რომ მხარი დაუჭიროთ ჩვენი სერვერის ხარჯებს და აპლიკაციის გაშვებულ ხარჯებს. ისინი იაფია და ამიტომაც არიან იქ, მათ შორის მეტი ღირებულებისთვის. 
+    <string name="announcement_title">შენიშვნა PocketHost-დან</string>
+    <string name="announcement_body">PocketHost უფასო იქნება სამუდამოდ ყველასთვის, მაგრამ ზოგიერთი ფუნქცია Pro-შია მხოლოდ იმისათვის, რომ მხარი დაუჭიროთ ჩვენი სერვერის ხარჯებს და აპლიკაციის გაშვებულ ხარჯებს. ისინი იაფია და ამიტომაც არიან იქ, მათ შორის მეტი ღირებულებისთვის. 
  
  თუ გსურთ დაგვეხმაროთ, ან უბრალოდ გსურთ გუნდთან საუბარი, შემოუერთდით ჩვენს Discord - ჩვენ სიამოვნებით გყავთ.</string>
     <string name="announcement_join_discord">შეუერთდი Discord</string>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Sunucu Çalışıyor</string>
     <string name="server_stopped">Sunucu Durduruldu</string>
     <string name="server_starting">Sunucu Başlatılıyor…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d oyuncuları</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Çalışma süresi: %1$s</string>
-    <string name="announcement_title">PocketCraft\'den bir not</string>
-    <string name="announcement_body">PocketCraft herkes için sonsuza kadar ücretsiz olacak, ancak sunucu maliyetlerimizi ve uygulama çalıştırma maliyetlerimizi destekleyebilmeniz için bazı özellikler Pro\'da yer alıyor. Ucuzlar ve bu yüzden oradalar, buna daha fazla değer de dahil. 
+    <string name="announcement_title">PocketHost\'den bir not</string>
+    <string name="announcement_body">PocketHost herkes için sonsuza kadar ücretsiz olacak, ancak sunucu maliyetlerimizi ve uygulama çalıştırma maliyetlerimizi destekleyebilmeniz için bazı özellikler Pro\'da yer alıyor. Ucuzlar ve bu yüzden oradalar, buna daha fazla değer de dahil. 
  
  Bize yardım etmek veya sadece ekiple sohbet etmek istiyorsanız Discord\'umuza katılın; sizi aramızda görmekten mutluluk duyarız.</string>
     <string name="announcement_join_discord">Discord\'a Katılın</string>

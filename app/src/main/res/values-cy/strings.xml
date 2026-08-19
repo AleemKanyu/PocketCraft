@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Rhedeg Gweinydd</string>
     <string name="server_stopped">Wedi Stopio\'r Gweinydd</string>
     <string name="server_starting">Gweinydd yn dechrau…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d chwaraewyr</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Uptime: %1$s</string>
-    <string name="announcement_title">Nodyn gan PocketCraft</string>
-    <string name="announcement_body">Bydd PocketCraft am ddim am byth i bawb, ond mae rhai nodweddion yn Pro dim ond er mwyn i chi allu cefnogi ein costau gweinydd a chostau rhedeg ap. Maent yn rhad, a dyna pam y maent i mewn yno, gan gynnwys hynny am fwy o werth. 
+    <string name="announcement_title">Nodyn gan PocketHost</string>
+    <string name="announcement_body">Bydd PocketHost am ddim am byth i bawb, ond mae rhai nodweddion yn Pro dim ond er mwyn i chi allu cefnogi ein costau gweinydd a chostau rhedeg ap. Maent yn rhad, a dyna pam y maent i mewn yno, gan gynnwys hynny am fwy o werth. 
  
  Os hoffech chi ein helpu ni, neu ddim ond eisiau sgwrsio â\'r tîm, ymunwch â\'n Discord - byddem wrth ein bodd yn eich cael chi.</string>
     <string name="announcement_join_discord">Ymuno â Discord</string>

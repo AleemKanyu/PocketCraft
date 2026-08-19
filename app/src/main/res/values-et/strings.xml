@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server töötab</string>
     <string name="server_stopped">Server peatus</string>
     <string name="server_starting">Serveri käivitamine…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d mängijat</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Tööaeg: %1$s</string>
-    <string name="announcement_title">Märkus rakendusest PocketCraft</string>
-    <string name="announcement_body">PocketCraft on kõigile igaveseks tasuta, kuid mõned funktsioonid on Pro-s ainult selleks, et saaksite toetada meie serverikulusid ja rakenduste kasutuskulusid. Need on odavad ja seetõttu on need seal sees, sealhulgas suurema väärtuse eest. 
+    <string name="announcement_title">Märkus rakendusest PocketHost</string>
+    <string name="announcement_body">PocketHost on kõigile igaveseks tasuta, kuid mõned funktsioonid on Pro-s ainult selleks, et saaksite toetada meie serverikulusid ja rakenduste kasutuskulusid. Need on odavad ja seetõttu on need seal sees, sealhulgas suurema väärtuse eest. 
  
  Kui soovite meid aidata või lihtsalt meeskonnaga vestelda, liituge meie discordiga – me ootame teid hea meelega.</string>
     <string name="announcement_join_discord">Liitu Discordiga</string>

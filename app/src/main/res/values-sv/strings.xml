@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server körs</string>
     <string name="server_stopped">Server stoppad</string>
     <string name="server_starting">Server startar...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d spelare</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Drifttid: %1$s</string>
-    <string name="announcement_title">En anteckning från PocketCraft</string>
-    <string name="announcement_body">PocketCraft kommer att vara gratis för alltid för alla, men vissa funktioner finns i Pro bara så att du kan stödja våra serverkostnader och appdriftskostnader. De är billiga, och det är därför de finns där, inklusive det för mer värde. 
+    <string name="announcement_title">En anteckning från PocketHost</string>
+    <string name="announcement_body">PocketHost kommer att vara gratis för alltid för alla, men vissa funktioner finns i Pro bara så att du kan stödja våra serverkostnader och appdriftskostnader. De är billiga, och det är därför de finns där, inklusive det för mer värde. 
  
  Om du vill hjälpa oss, eller bara vill chatta med teamet, gå med i vår Discord — vi vill gärna ha dig.</string>
     <string name="announcement_join_discord">Gå med i Discord</string>

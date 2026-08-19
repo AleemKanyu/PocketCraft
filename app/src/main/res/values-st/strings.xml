@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server Running</string>
     <string name="server_stopped">Seva e Emisitsoe</string>
     <string name="server_starting">Seva e Qala…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d libapali</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Nako ea ho qetela: %1$s</string>
-    <string name="announcement_title">Molaetsa ho tsoa ho PocketCraft</string>
-    <string name="announcement_body">PocketCraft e tla lokoloha ka ho sa feleng bakeng sa motho e mong le e mong, empa likarolo tse ling li ho Pro e le hore u tsebe ho tšehetsa litjeho tsa seva sa rona le litšenyehelo tsa ho tsamaisa lisebelisoa. Li theko e tlase, \'me ke ka lebaka leo li leng teng, ho kenyelletsa le bakeng sa boleng bo eketsehileng. 
+    <string name="announcement_title">Molaetsa ho tsoa ho PocketHost</string>
+    <string name="announcement_body">PocketHost e tla lokoloha ka ho sa feleng bakeng sa motho e mong le e mong, empa likarolo tse ling li ho Pro e le hore u tsebe ho tšehetsa litjeho tsa seva sa rona le litšenyehelo tsa ho tsamaisa lisebelisoa. Li theko e tlase, \'me ke ka lebaka leo li leng teng, ho kenyelletsa le bakeng sa boleng bo eketsehileng. 
  
  Haeba o batla ho re thusa, kapa o batla feela ho qoqa le sehlopha, ikopanye le Discord ya rona — re ka thabela ho ba le wena.</string>
     <string name="announcement_join_discord">Kena le Discord</string>

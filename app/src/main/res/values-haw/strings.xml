@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Ke holo nei ke kikowaena</string>
     <string name="server_stopped">Ua kū ke kikowaena</string>
     <string name="server_starting">Ke hoʻomaka nei ke kikowaena…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d mea pāʻani</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Manawa: %1$s</string>
-    <string name="announcement_title">He leka mai PocketCraft</string>
-    <string name="announcement_body">ʻAʻole manuahi ʻo PocketCraft no nā mea a pau, akā aia kekahi mau hiʻohiʻona i Pro i hiki iā ʻoe ke kākoʻo i kā mākou kikowaena koina a me nā koina holo polokalamu. He ʻuʻuku lākou, a ʻo ia ke kumu i loaʻa ai lākou i laila, me kēlā no ka waiwai ʻoi aku. 
+    <string name="announcement_title">He leka mai PocketHost</string>
+    <string name="announcement_body">ʻAʻole manuahi ʻo PocketHost no nā mea a pau, akā aia kekahi mau hiʻohiʻona i Pro i hiki iā ʻoe ke kākoʻo i kā mākou kikowaena koina a me nā koina holo polokalamu. He ʻuʻuku lākou, a ʻo ia ke kumu i loaʻa ai lākou i laila, me kēlā no ka waiwai ʻoi aku. 
  
  Inā makemake ʻoe e kōkua iā mākou, a makemake paha e kamaʻilio me ka hui, e hui pū me kā mākou Discord — makemake mākou e loaʻa iā ʻoe.</string>
     <string name="announcement_join_discord">E hui pū me Discord</string>

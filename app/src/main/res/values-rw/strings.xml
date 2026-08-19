@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Gukoresha Seriveri</string>
     <string name="server_stopped">Seriveri Yahagaritswe</string>
     <string name="server_starting">Seriveri Itangira…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d / __ Abakinnyi ba VARB__</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Igihe gikwiye: %1$s</string>
-    <string name="announcement_title">Inyandiko ya PocketCraft</string>
-    <string name="announcement_body">PocketCraft izaba yubuntu iteka kubantu bose, ariko ibintu bimwe na bimwe biri muri Pro kugirango ubashe gushyigikira ibiciro bya seriveri hamwe nigiciro cyo gukoresha porogaramu. Birahendutse, niyo mpamvu bahari, harimo nibyo kubiciro byinshi. 
+    <string name="announcement_title">Inyandiko ya PocketHost</string>
+    <string name="announcement_body">PocketHost izaba yubuntu iteka kubantu bose, ariko ibintu bimwe na bimwe biri muri Pro kugirango ubashe gushyigikira ibiciro bya seriveri hamwe nigiciro cyo gukoresha porogaramu. Birahendutse, niyo mpamvu bahari, harimo nibyo kubiciro byinshi. 
  
  Niba wifuza kudufasha, cyangwa ushaka gusa kuganira nikipe, injira muri Discord yacu - twifuza kukugira.</string>
     <string name="announcement_join_discord">Iyunge</string>

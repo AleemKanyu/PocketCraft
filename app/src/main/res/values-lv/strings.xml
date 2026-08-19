@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Serveris darbojas</string>
     <string name="server_stopped">Serveris apturēts</string>
     <string name="server_starting">Servera palaišana…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d spēlētāji</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Darbības laiks: %1$s</string>
-    <string name="announcement_title">Piezīme no PocketCraft</string>
-    <string name="announcement_body">PocketCraft būs visiem bez maksas, taču dažas Pro funkcijas ir pieejamas tikai tāpēc, lai jūs varētu atbalstīt mūsu servera izmaksas un lietotņu darbības izmaksas. Tie ir lēti, un tāpēc tie ir tur, tostarp par lielāku vērtību. 
+    <string name="announcement_title">Piezīme no PocketHost</string>
+    <string name="announcement_body">PocketHost būs visiem bez maksas, taču dažas Pro funkcijas ir pieejamas tikai tāpēc, lai jūs varētu atbalstīt mūsu servera izmaksas un lietotņu darbības izmaksas. Tie ir lēti, un tāpēc tie ir tur, tostarp par lielāku vērtību. 
  
  Ja vēlaties mums palīdzēt vai vienkārši tērzēt ar komandu, pievienojieties mūsu Discord — mēs priecāsimies par jums.</string>
     <string name="announcement_join_discord">Pievienojieties Discord</string>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">서버 실행 중</string>
     <string name="server_stopped">서버가 중지되었습니다</string>
     <string name="server_starting">서버 시작 중…</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d 선수</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">가동 시간: %1$s</string>
-    <string name="announcement_title">PocketCraft에서 보낸 메모</string>
-    <string name="announcement_body">PocketCraft은 모든 사람에게 영원히 무료로 제공되지만 서버 비용과 앱 실행 비용을 지원하기 위해 Pro에 일부 기능이 포함되어 있습니다. 가격이 저렴하기 때문에 더 많은 가치를 지닌 제품이 포함되어 있습니다. 
+    <string name="announcement_title">PocketHost에서 보낸 메모</string>
+    <string name="announcement_body">PocketHost은 모든 사람에게 영원히 무료로 제공되지만 서버 비용과 앱 실행 비용을 지원하기 위해 Pro에 일부 기능이 포함되어 있습니다. 가격이 저렴하기 때문에 더 많은 가치를 지닌 제품이 포함되어 있습니다. 
  
  우리를 돕고 싶거나 팀과 채팅하고 싶다면 Discord에 가입하세요. 우리는 여러분을 환영합니다.</string>
     <string name="announcement_join_discord">디스코드에 합류하세요</string>

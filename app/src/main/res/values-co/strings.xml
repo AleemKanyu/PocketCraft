@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server Running</string>
     <string name="server_stopped">Servitore fermatu</string>
     <string name="server_starting">Server Starting...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d ghjucatori</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">Uptime: %1$s</string>
-    <string name="announcement_title">Una nota da PocketCraft</string>
-    <string name="announcement_body">PocketCraft serà liberu per sempre per tutti, ma alcune funzioni sò in Pro solu per pudè sustene i nostri costi di u servitore è i costi di gestione di l\'app. Sò boni, è hè per quessa chì sò quì, cumpresu per più valore. 
+    <string name="announcement_title">Una nota da PocketHost</string>
+    <string name="announcement_body">PocketHost serà liberu per sempre per tutti, ma alcune funzioni sò in Pro solu per pudè sustene i nostri costi di u servitore è i costi di gestione di l\'app. Sò boni, è hè per quessa chì sò quì, cumpresu per più valore. 
  
  Sè vo vulete aiutà noi, o solu vulete chatter cù a squadra, unisci à u nostru Discord - ci piacerebbe avè voi.</string>
     <string name="announcement_join_discord">Unisci à Discord</string>

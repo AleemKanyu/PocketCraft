@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">සේවාදායක ධාවනය</string>
     <string name="server_stopped">සේවාදායකය නතර විය</string>
     <string name="server_starting">සේවාදායකය ආරම්භ වෙමින්...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d ක්‍රීඩකයන්</string>
     <string name="tps_label">TPS: %1$.1f</string>
     <string name="uptime_label">අතිකාල: %1$s</string>
-    <string name="announcement_title">PocketCraft වෙතින් සටහනක්</string>
-    <string name="announcement_body">PocketCraft සැමට සදහටම නොමිලේ වනු ඇත, නමුත් සමහර විශේෂාංග Pro හි ඇත, එවිට ඔබට අපගේ සේවාදායක පිරිවැය සහ යෙදුම් ධාවන වියදම් සඳහා සහය විය හැක. ඒවා ලාභදායී වන අතර, වැඩි වටිනාකමක් සඳහා ඒවා ඇතුළුව ඒවා එහි ඇත්තේ එබැවිනි. 
+    <string name="announcement_title">PocketHost වෙතින් සටහනක්</string>
+    <string name="announcement_body">PocketHost සැමට සදහටම නොමිලේ වනු ඇත, නමුත් සමහර විශේෂාංග Pro හි ඇත, එවිට ඔබට අපගේ සේවාදායක පිරිවැය සහ යෙදුම් ධාවන වියදම් සඳහා සහය විය හැක. ඒවා ලාභදායී වන අතර, වැඩි වටිනාකමක් සඳහා ඒවා ඇතුළුව ඒවා එහි ඇත්තේ එබැවිනි. 
  
  ඔබ අපට උදව් කිරීමට කැමති නම්, හෝ කණ්ඩායම සමඟ කතාබස් කිරීමට අවශ්‍ය නම්, අපගේ අසමගිය හා එක්වන්න — අපි ඔබ ලබා ගැනීමට කැමතියි.</string>
     <string name="announcement_join_discord">විසංවාදයට සම්බන්ධ වන්න</string>

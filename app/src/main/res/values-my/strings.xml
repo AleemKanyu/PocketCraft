@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketCraft</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">ဆာဗာ လုပ်ဆောင်ခြင်း။</string>
     <string name="server_stopped">ဆာဗာ ရပ်သွားသည်။</string>
     <string name="server_starting">ဆာဗာ စတင်နေသည်...</string>
@@ -21,8 +21,8 @@
     <string name="players_online">%1$d/%2$d ကစားသမားများ</string>
     <string name="tps_label">TPS- %1$.1f</string>
     <string name="uptime_label">အလုပ်ချိန်- %1$s</string>
-    <string name="announcement_title">PocketCraft မှ မှတ်စု</string>
-    <string name="announcement_body">PocketCraft သည် လူတိုင်းအတွက် ထာဝရအခမဲ့ဖြစ်လိမ့်မည်၊ သို့သော် အချို့သောအင်္ဂါရပ်များသည် ကျွန်ုပ်တို့၏ဆာဗာကုန်ကျစရိတ်နှင့် အက်ပ်လည်ပတ်မှုကုန်ကျစရိတ်များကို သင်ထောက်ပံ့ပေးနိုင်စေရန်အတွက် အချို့သောအင်္ဂါရပ်များသည် Pro တွင်ရှိသည်။ သူတို့ကစျေးပေါတယ်၊ ဒါကြောင့်သူတို့ကအဲဒီမှာရှိတယ်၊ အဲဒါကိုပိုပြီးတန်ဖိုးရှိစေတယ်။ 
+    <string name="announcement_title">PocketHost မှ မှတ်စု</string>
+    <string name="announcement_body">PocketHost သည် လူတိုင်းအတွက် ထာဝရအခမဲ့ဖြစ်လိမ့်မည်၊ သို့သော် အချို့သောအင်္ဂါရပ်များသည် ကျွန်ုပ်တို့၏ဆာဗာကုန်ကျစရိတ်နှင့် အက်ပ်လည်ပတ်မှုကုန်ကျစရိတ်များကို သင်ထောက်ပံ့ပေးနိုင်စေရန်အတွက် အချို့သောအင်္ဂါရပ်များသည် Pro တွင်ရှိသည်။ သူတို့ကစျေးပေါတယ်၊ ဒါကြောင့်သူတို့ကအဲဒီမှာရှိတယ်၊ အဲဒါကိုပိုပြီးတန်ဖိုးရှိစေတယ်။ 
  
  အကယ်၍ သင်သည် ကျွန်ုပ်တို့ကို ကူညီလိုပါက သို့မဟုတ် အဖွဲ့နှင့် ချတ်လုပ်လိုပါက ကျွန်ုပ်တို့၏ Discord တွင် ပါဝင်ပါ — သင့်အား ကျွန်ုပ်တို့ အလိုရှိသည်။</string>
     <string name="announcement_join_discord">Discord နှင့် ပူးပေါင်းပါ။</string>
