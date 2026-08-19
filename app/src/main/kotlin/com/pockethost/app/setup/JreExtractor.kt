@@ -37,8 +37,16 @@ object JreExtractor {
         displayName = "Java 21"
     )
 
+    val RUNTIME_JAVA_17 = RuntimeSpec(
+        id = "java17",
+        assetDir = "java/jre17",
+        extractedDirName = "jre17",
+        markerName = "jre_v17_extracted",
+        displayName = "Java 17"
+    )
+
     /** Last-resort fallback used in internal error paths. */
-    private val DEFAULT_RUNTIME = RUNTIME_JAVA_25
+    private val DEFAULT_RUNTIME = RUNTIME_JAVA_21
 
     /** Returns the best available runtime for the current device ABI. */
     fun defaultRuntimeForDevice(): RuntimeSpec {
@@ -46,32 +54,39 @@ object JreExtractor {
     }
 
     fun isAtLeast126(versionId: String): Boolean {
+        val minor = parseMinecraftMinor(versionId)
+        return minor != null && minor >= 26
+    }
+
+    fun parseMinecraftMinor(versionId: String): Int? {
         val trimmed = versionId.trim()
         if (trimmed.startsWith("1.")) {
             val parts = trimmed.removePrefix("1.").split('.', '-', '_')
-            val minor = parts.firstOrNull()?.toIntOrNull()
-            if (minor != null) {
-                return minor >= 26
-            }
+            return parts.firstOrNull()?.toIntOrNull()
         }
-        val firstPart = trimmed.substringBefore('.').toIntOrNull()
-        if (firstPart != null && firstPart >= 26) {
-            return true
-        }
-        return false
+        return trimmed.substringBefore('.').toIntOrNull()
     }
 
     fun runtimeForVersion(versionId: String): RuntimeSpec {
-        return if (isAtLeast126(versionId)) {
-            RUNTIME_JAVA_25
-        } else {
-            RUNTIME_JAVA_21
+        val minor = parseMinecraftMinor(versionId) ?: return RUNTIME_JAVA_21
+        return when {
+            minor >= 26 -> RUNTIME_JAVA_25
+            minor in 21..25 -> RUNTIME_JAVA_21
+            minor == 20 -> {
+                if (versionId.contains("1.20.5") || versionId.contains("1.20.6")) {
+                    RUNTIME_JAVA_21
+                } else {
+                    RUNTIME_JAVA_17
+                }
+            }
+            else -> RUNTIME_JAVA_17 // 1.7.10 - 1.19.x uses Java 17
         }
     }
 
     fun findExtractedRuntime(context: Context): RuntimeSpec? {
         return if (isExtracted(context, RUNTIME_JAVA_25)) RUNTIME_JAVA_25
         else if (isExtracted(context, RUNTIME_JAVA_21)) RUNTIME_JAVA_21
+        else if (isExtracted(context, RUNTIME_JAVA_17)) RUNTIME_JAVA_17
         else null
     }
 
@@ -203,10 +218,10 @@ object JreExtractor {
 
     fun launchCandidatesForVersion(versionId: String): List<RuntimeSpec> {
         val primary = runtimeForVersion(versionId)
-        return if (primary == RUNTIME_JAVA_25) {
-            listOf(RUNTIME_JAVA_25, RUNTIME_JAVA_21)
-        } else {
-            listOf(RUNTIME_JAVA_21, RUNTIME_JAVA_25)
+        return when (primary) {
+            RUNTIME_JAVA_25 -> listOf(RUNTIME_JAVA_25, RUNTIME_JAVA_21, RUNTIME_JAVA_17)
+            RUNTIME_JAVA_17 -> listOf(RUNTIME_JAVA_17, RUNTIME_JAVA_21, RUNTIME_JAVA_25)
+            else -> listOf(RUNTIME_JAVA_21, RUNTIME_JAVA_17, RUNTIME_JAVA_25)
         }
     }
 

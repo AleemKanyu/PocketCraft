@@ -415,9 +415,16 @@ class ServerLauncher(private val context: Context) {
                     }
                 } else {
                     result = runCatching {
-                        onOutput("[PocketHost] Launching in-process JVM on Android ${Build.VERSION.RELEASE}.")
+                        onOutput("[PocketHost] Launching in-process JVM (${resolvedRuntime.displayName}) on Android ${Build.VERSION.RELEASE}.")
                         NativeLauncher.hasInProcessJvmRunInThisProcess = true
-                        val bypassFlags = "-Djava.specification.version=26 -Djava.version=26.0.0 -DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true -DPurpur.IgnoreJavaVersion=true -Dpurpur.ignoreJavaVersion=true -Dpurpur.bypass-java-check=true -Dpurpur.ignore-java-version=true -Dpaper.oshi.disabled=true -Dpaper.disable-hardware-info=true -Doshi.os.disabled=true -Dpurpur.oshi.disabled=true -Dpurpur.disable-hardware-info=true"
+                        val bypassFlags = buildString {
+                            append("-DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true ")
+                            append("-DPurpur.IgnoreJavaVersion=true -Dpurpur.ignoreJavaVersion=true -Dpurpur.bypass-java-check=true -Dpurpur.ignore-java-version=true ")
+                            append("-Dpaper.oshi.disabled=true -Dpaper.disable-hardware-info=true -Doshi.os.disabled=true -Dpurpur.oshi.disabled=true -Dpurpur.disable-hardware-info=true")
+                            if (resolvedRuntime.id == "java25" || resolvedRuntime.id == "java26") {
+                                append(" -Djava.specification.version=26 -Djava.version=26.0.0")
+                            }
+                        }
                         runCatching { android.system.Os.setenv("JAVA_TOOL_OPTIONS", bypassFlags, true) }
                         runCatching { android.system.Os.setenv("_JAVA_OPTIONS", bypassFlags, true) }
                         NativeLauncher.launchJVM(
@@ -816,8 +823,6 @@ class ServerLauncher(private val context: Context) {
             "-Dpaper.anticheat.moved-too-quickly-threshold=100.0",
             "-Dpaper.watchdog.early-warning-delay=60000",
             "-Dpaper.watchdog.early-warning-every=60000",
-            "-Djava.specification.version=26",
-            "-Djava.version=26.0.0",
             "-DPaper.IgnoreJavaVersion=true",
             "-Dpaper.ignoreJavaVersion=true",
             "-Dpaper.bypass-java-check=true",
@@ -847,9 +852,26 @@ class ServerLauncher(private val context: Context) {
             "-XX:MaxGCPauseMillis=40",
             "-XX:+DisableExplicitGC",
         ).apply {
+            if (runtime.id == "java25" || runtime.id == "java26") {
+                add("-Djava.specification.version=26")
+                add("-Djava.version=26.0.0")
+            }
+
+            val gameVerProps = ServerPropertiesHelper.readProperties(File(serverDir))
+            val rawVer = gameVerProps.getProperty("pocketcraft-game-version", "1.21.1")
+            val mcMinor = com.pockethost.app.setup.JreExtractor.parseMinecraftMinor(rawVer) ?: 21
+            if (mcMinor < 17) {
+                add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+                add("--add-opens=java.base/java.lang.reflect=ALL-UNNAMED")
+                add("--add-opens=java.base/java.util=ALL-UNNAMED")
+                add("--add-opens=java.base/java.text=ALL-UNNAMED")
+                add("--add-opens=java.base/java.io=ALL-UNNAMED")
+                add("--add-opens=java.base/java.net=ALL-UNNAMED")
+                add("--add-opens=java.base/sun.misc=ALL-UNNAMED")
+                add("--add-opens=java.base/sun.security.util=ALL-UNNAMED")
+            }
+
             if (serverType == com.pockethost.app.data.model.ServerType.FABRIC) {
-                val gameVerProps = ServerPropertiesHelper.readProperties(File(serverDir))
-                val rawVer = gameVerProps.getProperty("pocketcraft-game-version", "1.21.1")
                 val cleanMcVer = CarpetModManager.cleanMcVersion(rawVer)
                 add("-Dfabric.gameVersion=$cleanMcVer")
                 add("-Dfabric.chunkSystem.workerThreads=2")

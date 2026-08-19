@@ -34,7 +34,27 @@ object BundledPluginInstaller {
         removeLegacyPlugins(pluginsDir)
         removeOutdatedBundledPlugins(context, pluginsDir)
 
+        val propsFile = File(serverDir, "server.properties")
+        val version = if (propsFile.exists()) {
+            val props = java.util.Properties().apply { runCatching { load(propsFile.inputStream()) } }
+            props.getProperty("pocketcraft-game-version", "1.21.1")
+        } else {
+            "1.21.1"
+        }
+        val minor = com.pockethost.app.setup.JreExtractor.parseMinecraftMinor(version) ?: 21
+        val isPre112 = minor < 12
+
         BUNDLED_PLUGINS.forEach { pluginName ->
+            val isBridgePlugin = pluginName.startsWith("Geyser", ignoreCase = true) || pluginName.startsWith("floodgate", ignoreCase = true)
+            if (isPre112 && isBridgePlugin) {
+                // Geyser & Floodgate do not support Minecraft versions < 1.12.2
+                val destFile = File(pluginsDir, pluginName)
+                if (destFile.exists()) {
+                    destFile.renameTo(File(pluginsDir, "$pluginName.disabled"))
+                }
+                return@forEach
+            }
+
             val destFile = File(pluginsDir, pluginName)
             val disabledFile = File(pluginsDir, "$pluginName.disabled")
             if (!disabledFile.exists() && (!destFile.exists() || !isZipValid(destFile))) {

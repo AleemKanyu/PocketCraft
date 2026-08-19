@@ -717,8 +717,12 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
 
   jvm_is_shutting_down = 0;
 
-  const char *full_version = (strstr(jre_path, "25") != NULL) ? "25.0.3-internal" : ((strstr(jre_path, "26") != NULL) ? "26-internal" : FULL_VERSION);
-  const char *dot_version = (strstr(jre_path, "25") != NULL) ? "25" : ((strstr(jre_path, "26") != NULL) ? "26" : DOT_VERSION);
+  const char *full_version = (strstr(jre_path, "25") != NULL) ? "25.0.3-internal" :
+                             ((strstr(jre_path, "26") != NULL) ? "26-internal" :
+                             ((strstr(jre_path, "17") != NULL) ? "17.0.1-internal" : FULL_VERSION));
+  const char *dot_version = (strstr(jre_path, "25") != NULL) ? "25" :
+                            ((strstr(jre_path, "26") != NULL) ? "26" :
+                            ((strstr(jre_path, "17") != NULL) ? "17" : DOT_VERSION));
 
   LOGI("Calling JLI_Launch with version=%s (dot=%s)...", full_version, dot_version);
   result = launch(argc, argv, 0, NULL, 0, NULL, full_version, dot_version,
