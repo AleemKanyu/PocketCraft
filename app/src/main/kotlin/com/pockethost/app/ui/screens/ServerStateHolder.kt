@@ -513,7 +513,7 @@ class ServerStateHolder(
         }
 
         val isRelayPending = tunnelConnecting && publicAddress.isNullOrBlank() && tunnelError == null
-        if (isJavaServerDone && !isRelayPending) {
+        if (isJavaServerDone) {
 
             isGeyserDone = true
             areSpawnChunksLoaded = true
@@ -535,9 +535,8 @@ class ServerStateHolder(
             // waiting for the async refreshAll() disk read to complete.
             updateServerUiState()
             refreshAll()
-        } else if (isJavaServerDone && isRelayPending) {
+        } else if (isRelayPending) {
             startupStatusMessage = "Opening internet relay..."
-            startupProgressPercent = 95
         }
     }
 
@@ -1787,8 +1786,7 @@ class ServerStateHolder(
             tunnelConnecting = false
         }
 
-        val isRelayPending = tunnelConnecting && publicAddress.isNullOrBlank() && tunnelError == null
-        if (isJavaServerDone && areSpawnChunksLoaded && !isRelayPending) {
+        if (isJavaServerDone) {
             isStarting = false
             isRestartingCycle = false
             isRunning = true
@@ -1796,6 +1794,7 @@ class ServerStateHolder(
             isRelayDone = true
             isJavaServerDone = true
             isGeyserDone = true
+            areSpawnChunksLoaded = true
             startupProgressPercent = 100
             startupStatusMessage = "Server ready!"
             stopStartupProgressTracking(reset = false)
@@ -1803,8 +1802,8 @@ class ServerStateHolder(
             startPeriodicLocationPolling()
             startPeriodicPingPolling()
             markJoinable()
-        } else if (isStarting || (isJavaServerDone && areSpawnChunksLoaded && isRelayPending)) {
-            // During active server boot or relay opening, NEVER adopt stale isRunning = true from disk state
+        } else if (isStarting) {
+            // During active server boot, NEVER adopt stale isRunning = true from disk state
             isRunning = false
             resetJoinable()
         } else if (!state.isStarting && isStarting && !isRunning && (lastStartRequestedRealtime > 0L && SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 180000L)) {
@@ -1899,19 +1898,19 @@ class ServerStateHolder(
         val processAlive = isServerProcessAlive()
 
         val isRelayPending = tunnelConnecting && publicAddress.isNullOrBlank() && tunnelError == null
-        // Server is ONLY truly RUNNING if Java server boot is done AND spawn chunks are loaded AND process is alive AND relay is not pending.
-        if (isJavaServerDone && areSpawnChunksLoaded && !isRelayPending && processAlive) {
+        // Server is truly RUNNING if Java server boot is done and process is alive.
+        if (isJavaServerDone && processAlive) {
             return PersistedRuntimeState(isRunning = true, publicAddress = address)
         }
 
-        val startingGracePeriod = (!isJavaServerDone || isRelayPending) && (isStarting || (lastStartRequestedRealtime > 0 && SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 120000L))
+        val startingGracePeriod = !isJavaServerDone && (isStarting || (lastStartRequestedRealtime > 0 && SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 120000L))
 
         if (startingGracePeriod && processAlive) {
             return PersistedRuntimeState(isStarting = true, publicAddress = address)
         }
 
         if (rawState == ServerHostService.RUNTIME_STATE_RUNNING || isRunning) {
-            if ((portOpen || processAlive) && isJavaServerDone && areSpawnChunksLoaded && !isRelayPending) {
+            if ((portOpen || processAlive) && isJavaServerDone) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
             if (startingGracePeriod && processAlive) {
@@ -1922,7 +1921,7 @@ class ServerStateHolder(
         }
 
         if (rawState == ServerHostService.RUNTIME_STATE_STARTING || isStarting || rawState.startsWith("STARTING")) {
-            if ((portOpen || processAlive) && isJavaServerDone && areSpawnChunksLoaded && !isRelayPending) {
+            if ((portOpen || processAlive) && isJavaServerDone) {
                 return PersistedRuntimeState(isRunning = true, publicAddress = address)
             }
             if (startingGracePeriod && processAlive) {

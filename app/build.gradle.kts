@@ -138,7 +138,14 @@ android {
             val keyAlias = configuredReleaseKeyAlias
             val keyPwd = configuredReleaseKeyPassword
 
-            storeFile = if (keystorePath.isNullOrBlank()) null else file(keystorePath)
+            val resolvedFile = if (keystorePath.isNullOrBlank()) {
+                null
+            } else {
+                val f = file(keystorePath)
+                if (f.exists()) f else rootProject.file(keystorePath)
+            }
+
+            storeFile = if (resolvedFile != null && resolvedFile.exists()) resolvedFile else null
             storePassword = storePwd
             this.keyAlias = keyAlias
             keyPassword = keyPwd
@@ -147,10 +154,11 @@ android {
 
     buildTypes {
         release {
-            signingConfig = if (configuredReleaseKeystorePath.isNullOrBlank()) {
-                signingConfigs.getByName("debug")
+            val releaseSigning = signingConfigs.getByName("release")
+            signingConfig = if (releaseSigning.storeFile != null && !configuredReleaseStorePassword.isNullOrBlank()) {
+                releaseSigning
             } else {
-                signingConfigs.getByName("release")
+                signingConfigs.getByName("debug")
             }
             
             isMinifyEnabled = !fastReleaseBuild
