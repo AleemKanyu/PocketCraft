@@ -548,13 +548,6 @@ private fun OnboardingScreen(
                                 errorText = permissionStepError,
                                 warningTick = permissionWarningTick
                             )
-                            7 -> OnboardingGoogleSignInScreen(
-                                signedInAccountEmail = signedInAccountEmail,
-                                onSignInClick = {
-                                    playHaptic()
-                                    googleSignInLauncher.launch(AccountManager.googleSignInIntent(context))
-                                }
-                            )
                             else -> OnboardingSetupScreen(
                                 serverName = setupServerName,
                                 onServerNameChange = {
@@ -769,7 +762,6 @@ private fun onboardingSteps(s: AppStrings): List<OnboardingStep> {
         OnboardingStep(s.onboardingStepCrossPlay),
         OnboardingStep(s.onboardingStepPickRegion),
         OnboardingStep(s.onboardingStepPermissions),
-        OnboardingStep(s.onboardingStepGoogleSignIn),
         OnboardingStep(s.onboardingStepSetup)
     )
 }

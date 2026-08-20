@@ -1444,7 +1444,7 @@ private fun BackupsManagementCard(
 
             if (account == null) {
                 Text(
-                    text = "Cloud backups are disabled. Connect Google account in Settings to enable.",
+                    text = "Local backups are stored securely on your device.",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
