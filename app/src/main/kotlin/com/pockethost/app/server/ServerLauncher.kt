@@ -958,7 +958,8 @@ class ServerLauncher(private val context: Context) {
                 .directory(File(serverDir))
                 .redirectErrorStream(true)
                 .apply {
-                    environment()["POJAV_NATIVEDIR"] = nativeLibDir
+                    environment()["POCKET_NATIVEDIR"] = nativeLibDir
+                    environment()["JAVA_NATIVEDIR"] = nativeLibDir
                     if (wrapperBin.exists()) {
                         environment()["LD_PRELOAD"] = wrapperBin.absolutePath
                     }
@@ -979,7 +980,8 @@ class ServerLauncher(private val context: Context) {
                 .directory(File(serverDir))
                 .redirectErrorStream(true)
                 .apply {
-                    environment()["POJAV_NATIVEDIR"] = nativeLibDir
+                    environment()["POCKET_NATIVEDIR"] = nativeLibDir
+                    environment()["JAVA_NATIVEDIR"] = nativeLibDir
                     if (wrapperBin.exists()) {
                         environment()["LD_PRELOAD"] = wrapperBin.absolutePath
                     }

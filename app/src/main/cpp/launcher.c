@@ -491,7 +491,8 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
   snprintf(path_env, sizeof(path_env), "%s/bin:%s", jre_path,
            getenv("PATH") ? getenv("PATH") : "");
 
-  setenv("POJAV_NATIVEDIR", native_lib_dir, 1);
+  setenv("POCKET_NATIVEDIR", native_lib_dir, 1);
+  setenv("JAVA_NATIVEDIR", native_lib_dir, 1);
   setenv("JAVA_HOME", jre_path, 1);
   setenv("HOME", server_dir, 1);
   setenv("TMPDIR", tmp_dir, 1);

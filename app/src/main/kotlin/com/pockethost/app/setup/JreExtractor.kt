@@ -139,8 +139,7 @@ object JreExtractor {
                 return
             }
             throw IllegalStateException(
-                "Missing app/src/main/assets/${runtime.assetDir}/. Copy the contents of " +
-                "PojavLauncher assets/components/jre-21/ or jre-25/ into that folder and rebuild."
+                "Missing app/src/main/assets/${runtime.assetDir}/. Please verify bundled assets."
             )
         }
 

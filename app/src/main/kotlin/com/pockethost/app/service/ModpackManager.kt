@@ -1418,8 +1418,8 @@ object ModpackManager {
                     environment()["HOME"] = serverDir.absolutePath
                     environment()["TMPDIR"] = serverDir.absolutePath
                     environment()["LD_LIBRARY_PATH"] = ldLibraryPath
-                    environment()["PATH"] = "${javaBin.parent}:${System.getenv("PATH").orEmpty()}"
-                    environment()["POJAV_NATIVEDIR"] = nativeLibDir
+                    environment()["POCKET_NATIVEDIR"] = nativeLibDir
+                    environment()["JAVA_NATIVEDIR"] = nativeLibDir
                     environment()["BIONIC_DISABLE_PTR_TAGGING"] = "1"
                 }
                 .start()

@@ -2872,7 +2872,7 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    "This permanently deletes your PocketCraft account access on this device and removes synced settings. This cannot be undone.",
+                                    "This permanently deletes your PocketHost account access on this device and removes synced settings. This cannot be undone.",
                                     fontSize = 13.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
