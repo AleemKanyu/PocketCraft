@@ -83,6 +83,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private var uiCommandListener: com.pockethost.app.broadcast.DashboardCommandListener? = null
+    private val notificationPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        Log.i("MainActivity", "POST_NOTIFICATIONS granted: $isGranted")
+    }
 
     override fun onStart() {
         super.onStart()
@@ -128,6 +133,12 @@ class MainActivity : ComponentActivity() {
 
         val onboardingCompleted = preferences.onboardingCompleted
         preferences.recordAppLaunch()
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
 
         if (onboardingCompleted && preferences.alwaysAliveBackground && !com.pockethost.app.server.ServerHostService.isServiceRunning(this)) {
             val listenerIntent = Intent(this, com.pockethost.app.server.ServerHostService::class.java).apply {
