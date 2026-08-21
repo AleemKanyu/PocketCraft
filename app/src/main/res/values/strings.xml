@@ -23,7 +23,7 @@
     <string name="uptime_label">Uptime: %1$s</string>
     <string name="discord_invite_url" translatable="false">https://discord.gg/7xw3Rd2vs2</string>
     <string name="announcement_title">A note from PocketHost</string>
-    <string name="announcement_body">PocketHost is 100% free and open for everyone. All server types, player limits, and features are completely unlocked.\n\nIf you would like to support hosting and development costs, you can make a voluntary donation in Settings or join our Discord community!</string>
+    <string name="announcement_body">PocketHost is 100% free and open for everyone. All server types, player limits, and features are completely unlocked.\n\nJoin our Discord community to connect with other players and get the latest updates!</string>
     <string name="announcement_join_discord">Join Discord</string>
     <string name="announcement_got_it">Got it</string>
 </resources>

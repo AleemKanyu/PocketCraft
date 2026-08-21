@@ -187,7 +187,7 @@ class BackupForegroundService : Service() {
         }
 
         val backupExcludeDirs = setOf(
-            "jre", "jre-21", "jre-runtime",
+            "jre", "jre-21", "jre-runtime", "jre17", "jre21", "jre25",
             "libraries", "bundler", "versions",
             "binaries", "cache", "logs",
             "crash-reports", "world_plugin_profiles"

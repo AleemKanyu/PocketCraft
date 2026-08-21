@@ -31,9 +31,9 @@ object JreExtractor {
 
     val RUNTIME_JAVA_21 = RuntimeSpec(
         id = "java21",
-        assetDir = "jre-runtime",
-        extractedDirName = "jre-runtime",
-        markerName = "jre_v4_extracted",
+        assetDir = "java/jre21",
+        extractedDirName = "jre21",
+        markerName = "jre_v21_extracted",
         displayName = "Java 21"
     )
 
@@ -190,7 +190,7 @@ object JreExtractor {
             marker.delete()
             throw IllegalStateException(
                 "Extracted runtime is incomplete. Expected lib/libjli.so and " +
-                    "lib/server/libjvm.so under assets/jre-runtime/."
+                    "lib/server/libjvm.so under assets/${runtime.assetDir}/."
             )
         }
 

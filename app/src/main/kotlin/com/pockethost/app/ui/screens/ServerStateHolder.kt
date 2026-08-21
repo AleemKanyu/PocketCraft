@@ -195,7 +195,7 @@ class ServerStateHolder(
     private val worldSetupRegistryKey = "pocketcraft-world-setup-list"
     private val singleServerPort = 25565
     private val serverSlotSystemFolderNames = setOf(
-        "plugins", "mods", "resourcepacks", "jre", "jre-21", "jre-runtime",
+        "plugins", "mods", "resourcepacks", "jre", "jre-21", "jre-runtime", "jre17", "jre21", "jre25",
         "logs", "cache", "config", "libraries", "binaries", "backups",
         "crash-reports", "bundler", "versions", "world_plugin_profiles",
         "server_photos"
@@ -205,7 +205,7 @@ class ServerStateHolder(
     // plugins/, mods/, resourcepacks/, config/, and all world folders are NOT in this list
     // and will always be included in the backup.
     private val backupExcludeDirs = setOf(
-        "jre", "jre-21", "jre-runtime",      // Java runtime — re-downloaded on next start
+        "jre", "jre-21", "jre-runtime", "jre17", "jre21", "jre25", // Java runtime — re-downloaded on next start
         "libraries", "bundler", "versions",   // Paper/Fabric internals — re-downloaded
         "binaries",                            // Cached server JARs — re-downloaded
         "cache",                               // Runtime caches — regenerated
@@ -4775,7 +4775,7 @@ class ServerStateHolder(
         val worldsBaseDir = File(appContext.filesDir, "servers/worlds").also { it.mkdirs() }
 
         val systemFolderNames = setOf(
-            "plugins", "jre", "jre-21", "jre-runtime", "logs", "cache", "config", "libraries", 
+            "plugins", "jre", "jre-21", "jre-runtime", "jre17", "jre21", "jre25", "logs", "cache", "config", "libraries", 
             "binaries", "backups", "crash-reports", "bundler", "versions"
         )
 
@@ -4944,7 +4944,7 @@ class ServerStateHolder(
     private fun migrateFlatLayoutToNested(serverDir: File, nestedDir: File) {
         val skip = setOf("server.properties", "eula.txt", "usercache.json",
             "ops.json", "whitelist.json", "banned-players.json", "banned-ips.json")
-        val systemDirs = setOf("plugins", "logs", "cache", "jre", "jre-21", "jre-runtime",
+        val systemDirs = setOf("plugins", "logs", "cache", "jre", "jre-21", "jre-runtime", "jre17", "jre21", "jre25",
             "config", "libraries", "binaries", "backups", "crash-reports", "bundler", "versions")
         serverDir.listFiles()?.forEach { file ->
             val name = file.name
@@ -4992,7 +4992,7 @@ class ServerStateHolder(
     ) {
         val worldsBaseDir = File(appContext.filesDir, "servers/worlds").also { it.mkdirs() }
         val systemFolderNames = setOf(
-            "plugins", "jre", "jre-21", "jre-runtime", "logs", "cache", "config", "libraries", 
+            "plugins", "jre", "jre-21", "jre-runtime", "jre17", "jre21", "jre25", "logs", "cache", "config", "libraries", 
             "binaries", "backups", "crash-reports", "bundler", "versions"
         )
         val allDirs = worldsBaseDir.listFiles()?.filter { 

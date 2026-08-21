@@ -779,10 +779,7 @@ fun PocketHostApp(
             hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
         if (popupShownThisLaunch) return@LaunchedEffect
-        preferences.donationReminderLastShownLaunchCount = preferences.appLaunchCount
-        showDonationReminderDialog = true
-        pendingDonationReminderDialog = false
-        popupShownThisLaunch = true
+        // Voluntary donation popups disabled
     }
 
     LaunchedEffect(
@@ -1995,30 +1992,6 @@ fun PocketHostApp(
                 showPromotionDialog = false
                 activePromotion = null
                 showPremiumUpgradeDialog = true
-            }
-        )
-    }
-
-    if (showDonationReminderDialog) {
-        PromotionBottomSheet(
-            title = "Support PocketHost",
-            body = "PocketHost is 100% free and community supported. We never lock features behind paywalls. If you enjoy using PocketHost, please consider a voluntary monthly donation to help fund server relays, high-speed download mirrors, and ongoing updates.",
-            ctaText = "DONATE / SUPPORT",
-            iconEmoji = "❤️",
-            onDismissRequest = {
-                showDonationReminderDialog = false
-            },
-            onCtaClick = {
-                showDonationReminderDialog = false
-                showPremiumUpgradeDialog = true
-            }
-        )
-    }
-
-    if (showPremiumUpgradeDialog) {
-        PremiumUpgradeBottomSheet(
-            onDismissRequest = {
-                showPremiumUpgradeDialog = false
             }
         )
     }

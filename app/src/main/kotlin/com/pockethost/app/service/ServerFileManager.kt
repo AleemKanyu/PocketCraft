@@ -241,7 +241,7 @@ object ServerFileManager {
     private fun migrateFlatLayoutToNested(serverDir: File, nestedDir: File) {
         val skip = setOf("server.properties", "eula.txt", "usercache.json",
             "ops.json", "whitelist.json", "banned-players.json", "banned-ips.json")
-        val systemDirs = setOf("plugins", "logs", "cache", "jre", "jre-21", "jre-runtime",
+        val systemDirs = setOf("plugins", "logs", "cache", "jre", "jre-21", "jre-runtime", "jre17", "jre21", "jre25",
             "config", "libraries", "binaries", "backups", "crash-reports", "bundler", "versions")
         serverDir.listFiles()?.forEach { file ->
             val name = file.name

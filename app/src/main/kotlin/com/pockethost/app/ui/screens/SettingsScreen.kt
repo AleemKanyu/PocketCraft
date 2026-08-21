@@ -126,6 +126,7 @@ data class SettingsState(
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     stateHolder: ServerStateHolder,
@@ -151,7 +152,7 @@ fun SettingsScreen(
     
     val activeS = LocalAppStrings.current
     var activeTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf(activeS.settingsServer, activeS.settingsApp, "Supporters", activeS.settingsAbout)
+    val tabs = listOf(activeS.settingsServer, activeS.settingsApp, activeS.settingsAbout)
     var firebaseUser by remember { mutableStateOf(AccountManager.currentUser()) }
     var signedInAccount by remember { mutableStateOf<GoogleSignInAccount?>(null) }
     LaunchedEffect(Unit) {
@@ -788,12 +789,7 @@ fun SettingsScreen(
                             min = 1, max = 50,
                             value = currentState.config.maxPlayers,
                             onValueChange = { 
-                                if (it > 15 && !isPremium) {
-                                    showPremiumBottomSheet = true
-                                    currentState = currentState.copy(config = currentState.config.copy(maxPlayers = 15))
-                                } else {
-                                    currentState = currentState.copy(config = currentState.config.copy(maxPlayers = it))
-                                }
+                                currentState = currentState.copy(config = currentState.config.copy(maxPlayers = it))
                             }
                         )
                     }
@@ -960,12 +956,8 @@ fun SettingsScreen(
                             selected = currentMobTheme.id,
                             onSelected = { selectedId ->
                                 val selectedTheme = MobTheme.fromId(selectedId)
-                                if (selectedTheme == MobTheme.CUSTOM && !isPremium) {
-                                    showPremiumBottomSheet = true
-                                } else {
-                                    onMobThemeChange(selectedTheme)
-                                    playHaptic()
-                                }
+                                onMobThemeChange(selectedTheme)
+                                playHaptic()
                             }
                         )
                     }
@@ -976,11 +968,7 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    if (isPremium) {
-                                        showThemeMaker = true
-                                    } else {
-                                        showPremiumBottomSheet = true
-                                    }
+                                    showThemeMaker = true
                                 },
                             contentPadding = PaddingValues(vertical = 16.dp)
                         ) {
@@ -1068,30 +1056,11 @@ fun SettingsScreen(
                             icon = "💬",
                             label = "Floating Chat on All Screens",
                             description = "Enable access to game chat overlay from any screen",
-                            checked = isFloatingChatFlowState && isPremium,
+                            checked = isFloatingChatFlowState,
                             onToggle = { enabled ->
-                                if (!isPremium) {
-                                    showPremiumBottomSheet = true
-                                } else {
-                                    preferences.isFloatingChatEnabled = enabled
-                                    scope.launch {
-                                        AppPreferencesStore.setFloatingChatEnabled(context, enabled)
-                                        if (firebaseUser != null) {
-                                            try {
-                                                DriveBackupManager.uploadAppSettingsToFirebase(context, firebaseUser!!)
-                                            } catch (e: Exception) {
-                                                // Silent fail
-                                            }
-                                        }
-                                        val activeAcc = signedInAccount
-                                        if (activeAcc != null) {
-                                            try {
-                                                DriveBackupManager.uploadAppSettings(context, activeAcc)
-                                            } catch (e: Exception) {
-                                                // Silent fail
-                                            }
-                                        }
-                                    }
+                                preferences.isFloatingChatEnabled = enabled
+                                scope.launch {
+                                    AppPreferencesStore.setFloatingChatEnabled(context, enabled)
                                 }
                                 playHaptic()
                             }
@@ -1244,263 +1213,8 @@ fun SettingsScreen(
                 }
             }
 
-            // --- TAB 2: ACCOUNT ---
+            // --- TAB 2: ABOUT ---
             if (activeTab == 2) {
-                item {
-                    AnimatedEntranceContainer(index = 0) {
-                        SettingsSection("VOLUNTARY DONATIONS", Icons.Default.Favorite, isFirstSection = true)
-                    }
-                }
-                item {
-                    AnimatedEntranceContainer(index = 1) {
-                        GameCard(modifier = Modifier.fillMaxWidth()) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(
-                                            Brush.verticalGradient(
-                                                listOf(
-                                                    Color(0xFFE91E63).copy(alpha = 0.20f),
-                                                    PocketColors.PrimaryMuted.copy(alpha = 0.30f)
-                                                )
-                                            )
-                                        )
-                                        .border(1.dp, Color(0xFFE91E63).copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Favorite,
-                                        contentDescription = null,
-                                        tint = Color(0xFFE91E63),
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-
-                                val hasActiveDonation = entitlement.tier != PremiumTier.NONE && entitlement.tier != null
-
-                                AccountStatusChip(
-                                    label = if (hasActiveDonation) {
-                                        if (entitlement.isSupportive) "Champion Supporter" else "Supporter Active"
-                                    } else "Community Funded",
-                                    tone = if (hasActiveDonation) PocketColors.Primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-
-                                Text(
-                                    text = if (hasActiveDonation) "Thank You for Supporting!" else "Support PocketHost",
-                                    modifier = Modifier.fillMaxWidth(),
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 16.sp,
-                                    fontFamily = Monocraft,
-                                    textAlign = TextAlign.Center
-                                )
-
-                                if (hasActiveDonation) {
-                                    val expiryDate = entitlement.expiresAtEpochMillis?.let {
-                                        val date = java.util.Date(it)
-                                        java.text.SimpleDateFormat("MMMM dd, yyyy", java.util.Locale.getDefault()).format(date)
-                                    }
-                                    if (expiryDate != null) {
-                                        Text(
-                                            text = "Next renewal: $expiryDate",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = PocketColors.Primary,
-                                            fontFamily = Monocraft,
-                                            textAlign = TextAlign.Center,
-                                            modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
-                                        )
-                                    }
-                                }
-
-                                Text(
-                                    text = "PocketHost is 100% free and open-source for everyone. We do not lock features behind paywalls. Your voluntary monthly contribution helps pay for server relays, high-speed download mirrors, and ongoing updates.",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    lineHeight = 16.sp,
-                                    textAlign = TextAlign.Center
-                                )
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    DuoButton(
-                                        text = "DONATE ₹299/MO",
-                                        onClick = {
-                                            val activity = context as? Activity
-                                            if (activity != null) {
-                                                showPremiumBottomSheet = true
-                                            } else {
-                                                onMessage("Could not open donation sheet.")
-                                            }
-                                        },
-                                        variant = DuoButtonVariant.Primary,
-                                        modifier = Modifier.weight(1f),
-                                        minHeight = 40.dp
-                                    )
-                                    DuoButton(
-                                        text = "DONATE ₹499/MO",
-                                        onClick = {
-                                            val activity = context as? Activity
-                                            if (activity != null) {
-                                                showPremiumBottomSheet = true
-                                            } else {
-                                                onMessage("Could not open donation sheet.")
-                                            }
-                                        },
-                                        variant = DuoButtonVariant.Warning,
-                                        modifier = Modifier.weight(1f),
-                                        minHeight = 40.dp
-                                    )
-                                }
-
-                                if (hasActiveDonation) {
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    TextButton(
-                                        onClick = {
-                                            val subscriptionSku = when {
-                                                entitlement.isSupportive -> BillingManager.PRODUCT_SUPPORTIVE
-                                                else -> BillingManager.PRODUCT_PREMIUM
-                                            }
-                                            runCatching {
-                                                val intent = Intent(Intent.ACTION_VIEW).apply {
-                                                    data = Uri.parse("https://play.google.com/store/account/subscriptions?package=${context.packageName}&sku=$subscriptionSku")
-                                                }
-                                                context.startActivity(intent)
-                                            }.onFailure {
-                                                runCatching {
-                                                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                                                        data = Uri.parse("https://play.google.com/store/account/subscriptions")
-                                                    }
-                                                    context.startActivity(intent)
-                                                }.onFailure {
-                                                    onMessage("Could not open Play Store subscription page.")
-                                                }
-                                            }
-                                        }
-                                    ) {
-                                        Text("Manage Contribution in Google Play", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(10.dp))
-                                val supporterDiscordId by AppPreferencesStore.supporterDiscordIdFlow(context).collectAsState(initial = "")
-                                var showDiscordIdDialog by remember { mutableStateOf(false) }
-
-                                if (showDiscordIdDialog) {
-                                    var tempDiscordId by remember { mutableStateOf(supporterDiscordId) }
-                                    AlertDialog(
-                                        onDismissRequest = { showDiscordIdDialog = false },
-                                        title = { Text("Discord Supporter Perks", fontFamily = Monocraft, fontWeight = FontWeight.Bold) },
-                                        text = {
-                                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                Text("Enter your Discord username or ID to claim your exclusive Supporter role and perks in our official Discord server.")
-                                                OutlinedTextField(
-                                                    value = tempDiscordId,
-                                                    onValueChange = { tempDiscordId = it },
-                                                    label = { Text("Discord Username / ID") },
-                                                    placeholder = { Text("e.g. username or username#1234") },
-                                                    singleLine = true,
-                                                    modifier = Modifier.fillMaxWidth()
-                                                )
-                                            }
-                                        },
-                                        confirmButton = {
-                                            Button(
-                                                onClick = {
-                                                    scope.launch {
-                                                        AppPreferencesStore.setSupporterDiscordId(context, tempDiscordId)
-                                                        preferences.supporterDiscordId = tempDiscordId
-                                                    }
-                                                    showDiscordIdDialog = false
-                                                    onMessage("Discord ID saved! Join our Discord to claim your role.")
-                                                    runCatching {
-                                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.gg/7xw3Rd2vs2"))
-                                                        context.startActivity(intent)
-                                                    }
-                                                }
-                                            ) {
-                                                Text("Save & Join Discord")
-                                            }
-                                        },
-                                        dismissButton = {
-                                            TextButton(onClick = { showDiscordIdDialog = false }) {
-                                                Text("Cancel")
-                                            }
-                                        }
-                                    )
-                                }
-
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(
-                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                            shape = RoundedCornerShape(8.dp)
-                                        )
-                                        .clickable { showDiscordIdDialog = true }
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = if (supporterDiscordId.isNotBlank()) "Linked Discord: $supporterDiscordId" else "Claim Discord Supporter Role",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            fontFamily = Monocraft,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = if (supporterDiscordId.isNotBlank()) "Tap to update your Discord ID" else "Link your Discord username to get supporter perks",
-                                            fontSize = 10.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Text(
-                                        text = if (supporterDiscordId.isNotBlank()) "EDIT ✏️" else "LINK 🔗",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = PocketColors.Primary
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (entitlement.isPremium && !entitlement.isSupportive) {
-                    item {
-                        AnimatedEntranceContainer(index = 4) {
-                            ProDiscordCard(
-                                entitlement = entitlement,
-                                onMessage = onMessage
-                            )
-                        }
-                    }
-                }
-
-                if (entitlement.isSupportive) {
-                    item {
-                        AnimatedEntranceContainer(index = 4) {
-                            SupportiveToolsCard(
-                                entitlement = entitlement,
-                                onMessage = onMessage
-                            )
-                        }
-                    }
-                }
-            }
-
-            // --- TAB 3: ABOUT ---
-            if (activeTab == 3) {
                 item {
                     AnimatedEntranceContainer(index = 0) {
                         SettingsSection("FIND US ONLINE", Icons.Default.Share, isFirstSection = true)
@@ -1876,12 +1590,10 @@ fun SettingsScreen(
                 }
             }
         }
-    }
-    android.util.Log.d("POCKETCRAFT_TEST", "SettingsScreen after Box block is composed! showSignOutConfirm=$showSignOutConfirm")
+    android.util.Log.d("POCKETCRAFT_TEST", "SettingsScreen after Box block is composed!")
 
     // Storage Manager Bottom Sheet
     if (showStorageManager) {
-        @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { showStorageManager = false },
             containerColor = MaterialTheme.colorScheme.surface
@@ -1987,7 +1699,6 @@ fun SettingsScreen(
     }
 
     if (showClearStorageManager) {
-        @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { showClearStorageManager = false },
             containerColor = MaterialTheme.colorScheme.surface
@@ -2095,455 +1806,9 @@ fun SettingsScreen(
         }
     }
 
-    if (showSignOutConfirm) {
-        android.util.Log.d("POCKETCRAFT_TEST", "Sign Out Dialog block is composed!")
-            androidx.compose.ui.window.Dialog(
-                onDismissRequest = { 
-                    android.util.Log.d("POCKETCRAFT_TEST", "Sign Out Dialog onDismissRequest called")
-                    showSignOutConfirm = false 
-                },
-                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.4f))
-                        .clickable { 
-                            android.util.Log.d("POCKETCRAFT_TEST", "Sign Out Dialog Box scrim clicked")
-                            showSignOutConfirm = false 
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = showSignOutConfirm,
-                        enter = androidx.compose.animation.fadeIn(tween(300)) + androidx.compose.animation.scaleIn(
-                            animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-                            initialScale = 0.9f
-                        ),
-                        exit = androidx.compose.animation.fadeOut(tween(200)) + androidx.compose.animation.scaleOut(
-                            targetScale = 0.9f
-                        )
-                    ) {
-                        Surface(
-                            modifier = Modifier
-                                .width(280.dp)
-                                .clickable(
-                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                    indication = null
-                                ) {}
-                                .border(1.dp, PocketColors.Primary.copy(alpha = 0.15f), RoundedCornerShape(20.dp)),
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 6.dp
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(20.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                Text(
-                                    "Sign Out",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp,
-                                    fontFamily = Monocraft,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    "Are you sure you want to sign out? You will need to log back in to access cloud backups.",
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                    lineHeight = 18.sp
-                                )
-                                
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    DuoButton(
-                                        text = "CANCEL",
-                                        onClick = { showSignOutConfirm = false },
-                                        variant = DuoButtonVariant.Secondary,
-                                        modifier = Modifier.weight(1f),
-                                        minHeight = 36.dp
-                                    )
-                                    DuoButton(
-                                        text = "SIGN OUT",
-                                        onClick = {
-                                            showSignOutConfirm = false
-                                            // signOut calls onComplete() synchronously after
-                                            // Firebase.signOut(), so state is guaranteed to update.
-                                            AccountManager.signOut(context) {
-                                                firebaseUser = null
-                                                signedInAccount = null
-                                                passwordInput = ""
-                                                accountActionError = ""
-                                                driveStatus = "Signed out successfully."
-                                            }
-                                        },
-                                        variant = DuoButtonVariant.Danger,
-                                        modifier = Modifier.weight(1f),
-                                        minHeight = 36.dp
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        // ── Email Verification Dialog (shown after account creation) ─────────
-        if (showEmailVerifyDialog) {
-            androidx.compose.ui.window.Dialog(
-                onDismissRequest = { if (!emailVerifyBusy) showEmailVerifyDialog = false },
-                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.5f))
-                        .clickable { if (!emailVerifyBusy) showEmailVerifyDialog = false },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        modifier = Modifier
-                            .width(310.dp)
-                            .clickable(
-                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                indication = null
-                            ) {}
-                            .border(1.dp, PocketColors.Primary.copy(alpha = 0.25f), RoundedCornerShape(20.dp)),
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 8.dp
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(androidx.compose.foundation.shape.CircleShape)
-                                    .background(PocketColors.Primary.copy(alpha = 0.12f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.MarkEmailRead,
-                                    contentDescription = null,
-                                    tint = PocketColors.Primary,
-                                    modifier = Modifier.size(26.dp)
-                                )
-                            }
-                            Text(
-                                "Verify your email",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 17.sp,
-                                fontFamily = Monocraft
-                            )
-                            Text(
-                                "We sent a verification link to ${firebaseUser?.email.orEmpty()}. Open the link in your email app, then tap \"I've Verified\" below. If you don't see it, check your spam folder too.",
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                lineHeight = 18.sp
-                            )
-                            if (emailVerifyError.isNotBlank()) {
-                                Text(
-                                    emailVerifyError,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.error,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                            }
-                            DuoButton(
-                                text = if (emailVerifyBusy) "CHECKING..." else "I'VE VERIFIED",
-                                enabled = !emailVerifyBusy,
-                                onClick = {
-                                    emailVerifyBusy = true
-                                    emailVerifyError = ""
-                                    AccountManager.reloadAndCheckVerified { result ->
-                                        result
-                                            .onSuccess { verified ->
-                                                if (verified) {
-                                                    showEmailVerifyDialog = false
-                                                    driveStatus = "Email verified! Account ready."
-                                                    scope.launch {
-                                                        try {
-                                                            firebaseUser?.let {
-                                                                DriveBackupManager.uploadAppSettingsToFirebase(context, it)
-                                                            }
-                                                        } catch (_: Exception) {}
-                                                    }
-                                                } else {
-                                                    emailVerifyError = "Email not verified yet. Please click the link in your inbox first."
-                                                }
-                                            }
-                                            .onFailure { emailVerifyError = it.message ?: "Could not check verification status." }
-                                        emailVerifyBusy = false
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                minHeight = 44.dp
-                            )
-                            DuoButton(
-                                text = "RESEND EMAIL",
-                                variant = DuoButtonVariant.Secondary,
-                                enabled = !emailVerifyBusy,
-                                onClick = {
-                                    emailVerifyBusy = true
-                                    AccountManager.sendEmailVerification { result ->
-                                        emailVerifyError = result.fold(
-                                            onSuccess = { "Verification email resent to ${firebaseUser?.email.orEmpty()}." },
-                                            onFailure = { it.message ?: "Could not resend email." }
-                                        )
-                                        emailVerifyBusy = false
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                minHeight = 40.dp
-                            )
-                        }
-                    }
-                }
-            }
-        }
 
-        // ── Delete Account: Password Re-Auth Dialog ────────────────────────────
-        if (showDeleteReAuthDialog) {
-            androidx.compose.ui.window.Dialog(
-                onDismissRequest = { if (!authBusy) showDeleteReAuthDialog = false },
-                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.5f))
-                        .clickable { if (!authBusy) showDeleteReAuthDialog = false },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        modifier = Modifier
-                            .width(310.dp)
-                            .clickable(
-                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                indication = null
-                            ) {}
-                            .border(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.22f), RoundedCornerShape(20.dp)),
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 8.dp
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(androidx.compose.foundation.shape.CircleShape)
-                                    .background(MaterialTheme.colorScheme.errorContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.DeleteForever,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(26.dp)
-                                )
-                            }
-                            Text(
-                                "Confirm Deletion",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 17.sp,
-                                fontFamily = Monocraft,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            Text(
-                                "This permanently deletes your account, synced settings, and cloud backups. Enter your password to confirm.",
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                lineHeight = 18.sp
-                            )
-                            ThemedAccountField(
-                                value = deleteReAuthPassword,
-                                onValueChange = { deleteReAuthPassword = it },
-                                label = "Password",
-                                leadingIcon = Icons.Default.Lock,
-                                trailingIcon = if (deleteReAuthPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                onTrailingIconClick = { deleteReAuthPasswordVisible = !deleteReAuthPasswordVisible },
-                                visualTransformation = if (deleteReAuthPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            if (deleteReAuthError.isNotBlank()) {
-                                Text(
-                                    deleteReAuthError,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.error,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                DuoButton(
-                                    text = "CANCEL",
-                                    onClick = { showDeleteReAuthDialog = false },
-                                    variant = DuoButtonVariant.Primary,
-                                    modifier = Modifier.weight(1f),
-                                    minHeight = 40.dp
-                                )
-                                DuoButton(
-                                    text = if (authBusy) "DELETING..." else "DELETE",
-                                    enabled = !authBusy && deleteReAuthPassword.isNotBlank(),
-                                    onClick = {
-                                        authBusy = true
-                                        deleteReAuthError = ""
-                                        accountActionError = ""
-                                        scope.launch {
-                                            val result = AccountManager.reauthenticateAndDeleteAccount(context, deleteReAuthPassword)
-                                            result.fold(
-                                                onSuccess = { message ->
-                                                    showDeleteReAuthDialog = false
-                                                    firebaseUser = null
-                                                    signedInAccount = null
-                                                    passwordInput = ""
-                                                    emailInput = ""
-                                                    deleteReAuthPassword = ""
-                                                    accountActionError = ""
-                                                    driveStatus = message
-                                                    onMessage(message)
-                                                },
-                                                onFailure = { error ->
-                                                    deleteReAuthError = error.message ?: "Could not delete account. Please try again."
-                                                }
-                                            )
-                                            authBusy = false
-                                        }
-                                    },
-                                    variant = DuoButtonVariant.Warning,
-                                    modifier = Modifier.weight(1f),
-                                    minHeight = 40.dp
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+}
 
-        // ── Old simple delete confirm (kept for Google-only accounts) ──────────
-        if (showDeleteAccountConfirm) {
-            androidx.compose.ui.window.Dialog(
-                onDismissRequest = { showDeleteAccountConfirm = false },
-                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.4f))
-                        .clickable { showDeleteAccountConfirm = false },
-                    contentAlignment = Alignment.Center
-                ) {
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = showDeleteAccountConfirm,
-                        enter = androidx.compose.animation.fadeIn(tween(300)) + androidx.compose.animation.scaleIn(
-                            animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-                            initialScale = 0.9f
-                        ),
-                        exit = androidx.compose.animation.fadeOut(tween(200)) + androidx.compose.animation.scaleOut(
-                            targetScale = 0.9f
-                        )
-                    ) {
-                        Surface(
-                            modifier = Modifier
-                                .width(300.dp)
-                                .clickable(
-                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                    indication = null
-                                ) {}
-                                .border(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.18f), RoundedCornerShape(20.dp)),
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 8.dp
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(20.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                Text(
-                                    "Delete Account",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp,
-                                    fontFamily = Monocraft,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    "This permanently deletes your PocketHost account access on this device and removes synced settings. This cannot be undone.",
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                    lineHeight = 18.sp
-                                )
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    DuoButton(
-                                        text = "CANCEL",
-                                        onClick = { showDeleteAccountConfirm = false },
-                                        variant = DuoButtonVariant.Primary,
-                                        modifier = Modifier.weight(1f),
-                                        minHeight = 36.dp
-                                    )
-                                    DuoButton(
-                                        text = "DELETE",
-                                        onClick = {
-                                            showDeleteAccountConfirm = false
-                                            authBusy = true
-                                            accountActionError = ""
-                                            scope.launch {
-                                                val result = AccountManager.deleteAccount(context)
-                                                result.fold(
-                                                    onSuccess = { message ->
-                                                        firebaseUser = null
-                                                        signedInAccount = null
-                                                        passwordInput = ""
-                                                        emailInput = ""
-                                                        accountActionError = ""
-                                                        driveStatus = message
-                                                        onMessage(message)
-                                                    },
-                                                    onFailure = { error ->
-                                                        val msg = when (error) {
-                                                            is com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException ->
-                                                                "For security, sign out and sign back in before deleting your account."
-                                                            else -> error.message ?: "Could not delete account. Please try again."
-                                                        }
-                                                        accountActionError = msg
-                                                        onMessage(msg)
-                                                    }
-                                                )
-                                                authBusy = false
-                                            }
-                                        },
-                                        variant = DuoButtonVariant.Warning,
-                                        modifier = Modifier.weight(1f),
-                                        minHeight = 36.dp
-                                    )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 private fun sanitizeLevelType(raw: String): String {

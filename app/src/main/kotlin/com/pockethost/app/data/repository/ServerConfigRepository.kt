@@ -98,7 +98,7 @@ class ServerConfigRepository @Inject constructor(
         val discovered = serverDir.listFiles()
             ?.filter { it.isDirectory }
             ?.filter { dir ->
-                dir.name !in setOf("jre", "jre-21", "jre-runtime", "logs", "plugins", "cache", "config", "libraries")
+                dir.name !in setOf("jre", "jre-21", "jre-runtime", "jre17", "jre21", "jre25", "logs", "plugins", "cache", "config", "libraries")
             }
             ?.filter { dir ->
                 File(dir, "level.dat").exists() ||
