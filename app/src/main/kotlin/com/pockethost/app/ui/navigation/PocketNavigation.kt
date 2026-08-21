@@ -212,7 +212,7 @@ fun PocketTopBar(
                         .padding(5.dp)
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.ic_launcher_foreground_circle),
+                        painter = painterResource(id = if (com.pockethost.app.ui.theme.pocketIsDarkTheme()) R.drawable.app_logo_dark else R.drawable.app_logo_light),
                         contentDescription = "PocketHost icon",
                         modifier = Modifier
                             .fillMaxSize()

@@ -1351,7 +1351,7 @@ fun SettingsScreen(
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     androidx.compose.foundation.Image(
-                                        painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_launcher_foreground),
+                                        painter = androidx.compose.ui.res.painterResource(id = if (com.pockethost.app.ui.theme.pocketIsDarkTheme()) R.drawable.app_logo_dark else R.drawable.app_logo_light),
                                         contentDescription = null,
                                         modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
                                     )

@@ -161,7 +161,6 @@ static int plt_hook_callback(struct dl_phdr_info *info, size_t size, void *data)
                 uintptr_t page_start = (uintptr_t)got_entry & ~(pagesize - 1);
                 mprotect((void *)page_start, pagesize, PROT_READ | PROT_WRITE);
                 *got_entry = (ElfW(Addr))exit;
-                mprotect((void *)page_start, pagesize, PROT_READ);
                 LOGI("PLT hooked %s in %s", sym_name, info->dlpi_name);
             }
         }
@@ -177,7 +176,6 @@ static int plt_hook_callback(struct dl_phdr_info *info, size_t size, void *data)
                 uintptr_t page_start = (uintptr_t)got_entry & ~(pagesize - 1);
                 mprotect((void *)page_start, pagesize, PROT_READ | PROT_WRITE);
                 *got_entry = (ElfW(Addr))exit;
-                mprotect((void *)page_start, pagesize, PROT_READ);
                 LOGI("PLT hooked %s in %s", sym_name, info->dlpi_name);
             }
         }

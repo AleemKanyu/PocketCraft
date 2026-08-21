@@ -1302,7 +1302,7 @@ private fun WelcomeScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.ic_launcher_foreground_square),
+                    painter = painterResource(id = if (com.pockethost.app.ui.theme.pocketIsDarkTheme()) R.drawable.app_logo_dark else R.drawable.app_logo_light),
                     contentDescription = null,
                     modifier = Modifier.size(40.dp),
                     contentScale = ContentScale.Fit

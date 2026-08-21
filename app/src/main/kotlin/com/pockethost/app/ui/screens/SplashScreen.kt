@@ -231,7 +231,7 @@ fun SplashScreen(
                 )
         ) {
             Image(
-                painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                painter = painterResource(id = if (com.pockethost.app.ui.theme.pocketIsDarkTheme()) R.drawable.app_logo_dark else R.drawable.app_logo_light),
                 contentDescription = null,
                 modifier = Modifier
                     .size(96.dp)

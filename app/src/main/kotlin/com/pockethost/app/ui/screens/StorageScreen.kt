@@ -71,16 +71,10 @@ import kotlinx.coroutines.withContext
 import com.pockethost.app.util.LocalAppStrings
 import android.widget.Toast
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.filled.Computer
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.graphics.Color
-import com.pockethost.app.integrations.AccountManager
-import com.pockethost.app.integrations.DriveBackupManager
-import com.pockethost.app.integrations.RemoteDriveBackup
 import com.pockethost.app.ui.components.DuoButton
 import com.pockethost.app.ui.components.DuoButtonVariant
 import com.pockethost.app.ui.components.GameCard

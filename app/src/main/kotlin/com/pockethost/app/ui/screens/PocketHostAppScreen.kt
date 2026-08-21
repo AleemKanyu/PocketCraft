@@ -8,6 +8,7 @@ import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import com.google.android.play.core.review.ReviewManagerFactory
+import com.pockethost.app.ui.components.PocketAppLogo
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -1877,11 +1878,8 @@ fun PocketHostApp(
                             .padding(10.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                            contentDescription = null,
-                            modifier = Modifier.size(42.dp),
-                            tint = Color.Unspecified
+                        PocketAppLogo(
+                            modifier = Modifier.size(42.dp)
                         )
                     }
                 }
