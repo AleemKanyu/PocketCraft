@@ -17,6 +17,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -65,6 +67,8 @@ import com.pockethost.app.ui.theme.Monocraft
 import com.pockethost.app.ui.util.MobTheme
 import com.pockethost.app.ui.util.ThemePreference
 import com.pockethost.app.ui.util.ThemePreferenceStore
+import com.pockethost.app.ui.util.AppIcon
+import com.pockethost.app.ui.util.AppIconManager
 import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.ui.theme.card3d
 import com.pockethost.app.ui.util.playAppHaptic
@@ -108,7 +112,6 @@ data class SettingsState(
     val requireResourcePack: Boolean = false,
     val levelType: String = "minecraft:normal",
     val autoRestartEnabled: Boolean = false,
-    val maxPowerEnabled: Boolean = false,
     val optimizationPreset: String = "none",
     val forceExternalJvm: Boolean = false
 ) {
@@ -120,7 +123,6 @@ data class SettingsState(
                requireResourcePack != other.requireResourcePack ||
                normalizeWorldType(levelType) != normalizeWorldType(other.levelType) ||
                autoRestartEnabled != other.autoRestartEnabled ||
-               maxPowerEnabled != other.maxPowerEnabled ||
                optimizationPreset != other.optimizationPreset ||
                forceExternalJvm != other.forceExternalJvm
     }
@@ -261,7 +263,6 @@ fun SettingsScreen(
         SettingsState(
             config = stateHolder.config,
             autoRestartEnabled = preferences.autoRestart,
-            maxPowerEnabled = preferences.isMaxPowerMode,
             forceExternalJvm = preferences.forceExternalJvm
         )
     }
@@ -274,7 +275,6 @@ fun SettingsScreen(
     var submittingFeedback by remember { mutableStateOf(false) }
     var showUnsavedDialog by remember { mutableStateOf(false) }
     var showStorageManager by remember { mutableStateOf(false) }
-    var showMaxPowerWarning by remember { mutableStateOf(false) }
     var showBuildHeightWarning by remember { mutableStateOf(false) }
     var pendingBuildHeightValue by remember { mutableIntStateOf(320) }
     var installedVersions by remember { mutableStateOf<List<InstalledVersionInfo>>(emptyList()) }
@@ -286,6 +286,9 @@ fun SettingsScreen(
     var selectedItemsForDeletion by remember { mutableStateOf<Set<String>>(emptySet()) }
     var isClearingStorage by remember { mutableStateOf(false) }
     var showWidgetThemePicker by remember { mutableStateOf(false) }
+    var showAppIconPicker by remember { mutableStateOf(false) }
+    var currentAppIcon by remember { mutableStateOf(AppIconManager.getCurrentIcon(context)) }
+    var showLicensesDialog by remember { mutableStateOf(false) }
     var showPremiumBottomSheet by remember { mutableStateOf(false) }
     var checkingForUpdate by remember { mutableStateOf(false) }
     var manualUpdateConfig by remember { mutableStateOf<UpdateConfig?>(null) }
@@ -348,7 +351,6 @@ fun SettingsScreen(
                 requireResourcePack = requireResourcePackVal,
                 levelType = levelTypeVal,
                 autoRestartEnabled = preferences.autoRestart,
-                maxPowerEnabled = preferences.isMaxPowerMode,
                 optimizationPreset = optPresetVal,
                 forceExternalJvm = preferences.forceExternalJvm
             )
@@ -393,24 +395,6 @@ fun SettingsScreen(
         )
     }
 
-    if (showMaxPowerWarning) {
-        AlertDialog(
-            onDismissRequest = { showMaxPowerWarning = false },
-            title = { Text("Max Power Mode") },
-            text = { Text("Warning: Max Power Mode unlocks all RAM limiters and pushes render distances to their absolute maximum. This can cause significant device heat and battery drain. Only enable this if your device is in a cool place or you have a very high-end device.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showMaxPowerWarning = false
-                    currentState = currentState.copy(maxPowerEnabled = true)
-                }) { Text("Enable") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showMaxPowerWarning = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
 
     if (showBuildHeightWarning) {
         AlertDialog(
@@ -462,6 +446,25 @@ fun SettingsScreen(
         )
         return
     }
+
+    if (showAppIconPicker) {
+        AppIconPickerDialog(
+            currentIcon = currentAppIcon,
+            onSelectIcon = { newIcon ->
+                currentAppIcon = newIcon
+                AppIconManager.setAppIcon(context, newIcon)
+                Toast.makeText(context, "App icon changed to ${newIcon.title}", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { showAppIconPicker = false }
+        )
+    }
+
+    if (showLicensesDialog) {
+        OpenSourceLicensesDialog(
+            onDismiss = { showLicensesDialog = false }
+        )
+    }
+
 
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -548,24 +551,6 @@ fun SettingsScreen(
                             max = 32,
                             value = currentState.config.simulationDistance,
                             onValueChange = { currentState = currentState.copy(config = currentState.config.copy(simulationDistance = it)) }
-                        )
-                    }
-                }
-                item {
-                    AnimatedEntranceContainer(index = 3) {
-                        SettingsToggleRow(
-                            icon = "⚡",
-                            label = activeS.maxPowerMode,
-                            description = activeS.maxPowerModeDesc,
-                            checked = currentState.maxPowerEnabled,
-                            onToggle = { 
-                                if (it) {
-                                    showMaxPowerWarning = true
-                                } else {
-                                    currentState = currentState.copy(maxPowerEnabled = false)
-                                }
-                                playHaptic() 
-                            }
                         )
                     }
                 }
@@ -1037,6 +1022,56 @@ fun SettingsScreen(
 
                 item {
                     AnimatedEntranceContainer(index = 3) {
+                        GameCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showAppIconPicker = true },
+                            contentPadding = PaddingValues(vertical = 14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    androidx.compose.foundation.Image(
+                                        painter = androidx.compose.ui.res.painterResource(id = currentAppIcon.previewRes),
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .size(42.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                    )
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = "App Icon",
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 15.sp
+                                        )
+                                        Text(
+                                            text = currentAppIcon.title,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+                                Icon(
+                                    imageVector = Icons.Default.ChevronRight,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    AnimatedEntranceContainer(index = 3) {
                         SettingsToggleRow(
                             icon = "📳",
                             label = "Haptic Feedback",
@@ -1330,12 +1365,12 @@ fun SettingsScreen(
                                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(context.getString(R.string.discord_invite_url)))) }
                                     .onFailure { onMessage("Could not open Discord link.") }
                             })
-                            SettingsLinkRow(icon = Icons.Default.Description, label = "Open Source Licenses", description = "Third-party software licenses", onClick = {
-                                runCatching {
-                                    com.google.android.gms.oss.licenses.OssLicensesMenuActivity.setActivityTitle("Open Source Licenses")
-                                    context.startActivity(Intent(context, com.google.android.gms.oss.licenses.OssLicensesMenuActivity::class.java))
-                                }.onFailure { onMessage("Could not open licenses.") }
-                            })
+                            SettingsLinkRow(
+                                icon = Icons.Default.Description,
+                                label = "Open Source Licenses",
+                                description = "Third-party software & font licenses",
+                                onClick = { showLicensesDialog = true }
+                            )
                         }
                     }
                 }
@@ -1542,7 +1577,7 @@ fun SettingsScreen(
                                             stateHolder.applyOptimizationPresetBlocking(currentState.optimizationPreset)
                                             val preferencesSaved = preferences.saveRuntimeSettings(
                                                 autoRestart = currentState.autoRestartEnabled,
-                                                maxPowerMode = currentState.maxPowerEnabled,
+                                                maxPowerMode = true,
                                                 forceExternalJvm = currentState.forceExternalJvm
                                             )
                                             if (!preferencesSaved) {
@@ -1555,7 +1590,6 @@ fun SettingsScreen(
                                                 config = nextConfig,
                                                 levelType = normalizedLevelType,
                                                 autoRestartEnabled = currentState.autoRestartEnabled,
-                                                maxPowerEnabled = currentState.maxPowerEnabled,
                                                 forceExternalJvm = currentState.forceExternalJvm
                                             )
                                             currentState = savedStateSnapshot
@@ -2602,3 +2636,286 @@ private fun formatSize(bytes: Long): String {
     val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt()
     return String.format("%.2f %s", bytes / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
 }
+
+@Composable
+private fun AppIconPickerDialog(
+    currentIcon: AppIcon,
+    onSelectIcon: (AppIcon) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Choose App Icon",
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 18.sp,
+                fontFamily = Monocraft,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Select a launcher icon for your home screen:",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                AppIcon.entries.forEach { icon ->
+                    val isSelected = icon == currentIcon
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isSelected) PocketColors.Primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        border = BorderStroke(
+                            width = if (isSelected) 2.dp else 1.dp,
+                            color = if (isSelected) PocketColors.Primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onSelectIcon(icon)
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            androidx.compose.foundation.Image(
+                                painter = androidx.compose.ui.res.painterResource(id = icon.previewRes),
+                                contentDescription = icon.title,
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                            )
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = icon.title,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = if (isSelected) PocketColors.Primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (icon == AppIcon.GREEN) {
+                                        Text(
+                                            text = "Default",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PocketColors.Primary,
+                                            modifier = Modifier
+                                                .background(PocketColors.Primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = icon.description,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Selected",
+                                    tint = PocketColors.Primary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            DuoButton(
+                text = "DONE",
+                onClick = onDismiss
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(24.dp)
+    )
+}
+
+@Composable
+private fun OpenSourceLicensesDialog(
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Description,
+                    contentDescription = null,
+                    tint = PocketColors.Primary
+                )
+                Text(
+                    text = "Open Source Licenses",
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 17.sp,
+                    fontFamily = Monocraft,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        },
+        text = {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    Text(
+                        text = "PocketHost uses the following open-source software and typography assets:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                item {
+                    LicenseItemCard(
+                        name = "Monocraft Font",
+                        author = "IdreesInc (github.com/IdreesInc/Monocraft)",
+                        licenseType = "SIL Open Font License 1.1",
+                        summary = "A pixelated monospace typeface modeled after the Minecraft font. Licensed under the SIL Open Font License, Version 1.1."
+                    )
+                }
+
+                item {
+                    LicenseItemCard(
+                        name = "Outfit Font",
+                        author = "Rodrigo Fuenzalida (Outfit.io)",
+                        licenseType = "SIL Open Font License 1.1",
+                        summary = "Geometric sans-serif typeface designed for high UI legibility. Licensed under OFL 1.1."
+                    )
+                }
+
+                item {
+                    LicenseItemCard(
+                        name = "Android Jetpack & Compose",
+                        author = "Google LLC & AOSP Contributors",
+                        licenseType = "Apache License 2.0",
+                        summary = "Modern Android UI toolkit, architecture components, and foundation runtime libraries."
+                    )
+                }
+
+                item {
+                    LicenseItemCard(
+                        name = "Kotlin & Coroutines",
+                        author = "JetBrains s.r.o.",
+                        licenseType = "Apache License 2.0",
+                        summary = "Kotlin programming language and structured concurrency coroutine libraries."
+                    )
+                }
+
+                item {
+                    LicenseItemCard(
+                        name = "OkHttp & Coil",
+                        author = "Square, Inc. & Coil Contributors",
+                        licenseType = "Apache License 2.0",
+                        summary = "HTTP client and image loading pipelines for Android."
+                    )
+                }
+
+                item {
+                    OutlinedButton(
+                        onClick = {
+                            runCatching {
+                                com.google.android.gms.oss.licenses.OssLicensesMenuActivity.setActivityTitle("All Open Source Licenses")
+                                context.startActivity(Intent(context, com.google.android.gms.oss.licenses.OssLicensesMenuActivity::class.java))
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("All Dependencies", fontSize = 12.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            DuoButton(
+                text = "CLOSE",
+                onClick = onDismiss
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(24.dp)
+    )
+}
+
+@Composable
+private fun LicenseItemCard(
+    name: String,
+    author: String,
+    licenseType: String,
+    summary: String
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = name,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = licenseType,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = PocketColors.Primary,
+                    modifier = Modifier
+                        .background(PocketColors.Primary.copy(alpha = 0.14f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                )
+            }
+            Text(
+                text = author,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = summary,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                lineHeight = 15.sp
+            )
+        }
+    }
+}
+
+

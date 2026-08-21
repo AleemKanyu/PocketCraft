@@ -105,6 +105,9 @@ import com.pockethost.app.ui.components.PlayerCardAction
 import com.pockethost.app.ui.components.resolvePlayerAvatarUrl
 import com.pockethost.app.ui.components.duoOutlinedTextFieldColors
 import com.pockethost.app.ui.components.duoTextFieldShape
+import com.pockethost.app.ui.components.DuoButton
+import com.pockethost.app.ui.components.DuoButtonVariant
+import com.pockethost.app.ui.theme.Monocraft
 import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.ui.theme.PocketMotion
 import com.pockethost.app.util.LocalAppStrings
@@ -567,81 +570,74 @@ private fun AfkHelpersSection(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(PocketColors.Primary.copy(alpha = 0.14f)),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Default.VideogameAsset,
-                            contentDescription = null,
-                            tint = PocketColors.Primary
-                        )
-                    }
-                    Column {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(PocketColors.Primary.copy(alpha = 0.14f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.VideogameAsset,
+                                contentDescription = null,
+                                tint = PocketColors.Primary
+                            )
+                        }
                         Text(
                             "AFK Helpers",
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 18.sp,
+                            fontFamily = Monocraft,
+                            fontSize = 17.sp,
                             color = PocketColors.TextPrimary
                         )
-                        Text(
-                            "Saved to this world and auto-respawned on next boot.",
-                            fontSize = 12.sp,
-                            color = PocketColors.TextSecondary
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = {
+                                scope.launch {
+                                    stateHolder.refreshAfkHelpers()
+                                    onMessage("AFK helper status refreshed.")
+                                }
+                            },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(PocketColors.InactiveBg)
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Refresh AFK helpers",
+                                tint = PocketColors.TextPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        DuoButton(
+                            text = "+ ADD FARM",
+                            onClick = onAddClick,
+                            variant = DuoButtonVariant.Primary,
+                            minHeight = 36.dp
                         )
                     }
                 }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = {
-                            scope.launch {
-                                stateHolder.refreshAfkHelpers()
-                                onMessage("AFK helper status refreshed.")
-                            }
-                        },
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(PocketColors.InactiveBg)
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = "Refresh AFK helpers",
-                            tint = PocketColors.TextPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Button(
-                        onClick = onAddClick,
-                        modifier = Modifier.height(38.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = PocketColors.Primary,
-                            contentColor = PocketColors.PrimaryText
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Add Farm", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    }
-                }
+                Text(
+                    "Saved to this world and auto-respawned on next boot.",
+                    fontSize = 12.sp,
+                    color = PocketColors.TextSecondary,
+                    modifier = Modifier.padding(start = 2.dp)
+                )
             }
 
             if (secondsLeft > 0) {
