@@ -540,25 +540,6 @@ fun ServerTypeVersionBottomSheet(
                             }
                         }
                     }
-
-                    val selectedVersionNeedsImport =
-                        selectedVersion != null && !downloadedVersions.contains(selectedVersion)
-                    if (selectedVersionNeedsImport) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        DuoButton(
-                            text = "📥  DOWNLOAD & SELECT JAR FOR $selectedVersion",
-                            onClick = { versionToImport = selectedVersion },
-                            variant = DuoButtonVariant.Primary,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Download the official server JAR and select the file from device storage to complete setup.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
                 }
 
                 if (selectedType == ServerType.MODPACK) {
@@ -792,7 +773,6 @@ fun ServerTypeVersionBottomSheet(
 
                 val buttonText = when {
                     isDownloadingThisVersion -> "DOWNLOADING…"
-                    selectedVersionNeedsImport -> "DOWNLOAD / IMPORT"
                     isConfirmEnabled -> "CONFIRM"
                     else -> "SELECT A VERSION"
                 }

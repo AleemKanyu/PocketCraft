@@ -845,25 +845,24 @@ fun PocketHostApp(
 
     SideEffect {
         val window = activity?.window ?: return@SideEffect
-        val splashBackgroundColor = PocketColors.FooterBg.toArgb()
         val isOnSplash = screen == Screen.LOADING || screen == Screen.DOWNLOADING
         val statusBarColor = when {
             hasBlockingSheet -> colorScheme.surface.toArgb()
-            isOnSplash -> splashBackgroundColor
+            isOnSplash -> PocketColors.BgApp.toArgb()
             screen == Screen.SERVER -> colorScheme.surface.toArgb()
             else -> colorScheme.background.toArgb()
         }
         val navBarColor = when {
             hasBlockingSheet -> colorScheme.surface.toArgb()
-            isOnSplash -> splashBackgroundColor
+            isOnSplash -> PocketColors.BgApp.toArgb()
             screen == Screen.SERVER -> PocketColors.FooterBg.toArgb()
             else -> PocketColors.FooterBg.toArgb()
         }
         window.statusBarColor = statusBarColor
         window.navigationBarColor = navBarColor
         WindowInsetsControllerCompat(window, window.decorView).apply {
-            isAppearanceLightStatusBars = if (isOnSplash) false else colorScheme.surface.luminance() > 0.5f
-            isAppearanceLightNavigationBars = if (isOnSplash) false else Color(navBarColor).luminance() > 0.5f
+            isAppearanceLightStatusBars = Color(statusBarColor).luminance() >= 0.5f
+            isAppearanceLightNavigationBars = Color(navBarColor).luminance() >= 0.5f
         }
     }
 

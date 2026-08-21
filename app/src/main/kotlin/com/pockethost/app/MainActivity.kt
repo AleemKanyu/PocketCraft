@@ -157,11 +157,11 @@ class MainActivity : ComponentActivity() {
         PocketColors.activeMobTheme = initialMobTheme
         PocketColors.isDark = initialDarkTheme
 
-        val splashBackgroundColor = PocketColors.FooterBg.toArgb()
+        val splashBackgroundColor = PocketColors.BgApp.toArgb()
         val initialSystemBarColor = splashBackgroundColor
         val initialNavBarColor = splashBackgroundColor
-        val initialLightSystemBars = false
-        val initialLightNavBar = false
+        val initialLightSystemBars = PocketColors.BgApp.luminance() >= 0.5f
+        val initialLightNavBar = PocketColors.BgApp.luminance() >= 0.5f
         WindowCompat.setDecorFitsSystemWindows(window, false)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             window.decorView.isForceDarkAllowed = false
@@ -299,14 +299,9 @@ class MainActivity : ComponentActivity() {
 
                 SideEffect {
                     val onSplash = jreError == null && !jreReady
-                    val splashBackgroundColor = PocketColors.FooterBg.toArgb()
-                    val statusBarColor = if (onSplash) {
-                        splashBackgroundColor
-                    } else {
-                        PocketColors.BgApp.toArgb()
-                    }
+                    val statusBarColor = PocketColors.BgApp.toArgb()
                     val navBarColor = if (onSplash) {
-                        splashBackgroundColor
+                        PocketColors.BgApp.toArgb()
                     } else {
                         PocketColors.FooterBg.toArgb()
                     }
@@ -317,8 +312,8 @@ class MainActivity : ComponentActivity() {
                     window.statusBarColor = statusBarColor
                     window.navigationBarColor = navBarColor
                     WindowInsetsControllerCompat(window, window.decorView).apply {
-                        isAppearanceLightStatusBars = if (onSplash) false else androidx.compose.ui.graphics.Color(statusBarColor).luminance() >= 0.5f
-                        isAppearanceLightNavigationBars = if (onSplash) false else androidx.compose.ui.graphics.Color(navBarColor).luminance() >= 0.5f
+                        isAppearanceLightStatusBars = androidx.compose.ui.graphics.Color(statusBarColor).luminance() >= 0.5f
+                        isAppearanceLightNavigationBars = androidx.compose.ui.graphics.Color(navBarColor).luminance() >= 0.5f
                     }
                 }
 

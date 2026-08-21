@@ -826,9 +826,11 @@ object PluginManager {
 
     fun isBedrockBridgeEnabled(context: Context, worldName: String): Boolean {
         if (!supportsBundledBedrockBridge(context, worldName)) return false
-        val hasGeyser = isManagedPluginEnabled(context, worldName, "geyser")
-        val hasFloodgate = isManagedPluginEnabled(context, worldName, "floodgate")
-        return hasGeyser && hasFloodgate
+        val pluginsDir = getPluginsDir(context, worldName)
+        if (!pluginsDir.exists()) return true
+        val hasGeyserDisabled = pluginsDir.listFiles()?.any { it.name.lowercase().contains("geyser") && it.name.endsWith(".disabled") } == true
+        val hasFloodgateDisabled = pluginsDir.listFiles()?.any { it.name.lowercase().contains("floodgate") && it.name.endsWith(".disabled") } == true
+        return !(hasGeyserDisabled || hasFloodgateDisabled)
     }
 
     fun getRuntimeKeyForWorld(context: Context, worldName: String): String {
@@ -2033,8 +2035,8 @@ object PluginManager {
         if (!serverDir.exists()) return true
         val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
         return when (ServerType.fromString(props.getProperty("pocketcraft-server-type"))) {
-            ServerType.PAPER, ServerType.PURPUR -> true
-            ServerType.VANILLA, ServerType.FABRIC, ServerType.MODPACK -> false
+            ServerType.PAPER, ServerType.PURPUR, ServerType.FABRIC -> true
+            ServerType.VANILLA, ServerType.MODPACK -> false
         }
     }
 

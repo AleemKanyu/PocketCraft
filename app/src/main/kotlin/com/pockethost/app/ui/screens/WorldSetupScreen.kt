@@ -397,9 +397,9 @@ fun WorldSetupScreen(
                                     Text("Max Players", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                                     Text(text = "${maxPlayersValue.roundToInt()} players", fontWeight = FontWeight.Bold, color = PocketColors.PrimaryDark)
                                 }
-                                Slider(value = maxPlayersValue, onValueChange = { newValue -> if (newValue.roundToInt() > 15 && !isPremium) { maxPlayersValue = 15f; showPremiumBottomSheet = true } else maxPlayersValue = newValue }, valueRange = 1f..50f, steps = 48)
+                                Slider(value = maxPlayersValue, onValueChange = { newValue -> maxPlayersValue = newValue }, valueRange = 1f..50f, steps = 48)
                             }
-                            if (!createMode) IpManagerCard(entitlement, isPremium, customSubdomainEnabled, onMessage, onNavigateToSignUp)
+                            IpManagerCard(entitlement, true, true, onMessage, onNavigateToSignUp)
                             ServerPhotoUpload(photoUri = serverPhotoUri, onPhotoSelected = { serverPhotoUri = it; photoChanged = true }, modifier = Modifier.fillMaxWidth())
                             
                             Text(text = "Import Existing World", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)

@@ -127,15 +127,11 @@ fun IpManagerContent(
     var showPremiumBottomSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentUser?.uid, isPremiumUnlocked) {
-        val uid = currentUser?.uid
-        if (uid.isNullOrBlank()) {
-            loading = false
-            return@LaunchedEffect
-        }
+        val ownerId = currentUser?.uid ?: android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "anonymous_device"
         loading = true
         runCatching {
             val snapshot = firestore.collection("subdomains")
-                .whereEqualTo("ownerId", uid)
+                .whereEqualTo("ownerId", ownerId)
                 .limit(1)
                 .get()
                 .await()
@@ -231,48 +227,6 @@ fun IpManagerContent(
                     modifier = Modifier.fillMaxWidth(),
                     minHeight = 40.dp
                 )
-            }
-            currentUser == null -> {
-                Text(
-                    text = "Sign in before creating a custom IP.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            !rolloutEnabled -> {
-                Text(
-                    text = "Custom IPs are visible here now, but creation is still disabled by remote rollout.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            !isPremiumUnlocked -> {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "Custom IPs unlock with Pro or Member.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    DuoButton(
-                        text = "UPGRADE TO PRO 🚀",
-                        onClick = { showPremiumBottomSheet = true },
-                        variant = DuoButtonVariant.Primary,
-                        modifier = Modifier.fillMaxWidth(),
-                        minHeight = 40.dp
-                    )
-                }
-                if (showPremiumBottomSheet) {
-                    PremiumUpgradeBottomSheet(
-                        onDismissRequest = { showPremiumBottomSheet = false },
-                        onNavigateToSignUp = onNavigateToSignUp
-                    )
-                }
             }
             else -> {
                 OutlinedTextField(
@@ -399,9 +353,10 @@ fun IpManagerContent(
                             scope.launch {
                                 runCatching {
                                     val detectedRegion = if (prefs.relayHost == "eu.pocketcraft.online") "eu" else "as"
+                                    val ownerId = currentUser?.uid ?: android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "anonymous_device"
                                     saveSubdomain(
                                         firestore = firestore,
-                                        ownerId = currentUser!!.uid,
+                                        ownerId = ownerId,
                                         newSubdomain = normalized,
                                         newRegion = detectedRegion,
                                         oldSubdomain = existingRecord?.subdomain
