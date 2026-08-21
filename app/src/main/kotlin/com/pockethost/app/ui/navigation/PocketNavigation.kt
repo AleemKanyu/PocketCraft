@@ -197,7 +197,7 @@ fun PocketTopBar(
                     modifier = Modifier
                         .size(38.dp)
                         .background(
-                            color = if (com.pockethost.app.ui.theme.pocketIsDarkTheme()) Color(0xFF1B3322) else Color(0xFF4ADE80),
+                            color = PocketColors.Primary,
                             shape = RoundedCornerShape(10.dp)
                         )
                         .drawBehind {
