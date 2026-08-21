@@ -33,12 +33,13 @@ object ModpackManager {
     private const val MODPACK_SEARCH_CACHE_TTL_MS = 5 * 60_000L
     private val DEFAULT_MODPACK_QUERIES = listOf(
         "skyblock",
-        "oneblock",
         "cobblemon",
-        "pokemon",
+        "better mc",
+        "all the mods",
         "fabulously optimized",
-        "simply optimized",
-        "optimization"
+        "medieval",
+        "adventure",
+        "tech"
     )
     private val KNOWN_CLIENT_ONLY_MOD_IDS = setOf(
         "better_client",
@@ -439,43 +440,7 @@ object ModpackManager {
     }
 
     private fun isAllowedModpack(item: ModpackCatalogItem): Boolean {
-        val titleLower = item.title.lowercase()
-        val descLower = item.description.lowercase()
-
-        // 1. Skyblock Category
-        val isSkyblock = titleLower.contains("skyblock") || titleLower.contains("sky-block") ||
-                titleLower.contains("oneblock") || titleLower.contains("one-block") ||
-                titleLower.contains("skyfactory") || titleLower.contains("sky factory") ||
-                titleLower.contains("project ozone") ||
-                descLower.contains("skyblock") || descLower.contains("sky-block") ||
-                descLower.contains("oneblock") || descLower.contains("one-block")
-
-        if (isSkyblock) return true
-
-        // 2. Pokemon Category
-        val isPokemon = titleLower.contains("pokemon") || titleLower.contains("cobblemon") ||
-                titleLower.contains("pixelmon") || titleLower.contains("poké") ||
-                descLower.contains("pokemon") || descLower.contains("cobblemon") ||
-                descLower.contains("pixelmon")
-
-        if (isPokemon) return true
-
-        // 3. Optimization Category
-        val optTitleKeywords = listOf(
-            "optimized", "optimization", "performance", "fps boost", "boosted fps",
-            "simply optimized", "fabulously optimized", "optifine", "sodium", "lithium", "iris",
-            "embeddium", "additive", "adrenaline", "smoothness", "speedy", "fps-boost", "better fps", "fps"
-        )
-        val hasOptTitle = optTitleKeywords.any { titleLower.contains(it) }
-
-        val optDescPhrases = listOf(
-            "optimization modpack", "optimization pack", "performance modpack", "performance pack",
-            "performance-focused", "focuses on performance", "focused on performance", "performance-oriented",
-            "fabulously optimized", "simply optimized"
-        )
-        val hasOptDesc = optDescPhrases.any { descLower.contains(it) }
-
-        return hasOptTitle || hasOptDesc
+        return true
     }
 
     private suspend fun resolveModpack(id: String): ResolvedModpack = withContext(Dispatchers.IO) {
