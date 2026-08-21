@@ -196,27 +196,22 @@ fun PocketTopBar(
                 Box(
                     modifier = Modifier
                         .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
                         .background(
                             color = PocketColors.Primary,
                             shape = RoundedCornerShape(10.dp)
                         )
-                        .drawBehind {
-                            raisedBorder(
-                                cornerRadius      = 10.dp.toPx(),
-                                borderColor       = PocketColors.PrimaryBorder,
-                                bottomBorderColor = PocketColors.PrimaryBorderBottom,
-                                sideWidthPx       = 1.5.dp.toPx(),
-                                bottomWidthPx     = 3.dp.toPx()
-                            )
-                        }
-                        .padding(5.dp)
+                        .border(
+                            width = 1.5.dp,
+                            color = PocketColors.PrimaryBorder,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .padding(6.dp)
                 ) {
                     Image(
-                        painter = painterResource(id = if (com.pockethost.app.ui.theme.pocketIsDarkTheme()) R.drawable.app_logo_dark else R.drawable.app_logo_light),
+                        painter = painterResource(id = R.drawable.app_logo),
                         contentDescription = "PocketHost icon",
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(8.dp)),
+                        modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit
                     )
                 }
