@@ -3,6 +3,7 @@ package com.pockethost.app.ui.onboarding
 import com.pockethost.app.BuildConfig
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -11,6 +12,11 @@ import android.os.Bundle
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -90,6 +96,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
@@ -121,7 +128,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.TextUnit
-import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.pockethost.app.MainActivity
@@ -393,12 +399,31 @@ private fun OnboardingScreen(
     var permissionWarningTick by rememberSaveable { mutableIntStateOf(0) }
     var signedInAccountEmail by rememberSaveable { mutableStateOf(AccountManager.currentDriveAccount(context)?.email.orEmpty()) }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                notificationsPermissionGranted = isNotificationPermissionGranted(context)
+                if (notificationsPermissionGranted && permissionStepError.isNotBlank()) {
+                    permissionStepError = ""
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         notificationsPermissionGranted = granted || isNotificationPermissionGranted(context)
         if (permissionStepError.isNotBlank() && notificationsPermissionGranted) {
             permissionStepError = ""
+        }
+        if (!notificationsPermissionGranted) {
+            openAppNotificationSettings(context)
         }
     }
     val googleSignInLauncher = rememberLauncherForActivityResult(
@@ -535,12 +560,20 @@ private fun OnboardingScreen(
                                 }
                             )
                             6 -> PermissionsScreen(
-                                    s = s,
+                                s = s,
                                 notificationsPermissionGranted = notificationsPermissionGranted,
                                 onAllowNotifications = {
                                     playHaptic()
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        if (!isNotificationPermissionGranted(context)) {
+                                            try {
+                                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                            } catch (_: Exception) {
+                                                openAppNotificationSettings(context)
+                                            }
+                                        } else {
+                                            notificationsPermissionGranted = true
+                                        }
                                     } else {
                                         notificationsPermissionGranted = true
                                     }
@@ -613,7 +646,7 @@ private fun OnboardingScreen(
                         text = if (currentStep == steps.lastIndex) s.onboardingButtonFinish else if (currentStep == 7) s.onboardingButtonSkip else s.onboardingButtonNext,
                         enabled = if (currentStep == 0) privacyAccepted else true,
                         onClick = {
-                            if (missingPermissionStep) {
+                            if (missingPermissionStep && permissionWarningTick == 0) {
                                 permissionStepError = s.onboardingPermissionsError
                                 permissionWarningTick++
                                 playHaptic(doublePulse = true)
@@ -1042,6 +1075,24 @@ private fun isNotificationPermissionGranted(context: Context): Boolean {
         context,
         Manifest.permission.POST_NOTIFICATIONS
     ) == PackageManager.PERMISSION_GRANTED
+}
+
+private fun openAppNotificationSettings(context: Context) {
+    try {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    } catch (_: Exception) {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", context.packageName, null)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (_: Exception) {}
+    }
 }
 
 @Composable

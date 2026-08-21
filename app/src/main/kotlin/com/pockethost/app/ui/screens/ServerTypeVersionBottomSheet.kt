@@ -85,6 +85,7 @@ fun ServerTypeVersionBottomSheet(
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val accentTextColor = if (isDarkTheme) PocketColors.PrimaryLight else PocketColors.PrimaryDark
     val scope = rememberCoroutineScope()
+    val selectedVersionNeedsImport = selectedType.supportsVersionSelect && selectedVersion != null && !downloadedVersions.contains(selectedVersion)
 
     fun confirmSelection() {
         if (selectedType == ServerType.MODPACK) {
@@ -348,6 +349,9 @@ fun ServerTypeVersionBottomSheet(
                                             )
                                             .clickable {
                                                 viewModel.setSelectedVersion(version)
+                                                if (!isDownloaded) {
+                                                    versionToImport = version
+                                                }
                                             }
                                     ) {
                                         Row(
@@ -541,9 +545,16 @@ fun ServerTypeVersionBottomSheet(
                         selectedVersion != null && !downloadedVersions.contains(selectedVersion)
                     if (selectedVersionNeedsImport) {
                         Spacer(modifier = Modifier.height(10.dp))
+                        DuoButton(
+                            text = "📥  DOWNLOAD & SELECT JAR FOR $selectedVersion",
+                            onClick = { versionToImport = selectedVersion },
+                            variant = DuoButtonVariant.Primary,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Download and select the server JAR for $selectedVersion before continuing.",
-                            color = MaterialTheme.colorScheme.error,
+                            text = "Download the official server JAR and select the file from device storage to complete setup.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -781,6 +792,7 @@ fun ServerTypeVersionBottomSheet(
 
                 val buttonText = when {
                     isDownloadingThisVersion -> "DOWNLOADING…"
+                    selectedVersionNeedsImport -> "DOWNLOAD / IMPORT"
                     isConfirmEnabled -> "CONFIRM"
                     else -> "SELECT A VERSION"
                 }
@@ -799,7 +811,11 @@ fun ServerTypeVersionBottomSheet(
                     DuoButton(
                         text = buttonText,
                         onClick = {
-                            confirmSelection()
+                            if (selectedVersionNeedsImport) {
+                                versionToImport = selectedVersion
+                            } else {
+                                confirmSelection()
+                            }
                         },
                         enabled = isConfirmEnabled,
                         modifier = Modifier.weight(1.3f),

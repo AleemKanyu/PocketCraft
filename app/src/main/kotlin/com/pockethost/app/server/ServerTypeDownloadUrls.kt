@@ -50,31 +50,28 @@ object ServerTypeDownloadUrls {
                     serverObj.getString("url")
                 }
                 ServerType.PAPER   -> {
-                    // 1. Fetch version metadata to find the latest build
-                    val versionUrl = java.net.URL("https://fill.papermc.io/v3/projects/paper/versions/$version")
-                    val conn = versionUrl.openConnection() as java.net.HttpURLConnection
+                    // Fetch builds array directly from v3 API
+                    val buildsUrl = java.net.URL("https://fill.papermc.io/v3/projects/paper/versions/$version/builds")
+                    val conn = buildsUrl.openConnection() as java.net.HttpURLConnection
                     conn.setRequestProperty("User-Agent", "PocketHost/1.0")
+                    conn.connectTimeout = 8000
+                    conn.readTimeout = 8000
                     val responseJson = conn.inputStream.bufferedReader().use { it.readText() }
-                    val json = org.json.JSONObject(responseJson)
-                    val builds = json.getJSONArray("builds")
-                    var latestBuild = -1
+                    val builds = org.json.JSONArray(responseJson)
+                    var bestUrl: String? = null
+                    var latestId = -1
                     for (i in 0 until builds.length()) {
-                        val b = builds.getInt(i)
-                        if (b > latestBuild) {
-                            latestBuild = b
+                        val buildObj = builds.getJSONObject(i)
+                        val id = buildObj.optInt("id", -1)
+                        val downloads = buildObj.optJSONObject("downloads") ?: continue
+                        val dlObj = downloads.optJSONObject("server:default") ?: downloads.optJSONObject("application")
+                        val url = dlObj?.optString("url")
+                        if (!url.isNullOrBlank() && id >= latestId) {
+                            latestId = id
+                            bestUrl = url
                         }
                     }
-                    if (latestBuild == -1) throw Exception("No builds found")
-
-                    // 2. Fetch build metadata to get the direct download URL
-                    val buildUrl = java.net.URL("https://fill.papermc.io/v3/projects/paper/versions/$version/builds/$latestBuild")
-                    val buildConn = buildUrl.openConnection() as java.net.HttpURLConnection
-                    buildConn.setRequestProperty("User-Agent", "PocketHost/1.0")
-                    val buildJson = buildConn.inputStream.bufferedReader().use { it.readText() }
-                    val buildObj = org.json.JSONObject(buildJson)
-                    val downloads = buildObj.getJSONObject("downloads")
-                    val serverDefault = downloads.optJSONObject("server:default") ?: downloads.getJSONObject("application")
-                    serverDefault.getString("url")
+                    bestUrl ?: "https://papermc.io/downloads/paper"
                 }
                 ServerType.PURPUR  -> "https://api.purpurmc.org/v2/purpur/$version/latest/download"
                 ServerType.MODPACK -> "https://modrinth.com/modpacks"

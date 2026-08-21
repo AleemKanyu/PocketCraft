@@ -20,12 +20,16 @@ object ServerJarImporter {
     ): ImportResult {
         return try {
             val fileName = getFileName(context, uri) ?: "server.jar"
-            if (!fileName.endsWith(".jar", ignoreCase = true)) {
-                return ImportResult.Error("Please select a server .jar file.")
+            val hasValidExt = fileName.endsWith(".jar", ignoreCase = true) ||
+                    fileName.endsWith(".bin", ignoreCase = true) ||
+                    fileName.endsWith(".zip", ignoreCase = true) ||
+                    !fileName.contains(".")
+            if (!hasValidExt) {
+                return ImportResult.Error("Please select a valid server .jar file.")
             }
 
             val fileSize = getFileSize(context, uri)
-            val minBytes = if (serverType == ServerType.FABRIC) 10_000L else 1_000_000L
+            val minBytes = 5_000L
             if (fileSize in 1 until minBytes) {
                 return ImportResult.Error("Selected file is too small to be a valid ${serverType.displayName} server JAR.")
             }

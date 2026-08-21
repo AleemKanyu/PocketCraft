@@ -50,6 +50,12 @@ import com.pockethost.app.server.ServerTypeDownloadUrls
 import com.pockethost.app.ui.theme.PocketColors
 import kotlinx.coroutines.launch
 
+import androidx.compose.material3.LinearProgressIndicator
+import com.pockethost.app.service.ServerFileManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerJarPickerBottomSheet(
@@ -113,7 +119,7 @@ fun ServerJarPickerBottomSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 36.dp),
-            verticalArrangement = Arrangement.spacedBy(22.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             val isFabric = serverType == ServerType.FABRIC
             // ── Header ────────────────────────────────────────────────────────────
@@ -139,15 +145,15 @@ fun ServerJarPickerBottomSheet(
                 }
                 Text(
                     text = when {
-                        isFabric -> "Download Fabric $version Server JAR"
-                        else     -> "Download $version Server JAR"
+                        isFabric -> "Install Fabric $version Server JAR"
+                        else     -> "Install $version Server JAR"
                     },
                     fontSize = 22.sp,
                     fontWeight = FontWeight.ExtraBold,
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "Download the server JAR automatically in your browser, then select the file from storage.",
+                    text = "Download directly in the app or choose a downloaded JAR file from storage.",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -157,113 +163,166 @@ fun ServerJarPickerBottomSheet(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
 
-            // ── Step 1 – Download in Browser ─────────────────────────────────────
+            if (downloadError != null) {
+                Text(
+                    text = downloadError!!,
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            // ── Option 1 – Direct In-App Download ─────────────────────────────────
             InstallStep(
                 stepNumber = 1,
-                title = when {
-                    isFabric -> "Download Official Fabric Server JAR"
-                    else     -> "Download Official Server JAR"
-                },
-                description = if (isResolving) "Resolving official download URL…" else if (hasTriggeredDownload) "Download started in browser. Tap again if needed." else "Tap to download the official server JAR in your browser."
+                title = "⚡ Direct In-App Download (Recommended)",
+                description = if (isDownloading) downloadStatusText else "Automatically download and install $version in one tap."
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .alpha(if (hasTriggeredDownload) 0.75f else downloadBtnAlpha)
-                        .clip(RoundedCornerShape(14.dp))
-                        .then(
-                            if (hasTriggeredDownload) {
-                                Modifier
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                                    .border(1.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-                            } else {
-                                Modifier.background(
-                                    Brush.horizontalGradient(
-                                        listOf(PocketColors.Primary, Color(0xFF4CAF50))
-                                    )
-                                )
-                            }
+                if (isDownloading) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        LinearProgressIndicator(
+                            progress = { downloadProgress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = PocketColors.Primary,
+                            trackColor = PocketColors.Primary.copy(alpha = 0.2f)
                         )
-                        .then(
-                            if (!isResolving) Modifier.clickable {
-                                hasTriggeredDownload = true
-                                runCatching {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)).apply {
-                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    }
-                                    context.startActivity(intent)
-                                }
-                            } else Modifier
-                        )
-                        .padding(vertical = 15.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isResolving) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = Color.White.copy(alpha = 0.7f)
-                            )
-                            Text(
-                                text = "Resolving download URL…",
-                                color = Color.White.copy(alpha = 0.7f),
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp
-                            )
-                        }
-                    } else {
                         Text(
-                            text = if (hasTriggeredDownload) "🌐  Download Again" else "🌐  Download in Browser",
-                            color = if (hasTriggeredDownload) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 15.sp
+                            text = downloadStatusText,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PocketColors.Primary
                         )
                     }
+                } else {
+                    DuoButton(
+                        text = if (isResolving) "CONNECTING…" else "⚡  1-TAP AUTO DOWNLOAD & INSTALL",
+                        onClick = {
+                            if (isResolving || isDownloading) return@DuoButton
+                            isDownloading = true
+                            downloadError = null
+                            downloadStatusText = "Connecting…"
+                            coroutineScope.launch(Dispatchers.IO) {
+                                try {
+                                    val targetFile = ServerFileManager.getServerJarFile(
+                                        context = context.applicationContext,
+                                        gameVersion = version,
+                                        serverType = serverType
+                                    )
+                                    targetFile.parentFile?.mkdirs()
+                                    val tempFile = File(targetFile.parentFile, "${targetFile.name}.downloading")
+                                    val conn = java.net.URL(downloadUrl).openConnection() as java.net.HttpURLConnection
+                                    conn.setRequestProperty("User-Agent", "PocketHost/1.0")
+                                    conn.connectTimeout = 15000
+                                    conn.readTimeout = 60000
+                                    val totalLength = conn.contentLengthLong
+                                    var bytesReadTotal = 0L
+                                    conn.inputStream.use { input ->
+                                        tempFile.outputStream().use { output ->
+                                            val buffer = ByteArray(32768)
+                                            var n: Int
+                                            while (input.read(buffer).also { n = it } != -1) {
+                                                output.write(buffer, 0, n)
+                                                bytesReadTotal += n
+                                                if (totalLength > 0) {
+                                                    val pct = (bytesReadTotal.toFloat() / totalLength.toFloat()).coerceIn(0f, 1f)
+                                                    downloadProgress = pct
+                                                    downloadStatusText = "Downloading: ${(pct * 100).toInt()}%"
+                                                } else {
+                                                    downloadStatusText = "Downloaded ${(bytesReadTotal / 1048576)} MB…"
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (tempFile.exists() && tempFile.length() > 5000) {
+                                        tempFile.renameTo(targetFile)
+                                        val uri = Uri.fromFile(targetFile)
+                                        withContext(Dispatchers.Main) {
+                                            isDownloading = false
+                                            onJarSelected(uri)
+                                        }
+                                    } else {
+                                        throw Exception("Downloaded file too small or empty")
+                                    }
+                                } catch (e: Exception) {
+                                    withContext(Dispatchers.Main) {
+                                        isDownloading = false
+                                        downloadError = "Direct download error (${e.localizedMessage ?: "timeout"}). Use browser download below."
+                                    }
+                                }
+                            }
+                        },
+                        enabled = !isResolving && !isDownloading,
+                        variant = DuoButtonVariant.Primary,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 
-            // ── Step 2 – Select Downloaded JAR ───────────────────────────────────
+            // ── Option 2 – Browser Download ─────────────────────────────────────
             InstallStep(
                 stepNumber = 2,
-                title = "Select Downloaded JAR",
-                description = "After downloading the file in your browser, choose it from your device storage."
+                title = "🌐 Download in Browser",
+                description = "Download via your web browser if direct download is restricted."
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .then(
-                            if (hasTriggeredDownload) {
-                                Modifier
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            listOf(PocketColors.Primary, Color(0xFF4CAF50))
-                                        )
-                                    )
-                            } else {
-                                Modifier
-                                    .border(
-                                        width = 1.5.dp,
-                                        color = PocketColors.Primary.copy(alpha = 0.45f),
-                                        shape = RoundedCornerShape(14.dp)
-                                    )
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                        .border(1.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                        .clickable {
+                            hasTriggeredDownload = true
+                            runCatching {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
                             }
+                        }
+                        .padding(vertical = 13.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "🌐  Open Browser Download Page",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+
+            // ── Option 3 – Select Downloaded JAR ─────────────────────────────────
+            InstallStep(
+                stepNumber = 3,
+                title = "📂 Select Downloaded JAR From Storage",
+                description = "Choose any .jar file downloaded from browser or stored on your device."
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .border(
+                            width = 1.5.dp,
+                            color = PocketColors.Primary.copy(alpha = 0.55f),
+                            shape = RoundedCornerShape(14.dp)
                         )
                         .clickable {
                             jarPickerLauncher.launch(arrayOf("application/java-archive", "*/*"))
                         }
-                        .padding(vertical = 15.dp),
+                        .padding(vertical = 13.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = if (hasTriggeredDownload) "📂  Select File From Device ➜" else "📂  Select File From Device",
-                        color = if (hasTriggeredDownload) Color.White else PocketColors.PrimaryDark,
+                        text = "📂  Select .JAR File From Device",
+                        color = PocketColors.PrimaryDark,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 15.sp
+                        fontSize = 14.sp
                     )
                 }
             }
