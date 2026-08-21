@@ -197,12 +197,12 @@ fun PocketTopBar(
                     modifier = Modifier
                         .size(38.dp)
                         .background(
-                            color = PocketColors.FooterLogoBg,
-                            shape = RoundedCornerShape(9.dp)
+                            color = if (com.pockethost.app.ui.theme.pocketIsDarkTheme()) Color(0xFF1B3322) else Color(0xFF4ADE80),
+                            shape = RoundedCornerShape(10.dp)
                         )
                         .drawBehind {
                             raisedBorder(
-                                cornerRadius      = 9.dp.toPx(),
+                                cornerRadius      = 10.dp.toPx(),
                                 borderColor       = PocketColors.PrimaryBorder,
                                 bottomBorderColor = PocketColors.PrimaryBorderBottom,
                                 sideWidthPx       = 1.5.dp.toPx(),
@@ -216,8 +216,8 @@ fun PocketTopBar(
                         contentDescription = "PocketHost icon",
                         modifier = Modifier
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(10.dp)),
-                        contentScale = ContentScale.Crop
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Fit
                     )
                 }
                 Text(

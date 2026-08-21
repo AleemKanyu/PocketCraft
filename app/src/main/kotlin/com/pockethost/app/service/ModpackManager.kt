@@ -977,16 +977,26 @@ object ModpackManager {
 
             if (!existingValid) {
                 val urls = prioritizeDownloadUrls(manifestFile.downloads)
-                if (urls.isEmpty()) {
-                    throw Exception("Missing download URL for modpack file: ${manifestFile.path}")
+                if (urls.isNotEmpty()) {
+                    runCatching {
+                        blockedRuntimeFileFetchWithFallback(
+                            urls = urls,
+                            dest = dest,
+                            label = manifestFile.path,
+                            onProgress = {}
+                        )
+                        verifyManifestFileHash(dest, manifestFile)
+                    }.onFailure { error ->
+                        val isRequired = manifestFile.serverSupport.trim().lowercase() == "required"
+                        val isModJar = relativePath.startsWith("mods/")
+                        if (isRequired && !isModJar) {
+                            throw Exception("Could not download required modpack file: ${manifestFile.path}", error)
+                        } else {
+                            Log.w(TAG, "Skipping failed optional/client modpack file ${manifestFile.path}: ${error.message}")
+                            runCatching { dest.delete() }
+                        }
+                    }
                 }
-                blockedRuntimeFileFetchWithFallback(
-                    urls = urls,
-                    dest = dest,
-                    label = manifestFile.path,
-                    onProgress = {}
-                )
-                verifyManifestFileHash(dest, manifestFile)
             }
 
             onProgress(index + 1, serverFiles.size)
@@ -1618,7 +1628,48 @@ object ModpackManager {
     }
 
     private suspend fun blockedRuntimeFileFetch(url: String, dest: File, onProgress: (Int) -> Unit): Unit = withContext(Dispatchers.IO) {
-        throw Exception("Downloading executable files is not supported due to Google Play Policy.")
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", "PocketHost-App/1.0 (Android; support@pockethost.app)")
+            .build()
+
+        dest.parentFile?.mkdirs()
+        val tempDest = File(dest.parentFile, "${dest.name}.tmp-${System.currentTimeMillis()}")
+        try {
+            executeWithRetry(request, "download modpack file $url").use { response ->
+                if (!response.isSuccessful) {
+                    throw Exception("HTTP ${response.code} downloading $url")
+                }
+                val body = response.body ?: throw Exception("Empty response body for $url")
+                val totalLength = body.contentLength()
+                var downloaded = 0L
+
+                body.byteStream().use { input ->
+                    tempDest.outputStream().use { output ->
+                        val buffer = ByteArray(32 * 1024)
+                        var read = input.read(buffer)
+                        while (read != -1) {
+                            output.write(buffer, 0, read)
+                            downloaded += read
+                            if (totalLength > 0) {
+                                val progress = ((downloaded * 100) / totalLength).toInt()
+                                onProgress(progress)
+                            }
+                            read = input.read(buffer)
+                        }
+                        output.flush()
+                    }
+                }
+            }
+            if (dest.exists()) dest.delete()
+            if (!tempDest.renameTo(dest)) {
+                tempDest.copyTo(dest, overwrite = true)
+                tempDest.delete()
+            }
+        } catch (e: Exception) {
+            tempDest.delete()
+            throw e
+        }
     }
 
     private fun executeWithRetry(
