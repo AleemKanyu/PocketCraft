@@ -331,11 +331,19 @@ fun ServerScreen(
                             stateHolder = stateHolder,
                             createMode = worldSetupCreateMode,
                             onVersionSelected = onVersionSelected,
-                            onBack = { showWorldSetupPage = false },
+                            onBack = {
+                                showWorldSetupPage = false
+                                worldSetupCreateMode = false
+                            },
                             onMessage = showMessage,
-                            onComplete = { showWorldSetupPage = false },
+                            onComplete = {
+                                showWorldSetupPage = false
+                                worldSetupCreateMode = false
+                                navigateToTab(PocketTab.HOME)
+                            },
                             onNavigateToSignUp = {
                                 showWorldSetupPage = false
+                                worldSetupCreateMode = false
                                 settingsInitialActiveTab = 2
                                 settingsInitialAuthTab = 1
                                 navigateToTab(PocketTab.SETTINGS)

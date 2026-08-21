@@ -72,6 +72,19 @@ private val splashMascots = listOf(
 
 @Composable
 private fun SplashMascotBackground() {
+    val isDark = com.pockethost.app.ui.theme.pocketIsDarkTheme()
+    val cubeRes = if (isDark) R.drawable.cube_logo_dark else R.drawable.cube_logo_light
+    val mascots = remember(cubeRes) {
+        listOf(
+            SplashMascot(cubeRes, 36.dp, 24.dp, 96.dp, -14f, 0.08f),
+            SplashMascot(R.drawable.ic_mods_pixel, 28.dp, 300.dp, 140.dp, 18f, 0.06f),
+            SplashMascot(R.drawable.ic_world_pixel, 32.dp, 16.dp, 520.dp, 10f, 0.06f),
+            SplashMascot(R.drawable.ic_pickaxe_pixel, 30.dp, 280.dp, 580.dp, -20f, 0.07f),
+            SplashMascot(R.drawable.ic_netherite_chestplate_hd, 26.dp, 48.dp, 660.dp, 0.05f, 0.05f),
+            SplashMascot(cubeRes, 40.dp, 220.dp, 720.dp, 16f, 0.08f)
+        )
+    }
+
     val infiniteTransition = rememberInfiniteTransition(label = "mascot_drift")
     
     val driftY1 by infiniteTransition.animateFloat(
@@ -103,7 +116,7 @@ private fun SplashMascotBackground() {
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
-        splashMascots.forEachIndexed { index, mascot ->
+        mascots.forEachIndexed { index, mascot ->
             val dy = if (index % 2 == 0) driftY1 else driftY2
             val dr = if (index % 3 == 0) slowRotation else -slowRotation
             
@@ -131,45 +144,23 @@ fun SplashScreen(
         animationSpec = tween(durationMillis = 260),
         label         = "splash_progress"
     )
-    // Rich dark greenish tone background
-    val baseColor = Color(0xFF0D1610)
-    val centerColor = Color(0xFF132317)
+    val isDark = com.pockethost.app.ui.theme.pocketIsDarkTheme()
+    val baseColor = PocketColors.BgApp
+    val surfaceColor = PocketColors.SurfaceCard
 
     val splashBackground = Brush.verticalGradient(
         colors = listOf(
             baseColor,
-            centerColor,
+            surfaceColor,
             baseColor
         )
     )
 
-    val titleColor = when (PocketColors.activeMobTheme) {
-        MobTheme.SKELETON -> Color(0xFFF0EBE0)
-        MobTheme.CREEPER -> Color(0xFFEFF7EF)
-        MobTheme.SIMPLE_WHITE, MobTheme.SIMPLE_DARK -> Color(0xFFEFF7EF)
-        MobTheme.CUSTOM -> CustomThemePalette.textPrimary
-    }
-
-    val statusColor = when (PocketColors.activeMobTheme) {
-        MobTheme.SKELETON -> Color(0xFF8A94A8)
-        MobTheme.CREEPER -> Color(0xFF8AAA8A)
-        MobTheme.SIMPLE_WHITE, MobTheme.SIMPLE_DARK -> Color(0xFF8AAA8A)
-        MobTheme.CUSTOM -> CustomThemePalette.textSecondary
-    }
-
-    val progressColor = when (PocketColors.activeMobTheme) {
-        MobTheme.SKELETON -> Color(0xFF7A8490)
-        MobTheme.CREEPER -> Color(0xFF4ADE80)
-        MobTheme.SIMPLE_WHITE, MobTheme.SIMPLE_DARK -> Color(0xFF4ADE80)
-        MobTheme.CUSTOM -> CustomThemePalette.primary
-    }
-
-    val trackColor = when (PocketColors.activeMobTheme) {
-        MobTheme.SKELETON -> Color(0xFF2E3440)
-        MobTheme.CREEPER -> Color(0xFF2C362C)
-        MobTheme.SIMPLE_WHITE, MobTheme.SIMPLE_DARK -> Color(0xFF2C362C)
-        MobTheme.CUSTOM -> CustomThemePalette.inactiveBg
-    }
+    val titleColor = PocketColors.TextPrimary
+    val statusColor = PocketColors.TextSecondary
+    val progressColor = PocketColors.Primary
+    val trackColor = PocketColors.InactiveBorder
+    val logoRes = if (isDark) R.drawable.cube_logo_dark else R.drawable.cube_logo_light
 
     val pulseTransition = rememberInfiniteTransition(label = "logo_pulse")
     val logoScale by pulseTransition.animateFloat(
@@ -226,7 +217,7 @@ fun SplashScreen(
                 )
         ) {
             Image(
-                painter = painterResource(id = R.drawable.cube_logo_dark),
+                painter = painterResource(id = logoRes),
                 contentDescription = null,
                 modifier = Modifier
                     .size(96.dp)
@@ -257,12 +248,10 @@ fun SplashScreen(
                     modifier = Modifier
                         .rotate(-8f)
                         .background(
-                            brush = Brush.linearGradient(
-                                colors = listOf(Color(0xFF10B981), Color(0xFF059669), Color(0xFF047857))
-                            ),
+                            color = PocketColors.Primary,
                             shape = RoundedCornerShape(6.dp)
                         )
-                        .border(1.5.dp, Color(0xFFA7F3D0), RoundedCornerShape(6.dp))
+                        .border(1.5.dp, PocketColors.PrimaryBorder, RoundedCornerShape(6.dp))
                         .padding(horizontal = 7.dp, vertical = 2.dp)
                 ) {
                     Text(
@@ -270,7 +259,7 @@ fun SplashScreen(
                         fontFamily = Monocraft,
                         fontWeight = FontWeight.Black,
                         fontSize = 14.sp,
-                        color = Color.White,
+                        color = PocketColors.PrimaryText,
                         letterSpacing = 1.sp
                     )
                 }

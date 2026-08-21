@@ -509,17 +509,20 @@ fun SettingsScreen(
             ) {
             // --- TAB 0: SERVER ---
             if (activeTab == 0) {
-                item {
-                    AnimatedEntranceContainer(index = 0) {
-                        SettingsToggleRow(
-                            vectorIcon = Icons.Default.Devices,
-                            label = "Bedrock Crossplay Support (Geyser & Floodgate)",
-                            description = if (stateHolder.bedrockBridgeEnabled) "ENABLED — Allows Bedrock (Mobile & Console) players to join." else "DISABLED — Server boots faster and uses less memory (Java players only).",
-                            checked = stateHolder.bedrockBridgeEnabled,
-                            onToggle = { enabled ->
-                                stateHolder.toggleBedrockBridge(enabled)
-                            }
-                        )
+                if (stateHolder.config.serverType != com.pockethost.app.data.model.ServerType.VANILLA &&
+                    stateHolder.config.serverType != com.pockethost.app.data.model.ServerType.MODPACK) {
+                    item {
+                        AnimatedEntranceContainer(index = 0) {
+                            SettingsToggleRow(
+                                vectorIcon = Icons.Default.Devices,
+                                label = "Bedrock Crossplay Support (Geyser & Floodgate)",
+                                description = if (stateHolder.bedrockBridgeEnabled) "ENABLED — Allows Bedrock (Mobile & Console) players to join." else "DISABLED — Server boots faster and uses less memory (Java players only).",
+                                checked = stateHolder.bedrockBridgeEnabled,
+                                onToggle = { enabled ->
+                                    stateHolder.toggleBedrockBridge(enabled)
+                                }
+                            )
+                        }
                     }
                 }
                 item {
@@ -780,17 +783,20 @@ fun SettingsScreen(
                     }
                 }
 
-                item {
-                    AnimatedEntranceContainer(index = 8) {
-                        SettingsToggleRow(
-                            vectorIcon = Icons.Default.Devices,
-                            label = "Bedrock Crossplay Support",
-                            description = if (stateHolder.bedrockBridgeEnabled) "Geyser & Floodgate enabled. Bedrock mobile and console players can join." else "Disabled. Server boots faster and saves memory (Java players only).",
-                            checked = stateHolder.bedrockBridgeEnabled,
-                            onToggle = { enabled ->
-                                stateHolder.toggleBedrockBridge(enabled)
-                            }
-                        )
+                if (currentState.config.serverType != com.pockethost.app.data.model.ServerType.VANILLA &&
+                    currentState.config.serverType != com.pockethost.app.data.model.ServerType.MODPACK) {
+                    item {
+                        AnimatedEntranceContainer(index = 8) {
+                            SettingsToggleRow(
+                                vectorIcon = Icons.Default.Devices,
+                                label = "Bedrock Crossplay Support",
+                                description = if (stateHolder.bedrockBridgeEnabled) "Geyser & Floodgate enabled. Bedrock mobile and console players can join." else "Disabled. Server boots faster and saves memory (Java players only).",
+                                checked = stateHolder.bedrockBridgeEnabled,
+                                onToggle = { enabled ->
+                                    stateHolder.toggleBedrockBridge(enabled)
+                                }
+                            )
+                        }
                     }
                 }
 

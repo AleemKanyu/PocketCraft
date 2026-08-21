@@ -91,7 +91,7 @@ fun WorldSetupScreen(
         )
     }
     var serverDescription by remember(stateHolder.serverDescription, createMode) {
-        mutableStateOf(if (createMode) "Hosted on PocketCraft" else stateHolder.serverDescription)
+        mutableStateOf(if (createMode) ServerStateHolder.DEFAULT_SERVER_DESCRIPTION else stateHolder.serverDescription)
     }
     var serverPhotoUri by remember(stateHolder.serverPhotoUrl) {
         mutableStateOf(if (stateHolder.serverPhotoUrl.isNotBlank()) Uri.parse(stateHolder.serverPhotoUrl) else null)
@@ -177,7 +177,7 @@ fun WorldSetupScreen(
             else -> stateHolder.config.gameVersion.ifBlank { selectedVersion.trim() }
         }
         val trimmedServerName = serverName.trim()
-        val trimmedDescription = if (serverDescription.trim().isBlank()) "Hosted on PocketCraft" else serverDescription.trim()
+        val trimmedDescription = if (serverDescription.trim().isBlank()) ServerStateHolder.DEFAULT_SERVER_DESCRIPTION else serverDescription.trim()
 
         if (trimmedServerName.isBlank() || (selectedServerType.supportsVersionSelect && versionId.isBlank())) {
             onMessage("Please enter a valid server name and version.")
