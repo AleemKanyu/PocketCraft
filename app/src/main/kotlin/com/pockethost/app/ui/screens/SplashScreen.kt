@@ -62,12 +62,12 @@ private data class SplashMascot(
 )
 
 private val splashMascots = listOf(
-    SplashMascot(R.drawable.ic_launcher_foreground_circle, 36.dp, 24.dp, 96.dp, -14f, 0.07f),
+    SplashMascot(R.drawable.cube_logo_dark, 36.dp, 24.dp, 96.dp, -14f, 0.07f),
     SplashMascot(R.drawable.ic_mods_pixel, 28.dp, 300.dp, 140.dp, 18f, 0.06f),
     SplashMascot(R.drawable.ic_world_pixel, 32.dp, 16.dp, 520.dp, 10f, 0.06f),
     SplashMascot(R.drawable.ic_pickaxe_pixel, 30.dp, 280.dp, 580.dp, -20f, 0.07f),
     SplashMascot(R.drawable.ic_netherite_chestplate_hd, 26.dp, 48.dp, 660.dp, 8f, 0.05f),
-    SplashMascot(R.drawable.ic_launcher_foreground_circle, 40.dp, 220.dp, 720.dp, 16f, 0.06f)
+    SplashMascot(R.drawable.cube_logo_dark, 40.dp, 220.dp, 720.dp, 16f, 0.06f)
 )
 
 @Composable
@@ -131,14 +131,9 @@ fun SplashScreen(
         animationSpec = tween(durationMillis = 260),
         label         = "splash_progress"
     )
-    // Colors matching selected theme but darker tone (represented by PocketColors.FooterBg)
-    val baseColor = PocketColors.FooterBg
-    val centerColor = Color(
-        red = baseColor.red + (1f - baseColor.red) * 0.05f,
-        green = baseColor.green + (1f - baseColor.green) * 0.05f,
-        blue = baseColor.blue + (1f - baseColor.blue) * 0.05f,
-        alpha = baseColor.alpha
-    )
+    // Rich dark greenish tone background
+    val baseColor = Color(0xFF0D1610)
+    val centerColor = Color(0xFF132317)
 
     val splashBackground = Brush.verticalGradient(
         colors = listOf(
@@ -231,7 +226,7 @@ fun SplashScreen(
                 )
         ) {
             Image(
-                painter = painterResource(id = if (com.pockethost.app.ui.theme.pocketIsDarkTheme()) R.drawable.app_logo_dark else R.drawable.app_logo_light),
+                painter = painterResource(id = R.drawable.cube_logo_dark),
                 contentDescription = null,
                 modifier = Modifier
                     .size(96.dp)
