@@ -971,9 +971,49 @@ fun PocketHostApp(
                 return
             }
 
-            pendingModpackImportId = modpackId
-            pendingModpackImportPageUrl = encodedPageUrl ?: "https://modrinth.com/modpacks"
-            showModpackImportDialog = true
+            scope.launch {
+                modpackImportInProgress = true
+                modpackImportError = null
+                modpackImportId = modpackId
+                modpackImportStatus = "Downloading and preparing modpack '$modpackId'..."
+                modpackImportProgress = 5
+
+                val result = ModpackManager.installModpack(
+                    context = context,
+                    modpackId = modpackId,
+                    worldName = activeWorld,
+                    onStatus = { status ->
+                        modpackImportStatus = status
+                    },
+                    onProgress = { progress ->
+                        modpackImportProgress = progress.coerceIn(5, 95)
+                    }
+                )
+                if (result.isSuccess) {
+                    Toast.makeText(context, "Modpack installed successfully!", Toast.LENGTH_LONG).show()
+                    modpackImportProgress = 100
+                    modpackImportStatus = "Modpack ready! Configuring server..."
+                    val currentConfig = stateHolder.config
+                    val newModpackConfig = currentConfig.copy(
+                        serverType = ServerType.MODPACK,
+                        gameVersion = modpackId,
+                        customJarPath = modpackId
+                    )
+                    stateHolder.saveSettings(newModpackConfig)
+                    AppPreferencesStore.setSelectedServerType(context, ServerType.MODPACK.name)
+                    AppPreferencesStore.setSelectedVersion(context, modpackId)
+                    downloadedVersions = scanDownloadedRuntimeKeys(context.applicationContext)
+                    requestVersionChange(ServerType.MODPACK, modpackId)
+                    delay(1_500)
+                    modpackImportInProgress = false
+                    modpackImportId = null
+                } else {
+                    val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+                    modpackImportError = "Install failed: $errorMsg"
+                    modpackImportInProgress = false
+                    Toast.makeText(context, "Install failed: $errorMsg", Toast.LENGTH_LONG).show()
+                }
+            }
             return
         }
 
