@@ -231,20 +231,9 @@ fun PlayersScreen(
                             )
                         }
                     )
-                    4 -> PlayersListTab(
-                        players = stateHolder.bannedPlayers,
-                        emptyTitle = "Ban list is empty",
-                        emptySubtitle = "Banned players are stored in `banned-players.json`.",
-                        onPlayerSelected = onPlayerSelected,
-                        actionLists = { player ->
-                            listOf(
-                                PlayerCardAction(
-                                    label = "Unban",
-                                    onClick = { stateHolder.unbanPlayer(player.name) },
-                                    tint = PocketColors.Primary
-                                )
-                            )
-                        }
+                    4 -> BannedTab(
+                        stateHolder = stateHolder,
+                        onPlayerSelected = onPlayerSelected
                     )
                     else -> Box(Modifier.fillMaxSize())
                 }
@@ -1737,6 +1726,209 @@ fun PlayersListTab(
                         actions = actionLists(player)
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun BannedTab(
+    stateHolder: ServerStateHolder,
+    onPlayerSelected: (PlayerInfo) -> Unit
+) {
+    var showUnbanIpDialog by remember { mutableStateOf(false) }
+    var ipToUnban by remember { mutableStateOf("") }
+
+    if (showUnbanIpDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnbanIpDialog = false },
+            title = { Text("Unban IP Address", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Enter the IP address you wish to unban from the server:", fontSize = 14.sp)
+                    OutlinedTextField(
+                        value = ipToUnban,
+                        onValueChange = { ipToUnban = it },
+                        placeholder = { Text("e.g. 192.168.1.50") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = duoTextFieldShape(),
+                        colors = duoOutlinedTextFieldColors()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val ip = ipToUnban.trim()
+                        if (ip.isNotBlank()) {
+                            stateHolder.unbanIp(ip)
+                        }
+                        ipToUnban = ""
+                        showUnbanIpDialog = false
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Unban IP")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnbanIpDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            GameCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column {
+                        Text(
+                            text = "IP Ban Management",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 16.sp
+                        )
+                        Text(
+                            text = "Unban specific IP addresses or clear all active IP bans",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { showUnbanIpDialog = true },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = PocketColors.Primary,
+                                contentColor = PocketColors.TextLight
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Shield,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Unban IP", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        if (stateHolder.bannedIps.isNotEmpty()) {
+                            OutlinedButton(
+                                onClick = { stateHolder.unbanAllIps() },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Clear All IP Bans", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (stateHolder.bannedIps.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Banned IP Addresses (${stateHolder.bannedIps.size})",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
+            items(stateHolder.bannedIps, key = { it.ip }) { record ->
+                GameCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = record.ip,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                fontFamily = Monocraft
+                            )
+                            if (record.reason.isNotBlank()) {
+                                Text(
+                                    text = "Reason: ${record.reason}",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        TextButton(
+                            onClick = { stateHolder.unbanIp(record.ip) }
+                        ) {
+                            Text("Unban", color = PocketColors.Primary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Text(
+                text = "Banned Players (${stateHolder.bannedPlayers.size})",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+
+        if (stateHolder.bannedPlayers.isEmpty() && stateHolder.bannedIps.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Ban list is empty",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Banned players and IPs are stored in banned-players.json and banned-ips.json.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        } else {
+            items(stateHolder.bannedPlayers, key = { it.uuid.ifBlank { it.name } }) { player ->
+                PlayerCard(
+                    username = player.name,
+                    subtitle = if (player.uuid.isNotEmpty()) player.uuid.take(8) else "Banned player",
+                    avatarUrl = resolvePlayerAvatarUrl(player.name, player.uuid, 64),
+                    onClick = { onPlayerSelected(player) },
+                    actions = listOf(
+                        PlayerCardAction(
+                            label = "Unban",
+                            onClick = { stateHolder.unbanPlayer(player.name) },
+                            tint = PocketColors.Primary
+                        )
+                    )
+                )
             }
         }
     }

@@ -24,7 +24,7 @@ object RconClient {
         password: String = DEFAULT_PASSWORD,
         timeoutMs: Int = DEFAULT_TIMEOUT_MS
     ): String {
-        val trimmedCommand = command.trim()
+        val trimmedCommand = command.trim().removePrefix("/")
         if (trimmedCommand.isBlank()) return ""
 
         return runCatching {
@@ -62,41 +62,42 @@ object RconClient {
                     out.flush()
                 }
 
+                fun readPacket(): Triple<Int, Int, String> {
+                    val len = readIntLE()
+                    if (len < 10) return Triple(-1, -1, "")
+                    val id = readIntLE()
+                    val type = readIntLE()
+                    val payloadSize = (len - 10).coerceAtLeast(0)
+                    val bytes = if (payloadSize > 0) ByteArray(payloadSize).also { inp.readFully(it) } else ByteArray(0)
+                    inp.read(); inp.read() // null terminators
+                    return Triple(id, type, String(bytes, StandardCharsets.UTF_8).trim())
+                }
+
                 // 1. Send Authentication packet (type 3)
                 sendPacket(1, SERVERDATA_AUTH, password)
-                val authLength = readIntLE()
-                if (authLength < 10) return ""
-
-                val authId = readIntLE()
-                val authType = readIntLE()
-                val authPayloadSize = (authLength - 10).coerceAtLeast(0)
-                if (authPayloadSize > 0) {
-                    inp.skipBytes(authPayloadSize)
+                
+                // Read until we get SERVERDATA_AUTH_RESPONSE (type 2) or failure (id == -1)
+                var authenticated = false
+                repeat(5) {
+                    val (authId, authType, _) = readPacket()
+                    if (authId == -1) {
+                        Log.w(TAG, "RCON authentication failed (invalid password).")
+                        return ""
+                    }
+                    if (authType == SERVERDATA_AUTH_RESPONSE && authId == 1) {
+                        authenticated = true
+                        return@repeat
+                    }
                 }
-                inp.read() // null byte
-                inp.read() // null byte
 
-                if (authId == -1) {
-                    Log.w(TAG, "RCON authentication failed (invalid password).")
+                if (!authenticated) {
+                    Log.w(TAG, "RCON authentication timeout or invalid response.")
                     return ""
                 }
 
                 // 2. Send Command packet (type 2)
                 sendPacket(2, SERVERDATA_EXECCOMMAND, trimmedCommand)
-                val cmdLength = readIntLE()
-                if (cmdLength < 10) return "[OK]"
-
-                val cmdId = readIntLE()
-                val cmdType = readIntLE()
-                val cmdPayloadSize = (cmdLength - 10).coerceAtLeast(0)
-                val responseBytes = ByteArray(cmdPayloadSize)
-                if (cmdPayloadSize > 0) {
-                    inp.readFully(responseBytes)
-                }
-                inp.read() // null byte
-                inp.read() // null byte
-
-                val responseText = String(responseBytes, StandardCharsets.UTF_8).trim()
+                val (_, _, responseText) = readPacket()
                 if (responseText.isBlank()) "[OK]" else responseText
             }
         }.getOrElse { error ->
@@ -123,7 +124,7 @@ object RconClient {
         timeoutMs: Int = DEFAULT_TIMEOUT_MS
     ): List<String> {
         if (commands.isEmpty()) return emptyList()
-        val nonBlank = commands.map { it.trim() }.filter { it.isNotBlank() }
+        val nonBlank = commands.map { it.trim().removePrefix("/") }.filter { it.isNotBlank() }
         if (nonBlank.isEmpty()) return emptyList()
 
         return runCatching {
@@ -159,9 +160,20 @@ object RconClient {
 
                 // Authenticate once
                 sendPacket(1, SERVERDATA_AUTH, password)
-                val (authId, _, _) = readPacket()
-                if (authId == -1) {
-                    Log.w(TAG, "RCON batch auth failed")
+                var authenticated = false
+                repeat(5) {
+                    val (authId, authType, _) = readPacket()
+                    if (authId == -1) {
+                        Log.w(TAG, "RCON batch auth failed")
+                        return@use commands.map { "" }
+                    }
+                    if (authType == SERVERDATA_AUTH_RESPONSE && authId == 1) {
+                        authenticated = true
+                        return@repeat
+                    }
+                }
+                if (!authenticated) {
+                    Log.w(TAG, "RCON batch auth timeout or invalid response")
                     return@use commands.map { "" }
                 }
 

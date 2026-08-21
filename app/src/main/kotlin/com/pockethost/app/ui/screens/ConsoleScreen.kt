@@ -7,6 +7,9 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Switch
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -2596,6 +2599,8 @@ private fun ConsoleCard(
                 modifier = Modifier.weight(1f),
                 shape = duoTextFieldShape(),
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { onSend() }),
                 textStyle = MaterialTheme.typography.bodyMedium.copy(
                     fontFamily = DMMono
                 ),

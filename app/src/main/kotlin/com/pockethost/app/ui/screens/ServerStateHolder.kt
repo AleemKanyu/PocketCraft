@@ -494,6 +494,7 @@ class ServerStateHolder(
     val whitelistPlayers = mutableStateListOf<PlayerInfo>()
     val opPlayers = mutableStateListOf<PlayerInfo>()
     val bannedPlayers = mutableStateListOf<PlayerInfo>()
+    val bannedIps = mutableStateListOf<BannedIpRecord>()
     val backups = mutableStateListOf<BackupEntry>()
     val worlds = mutableStateListOf<WorldEntry>()
     val afkFarms: List<AfkFarmLocation>
@@ -928,6 +929,7 @@ class ServerStateHolder(
             replaceAll(whitelistPlayers, snapshot.whitelist)
             replaceAll(opPlayers, snapshot.ops)
             replaceAll(bannedPlayers, snapshot.banned)
+            replaceAll(bannedIps, snapshot.bannedIps)
             replaceAll(backups, snapshot.backups)
             replaceAll(worlds, snapshot.worlds)
             relayHost = snapshot.relayHost
@@ -1660,8 +1662,19 @@ class ServerStateHolder(
     }
 
     fun sendCommand(cmd: String, showOfflineWarning: Boolean = true) {
-        val clean = cmd.trim()
+        var clean = cmd.trim().removePrefix("/")
         if (clean.isBlank()) return
+
+        val lower = clean.lowercase(Locale.getDefault())
+        if (lower.startsWith("unban-ip ")) {
+            val targetIp = clean.substring(9).trim()
+            clean = "pardon-ip $targetIp"
+            unbanIp(targetIp)
+        } else if (lower.startsWith("pardon-ip ")) {
+            val targetIp = clean.substring(10).trim()
+            unbanIp(targetIp)
+        }
+
         if (!isRunning) {
             if (showOfflineWarning) {
                 appendLog("[RCON] Server is offline. Start the server before sending commands.")
@@ -1672,7 +1685,7 @@ class ServerStateHolder(
         com.pockethost.app.server.ServerLauncher.sendCommand(clean)
         scope.launch(Dispatchers.IO) {
             runCatching {
-                val response = RconClient.sendCommand(clean)
+                val response = RconClient.sendCommand(clean, port = config.rconPort)
                 if (response.isNotBlank() && response != "[OK]") {
                     withContext(Dispatchers.Main) { appendLog(response) }
                 }
@@ -1682,17 +1695,18 @@ class ServerStateHolder(
 
     // Source RCON client (RFC-compliant packet framing over TCP socket 25575)
     fun sendRconCommand(command: String): String {
-        val rconResponse = RconClient.sendCommand(command)
+        val clean = command.trim().removePrefix("/")
+        val rconResponse = RconClient.sendCommand(clean, port = config.rconPort)
         if (rconResponse.isNotBlank()) {
             return rconResponse
         }
-        com.pockethost.app.server.ServerLauncher.sendCommand(command)
+        com.pockethost.app.server.ServerLauncher.sendCommand(clean)
         return "[OK]"
     }
 
     fun sendRconCommands(commands: List<String>): List<String> {
         if (commands.isEmpty()) return emptyList()
-        return RconClient.sendCommands(commands)
+        return RconClient.sendCommands(commands, port = config.rconPort)
     }
 
     // Little-endian helpers for RCON protocol
@@ -2091,6 +2105,10 @@ class ServerStateHolder(
         val normalizedName = name.trim()
         if (normalizedName.isBlank()) return
 
+        if (isRunning) {
+            sendCommand("pardon $normalizedName")
+        }
+
         scope.launch(Dispatchers.IO) {
             val error = mutateNamedList("banned-players.json") { list ->
                 list.filterNot { it.name.equals(normalizedName, ignoreCase = true) }
@@ -2100,6 +2118,76 @@ class ServerStateHolder(
                 if (error != null) {
                     appendLog("[PocketHost] Failed to unban $normalizedName: ${error.message}")
                 }
+                refreshAll()
+            }
+        }
+    }
+
+    fun unbanIp(ip: String) {
+        val cleanIp = ip.trim()
+        if (cleanIp.isBlank()) return
+
+        if (isRunning) {
+            com.pockethost.app.server.ServerLauncher.sendCommand("pardon-ip $cleanIp")
+            scope.launch(Dispatchers.IO) {
+                RconClient.sendCommand("pardon-ip $cleanIp", port = config.rconPort)
+            }
+        }
+
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                val jsonFile = File(serverDir, "banned-ips.json")
+                if (jsonFile.exists()) {
+                    val arr = JSONArray(jsonFile.readText())
+                    val newArr = JSONArray()
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.optJSONObject(i) ?: continue
+                        val itemIp = obj.optString("ip").trim()
+                        if (!itemIp.equals(cleanIp, ignoreCase = true)) {
+                            newArr.put(obj)
+                        }
+                    }
+                    jsonFile.writeText(newArr.toString(2))
+                }
+
+                val txtFile = File(serverDir, "banned-ips.txt")
+                if (txtFile.exists()) {
+                    val newLines = txtFile.readLines().filterNot { line ->
+                        val itemIp = line.trim().split("|").firstOrNull()?.trim().orEmpty()
+                        itemIp.equals(cleanIp, ignoreCase = true)
+                    }
+                    txtFile.writeText(newLines.joinToString("\n"))
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                appendLog("[PocketHost] Unbanned IP: $cleanIp")
+                refreshAll()
+            }
+        }
+    }
+
+    fun unbanAllIps() {
+        if (isRunning) {
+            bannedIps.forEach { record ->
+                com.pockethost.app.server.ServerLauncher.sendCommand("pardon-ip ${record.ip}")
+            }
+            scope.launch(Dispatchers.IO) {
+                bannedIps.forEach { record ->
+                    RconClient.sendCommand("pardon-ip ${record.ip}", port = config.rconPort)
+                }
+            }
+        }
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                File(serverDir, "banned-ips.json").writeText("[]")
+                val txtFile = File(serverDir, "banned-ips.txt")
+                if (txtFile.exists()) {
+                    txtFile.writeText("")
+                }
+            }
+            withContext(Dispatchers.Main) {
+                appendLog("[PocketHost] All IP bans cleared.")
                 refreshAll()
             }
         }
@@ -3993,6 +4081,7 @@ class ServerStateHolder(
             whitelist = readNamedList("whitelist.json"),
             ops = readNamedList("ops.json"),
             banned = readNamedList("banned-players.json"),
+            bannedIps = readBannedIps(),
             backups = listBackupsForWorld(activeWorld),
             relayHost = com.pockethost.app.data.preferences.AppPreferences(appContext).relayHost,
             activeWorldNeedsSetup = !readWorldsWithCompletedSetup(properties).contains(levelName),
@@ -4444,6 +4533,58 @@ class ServerStateHolder(
                 }
             }.sortedBy { it.name.lowercase(Locale.getDefault()) }
         }.getOrDefault(emptyList())
+    }
+
+    private fun readBannedIps(): List<BannedIpRecord> {
+        val jsonFile = File(serverDir, "banned-ips.json")
+        val txtFile = File(serverDir, "banned-ips.txt")
+        val result = mutableListOf<BannedIpRecord>()
+        val seen = mutableSetOf<String>()
+
+        if (jsonFile.exists()) {
+            runCatching {
+                val arr = JSONArray(jsonFile.readText())
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val ip = obj.optString("ip").trim()
+                    if (ip.isNotBlank() && seen.add(ip.lowercase(Locale.getDefault()))) {
+                        result.add(
+                            BannedIpRecord(
+                                ip = ip,
+                                created = obj.optString("created"),
+                                source = obj.optString("source"),
+                                expires = obj.optString("expires"),
+                                reason = obj.optString("reason")
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        if (txtFile.exists()) {
+            runCatching {
+                txtFile.readLines().forEach { line ->
+                    val clean = line.trim()
+                    if (clean.isNotBlank() && !clean.startsWith("#")) {
+                        val parts = clean.split("|")
+                        val ip = parts.firstOrNull()?.trim().orEmpty()
+                        if (ip.isNotBlank() && seen.add(ip.lowercase(Locale.getDefault()))) {
+                            result.add(
+                                BannedIpRecord(
+                                    ip = ip,
+                                    created = parts.getOrNull(1)?.trim().orEmpty(),
+                                    source = parts.getOrNull(2)?.trim().orEmpty(),
+                                    expires = parts.getOrNull(3)?.trim().orEmpty(),
+                                    reason = parts.getOrNull(4)?.trim().orEmpty()
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        return result.sortedBy { it.ip }
     }
 
     private fun mutateNamedList(
@@ -5551,6 +5692,14 @@ class ServerStateHolder(
         target.addAll(incoming)
     }
 
+    data class BannedIpRecord(
+        val ip: String,
+        val created: String = "",
+        val source: String = "",
+        val expires: String = "",
+        val reason: String = ""
+    )
+
     private data class DashboardSnapshot(
         val config: ServerConfig,
         val localIp: String,
@@ -5563,6 +5712,7 @@ class ServerStateHolder(
         val whitelist: List<PlayerInfo>,
         val ops: List<PlayerInfo>,
         val banned: List<PlayerInfo>,
+        val bannedIps: List<BannedIpRecord>,
         val backups: List<BackupEntry>,
         val relayHost: String,
         val activeWorldNeedsSetup: Boolean,
