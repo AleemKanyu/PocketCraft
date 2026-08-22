@@ -89,7 +89,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = autoVersionCode
-        versionName = "1.0.0"
+        versionName = "1.0.1"
 
         buildConfigField("String", "RELAY_PUBLIC_DOMAIN", "\"joinmc.link\"")
         buildConfigField("String", "GITHUB_REPO_OWNER", "\"$githubRepoOwner\"")
@@ -184,6 +184,13 @@ android {
     lint {
         checkReleaseBuilds = true
         abortOnError = true
+    }
+
+    applicationVariants.all {
+        outputs.all {
+            val outputImpl = this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            outputImpl?.outputFileName = "PocketHost.apk"
+        }
     }
 
     packaging {
