@@ -131,32 +131,81 @@ fun PlayerCard(
             if (trailingContent != null) {
                 trailingContent()
             } else if (actions.isNotEmpty()) {
-                Box {
-                    IconButton(onClick = { expanded = true }) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Player actions",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    PocketDropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (actions.size <= 2) {
                         actions.forEach { action ->
-                            PocketDropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = action.label,
-                                        color = action.tint ?: MaterialTheme.colorScheme.onSurface,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                },
-                                onClick = {
-                                    expanded = false
-                                    action.onClick()
-                                }
+                            val buttonColor = action.tint ?: PocketColors.Primary
+                            Surface(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { action.onClick() },
+                                shape = RoundedCornerShape(10.dp),
+                                color = buttonColor.copy(alpha = 0.14f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, buttonColor.copy(alpha = 0.35f))
+                            ) {
+                                Text(
+                                    text = action.label,
+                                    color = buttonColor,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        val firstAction = actions.first()
+                        val buttonColor = firstAction.tint ?: PocketColors.Primary
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { firstAction.onClick() },
+                            shape = RoundedCornerShape(10.dp),
+                            color = buttonColor.copy(alpha = 0.14f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, buttonColor.copy(alpha = 0.35f))
+                        ) {
+                            Text(
+                                text = firstAction.label,
+                                color = buttonColor,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             )
+                        }
+
+                        Box {
+                            IconButton(
+                                onClick = { expanded = true },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "Player actions",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            PocketDropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false }
+                            ) {
+                                actions.drop(1).forEach { action ->
+                                    PocketDropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = action.label,
+                                                color = action.tint ?: MaterialTheme.colorScheme.onSurface,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        },
+                                        onClick = {
+                                            expanded = false
+                                            action.onClick()
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }

@@ -73,7 +73,7 @@ private val splashMascots = listOf(
 @Composable
 private fun SplashMascotBackground() {
     val isDark = com.pockethost.app.ui.theme.pocketIsDarkTheme()
-    val cubeRes = if (isDark) R.drawable.cube_logo_dark else R.drawable.cube_logo_light
+    val cubeRes = R.drawable.cube_logo_light
     val mascots = remember(cubeRes) {
         listOf(
             SplashMascot(cubeRes, 36.dp, 24.dp, 96.dp, -14f, 0.08f),
@@ -160,7 +160,7 @@ fun SplashScreen(
     val statusColor = PocketColors.TextSecondary
     val progressColor = PocketColors.Primary
     val trackColor = PocketColors.InactiveBorder
-    val logoRes = if (isDark) R.drawable.cube_logo_dark else R.drawable.cube_logo_light
+    val logoRes = R.drawable.cube_logo_light
 
     val pulseTransition = rememberInfiniteTransition(label = "logo_pulse")
     val logoScale by pulseTransition.animateFloat(

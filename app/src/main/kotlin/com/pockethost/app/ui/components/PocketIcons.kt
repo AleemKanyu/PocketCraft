@@ -12,11 +12,11 @@ import com.pockethost.app.ui.theme.pocketIsDarkTheme
 @Composable
 fun PocketAppLogo(
     modifier: Modifier = Modifier,
-    contentDescription: String? = "PocketCraft"
+    contentDescription: String? = "PocketCraft",
+    onPureBlackBackground: Boolean = false
 ) {
-    val isDark = pocketIsDarkTheme()
     Image(
-        painter = painterResource(if (isDark) R.drawable.app_logo_dark else R.drawable.app_logo_light),
+        painter = painterResource(if (onPureBlackBackground) R.drawable.app_logo_dark else R.drawable.app_logo_light),
         contentDescription = contentDescription,
         modifier = modifier
     )
@@ -25,11 +25,11 @@ fun PocketAppLogo(
 @Composable
 fun PocketWorldIcon(
     modifier: Modifier = Modifier,
-    tint: Color = Color.Unspecified
+    tint: Color = Color.Unspecified,
+    onPureBlackBackground: Boolean = false
 ) {
-    val isDark = pocketIsDarkTheme()
     Image(
-        painter = painterResource(if (isDark) R.drawable.app_logo_dark else R.drawable.app_logo_light),
+        painter = painterResource(if (onPureBlackBackground) R.drawable.app_logo_dark else R.drawable.app_logo_light),
         contentDescription = null,
         modifier = modifier
     )

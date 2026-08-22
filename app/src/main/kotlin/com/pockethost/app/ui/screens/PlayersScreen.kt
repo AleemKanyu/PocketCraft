@@ -102,6 +102,7 @@ import com.pockethost.app.data.model.PlayerInfo
 import com.pockethost.app.ui.components.GameCard
 import com.pockethost.app.ui.components.PlayerCard
 import com.pockethost.app.ui.components.PlayerCardAction
+import androidx.compose.foundation.horizontalScroll
 import com.pockethost.app.ui.components.resolvePlayerAvatarUrl
 import com.pockethost.app.ui.components.duoOutlinedTextFieldColors
 import com.pockethost.app.ui.components.duoTextFieldShape
@@ -110,6 +111,10 @@ import com.pockethost.app.ui.components.DuoButtonVariant
 import com.pockethost.app.ui.theme.Monocraft
 import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.ui.theme.PocketMotion
+import com.pockethost.app.ui.theme.button3d
+import com.pockethost.app.ui.theme.card3d
+import com.pockethost.app.ui.theme.ButtonFont
+import com.pockethost.app.ui.theme.DMMono
 import com.pockethost.app.util.LocalAppStrings
 import kotlinx.coroutines.launch
 
@@ -132,25 +137,53 @@ fun PlayersScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        androidx.compose.material3.ScrollableTabRow(
-            selectedTabIndex = selected,
-            containerColor = MaterialTheme.colorScheme.background,
-            divider = {}
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             tabs.forEachIndexed { index, label ->
-                androidx.compose.material3.Tab(
-                    selected = selected == index,
-                    onClick = { selected = index },
-                    text = {
-                        Text(
-                            text = label,
-                            fontWeight = if (selected == index) FontWeight.ExtraBold else FontWeight.Medium,
-                            fontSize = 13.sp
+                val isSelected = selected == index
+                val countText = when (index) {
+                    0 -> stateHolder.onlinePlayers.size.takeIf { it > 0 }?.let { " ($it)" }.orEmpty()
+                    2 -> stateHolder.whitelistPlayers.size.takeIf { it > 0 }?.let { " ($it)" }.orEmpty()
+                    3 -> stateHolder.opPlayers.size.takeIf { it > 0 }?.let { " ($it)" }.orEmpty()
+                    4 -> (stateHolder.bannedPlayers.size + stateHolder.bannedIps.size).takeIf { it > 0 }?.let { " ($it)" }.orEmpty()
+                    else -> ""
+                }
+                Box(
+                    modifier = Modifier
+                        .then(
+                            if (isSelected) {
+                                Modifier.button3d(
+                                    elevation = 4.dp,
+                                    borderColor = PocketColors.PrimaryBorder,
+                                    depthColor = PocketColors.PrimaryBorderBottom
+                                )
+                            } else {
+                                Modifier.card3d(
+                                    elevation = 2.dp,
+                                    cornerRadius = 14.dp,
+                                    borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                )
+                            }
                         )
-                    },
-                    selectedContentColor = PocketColors.Primary,
-                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                        .background(if (isSelected) PocketColors.Primary else MaterialTheme.colorScheme.surface)
+                        .clickable { selected = index }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "$label$countText",
+                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = if (isSelected) PocketColors.PrimaryText else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
 
@@ -1481,7 +1514,8 @@ fun WhitelistTab(
                         Text("Search whitelist or type a username to add")
                     }
                 )
-                Button(
+                DuoButton(
+                    text = LocalAppStrings.current.addPlayer,
                     onClick = {
                         val playerName = query.trim()
                         if (playerName.isNotBlank()) {
@@ -1491,16 +1525,10 @@ fun WhitelistTab(
                         }
                     },
                     enabled = query.trim().isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = PocketColors.Primary,
-                        contentColor = Color.Black
-                    )
-                ) {
-                    Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.size(4.dp))
-                    Text(LocalAppStrings.current.addPlayer, fontWeight = FontWeight.Bold)
-                }
+                    icon = Icons.Default.Add,
+                    variant = DuoButtonVariant.Primary,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
 
@@ -1805,32 +1833,23 @@ fun BannedTab(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Button(
+                        DuoButton(
+                            text = "Unban IP",
                             onClick = { showUnbanIpDialog = true },
+                            icon = Icons.Default.Shield,
+                            variant = DuoButtonVariant.Primary,
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = PocketColors.Primary,
-                                contentColor = PocketColors.TextLight
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Shield,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Unban IP", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        }
+                            minHeight = 44.dp
+                        )
 
                         if (stateHolder.bannedIps.isNotEmpty()) {
-                            OutlinedButton(
+                            DuoButton(
+                                text = "Clear All IP Bans",
                                 onClick = { stateHolder.unbanAllIps() },
+                                variant = DuoButtonVariant.SecondaryGray,
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Clear All IP Bans", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            }
+                                minHeight = 44.dp
+                            )
                         }
                     }
                 }
