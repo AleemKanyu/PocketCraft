@@ -14,6 +14,7 @@ import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.ProductDetails.SubscriptionOfferDetails
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.PurchasesUpdatedListener
+import com.android.billingclient.api.PendingPurchasesParams
 import com.android.billingclient.api.QueryProductDetailsParams
 import com.android.billingclient.api.QueryPurchasesParams
 import com.google.firebase.auth.FirebaseAuth
@@ -116,9 +117,12 @@ class BillingManager private constructor(private val context: Context) {
     }
 
     private fun initializeBillingClient() {
+        val pendingPurchasesParams = PendingPurchasesParams.newBuilder()
+            .enableOneTimeProducts()
+            .build()
         billingClient = BillingClient.newBuilder(context)
             .setListener(purchasesUpdatedListener)
-            .enablePendingPurchases()
+            .enablePendingPurchases(pendingPurchasesParams)
             .build()
     }
 
@@ -166,9 +170,10 @@ class BillingManager private constructor(private val context: Context) {
             .setProductList(products)
             .build()
 
-        client.queryProductDetailsAsync(params) { billingResult, productDetailsList ->
+        client.queryProductDetailsAsync(params) { billingResult, productDetailsResult ->
             if (billingResult.responseCode == BillingResponseCode.OK) {
-                _availableOffers.value = productDetailsList.mapNotNull { toSubscriptionOffer(it) }
+                val detailsList = productDetailsResult.productDetailsList ?: emptyList()
+                _availableOffers.value = detailsList.mapNotNull { toSubscriptionOffer(it) }
                     .sortedBy { if (it.tier == PremiumTier.PREMIUM) 0 else 1 }
                 onComplete?.invoke()
             } else {
