@@ -65,25 +65,8 @@ object ServerPropertiesWriter {
     }
 
     fun overlayManagedValues(serverDir: File?, props: Properties, prefs: ServerPrefsSnapshot, isPremium: Boolean = false) {
-        // Safety guard: never overwrite level-name with a folder that has no world data
-        // when there is already a valid world at the current level-name location.
-        val desiredLevelName = prefs.worldName
-        val actualLevelName: String = if (serverDir != null) {
-            val desiredDir = java.io.File(serverDir, desiredLevelName)
-            val desiredHasData = java.io.File(desiredDir, "level.dat").exists() ||
-                java.io.File(desiredDir, "region").isDirectory
-            if (!desiredHasData) {
-                val existingName = props.getProperty("level-name")?.trim()
-                val existingDir = existingName?.takeIf { it.isNotBlank() }?.let { java.io.File(serverDir, it) }
-                val existingHasData = existingDir != null &&
-                    (java.io.File(existingDir, "level.dat").exists() || java.io.File(existingDir, "region").isDirectory)
-                if (existingHasData) {
-                    Log.w(TAG, "Keeping existing level-name='$existingName' because '$desiredLevelName' has no world data yet.")
-                    existingName!!
-                } else desiredLevelName
-            } else desiredLevelName
-        } else desiredLevelName
-        props["level-name"] = actualLevelName
+        val desiredLevelName = prefs.worldName.ifBlank { "world" }
+        props["level-name"] = desiredLevelName
         props["level-seed"] = prefs.worldSeed
         val maxLimit = 50
         props["max-players"] = prefs.maxPlayers.coerceIn(1, maxLimit).toString()

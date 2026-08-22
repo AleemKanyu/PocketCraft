@@ -42,6 +42,7 @@ import com.pockethost.app.data.preferences.AppPreferencesStore
 import com.pockethost.app.data.repository.ServerConfigRepository
 import com.pockethost.app.notification.NotificationHelper
 import com.pockethost.app.network.RconClient
+import com.pockethost.app.server.BundledPluginInstaller
 import com.pockethost.app.service.PluginManager
 import com.pockethost.app.service.ConsoleParser
 import com.pockethost.app.service.ParsedPlayerPing
@@ -751,10 +752,51 @@ class ServerStateHolder(
         refreshAll()
         ensureBedrockBridgeProvisioned()
         performOneTimeEmergencyRecovery()
+        syncRunningStateWithService()
         
         scope.launch {
             AppPreferencesStore.isFirstBootCompleteFlow(appContext).collect { complete ->
                 firstBootComplete = complete
+            }
+        }
+    }
+
+    private fun syncRunningStateWithService() {
+        if (ServerHostService.isServiceRunning(appContext)) {
+            val stateFile = File(appContext.filesDir, "runtime_state.json")
+            if (stateFile.exists()) {
+                runCatching {
+                    val obj = org.json.JSONObject(stateFile.readText())
+                    val state = obj.optString("runtime_state", ServerHostService.RUNTIME_STATE_OFFLINE)
+                    val activeAddr = obj.optString("public_address", "").takeIf { it.isNotBlank() }
+                    
+                    if (state == ServerHostService.RUNTIME_STATE_RUNNING) {
+                        isStarting = false
+                        isRunning = true
+                        isJavaServerDone = true
+                        isGeyserDone = true
+                        areSpawnChunksLoaded = true
+                        serverJoinable = true
+                        if (!activeAddr.isNullOrBlank()) {
+                            publicAddress = activeAddr
+                            tunnelConnecting = false
+                        }
+                        updateServerUiState()
+                    } else if (state == ServerHostService.RUNTIME_STATE_STARTING) {
+                        isStarting = true
+                        isRunning = false
+                        updateServerUiState()
+                        startStartupProgressTracking()
+                    }
+                }.onFailure { e ->
+                    android.util.Log.w("ServerStateHolder", "Failed to parse runtime_state.json: ${e.message}")
+                }
+            } else {
+                isStarting = false
+                isRunning = true
+                isJavaServerDone = true
+                serverJoinable = true
+                updateServerUiState()
             }
         }
     }
@@ -862,8 +904,13 @@ class ServerStateHolder(
 
     fun toggleBedrockBridge(enabled: Boolean) {
         scope.launch(Dispatchers.IO) {
-            PluginManager.setBedrockBridgeEnabled(appContext, activeWorld, enabled)
-            val updatedState = PluginManager.isBedrockBridgeEnabled(appContext, activeWorld)
+            val targetWorld = activeWorld.ifBlank { "world" }
+            if (enabled) {
+                val serverDir = ServerFileManager.getServerDir(appContext, targetWorld)
+                BundledPluginInstaller.installBundledPlugins(appContext, serverDir)
+            }
+            PluginManager.setBedrockBridgeEnabled(appContext, targetWorld, enabled)
+            val updatedState = PluginManager.isBedrockBridgeEnabled(appContext, targetWorld)
             withContext(Dispatchers.Main) {
                 bedrockBridgeEnabled = updatedState
             }
@@ -1339,8 +1386,12 @@ class ServerStateHolder(
         restartFallbackJob = scope.launch {
             delay(3500L)
             if (!pendingRestart && !isRestartingCycle) return@launch
-            if (isRunning || isStarting) return@launch
-            if (isServerProcessAlive()) return@launch
+            if (isRunning || isServerProcessAlive()) {
+                pendingRestart = false
+                isStopping = false
+                isRestartingCycle = false
+                return@launch
+            }
 
             pendingRestart = false
             isStopping = false

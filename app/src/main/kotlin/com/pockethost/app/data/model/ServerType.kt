@@ -9,7 +9,13 @@ enum class ServerType(val displayName: String, val supportsVersionSelect: Boolea
 
     companion object {
         fun fromString(value: String?): ServerType {
-            return values().find { it.name == value } ?: PAPER
+            if (value.isNullOrBlank()) return PAPER
+            for (type in entries) {
+                if (type.name.equals(value, ignoreCase = true) || type.displayName.equals(value, ignoreCase = true)) {
+                    return type
+                }
+            }
+            return PAPER
         }
     }
 }

@@ -277,6 +277,8 @@ object PluginManager {
     fun setBedrockBridgeEnabled(context: Context, worldName: String, enabled: Boolean) {
         val crossplayPlugins = listOf("geyser", "floodgate", "viaversion", "viabackwards", "geyserreversion")
         if (enabled) {
+            val serverDir = ServerFileManager.getServerDir(context, worldName)
+            BundledPluginInstaller.installBundledPlugins(context, serverDir)
             crossplayPlugins.forEach { ensureManagedPluginEnabled(context, worldName, it) }
             preserveFloodgateKey(context, worldName)
             enforceBedrockBridgeLocalConfig(context, worldName)
@@ -1938,13 +1940,26 @@ object PluginManager {
 
     private fun ensureManagedPluginEnabled(context: Context, worldName: String, projectId: String) {
         val pluginsDir = getPluginsDir(context, worldName)
-        pluginsDir.listFiles { file -> file.name.endsWith(".jar.disabled") }
-            ?.forEach { file ->
-                if (file.name.lowercase().contains(projectId.lowercase())) {
-                    val enabledFile = java.io.File(pluginsDir, file.name.removeSuffix(".disabled"))
-                    runCatching { file.renameTo(enabledFile) }
-                }
+        var unDisabledAny = false
+        val files = pluginsDir.listFiles() ?: emptyArray()
+        for (file in files) {
+            if (file.name.endsWith(".jar.disabled") && file.name.lowercase().contains(projectId.lowercase())) {
+                val enabledFile = java.io.File(pluginsDir, file.name.removeSuffix(".disabled"))
+                runCatching { file.renameTo(enabledFile) }
+                unDisabledAny = true
             }
+        }
+        var hasEnabledJar = false
+        for (file in files) {
+            if (file.name.endsWith(".jar") && file.name.lowercase().contains(projectId.lowercase())) {
+                hasEnabledJar = true
+                break
+            }
+        }
+        if (!unDisabledAny && !hasEnabledJar) {
+            val serverDir = ServerFileManager.getServerDir(context, worldName)
+            BundledPluginInstaller.installBundledPlugins(context, serverDir)
+        }
     }
 
     private fun disableManagedPlugin(context: Context, worldName: String, projectId: String) {

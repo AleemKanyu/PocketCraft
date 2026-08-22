@@ -766,7 +766,8 @@ class ServerHostService : Service() {
                 if (!restartVersionId.isNullOrBlank() && !restartWorldName.isNullOrBlank()) {
                     android.util.Log.i("ServerHostService", "Restart requested: launching server $restartVersionId for world $restartWorldName...")
                     stopInProgress.set(false)
-                    delay(1000L)
+                    isLaunching = false
+                    delay(500L)
                     start(applicationContext, restartVersionId, restartWorldName)
                     return@launch
                 }

@@ -2087,7 +2087,7 @@ private fun WorldSelectorCard(
                             contentScale = ContentScale.Crop
                         )
                     } else {
-                        PocketWorldIcon(modifier = Modifier.size(24.dp))
+                        PocketWorldIcon(modifier = Modifier.size(36.dp))
                     }
                 }
 

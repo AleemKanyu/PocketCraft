@@ -15,9 +15,21 @@ final class DebugSubscriptionShield extends ChannelInboundHandlerAdapter {
     private static boolean isDebugSubscriptionDecodeFailure(Throwable cause) {
         Throwable current = cause;
         while (current != null) {
-            String message = current.getMessage();
-            if (message != null && message.contains("debug_subscription_request")) {
+            if (current.getClass().getName().contains("DecoderException")) {
                 return true;
+            }
+            String message = current.getMessage();
+            if (message != null) {
+                String lowerMsg = message.toLowerCase();
+                if (lowerMsg.contains("debug_subscription_request") ||
+                    lowerMsg.contains("accept_teleportation") ||
+                    lowerMsg.contains("was larger than i expected") ||
+                    lowerMsg.contains("bytes extra") ||
+                    lowerMsg.contains("decoderexception") ||
+                    lowerMsg.contains("book") ||
+                    lowerMsg.contains("slot")) {
+                    return true;
+                }
             }
             current = current.getCause();
         }
