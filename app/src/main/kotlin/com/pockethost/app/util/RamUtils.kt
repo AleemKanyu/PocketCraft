@@ -159,7 +159,8 @@ object RamUtils {
             isGalaxyA12Family -> minOf((availableRamMb * 0.52f).toInt(), 896)
             totalRamMb <= 3072 -> minOf((availableRamMb * 0.58f).toInt(), 768)
             totalRamMb <= 4096 -> minOf((availableRamMb * 0.62f).toInt(), 1024)
-            else -> minOf((availableRamMb * 0.72f).toInt(), (totalRamMb * 0.90f).toInt())
+            totalRamMb <= 6144 -> minOf((availableRamMb * 0.80f).toInt(), 3072)
+            else -> minOf((availableRamMb * 0.85f).toInt(), (totalRamMb * 0.75f).toInt(), 4096)
         }
         val minHeapFloor = if (isGalaxyA12Family || totalRamMb <= 3072) 384 else 512
         val reason = when {

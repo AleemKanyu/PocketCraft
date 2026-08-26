@@ -179,6 +179,7 @@ fun PocketHostApp(
     var selectedServerType by remember { mutableStateOf(ServerType.PAPER) }
     var downloadedVersions by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showVersionPickerDialog by remember { mutableStateOf(false) }
+    var showBedrockCreationDialog by remember { mutableStateOf(false) }
     var showVersionRiskDialog by remember { mutableStateOf(false) }
     var pendingVersionChange by remember { mutableStateOf<PendingVersionChange?>(null) }
     var pendingVersionRollbackConfig by remember { mutableStateOf<Triple<ServerType, String, String?>?>(null) }
@@ -970,49 +971,9 @@ fun PocketHostApp(
                 return
             }
 
-            scope.launch {
-                modpackImportInProgress = true
-                modpackImportError = null
-                modpackImportId = modpackId
-                modpackImportStatus = "Downloading and preparing modpack '$modpackId'..."
-                modpackImportProgress = 5
-
-                val result = ModpackManager.installModpack(
-                    context = context,
-                    modpackId = modpackId,
-                    worldName = activeWorld,
-                    onStatus = { status ->
-                        modpackImportStatus = status
-                    },
-                    onProgress = { progress ->
-                        modpackImportProgress = progress.coerceIn(5, 95)
-                    }
-                )
-                if (result.isSuccess) {
-                    Toast.makeText(context, "Modpack installed successfully!", Toast.LENGTH_LONG).show()
-                    modpackImportProgress = 100
-                    modpackImportStatus = "Modpack ready! Configuring server..."
-                    val currentConfig = stateHolder.config
-                    val newModpackConfig = currentConfig.copy(
-                        serverType = ServerType.MODPACK,
-                        gameVersion = modpackId,
-                        customJarPath = modpackId
-                    )
-                    stateHolder.saveSettings(newModpackConfig)
-                    AppPreferencesStore.setSelectedServerType(context, ServerType.MODPACK.name)
-                    AppPreferencesStore.setSelectedVersion(context, modpackId)
-                    downloadedVersions = scanDownloadedRuntimeKeys(context.applicationContext)
-                    requestVersionChange(ServerType.MODPACK, modpackId)
-                    delay(1_500)
-                    modpackImportInProgress = false
-                    modpackImportId = null
-                } else {
-                    val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
-                    modpackImportError = "Install failed: $errorMsg"
-                    modpackImportInProgress = false
-                    Toast.makeText(context, "Install failed: $errorMsg", Toast.LENGTH_LONG).show()
-                }
-            }
+            pendingModpackImportId = modpackId
+            pendingModpackImportPageUrl = encodedPageUrl
+            showModpackImportDialog = true
             return
         }
 
@@ -1025,11 +986,7 @@ fun PocketHostApp(
                 )
             }
             if (!jarReady) {
-                showVersionPickerDialog = true
-                loadingStatus = "Preparing PocketCraft..."
-                versionDownloadProgress = 0
-                transitionTarget = Screen.SERVER
-                screen = Screen.SERVER
+                requestVersionChange(effectiveType, effectiveVersion)
                 return
             }
         }
@@ -1144,6 +1101,7 @@ fun PocketHostApp(
                     onDarkThemeChange = onDarkThemeChange,
                     currentMobTheme = currentMobTheme,
                     onMobThemeChange = onMobThemeChange,
+                    onOpenBedrockCreation = { showBedrockCreationDialog = true },
                     homeTopContent = {
                         if (modpackImportInProgress || modpackImportError != null) {
                             ModpackImportProgressCard(
@@ -1486,6 +1444,30 @@ fun PocketHostApp(
                 currentCustomJarPath = stateHolder.config.customJarPath
             )
         }
+    }
+
+    if (showBedrockCreationDialog) {
+        com.pockethost.app.ui.components.BedrockServerCreationBottomSheet(
+            onDismiss = { showBedrockCreationDialog = false },
+            onCreateBedrockServer = { name, port, gamemode, difficulty, maxPlayers ->
+                scope.launch {
+                    val createdWorldName = "bedrock_${System.currentTimeMillis() / 1000}"
+                    com.pockethost.app.server.NukkitLaunchManager.prepareNukkitServer(
+                        context = context,
+                        worldName = createdWorldName,
+                        serverName = name,
+                        port = port,
+                        gamemode = gamemode,
+                        difficulty = difficulty,
+                        maxPlayers = maxPlayers
+                    )
+                    stateHolder.createWorld(createdWorldName)
+                    stateHolder.setActiveWorld(createdWorldName, syncPluginProfiles = false)
+                    requestVersionChange(ServerType.BEDROCK, "1.21.60")
+                    Toast.makeText(context, "Bedrock server '$name' created!", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
     }
 
     if (showVersionRiskDialog && pendingVersionChange != null) {

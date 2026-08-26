@@ -1404,7 +1404,8 @@ private fun ServerIdentityCard(
                                 Image(
                                     painter = painterResource(id = R.drawable.app_logo_light),
                                     contentDescription = "Server logo",
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.fillMaxSize().padding(5.dp),
+                                    contentScale = ContentScale.Fit
                                 )
                             }
                         }
@@ -1812,15 +1813,14 @@ private fun ServerIdentityCard(
             relayConnecting && stateHolder.isRunning -> "Reconnecting to the servers..."
             relayConnecting -> "Opening internet relay..."
             !publicAddress.isNullOrBlank() -> publicAddress
-            else -> "No internet"
+            else -> "Opening internet relay..."
         }
 
         val localWifiAddress = stateHolder.localIp
             .takeIf(::isShareableLanIp)
             ?.let { "$it:${stateHolder.config.port}" }
         val relayReady = !publicAddress.isNullOrBlank()
-        val canShareAddresses = stateHolder.status == ServerStatus.ONLINE &&
-            (stateHolder.isServerFullyReady || stateHolder.isJavaServerDone)
+        val canShareAddresses = (stateHolder.status == ServerStatus.ONLINE || stateHolder.isRunning || stateHolder.isJavaServerDone || stateHolder.serverJoinable) && !stateHolder.isStopping
 
 
 

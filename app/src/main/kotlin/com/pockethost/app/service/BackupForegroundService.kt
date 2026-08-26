@@ -352,7 +352,7 @@ class BackupForegroundService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(com.pockethost.app.R.drawable.ic_launcher_foreground)
+            .setSmallIcon(com.pockethost.app.R.drawable.ic_notification_small)
             .setContentTitle("Automatic Backup")
             .setContentText(text)
             .setOngoing(true)
@@ -375,7 +375,7 @@ class BackupForegroundService : Service() {
 
     private fun showDoneNotification(success: Boolean, detail: String) {
         val done = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(com.pockethost.app.R.drawable.ic_launcher_foreground)
+            .setSmallIcon(com.pockethost.app.R.drawable.ic_notification_small)
             .setContentTitle(if (success) "Backup Complete ✓" else "Backup Failed ✗")
             .setContentText(detail)
             .setOngoing(false)

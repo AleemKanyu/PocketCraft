@@ -85,9 +85,12 @@ fun StorageScreen(
     onOpenWorldSetup: (Boolean) -> Unit = {},
     onChangeVersion: () -> Unit = {},
     onMessage: (String) -> Unit = {},
-    onNavigateToSettings: (Int?) -> Unit = {}
+    onNavigateToSettings: (Int?) -> Unit = {},
+    onOpenBedrockCreation: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
+    val tabTitles = remember { listOf("WORLDS", "FILES") }
 
     LaunchedEffect(selectedTab) {
         stateHolder.refreshAll()
@@ -135,7 +138,8 @@ fun StorageScreen(
                         onOpenWorldSetup = onOpenWorldSetup,
                         onChangeVersion = onChangeVersion,
                         onMessage = onMessage,
-                        onNavigateToSettings = onNavigateToSettings
+                        onNavigateToSettings = onNavigateToSettings,
+                        onOpenBedrockCreation = onOpenBedrockCreation
                     )
                     else -> ServerFilesBrowser(stateHolder = stateHolder)
                 }

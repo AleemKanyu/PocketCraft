@@ -35,6 +35,21 @@ object BundledPluginInstaller {
         removeOutdatedBundledPlugins(context, pluginsDir)
 
         val propsFile = File(serverDir, "server.properties")
+        val isBedrock = if (propsFile.exists()) {
+            val props = java.util.Properties().apply { runCatching { load(propsFile.inputStream()) } }
+            props.getProperty("pocketcraft-server-type", "").equals("BEDROCK", ignoreCase = true)
+        } else false
+
+        if (isBedrock) {
+            // Bedrock (Nukkit) uses its own Bedrock native plugins, NOT Java Bukkit plugins.
+            // Clean up any Bukkit plugins that may have been copied previously.
+            BUNDLED_PLUGINS.forEach { pluginName ->
+                val f = File(pluginsDir, pluginName)
+                if (f.exists()) runCatching { f.delete() }
+            }
+            return
+        }
+
         val version = if (propsFile.exists()) {
             val props = java.util.Properties().apply { runCatching { load(propsFile.inputStream()) } }
             props.getProperty("pocketcraft-game-version", "1.21.1")

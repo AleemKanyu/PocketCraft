@@ -592,8 +592,8 @@ class ServerHostService : Service() {
         // a detached JVM process running without relay/control.
         forceTerminateHostedServer()
         val inProcessRuntime = !ServerLauncher.hasActiveExternalProcess()
-        if (inProcessRuntime && isLaunching) {
-            android.util.Log.e("PocketHost", "Service destroyed while JVM thread active. Killing :server process to prevent leak.")
+        if (inProcessRuntime) {
+            android.util.Log.i("PocketHost", "Service destroyed. Killing :server process to allow fresh JVM launch on next start.")
             currentVersionId?.let { persistRuntimeState(applicationContext, it, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE) }
             android.os.Process.killProcess(android.os.Process.myPid())
         }
@@ -899,7 +899,14 @@ class ServerHostService : Service() {
             resolvedJar ?: throw IllegalStateException("Server JAR could not be resolved")
         }
         runtimeJob.await()
-        jarJob.await()
+        val jar = jarJob.await()
+        if (effectiveServerType == com.pockethost.app.data.model.ServerType.BEDROCK) {
+            com.pockethost.app.server.NukkitLaunchManager.prepareNukkitServer(
+                context = applicationContext,
+                worldName = currentWorldName ?: "world"
+            )
+        }
+        jar
     }
 
     private fun isLocalServerPortOpen(port: Int): Boolean {
@@ -1104,7 +1111,7 @@ class ServerHostService : Service() {
         }
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_notification_small)
             .setContentTitle(title)
             .setContentText(body)
             .setSubText(if (isRunning) activeWorldNameOrDefault() else null)
@@ -1297,7 +1304,9 @@ class ServerHostService : Service() {
     private fun startServerLogTail(versionId: String) {
         if (logTailRunning.getAndSet(true)) return
 
-        val latestLog = File(ServerFileManager.getServerDir(applicationContext, activeWorldNameOrDefault()), "logs/latest.log")
+        val serverDir = ServerFileManager.getServerDir(applicationContext, activeWorldNameOrDefault())
+        val latestLog = File(serverDir, "logs/server.log").takeIf { it.exists() }
+            ?: File(serverDir, "logs/latest.log")
         val tailStartLength = latestLog.takeIf { it.exists() }?.length() ?: 0L
         // Read up to 128KB of backlog so the user sees the start-up logs even if the tailer starts a bit late.
         val initialOffset = latestLog.takeIf { it.exists() }?.let { (it.length() - 131072).coerceAtLeast(0L) } ?: 0L
@@ -1911,10 +1920,11 @@ class ServerHostService : Service() {
         currentVersionId = versionId
         currentWorldName = worldName
         runCatching {
-            val latestLog = File(ServerFileManager.getServerDir(applicationContext, worldName), "logs/latest.log")
-            if (latestLog.exists()) {
-                latestLog.delete()
-            }
+            val serverDir = ServerFileManager.getServerDir(applicationContext, worldName)
+            val nukkitLog = File(serverDir, "logs/server.log")
+            if (nukkitLog.exists()) nukkitLog.delete()
+            val latestLog = File(serverDir, "logs/latest.log")
+            if (latestLog.exists()) latestLog.delete()
         }
         stopReason = "unknown"
         serverReadyNotificationShown = false
@@ -2160,6 +2170,8 @@ class ServerHostService : Service() {
             line.contains("Preparing level", ignoreCase = true) ||
             line.contains("Running Java", ignoreCase = true) ||
             line.contains("Initializing plugins", ignoreCase = true) ||
+            line.contains("PowerNukkit", ignoreCase = true) ||
+            line.contains("Starting Minecraft: BE", ignoreCase = true) ||
             ConsoleParser.isPreparingStartRegion(line)) {
             hasSeenServerStarting = true
         }
@@ -2231,8 +2243,11 @@ class ServerHostService : Service() {
         }
 
         val elapsedSinceLaunch = SystemClock.elapsedRealtime() - serviceLaunchRealtimeMs
-        if (!isBacklog && (serviceLaunchRealtimeMs == 0L || elapsedSinceLaunch >= 3000L) && looksLikeServerReady(line)) {
-            onServerReady()
+        if (serviceLaunchRealtimeMs == 0L || elapsedSinceLaunch >= 2000L) {
+            if (looksLikeServerReady(line) || (line.contains("Done (", ignoreCase = true) && line.contains("help", ignoreCase = true))) {
+                android.util.Log.i("ServerHostService", "Server ready signal detected on log line (isBacklog=$isBacklog): $line")
+                onServerReady()
+            }
         }
 
         if (ConsoleParser.isPreparingStartRegion(line)) {

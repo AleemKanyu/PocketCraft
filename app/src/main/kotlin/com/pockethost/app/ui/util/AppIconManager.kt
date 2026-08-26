@@ -13,31 +13,31 @@ enum class AppIcon(
     val description: String,
     val previewRes: Int
 ) {
-    GREEN(
-        id = "green",
-        aliasName = "com.pockethost.app.MainActivity",
+    LIGHT(
+        id = "light",
+        aliasName = "com.pockethost.app.MainActivityDefault",
         title = "Emerald Green",
-        description = "Default vibrant green with PH cube",
-        previewRes = R.drawable.icon_preview_green
+        description = "Vibrant green with black logo",
+        previewRes = R.drawable.icon_preview_light
     ),
-    DARK_GREEN(
-        id = "dark_green",
-        aliasName = "com.pockethost.app.MainActivityDarkGreen",
-        title = "Creeper Dark Green",
-        description = "Deep dark green theme with PH cube",
-        previewRes = R.drawable.icon_preview_dark_green
-    ),
-    MIDNIGHT(
-        id = "midnight",
+    DARK(
+        id = "dark",
         aliasName = "com.pockethost.app.MainActivityDark",
         title = "Midnight Black",
-        description = "Onyx dark background with golden cube",
+        description = "Dark onyx with white logo",
         previewRes = R.drawable.icon_preview_dark
+    ),
+    WHITE(
+        id = "white",
+        aliasName = "com.pockethost.app.MainActivityWhite",
+        title = "Snow White",
+        description = "Pure white with black logo and shadow",
+        previewRes = R.drawable.icon_preview_white
     );
 
     companion object {
         fun fromId(id: String?): AppIcon {
-            return entries.firstOrNull { it.id == id } ?: GREEN
+            return entries.firstOrNull { it.id == id } ?: LIGHT
         }
     }
 }
@@ -55,27 +55,33 @@ object AppIconManager {
         val pm = context.packageManager
         val packageName = context.packageName
 
-        AppIcon.entries.forEach { icon ->
-            val compName = ComponentName(packageName, icon.aliasName)
-            val newState = if (icon == targetIcon) {
-                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-            } else {
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-            }
-            try {
-                pm.setComponentEnabledSetting(
-                    compName,
-                    newState,
-                    PackageManager.DONT_KILL_APP
-                )
-            } catch (e: Exception) {
-                Log.e("AppIconManager", "Failed to update component $compName", e)
-            }
-        }
-
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_ICON, targetIcon.id)
             .apply()
+
+        val targetComp = ComponentName(packageName, targetIcon.aliasName)
+        try {
+            pm.setComponentEnabledSetting(
+                targetComp,
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                PackageManager.DONT_KILL_APP
+            )
+        } catch (e: Exception) {
+            Log.e("AppIconManager", "Failed to enable component $targetComp", e)
+        }
+
+        AppIcon.entries.filter { it != targetIcon }.forEach { icon ->
+            val compName = ComponentName(packageName, icon.aliasName)
+            try {
+                pm.setComponentEnabledSetting(
+                    compName,
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP
+                )
+            } catch (e: Exception) {
+                Log.e("AppIconManager", "Failed to disable component $compName", e)
+            }
+        }
     }
 }

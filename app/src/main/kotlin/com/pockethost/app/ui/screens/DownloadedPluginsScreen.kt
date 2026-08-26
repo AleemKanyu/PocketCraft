@@ -127,7 +127,8 @@ fun DownloadedPluginsScreen(
             com.pockethost.app.data.model.ServerType.MODPACK -> DownloadedContentTab.entries.toList()
             com.pockethost.app.data.model.ServerType.PAPER,
             com.pockethost.app.data.model.ServerType.PURPUR -> listOf(DownloadedContentTab.RESOURCE_PACKS)
-            com.pockethost.app.data.model.ServerType.VANILLA -> listOf(DownloadedContentTab.RESOURCE_PACKS)
+            com.pockethost.app.data.model.ServerType.VANILLA,
+            com.pockethost.app.data.model.ServerType.BEDROCK -> listOf(DownloadedContentTab.RESOURCE_PACKS)
         }
     }
 
@@ -138,6 +139,7 @@ fun DownloadedPluginsScreen(
             selectedTab = 0
         }
     }
+    var showNukkitPluginPicker by remember { mutableStateOf(false) }
 
     fun refresh() {
         val rawItems = when (currentTab().type) {
@@ -459,6 +461,14 @@ fun DownloadedPluginsScreen(
                 )
             }
         }
+    }
+
+    if (showNukkitPluginPicker) {
+        com.pockethost.app.ui.components.NukkitPluginPickerBottomSheet(
+            worldName = stateHolder.activeWorld,
+            onDismiss = { showNukkitPluginPicker = false },
+            onPluginImported = { refresh() }
+        )
     }
 }
 

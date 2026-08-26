@@ -66,6 +66,7 @@ object ServerJarManager {
             )
             ServerType.PURPUR -> fetchPurpurVersions()
             ServerType.FABRIC -> fetchFabricVersions()
+            ServerType.BEDROCK -> fetchBedrockVersions()
             ServerType.MODPACK -> emptyList()
         }
 
@@ -228,4 +229,8 @@ object ServerJarManager {
             "Server JAR not found for ${serverType.displayName} $gameVersion. Please tap \"Import Server JAR\" to download and select your server .jar file."
         )
     }.flowOn(Dispatchers.IO)
+
+    private fun fetchBedrockVersions(): List<String> {
+        return listOf("1.21.60", "1.21.50", "1.21.40", "1.21.30", "1.21.20", "1.21.2", "1.21.0", "1.20.80")
+    }
 }

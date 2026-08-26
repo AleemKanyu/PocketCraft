@@ -20,6 +20,11 @@ enum class ServerTypeConfig(
         label = "Fabric",
         description = "Lightweight modding server with Fabric loaders and vanilla versions."
     ),
+    BEDROCK(
+        id = "bedrock",
+        label = "Bedrock Edition",
+        description = "Dedicated server environment built specifically for Minecraft Bedrock Edition players."
+    ),
     MODPACK(
         id = "modpack",
         label = "Modpack",

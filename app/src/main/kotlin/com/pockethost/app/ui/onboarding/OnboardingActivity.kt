@@ -347,10 +347,21 @@ class OnboardingActivity : ComponentActivity() {
     }
 
     private fun completeOnboarding() {
-        preferences.onboardingCompleted = true
-        preferences.openWorldSetupNextLaunch = false
-        startActivity(Intent(this, MainActivity::class.java))
-        finishAffinity()
+        try {
+            preferences.onboardingCompleted = true
+            preferences.openWorldSetupNextLaunch = false
+            val intent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            startActivity(intent)
+            finish()
+        } catch (e: Exception) {
+            android.util.Log.e("OnboardingActivity", "Failed to complete onboarding safely", e)
+            try {
+                startActivity(Intent(this, MainActivity::class.java))
+            } catch (_: Exception) {}
+            finish()
+        }
     }
 
     companion object {

@@ -34,7 +34,7 @@ class PocketHostMessagingService : FirebaseMessagingService() {
 
     private fun showBroadcastNotification(title: String, body: String) {
         val notification = NotificationCompat.Builder(this, "pocketcraft_broadcast")
-            .setSmallIcon(R.drawable.ic_launcher_foreground_circle)
+            .setSmallIcon(R.drawable.ic_notification_small)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))

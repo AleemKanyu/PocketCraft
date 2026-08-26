@@ -231,6 +231,7 @@ fun ServerTypeVersionBottomSheet(
                     ServerType.PURPUR -> "Paper fork offering extensive customization and full plugin support."
                     ServerType.FABRIC -> "Lightweight modular loader compatible with Fabric mods."
                     ServerType.VANILLA -> "Standard official Minecraft server software."
+                    ServerType.BEDROCK -> "Dedicated server environment built specifically for Bedrock Edition players."
                     ServerType.MODPACK -> "Curated community modpack with custom mods and configs."
                 }
                 Spacer(modifier = Modifier.height(8.dp))

@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import com.pockethost.app.ui.theme.ButtonFont
 import com.pockethost.app.ui.theme.button3d
+import com.pockethost.app.ui.theme.card3d
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -37,20 +38,20 @@ enum class PlayerActionType(
     val shadowColor: Color
 ) {
     DAMAGE(
-        backgroundColor = Color(0xFFFF6B6B),  // Red
-        shadowColor = Color(0xFFE63946)       // Dark Red
+        backgroundColor = Color(0xFFE53935),  // Vibrant Red
+        shadowColor = Color(0xFFB71C1C)       // Deep Red 3D Shadow
     ),
     HEAL(
-        backgroundColor = Color(0xFF4CAF50),  // Green
-        shadowColor = Color(0xFF2E7D32)       // Dark Green
+        backgroundColor = Color(0xFF43A047),  // Vibrant Green
+        shadowColor = Color(0xFF1B5E20)       // Deep Green 3D Shadow
     ),
     STARVE(
-        backgroundColor = Color(0xFFFF9800),  // Orange
-        shadowColor = Color(0xFFE65100)       // Dark Orange
+        backgroundColor = Color(0xFFFB8C00),  // Vibrant Orange
+        shadowColor = Color(0xFFE65100)       // Deep Orange 3D Shadow
     ),
     FEED(
-        backgroundColor = Color(0xFF2196F3),  // Blue
-        shadowColor = Color(0xFF1565C0)       // Dark Blue
+        backgroundColor = Color(0xFF1E88E5),  // Vibrant Blue
+        shadowColor = Color(0xFF0D47A1)       // Deep Blue 3D Shadow
     )
 }
 
@@ -68,27 +69,30 @@ fun PlayerActionButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val restingBorder = 3.dp
+    val cornerRadius = 14.dp
+    val shape = RoundedCornerShape(cornerRadius)
+    val alpha = if (enabled) 1f else 0.55f
+
     val offsetY by animateDpAsState(
-        targetValue = if (pressed && enabled) (restingBorder - 1.5.dp) else 0.dp,
+        targetValue = if (pressed && enabled) 3.dp else 0.dp,
         animationSpec = tween(80),
         label = "action_button_offset"
     )
-    val alpha = if (enabled) 1f else 0.55f
-    val shape = RoundedCornerShape(18.dp)
 
     Box(
         modifier = modifier
-            .padding(bottom = 4.dp)
+            .padding(bottom = if (pressed && enabled) 0.dp else 3.dp)
             .offset(y = offsetY)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .button3d(
-                    elevation = 8.dp,
+                .card3d(
+                    elevation = if (pressed && enabled) 2.dp else 5.dp,
+                    cornerRadius = cornerRadius,
                     borderColor = actionType.shadowColor.copy(alpha = alpha),
-                    depthColor = actionType.shadowColor.copy(alpha = alpha)
+                    depthColor = actionType.shadowColor.copy(alpha = alpha),
+                    borderWidth = 1.5.dp
                 )
                 .clip(shape)
                 .background(actionType.backgroundColor.copy(alpha = alpha))
@@ -98,7 +102,7 @@ fun PlayerActionButton(
                     indication = null,
                     onClick = onClick
                 )
-                .padding(horizontal = 20.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -107,12 +111,11 @@ fun PlayerActionButton(
                 color = Color.White,
                 style = MaterialTheme.typography.labelLarge.copy(
                     fontFamily = ButtonFont,
-                    fontWeight = FontWeight.Normal,
-                    fontSize = 14.sp,
-                    letterSpacing = 0.sp
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 15.sp,
+                    letterSpacing = 0.5.sp
                 ),
-                maxLines = 2,
-                softWrap = true,
+                maxLines = 1,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
         }

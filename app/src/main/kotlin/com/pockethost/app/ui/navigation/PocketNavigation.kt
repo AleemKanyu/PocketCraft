@@ -195,18 +195,18 @@ fun PocketTopBar(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(9.dp))
                         .background(
                             color = PocketColors.Primary,
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(9.dp)
                         )
                         .border(
-                            width = 1.5.dp,
+                            width = 1.dp,
                             color = PocketColors.PrimaryBorder,
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(9.dp)
                         )
-                        .padding(6.dp)
+                        .padding(2.5.dp)
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.app_logo),

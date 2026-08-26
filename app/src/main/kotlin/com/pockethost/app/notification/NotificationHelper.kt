@@ -45,7 +45,7 @@ object NotificationHelper {
     fun notifyServerOnline(context: Context, version: String) {
         try {
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setSmallIcon(R.drawable.ic_notification_small)
                 .setContentTitle("Server is Online! 🎮")
                 .setContentText("Minecraft $version is ready. Players can now connect.")
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -72,7 +72,7 @@ object NotificationHelper {
     fun notifyServerCrashLoop(context: Context) {
         try {
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setSmallIcon(R.drawable.ic_notification_small)
                 .setContentTitle("Server Startup Failed! ⚠️")
                 .setContentText("The server crashed repeatedly during startup. Tap to view logs.")
                 .setPriority(NotificationCompat.PRIORITY_HIGH)

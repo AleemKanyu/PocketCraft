@@ -74,7 +74,8 @@ class ServerLauncher(private val context: Context) {
             isGalaxyA12Family -> minOf((availableRamMb * 0.52f).toInt(), 896)
             totalRamMb <= 3072 -> minOf((availableRamMb * 0.58f).toInt(), 768)
             totalRamMb <= 4096 -> minOf((availableRamMb * 0.62f).toInt(), 1024)
-            else -> minOf((availableRamMb * 0.72f).toInt(), (totalRamMb * 0.90f).toInt())
+            totalRamMb <= 6144 -> minOf((availableRamMb * 0.80f).toInt(), 3072)
+            else -> minOf((availableRamMb * 0.85f).toInt(), (totalRamMb * 0.75f).toInt(), 4096)
         }
         val minHeapFloor = if (isGalaxyA12Family || totalRamMb <= 3072) 384 else 512
         val reason = when {
@@ -85,7 +86,7 @@ class ServerLauncher(private val context: Context) {
             else -> null
         }
         return DeviceStabilityProfile(
-            forceExternalJvm = isGalaxyM13Family || isXiaomiAndroid14PlusFamily,
+            forceExternalJvm = isGalaxyM13Family,
             constrainedHeap = constrainedHeap,
             maxHeapCapMb = targetHeapCap.coerceAtLeast(minHeapFloor),
             minHeapFloorMb = minHeapFloor,
@@ -255,8 +256,9 @@ class ServerLauncher(private val context: Context) {
         ServerFileManager.ensureDirectoryPermissions(shimDir)
         ensureSystemShims(shimDir, File(tmpDir), onOutput)
         val deviceProfile = buildDeviceStabilityProfile(totalRamMb = getTotalRamMb(context), availableRamMb = com.pockethost.app.util.RamUtils.getAvailableRamMb(context))
-        val forceExternal = !isFilesdirNoexec(runtime)
-        val preferInProcessJvm = !forceExternal
+        val prefsForceExternal = AppPreferences(context).forceExternalJvm
+        val forceExternal = prefsForceExternal || deviceProfile.forceExternalJvm
+        val preferInProcessJvm = !forceExternal || isFilesdirNoexec(runtime)
 
         val resolvedRuntime = ensureLaunchableRuntime(
             versionId = versionId,
@@ -318,7 +320,12 @@ class ServerLauncher(private val context: Context) {
             else -> 512
         }
         val availRamCap = (availRam * 0.85f).toInt().coerceAtLeast(deviceProfile.minHeapFloorMb)
-        val maxHeapCapForAndroid = 1536
+        val maxHeapCapForAndroid = when {
+            totalRam >= 8000 -> 4096
+            totalRam >= 6000 -> 3072
+            totalRam >= 4000 -> 2048
+            else -> 1536
+        }
         val maxRamMb = requestedMaxRamMb
             .coerceAtMost(availRamCap)
             .coerceAtMost(maxHeapCapForAndroid)
@@ -398,6 +405,17 @@ class ServerLauncher(private val context: Context) {
                     )
                     if (result != 0 && NativeLauncher.loadLibrary()) {
                         onOutput("[PocketHost] SELinux/permission blocked external java process (exit=$result). Automatically switching to in-process JNI JVM execution...")
+                        NativeLauncher.hasInProcessJvmRunInThisProcess = true
+                        val bypassFlags = buildString {
+                            append("-DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true ")
+                            append("-DPurpur.IgnoreJavaVersion=true -Dpurpur.ignoreJavaVersion=true -Dpurpur.bypass-java-check=true -Dpurpur.ignore-java-version=true ")
+                            append("-Dpaper.oshi.disabled=true -Dpaper.disable-hardware-info=true -Doshi.os.disabled=true -Dpurpur.oshi.disabled=true -Dpurpur.disable-hardware-info=true")
+                            if (resolvedRuntime.id == "java25" || resolvedRuntime.id == "java26") {
+                                append(" -Djava.specification.version=26 -Djava.version=26.0.0")
+                            }
+                        }
+                        runCatching { android.system.Os.setenv("JAVA_TOOL_OPTIONS", bypassFlags, true) }
+                        runCatching { android.system.Os.setenv("_JAVA_OPTIONS", bypassFlags, true) }
                         result = runCatching {
                             NativeLauncher.launchJVM(
                                 jrePath = jrePath,

@@ -126,7 +126,8 @@ fun WorldsScreen(
     onOpenWorldSetup: (Boolean) -> Unit = {},
     onChangeVersion: () -> Unit = {},
     onMessage: (String) -> Unit = {},
-    onNavigateToSettings: (Int?) -> Unit = {}
+    onNavigateToSettings: (Int?) -> Unit = {},
+    onOpenBedrockCreation: () -> Unit = {}
 ) {
     val s = LocalAppStrings.current
     val context = LocalContext.current
@@ -179,7 +180,7 @@ fun WorldsScreen(
         contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Current World Card
+        // Dedicated Bedrock Host Entry Point
         item {
             AnimatedEntranceContainer(index = 0) {
                 Column {

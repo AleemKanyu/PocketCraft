@@ -150,7 +150,8 @@ fun ServerScreen(
     onDarkThemeChange: (Boolean) -> Unit,
     currentMobTheme: MobTheme,
     onMobThemeChange: (MobTheme) -> Unit,
-    homeTopContent: (@Composable () -> Unit)? = null
+    homeTopContent: (@Composable () -> Unit)? = null,
+    onOpenBedrockCreation: () -> Unit = {}
 ) {
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -446,7 +447,8 @@ fun ServerScreen(
                                         onNavigateToSettings = { initialActiveTab ->
                                             settingsInitialActiveTab = initialActiveTab
                                             navigateToTab(PocketTab.SETTINGS)
-                                        }
+                                        },
+                                        onOpenBedrockCreation = onOpenBedrockCreation
                                     )
 
                                     PocketTab.MODS -> PluginsHubScreen(

@@ -172,7 +172,8 @@ fun PluginsHubScreen(
             com.pockethost.app.data.model.ServerType.MODPACK -> listOf(ContentTab.MODS, ContentTab.PACKS)
             com.pockethost.app.data.model.ServerType.PAPER,
             com.pockethost.app.data.model.ServerType.PURPUR -> listOf(ContentTab.PLUGINS, ContentTab.PACKS)
-            com.pockethost.app.data.model.ServerType.VANILLA -> listOf(ContentTab.PACKS)
+            com.pockethost.app.data.model.ServerType.VANILLA,
+            com.pockethost.app.data.model.ServerType.BEDROCK -> listOf(ContentTab.PACKS)
         }
     }
 

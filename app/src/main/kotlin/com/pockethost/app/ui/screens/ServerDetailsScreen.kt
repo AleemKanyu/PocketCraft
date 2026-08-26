@@ -103,10 +103,10 @@ fun ServerDetailsScreen(
         mutableStateOf(stateHolder.config.customJarPath)
     }
     var joinMessageText by remember(stateHolder.config.joinMessageText) {
-        mutableStateOf(stateHolder.config.joinMessageText)
+        mutableStateOf(stateHolder.config.joinMessageText.replace("\\:", ":").replace("\\=", "="))
     }
     var joinMessageUrl by remember(stateHolder.config.joinMessageUrl) {
-        mutableStateOf(stateHolder.config.joinMessageUrl)
+        mutableStateOf(stateHolder.config.joinMessageUrl.replace("\\:", ":").replace("\\=", "="))
     }
     var showVersionDialog by remember { mutableStateOf(false) }
     var showPremiumBottomSheet by remember { mutableStateOf(false) }
@@ -117,77 +117,83 @@ fun ServerDetailsScreen(
     suspend fun persistDetails(showMessage: Boolean, closeAfterSave: Boolean) {
         if (isSaving) return
         isSaving = true
-        saveProgress = 0f
+        saveProgress = 0.1f
 
-        val trimmedName = serverName.trim().ifBlank { activeWorld }
-        val trimmedDescription = serverDescription.trim()
-        val existingPhoto = stateHolder.serverPhotoUrl.trim()
-        val photoUrlToSave = runCatching {
-            when {
-                photoChanged && serverPhotoUri != null -> {
-                    saveProgress = 0.05f
-                    stateHolder.importWorldServerPhoto(
-                        worldName = activeWorld,
-                        sourceUri = serverPhotoUri!!,
-                        onProgress = { percent ->
-                            saveProgress = 0.05f + (percent.coerceIn(0, 100) / 100f) * 0.8f
-                        }
-                    )
+        try {
+            val trimmedName = serverName.trim().ifBlank { activeWorld }
+            val trimmedDescription = serverDescription.trim()
+            val existingPhoto = stateHolder.serverPhotoUrl.trim()
+
+            val cleanJoinText = joinMessageText.trim().replace("\\:", ":")
+            val cleanJoinUrl = joinMessageUrl.trim().replace("\\:", ":")
+
+            val photoUrlToSave = runCatching {
+                when {
+                    photoChanged && serverPhotoUri != null -> {
+                        saveProgress = 0.2f
+                        stateHolder.importWorldServerPhoto(
+                            worldName = activeWorld,
+                            sourceUri = serverPhotoUri!!,
+                            onProgress = { percent ->
+                                saveProgress = 0.2f + (percent.coerceIn(0, 100) / 100f) * 0.7f
+                            }
+                        )
+                    }
+                    photoChanged -> ""
+                    else -> existingPhoto
                 }
-                photoChanged -> ""
-                else -> existingPhoto
+            }.getOrElse { error ->
+                if (showMessage) onMessage("Photo upload failed: ${error.message ?: "unknown error"}")
+                return
             }
-        }.getOrElse { error ->
-            isSaving = false
-            saveProgress = 0f
-            if (showMessage) onMessage("Photo upload failed: ${error.message ?: "unknown error"}")
-            return
-        }
 
-        val nothingChanged =
-            trimmedName == stateHolder.serverName.trim() &&
-                trimmedDescription == stateHolder.serverDescription.trim() &&
-                photoUrlToSave == existingPhoto &&
-                selectedVersion.trim() == stateHolder.config.gameVersion &&
-                selectedServerType == stateHolder.config.serverType &&
-                selectedCustomJarPath == stateHolder.config.customJarPath &&
-                joinMessageText.trim() == stateHolder.config.joinMessageText.trim() &&
-                joinMessageUrl.trim() == stateHolder.config.joinMessageUrl.trim()
+            val nothingChanged =
+                trimmedName == stateHolder.serverName.trim() &&
+                    trimmedDescription == stateHolder.serverDescription.trim() &&
+                    photoUrlToSave == existingPhoto &&
+                    selectedVersion.trim() == stateHolder.config.gameVersion &&
+                    selectedServerType == stateHolder.config.serverType &&
+                    selectedCustomJarPath == stateHolder.config.customJarPath &&
+                    cleanJoinText == stateHolder.config.joinMessageText.trim().replace("\\:", ":") &&
+                    cleanJoinUrl == stateHolder.config.joinMessageUrl.trim().replace("\\:", ":")
 
-        if (nothingChanged) {
-            isSaving = false
-            saveProgress = 0f
-            if (closeAfterSave) onBack()
-            return
-        }
+            if (nothingChanged) {
+                if (closeAfterSave) onBack()
+                return
+            }
 
-        saveProgress = saveProgress.coerceAtLeast(0.92f)
-        val msg = stateHolder.updateWorldServerDetails(
-            worldName = activeWorld,
-            displayName = trimmedName,
-            photoUrl = photoUrlToSave,
-            description = trimmedDescription
-        )
-        stateHolder.saveSettings(
-            stateHolder.config.copy(
-                gameVersion = selectedVersion.trim(),
-                serverType = selectedServerType,
-                customJarPath = selectedCustomJarPath,
-                joinMessageText = if (isPremium) joinMessageText.trim() else stateHolder.config.joinMessageText,
-                joinMessageUrl = if (isPremium) joinMessageUrl.trim() else stateHolder.config.joinMessageUrl
+            saveProgress = saveProgress.coerceAtLeast(0.92f)
+            val msg = stateHolder.updateWorldServerDetails(
+                worldName = activeWorld,
+                displayName = trimmedName,
+                photoUrl = photoUrlToSave,
+                description = trimmedDescription
             )
-        )
-        AppPreferencesStore.setSelectedServerType(context, selectedServerType.name)
-        AppPreferencesStore.setSelectedVersion(context, selectedVersion.trim())
-        photoChanged = false
-        saveProgress = 1f
-        if (showMessage) {
-            onMessage(msg)
-        }
-        isSaving = false
-        saveProgress = 0f
-        if (closeAfterSave) {
-            onBack()
+            stateHolder.saveSettings(
+                stateHolder.config.copy(
+                    gameVersion = selectedVersion.trim(),
+                    serverType = selectedServerType,
+                    customJarPath = selectedCustomJarPath,
+                    joinMessageText = if (isPremium) cleanJoinText else stateHolder.config.joinMessageText,
+                    joinMessageUrl = if (isPremium) cleanJoinUrl else stateHolder.config.joinMessageUrl
+                )
+            )
+            AppPreferencesStore.setSelectedServerType(context, selectedServerType.name)
+            AppPreferencesStore.setSelectedVersion(context, selectedVersion.trim())
+            photoChanged = false
+            saveProgress = 1f
+            if (showMessage) {
+                onMessage(msg)
+            }
+            if (closeAfterSave) {
+                onBack()
+            }
+        } catch (e: Throwable) {
+            android.util.Log.e("ServerDetailsScreen", "Error saving server details", e)
+            if (showMessage) onMessage("Error saving details: ${e.message}")
+        } finally {
+            isSaving = false
+            saveProgress = 0f
         }
     }
 
@@ -215,6 +221,8 @@ fun ServerDetailsScreen(
         joinMessageUrl,
         activeWorld
     ) {
+        val cleanText = joinMessageText.trim().replace("\\:", ":")
+        val cleanUrl = joinMessageUrl.trim().replace("\\:", ":")
         val hasUnsavedChanges =
             serverName.trim() != stateHolder.serverName.trim() ||
                 serverDescription.trim() != stateHolder.serverDescription.trim() ||
@@ -222,11 +230,11 @@ fun ServerDetailsScreen(
                 selectedVersion.trim() != stateHolder.config.gameVersion ||
                 selectedServerType != stateHolder.config.serverType ||
                 selectedCustomJarPath != stateHolder.config.customJarPath ||
-                (isPremium && joinMessageText.trim() != stateHolder.config.joinMessageText.trim()) ||
-                (isPremium && joinMessageUrl.trim() != stateHolder.config.joinMessageUrl.trim())
+                (isPremium && cleanText != stateHolder.config.joinMessageText.trim().replace("\\:", ":")) ||
+                (isPremium && cleanUrl != stateHolder.config.joinMessageUrl.trim().replace("\\:", ":"))
 
-        if (hasUnsavedChanges) {
-            delay(450)
+        if (hasUnsavedChanges && !isSaving) {
+            delay(600)
             persistDetails(showMessage = false, closeAfterSave = false)
         }
     }
@@ -245,16 +253,27 @@ fun ServerDetailsScreen(
             )
             .padding(16.dp)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
-            Text(
-                text = "Server Details",
-                style = MaterialTheme.typography.titleLarge
-            )
+            Column {
+                Text(
+                    text = "Server Settings",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Customize name, description, photo & version",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         IpManagerCard(
@@ -265,16 +284,14 @@ fun ServerDetailsScreen(
             onNavigateToSignUp = onNavigateToSignUp
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
-
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(PocketColors.Primary.copy(alpha = 0.12f), RoundedCornerShape(24.dp))
-                .border(2.dp, PocketColors.Primary.copy(alpha = 0.22f), RoundedCornerShape(24.dp))
-                .padding(18.dp)
+                .background(PocketColors.Primary.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                .border(1.5.dp, PocketColors.Primary.copy(alpha = 0.22f), RoundedCornerShape(20.dp))
+                .padding(16.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -282,11 +299,13 @@ fun ServerDetailsScreen(
                     Icon(
                         imageVector = Icons.Filled.AutoAwesome,
                         contentDescription = null,
-                        tint = PocketColors.PrimaryDark
+                        tint = PocketColors.PrimaryDark,
+                        modifier = Modifier.size(20.dp)
                     )
                     Text(
-                        text = "Give your server a playful home-card look",
+                        text = "Customize Home Card & Details",
                         style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -297,20 +316,16 @@ fun ServerDetailsScreen(
                     Icon(
                         imageVector = Icons.Filled.Dns,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = "World: ${stateHolder.activeWorld}",
+                        text = "Active World: ${stateHolder.activeWorld}",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
-                Text(
-                    text = "Upload a photo from your phone and add a short description that shows right under the server name.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp
-                )
             }
         }
 
@@ -318,14 +333,14 @@ fun ServerDetailsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(6.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp)
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 OutlinedTextField(
                     value = serverName,
                     onValueChange = { serverName = it },
                     singleLine = true,
-                    label = { Text("Server name") },
+                    label = { Text("Server Name") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = duoTextFieldShape(),
                     colors = duoOutlinedTextFieldColors()
@@ -355,7 +370,7 @@ fun ServerDetailsScreen(
                     readOnly = true,
                     enabled = true,
                     interactionSource = versionFieldInteractionSource,
-                    label = { Text("Game version") },
+                    label = { Text("Game Version") },
                     trailingIcon = {
                         Icon(
                             imageVector = Icons.Filled.Dns,
@@ -375,13 +390,13 @@ fun ServerDetailsScreen(
                         .background(
                             if (isPremium) PocketColors.Primary.copy(alpha = 0.08f)
                             else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                            RoundedCornerShape(20.dp)
+                            RoundedCornerShape(16.dp)
                         )
                         .border(
                             1.dp,
                             if (isPremium) PocketColors.Primary.copy(alpha = 0.25f)
                             else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-                            RoundedCornerShape(20.dp)
+                            RoundedCornerShape(16.dp)
                         )
                         .padding(14.dp)
                 ) {
@@ -461,8 +476,8 @@ fun ServerDetailsScreen(
                             singleLine = true,
                             readOnly = !isPremium,
                             interactionSource = textInteractionSource,
-                            label = { Text("Announcement text") },
-                            placeholder = { Text("e.g. hosted on Pocketcraft") },
+                            label = { Text("Announcement Text") },
+                            placeholder = { Text("e.g. hosted on PocketHost") },
                             trailingIcon = if (!isPremium) {
                                 { Icon(Icons.Filled.Lock, contentDescription = "Locked", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                             } else null,
@@ -477,7 +492,7 @@ fun ServerDetailsScreen(
                             singleLine = true,
                             readOnly = !isPremium,
                             interactionSource = urlInteractionSource,
-                            label = { Text("Announcement link / Discord URL") },
+                            label = { Text("Announcement Link / Discord URL") },
                             placeholder = { Text("e.g. https://discord.gg/yourcode") },
                             trailingIcon = if (!isPremium) {
                                 { Icon(Icons.Filled.Lock, contentDescription = "Locked", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -518,10 +533,10 @@ fun ServerDetailsScreen(
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
 
                 DuoButton(
-                    text = "SAVE",
+                    text = if (isSaving) "SAVING..." else "SAVE DETAILS",
                     onClick = {
                         scope.launch {
                             persistDetails(showMessage = true, closeAfterSave = true)

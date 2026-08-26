@@ -283,7 +283,7 @@ class ServerStateHolder(
     private fun updateServerUiState() {
         serverUiState = when {
             isStopping && !isRestartingCycle && !pendingRestart -> ServerUiState.RUNNING
-            isRunning && isJavaServerDone && serverJoinable -> ServerUiState.RUNNING
+            status == ServerStatus.ONLINE -> ServerUiState.RUNNING
             isStarting || isRestartingCycle || isRunning -> ServerUiState.STARTING
             else -> ServerUiState.IDLE
         }
@@ -669,7 +669,8 @@ class ServerStateHolder(
                         isJavaServerDone = true
                         isGeyserDone = true
                         areSpawnChunksLoaded = true
-                        isStarting = true
+                        isStarting = false
+                        isRunning = true
                         attemptTransitionToOnline()
                     }
                     ServerHostService.EVENT_OUTPUT -> appendLog(line)
@@ -785,6 +786,10 @@ class ServerStateHolder(
                     } else if (state == ServerHostService.RUNTIME_STATE_STARTING) {
                         isStarting = true
                         isRunning = false
+                        isJavaServerDone = false
+                        isGeyserDone = false
+                        areSpawnChunksLoaded = false
+                        serverJoinable = false
                         updateServerUiState()
                         startStartupProgressTracking()
                     }
@@ -792,11 +797,14 @@ class ServerStateHolder(
                     android.util.Log.w("ServerStateHolder", "Failed to parse runtime_state.json: ${e.message}")
                 }
             } else {
-                isStarting = false
-                isRunning = true
-                isJavaServerDone = true
-                serverJoinable = true
+                isStarting = true
+                isRunning = false
+                isJavaServerDone = false
+                isGeyserDone = false
+                areSpawnChunksLoaded = false
+                serverJoinable = false
                 updateServerUiState()
+                startStartupProgressTracking()
             }
         }
     }
@@ -1420,7 +1428,15 @@ class ServerStateHolder(
         }
 
         // Debug: log important lines
-        if (cleanLine.contains("Done", ignoreCase = true) || cleanLine.contains("Server port", ignoreCase = true)) {
+        if (cleanLine.contains("Done (", ignoreCase = true) && cleanLine.contains("help", ignoreCase = true)) {
+            android.util.Log.d("ServerStateHolder", "appendLog received Done line -> transitioning server to ONLINE: $cleanLine")
+            isJavaServerDone = true
+            isGeyserDone = true
+            areSpawnChunksLoaded = true
+            startupProgressPercent = 100
+            startupStatusMessage = "Server ready!"
+            attemptTransitionToOnline()
+        } else if (cleanLine.contains("Done", ignoreCase = true) || cleanLine.contains("Server port", ignoreCase = true)) {
             android.util.Log.d("ServerStateHolder", "appendLog received: $cleanLine")
         }
 
@@ -1692,7 +1708,8 @@ class ServerStateHolder(
 
     private fun loadLogsFromDisk() {
         scope.launch(Dispatchers.IO) {
-            val latestLogFile = File(serverDir, "logs/latest.log")
+            val latestLogFile = File(serverDir, "logs/server.log").takeIf { it.exists() }
+                ?: File(serverDir, "logs/latest.log")
             if (latestLogFile.exists()) {
                 val lines = runCatching {
                     latestLogFile.useLines { seq: Sequence<String> ->
@@ -1920,13 +1937,9 @@ class ServerStateHolder(
             tps = 20f
         }
 
-        if (state.isRunning && publicAddress.isNullOrBlank() && !state.publicAddress.isNullOrBlank() && !tunnelConnecting) {
+        if (!state.publicAddress.isNullOrBlank()) {
             publicAddress = state.publicAddress
             tunnelError = null
-        }
-
-        if (state.isRunning && state.publicAddress.isNullOrBlank() && tunnelConnecting) {
-            publicAddress = null
         }
 
         if (!state.isRunning && !state.isStarting) {
@@ -4032,11 +4045,15 @@ class ServerStateHolder(
                     if (!isStarting || (isRunning && displayPct >= 100)) break
 
                     withContext(Dispatchers.Main) {
-                        startupProgressPercent = displayPct
-                        if (displayPct >= 100 || isServerActuallyReady) {
+                        if (isServerActuallyReady) {
+                            startupProgressPercent = 100
                             startupStatusMessage = "Server ready!"
-                        } else if (startupStatusMessage.isBlank() || startupStatusMessage == "Initializing..." || startupStatusMessage == "Preparing server...") {
-                            startupStatusMessage = naturalStartupStatus(elapsedMs)
+                            attemptTransitionToOnline()
+                        } else {
+                            startupProgressPercent = displayPct
+                            if (startupStatusMessage.isBlank() || startupStatusMessage == "Initializing..." || startupStatusMessage == "Preparing server...") {
+                                startupStatusMessage = naturalStartupStatus(elapsedMs)
+                            }
                         }
                     }
 

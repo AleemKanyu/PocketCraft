@@ -72,20 +72,27 @@ object ConsoleParser {
         RegexOption.IGNORE_CASE
     )
 
+    // Match Nukkit format: 2026-08-26 11:16:11 [main] INFO - or 11:24:24 [main] [INFO]
+    private val PREFIX_REGEX_NUKKIT = Regex(
+        """^(?:\d{4}-\d{2}-\d{2}\s+)?\d{2}:\d{2}:\d{2}\s+\[.*?\]\s+\[?(?:INFO|WARN|ERROR|FATAL|ALERT|DEBUG|TRACE)\]?\s*(?:-\s*)?""",
+        RegexOption.IGNORE_CASE
+    )
+
     // Chat: "[17:30:15 INFO]: <Steve> hello"
     private val CHAT_REGEX = Regex("""<([^>]+)>\s+""")
 
     fun parse(raw: String): ConsoleMessage {
         val cleanRaw = stripAnsi(raw).trim()
         val level = when {
-            cleanRaw.contains("[WARN]") || cleanRaw.contains("WARN]") -> LogLevel.WARN
-            cleanRaw.contains("[ERROR]") || cleanRaw.contains("ERROR]") ||
+            cleanRaw.contains("[WARN]") || cleanRaw.contains("WARN]") || cleanRaw.contains(" WARN -") -> LogLevel.WARN
+            cleanRaw.contains("[ERROR]") || cleanRaw.contains("ERROR]") || cleanRaw.contains(" ERROR -") ||
                     cleanRaw.contains("[FATAL]") || cleanRaw.contains("FATAL]") -> LogLevel.ERROR
             CHAT_REGEX.containsMatchIn(cleanRaw) -> LogLevel.CHAT
             else -> LogLevel.INFO
         }
         // Strip the timestamp prefix for cleaner display
         val text = cleanRaw
+            .replace(PREFIX_REGEX_NUKKIT, "")
             .replace(PREFIX_REGEX_1, "")
             .replace(PREFIX_REGEX_2, "")
             .trim()
@@ -113,13 +120,15 @@ object ConsoleParser {
             return false
         }
 
-        val afterThread = clean.substringAfter("]: ", clean)
+        val afterThread = clean.substringAfter("]: ", clean).substringAfter(" - ", clean)
         if (afterThread.startsWith("[")) {
             return false
         }
         val text = stripLogDecorations(clean)
         if (text.contains("geyser", ignoreCase = true)) return false
-        return DONE_PREFIX_REGEX.containsMatchIn(text) || (text.startsWith("Done (", ignoreCase = true) && text.contains("help", ignoreCase = true))
+        return DONE_PREFIX_REGEX.containsMatchIn(text) ||
+                (text.startsWith("Done (", ignoreCase = true) && text.contains("help", ignoreCase = true)) ||
+                (clean.contains("Done (", ignoreCase = true) && clean.contains("help", ignoreCase = true))
     }
 
 
@@ -295,6 +304,7 @@ object ConsoleParser {
 
     private fun stripLogDecorations(text: String): String =
         text.trim()
+            .replace(PREFIX_REGEX_NUKKIT, "")
             .replace(PREFIX_REGEX_1, "")
             .replace(PREFIX_REGEX_2, "")
             .trim()

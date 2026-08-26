@@ -327,6 +327,7 @@ object PluginManager {
     }
 
     fun enforceBedrockBridgeLocalConfig(context: Context, worldName: String) {
+        if (!supportsBundledBedrockBridge(context, worldName)) return
         val pluginsDir = getPluginsDir(context, worldName)
         val floodgateConfigFile = getFloodgateConfigFile(context, worldName)
         val floodgateDirName = floodgateConfigFile.parentFile?.name?.takeIf { it.isNotBlank() } ?: "floodgate"
@@ -379,10 +380,17 @@ object PluginManager {
         updated = ensureTopLevelYamlValue(updated, "mtu", "1400")
         updated = ensureYamlSectionValue(updated, "advanced", "floodgate-key-file", floodgateKeyPath)
 
+        val isOnlineMode = runCatching {
+            val serverDir = ServerFileManager.getServerDir(context, worldName)
+            val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
+            props.getProperty("online-mode", "false").toBoolean()
+        }.getOrDefault(false)
+        val geyserAuthType = if (isOnlineMode) "floodgate" else "offline"
+
         // Force Geyser to connect to Paper over 127.0.0.1 loopback for 0ms internal network latency
         updated = ensureYamlSectionValue(updated, "java", "address", "127.0.0.1")
         updated = ensureYamlSectionValue(updated, "java", "port", "25565")
-        updated = ensureYamlSectionValue(updated, "java", "auth-type", "floodgate")
+        updated = ensureYamlSectionValue(updated, "java", "auth-type", geyserAuthType)
         updated = ensureYamlSectionValue(updated, "java", "forward-hostname", "false")
         updated = ensureYamlSectionValue(updated, "java", "use-direct-netty-drive", "true")
 
@@ -390,12 +398,12 @@ object PluginManager {
         if (updated.lines().any { it.trim() == "remote:" }) {
             updated = ensureYamlSectionValue(updated, "remote", "address", "127.0.0.1")
             updated = ensureYamlSectionValue(updated, "remote", "port", "25565")
-            updated = ensureYamlSectionValue(updated, "remote", "auth-type", "floodgate")
+            updated = ensureYamlSectionValue(updated, "remote", "auth-type", geyserAuthType)
         }
 
         // Handle newer config variants that may expose auth in an additional server section.
         if (updated.lines().any { it.trim() == "server:" }) {
-            updated = ensureYamlSectionValue(updated, "server", "auth-type", "floodgate")
+            updated = ensureYamlSectionValue(updated, "server", "auth-type", geyserAuthType)
         }
 
         updated = ensureTopLevelYamlValue(updated, "passthrough-protocol-name", "true")
@@ -541,41 +549,49 @@ object PluginManager {
     }
 
     /**
-     * Preserves the Floodgate encryption key (key.pem) across server resets.
-     * If the key file is deleted or regenerated, all existing player links are
-     * invalidated — causing Bedrock player data resets even with player-link enabled.
-     * The backup is stored outside the server world folder so it survives world resets.
+     * Preserves and pre-generates the Floodgate encryption key (key.pem) across server resets and plugin directories.
+     * Guarantees key.pem exists before server startup so Geyser and Floodgate can authenticate Bedrock players cleanly.
      */
     fun preserveFloodgateKey(context: Context, worldName: String) {
         val serverDir = ServerFileManager.getServerDir(context, worldName)
         val backupDir = File(context.filesDir, "servers/$worldName").also { it.mkdirs() }
         val floodgateDirs = listOf(
             File(serverDir, "plugins/floodgate"),
-            File(serverDir, "plugins/Floodgate")
-        )
-        val keyFile = floodgateDirs.map { File(it, "key.pem") }.firstOrNull { it.exists() }
-        val defaultKeyFile = File(floodgateDirs.first(), "key.pem")
+            File(serverDir, "plugins/Floodgate"),
+            File(serverDir, "plugins/Geyser-Spigot")
+        ).onEach { it.mkdirs() }
+
+        val keyFile = floodgateDirs.map { File(it, "key.pem") }.firstOrNull { it.exists() && it.length() > 0 }
         val backupFile = File(backupDir, "floodgate_key_backup.pem")
 
-        if (keyFile != null && !backupFile.exists()) {
-            // First time — back it up
-            runCatching {
-                keyFile.copyTo(backupFile, overwrite = false)
-                android.util.Log.d("Floodgate", "Backed up Floodgate key to ${backupFile.path}")
+        val validKeyPem = when {
+            keyFile != null -> runCatching { keyFile.readText() }.getOrDefault("")
+            backupFile.exists() && backupFile.length() > 0 -> runCatching { backupFile.readText() }.getOrDefault("")
+            else -> generateFloodgateRsaKeyPem()
+        }
+
+        if (validKeyPem.isNotBlank()) {
+            floodgateDirs.forEach { dir ->
+                val file = File(dir, "key.pem")
+                runCatching {
+                    file.writeText(validKeyPem)
+                }
             }
-        } else if (keyFile == null && backupFile.exists()) {
-            // Key was deleted — restore it
             runCatching {
-                defaultKeyFile.parentFile?.mkdirs()
-                backupFile.copyTo(defaultKeyFile, overwrite = true)
-                android.util.Log.d("Floodgate", "Restored Floodgate key from backup")
-            }
-        } else if (keyFile != null && backupFile.exists()) {
-            // Both exist — keep backup in sync with current key
-            runCatching {
-                keyFile.copyTo(backupFile, overwrite = true)
+                backupFile.writeText(validKeyPem)
             }
         }
+    }
+
+    private fun generateFloodgateRsaKeyPem(): String {
+        return runCatching {
+            val kpg = java.security.KeyPairGenerator.getInstance("RSA")
+            kpg.initialize(2048)
+            val kp = kpg.generateKeyPair()
+            val encoder = java.util.Base64.getMimeEncoder(64, "\n".toByteArray())
+            val privateKeyEncoded = encoder.encodeToString(kp.private.encoded)
+            "-----BEGIN PRIVATE KEY-----\n$privateKeyEncoded\n-----END PRIVATE KEY-----\n"
+        }.getOrElse { "" }
     }
 
     fun readFloodgateConfigValue(context: Context, worldName: String, key: String): String? {
@@ -846,6 +862,7 @@ object PluginManager {
             com.pockethost.app.data.model.ServerType.FABRIC -> "fabric-$version"
             com.pockethost.app.data.model.ServerType.PAPER -> "paper-$version"
             com.pockethost.app.data.model.ServerType.PURPUR -> "purpur-$version"
+            com.pockethost.app.data.model.ServerType.BEDROCK -> "bedrock-$version"
             com.pockethost.app.data.model.ServerType.MODPACK -> {
                 val loader = props.getProperty("pocketcraft-modpack-loader").orEmpty().lowercase()
                 when {
@@ -2051,7 +2068,7 @@ object PluginManager {
         val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
         return when (ServerType.fromString(props.getProperty("pocketcraft-server-type"))) {
             ServerType.PAPER, ServerType.PURPUR, ServerType.FABRIC -> true
-            ServerType.VANILLA, ServerType.MODPACK -> false
+            ServerType.BEDROCK, ServerType.VANILLA, ServerType.MODPACK -> false
         }
     }
 

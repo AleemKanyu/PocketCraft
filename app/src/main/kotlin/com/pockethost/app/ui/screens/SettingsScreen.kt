@@ -38,6 +38,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -1050,8 +1051,9 @@ fun SettingsScreen(
                                         painter = androidx.compose.ui.res.painterResource(id = currentAppIcon.previewRes),
                                         contentDescription = null,
                                         modifier = Modifier
-                                            .size(42.dp)
-                                            .clip(RoundedCornerShape(10.dp))
+                                            .size(28.dp)
+                                            .shadow(elevation = 3.dp, shape = RoundedCornerShape(7.dp))
+                                            .clip(RoundedCornerShape(7.dp))
                                     )
                                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                         Text(
@@ -1394,7 +1396,7 @@ fun SettingsScreen(
                                     androidx.compose.foundation.Image(
                                         painter = androidx.compose.ui.res.painterResource(id = R.drawable.app_logo_light),
                                         contentDescription = null,
-                                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
+                                        modifier = Modifier.size(38.dp).clip(RoundedCornerShape(9.dp))
                                     )
                                     Column {
                                         Text("PocketHost", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, fontFamily = Monocraft)
@@ -2649,6 +2651,8 @@ private fun AppIconPickerDialog(
     onSelectIcon: (AppIcon) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var selectedIconState by remember { mutableStateOf(currentIcon) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -2672,9 +2676,9 @@ private fun AppIconPickerDialog(
                 )
 
                 AppIcon.entries.forEach { icon ->
-                    val isSelected = icon == currentIcon
+                    val isSelected = icon == selectedIconState
                     Surface(
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(14.dp),
                         color = if (isSelected) PocketColors.Primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
                         border = BorderStroke(
                             width = if (isSelected) 2.dp else 1.dp,
@@ -2683,52 +2687,47 @@ private fun AppIconPickerDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                onSelectIcon(icon)
+                                selectedIconState = icon
                             }
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             androidx.compose.foundation.Image(
                                 painter = androidx.compose.ui.res.painterResource(id = icon.previewRes),
                                 contentDescription = icon.title,
                                 modifier = Modifier
-                                    .size(46.dp)
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .size(30.dp)
+                                    .shadow(elevation = 3.dp, shape = RoundedCornerShape(7.dp))
+                                    .clip(RoundedCornerShape(7.dp))
                             )
 
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text(
-                                        text = icon.title,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                        color = if (isSelected) PocketColors.Primary else MaterialTheme.colorScheme.onSurface
-                                    )
-                                    if (icon == AppIcon.GREEN) {
-                                        Text(
-                                            text = "Default",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = PocketColors.Primary,
-                                            modifier = Modifier
-                                                .background(PocketColors.Primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                                 Text(
-                                    text = icon.description,
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    text = icon.title,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = if (isSelected) PocketColors.Primary else MaterialTheme.colorScheme.onSurface
                                 )
+                                if (icon == AppIcon.LIGHT) {
+                                    Text(
+                                        text = "Default",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PocketColors.Primary,
+                                        modifier = Modifier
+                                            .background(PocketColors.Primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
 
                             if (isSelected) {
@@ -2746,9 +2745,17 @@ private fun AppIconPickerDialog(
         },
         confirmButton = {
             DuoButton(
-                text = "DONE",
-                onClick = onDismiss
+                text = "OK",
+                onClick = {
+                    onSelectIcon(selectedIconState)
+                    onDismiss()
+                }
             )
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("CANCEL", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         },
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(24.dp)

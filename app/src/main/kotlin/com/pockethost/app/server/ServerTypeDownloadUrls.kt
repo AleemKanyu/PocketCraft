@@ -14,6 +14,7 @@ object ServerTypeDownloadUrls {
             ServerType.PAPER   -> "https://papermc.io/downloads/paper"
             ServerType.PURPUR  -> "https://purpurmc.org/downloads"
             ServerType.FABRIC  -> "https://fabricmc.net/use/server/"
+            ServerType.BEDROCK -> "https://github.com/PowerNukkitX/PowerNukkitX/releases/download/3.0.3/powernukkitx.jar"
             ServerType.MODPACK -> "https://modrinth.com/modpacks"
         }
     }
@@ -74,6 +75,7 @@ object ServerTypeDownloadUrls {
                     bestUrl ?: "https://papermc.io/downloads/paper"
                 }
                 ServerType.PURPUR  -> "https://api.purpurmc.org/v2/purpur/$version/latest/download"
+                ServerType.BEDROCK -> "https://github.com/PowerNukkitX/PowerNukkitX/releases/download/3.0.3/powernukkitx.jar"
                 ServerType.MODPACK -> "https://modrinth.com/modpacks"
 
                 ServerType.FABRIC -> {
@@ -122,6 +124,7 @@ object ServerTypeDownloadUrls {
                 ServerType.PAPER   -> "https://papermc.io/downloads/paper"
                 ServerType.PURPUR  -> "https://purpurmc.org/downloads"
                 ServerType.FABRIC  -> fabricServerJarUrl(cleanVersion, "0.16.10", "1.0.1")
+                ServerType.BEDROCK -> "https://github.com/PowerNukkitX/PowerNukkitX/releases/download/3.0.3/powernukkitx.jar"
                 ServerType.MODPACK -> "https://modrinth.com/modpacks"
             }
         }

@@ -190,46 +190,9 @@ object ModpackManager {
         onStatus: (String) -> Unit,
         onProgress: (Int) -> Unit
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        val serverDir = ServerFileManager.getServerDir(context, worldName)
-        val tempPackFile = File(serverDir, "pack_${System.currentTimeMillis()}.mrpack")
-        try {
-            onStatus("Resolving modpack $modpackId...")
-            val resolved = resolveModpack(modpackId)
-            if (resolved.downloadUrl.isBlank()) {
-                return@withContext Result.failure(Exception("Could not find download URL for $modpackId"))
-            }
-
-            onStatus("Downloading modpack package...")
-            blockedRuntimeFileFetch(resolved.downloadUrl, tempPackFile) { percent ->
-                onProgress((percent * 0.2f).toInt().coerceIn(0, 20))
-            }
-
-            if (!isModrinthPackFile(tempPackFile)) {
-                throw Exception("Downloaded file is not a valid Modrinth modpack package.")
-            }
-
-            onStatus("Installing Modrinth modpack...")
-            installModrinthPackFile(
-                context = context,
-                packFile = tempPackFile,
-                serverDir = serverDir,
-                worldName = worldName,
-                modpackId = modpackId,
-                onStatus = onStatus,
-                onProgress = onProgress
-            )
-
-            onProgress(100)
-            onStatus("Modpack installed successfully!")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to install modpack $modpackId", e)
-            Result.failure(e)
-        } finally {
-            if (tempPackFile.exists()) {
-                tempPackFile.delete()
-            }
-        }
+        Result.failure(
+            IllegalStateException("Direct in-app modpack downloads are disabled for Google Play policy compliance. Please download the modpack file in your browser and import it.")
+        )
     }
 
     suspend fun importModpackZip(
