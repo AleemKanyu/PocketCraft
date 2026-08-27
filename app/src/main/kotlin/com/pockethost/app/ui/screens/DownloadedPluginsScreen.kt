@@ -76,6 +76,10 @@ private enum class DownloadedContentTab(
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val type: PluginManager.ContentType
 ) {
+    PLUGINS(
+        icon = Icons.Default.Extension,
+        type = PluginManager.ContentType.PLUGINS
+    ),
     MODS(
         icon = Icons.Default.Extension,
         type = PluginManager.ContentType.MODS
@@ -87,11 +91,13 @@ private enum class DownloadedContentTab(
 }
 
 private fun DownloadedContentTab.label(s: AppStrings) = when (this) {
+    DownloadedContentTab.PLUGINS -> "Plugins"
     DownloadedContentTab.MODS -> s.mods
     DownloadedContentTab.RESOURCE_PACKS -> s.resourcePacks
 }
 
 private fun DownloadedContentTab.emptyLabel(s: AppStrings) = when (this) {
+    DownloadedContentTab.PLUGINS -> "No plugins installed"
     DownloadedContentTab.MODS -> s.noModsInstalled
     DownloadedContentTab.RESOURCE_PACKS -> s.noResourcePacksInstalled
 }
@@ -124,11 +130,11 @@ fun DownloadedPluginsScreen(
     val availableTabs: List<DownloadedContentTab> = remember(stateHolder.config.serverType) {
         when (stateHolder.config.serverType) {
             com.pockethost.app.data.model.ServerType.FABRIC,
-            com.pockethost.app.data.model.ServerType.MODPACK -> DownloadedContentTab.entries.toList()
+            com.pockethost.app.data.model.ServerType.MODPACK -> listOf(DownloadedContentTab.MODS, DownloadedContentTab.RESOURCE_PACKS)
             com.pockethost.app.data.model.ServerType.PAPER,
-            com.pockethost.app.data.model.ServerType.PURPUR -> listOf(DownloadedContentTab.RESOURCE_PACKS)
+            com.pockethost.app.data.model.ServerType.PURPUR,
             com.pockethost.app.data.model.ServerType.VANILLA,
-            com.pockethost.app.data.model.ServerType.BEDROCK -> listOf(DownloadedContentTab.RESOURCE_PACKS)
+            com.pockethost.app.data.model.ServerType.BEDROCK -> listOf(DownloadedContentTab.PLUGINS, DownloadedContentTab.RESOURCE_PACKS)
         }
     }
 
@@ -147,10 +153,7 @@ fun DownloadedPluginsScreen(
             PluginManager.ContentType.MODS -> PluginManager.listMods(context, stateHolder.activeWorld)
             PluginManager.ContentType.RESOURCE_PACKS -> PluginManager.listResourcePacks(context, stateHolder.activeWorld)
         }
-        items = rawItems.filterNot { plugin ->
-            plugin.name.contains("floodgate", ignoreCase = true) ||
-            plugin.fileName.contains("floodgate", ignoreCase = true)
-        }
+        items = rawItems
     }
 
     val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->

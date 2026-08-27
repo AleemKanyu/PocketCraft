@@ -69,6 +69,11 @@ object BundledPluginInstaller {
                 }
                 return@forEach
             }
+            if (pluginName == "DummyPlayers.jar" && minor >= 20) {
+                val destFile = File(pluginsDir, pluginName)
+                if (destFile.exists()) runCatching { destFile.delete() }
+                return@forEach
+            }
 
             val destFile = File(pluginsDir, pluginName)
             val disabledFile = File(pluginsDir, "$pluginName.disabled")

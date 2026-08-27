@@ -328,6 +328,12 @@ object PluginManager {
 
     fun enforceBedrockBridgeLocalConfig(context: Context, worldName: String) {
         if (!supportsBundledBedrockBridge(context, worldName)) return
+        val crossplayPlugins = listOf("geyser", "floodgate", "viaversion", "viabackwards", "geyserreversion")
+        crossplayPlugins.forEach { ensureManagedPluginEnabled(context, worldName, it) }
+        ensureLatestGeyserSpigotPlugin(context, worldName)
+        ensureCrossVersionPlugins(context, worldName)
+        ensureGeyserReversionExtension(context, worldName)
+        preserveFloodgateKey(context, worldName)
         val pluginsDir = getPluginsDir(context, worldName)
         val floodgateConfigFile = getFloodgateConfigFile(context, worldName)
         val floodgateDirName = floodgateConfigFile.parentFile?.name?.takeIf { it.isNotBlank() } ?: "floodgate"
@@ -380,12 +386,7 @@ object PluginManager {
         updated = ensureTopLevelYamlValue(updated, "mtu", "1400")
         updated = ensureYamlSectionValue(updated, "advanced", "floodgate-key-file", floodgateKeyPath)
 
-        val isOnlineMode = runCatching {
-            val serverDir = ServerFileManager.getServerDir(context, worldName)
-            val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
-            props.getProperty("online-mode", "false").toBoolean()
-        }.getOrDefault(false)
-        val geyserAuthType = if (isOnlineMode) "floodgate" else "offline"
+        val geyserAuthType = "floodgate"
 
         // Force Geyser to connect to Paper over 127.0.0.1 loopback for 0ms internal network latency
         updated = ensureYamlSectionValue(updated, "java", "address", "127.0.0.1")
@@ -470,6 +471,71 @@ object PluginManager {
         ensureGeyserReversionExtension(context, worldName)
     }
 
+    fun fetchModrinthPluginDownloadUrl(context: Context, projectId: String): String? {
+        return runCatching {
+            val url = "https://api.modrinth.com/v2/project/$projectId/version"
+            val request = Request.Builder().url(url).header("User-Agent", userAgent()).build()
+            getHttpClient(context).newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@runCatching null
+                val payload = response.body?.string().orEmpty()
+                if (payload.isBlank()) return@runCatching null
+                val array = JSONArray(payload)
+                if (array.length() > 0) {
+                    val files = array.getJSONObject(0).optJSONArray("files")
+                    if (files != null && files.length() > 0) {
+                        return@runCatching files.getJSONObject(0).optString("url").takeIf { it.isNotBlank() }
+                    }
+                }
+                null
+            }
+        }.getOrNull()
+    }
+
+    fun ensureCrossVersionPlugins(context: Context, worldName: String) {
+        val pluginsDir = getPluginsDir(context, worldName)
+        val viaVersionFile = File(pluginsDir, "ViaVersion.jar")
+        val viaBackwardsFile = File(pluginsDir, "ViaBackwards.jar")
+
+        if (!viaVersionFile.exists() || viaVersionFile.length() < 500_000L) {
+            val dlUrl = fetchModrinthPluginDownloadUrl(context, "viaversion")
+                ?: "https://api.spiget.org/v2/resources/19254/download"
+            runCatching {
+                val req = Request.Builder().url(dlUrl).header("User-Agent", userAgent()).build()
+                getHttpClient(context).newCall(req).execute().use { resp ->
+                    if (resp.isSuccessful && resp.body != null) {
+                        val tmp = File(pluginsDir, "ViaVersion.tmp")
+                        resp.body!!.byteStream().use { input -> tmp.outputStream().use { output -> input.copyTo(output) } }
+                        if (tmp.length() > 500_000L) {
+                            tmp.copyTo(viaVersionFile, overwrite = true)
+                            Log.i("PluginManager", "Successfully downloaded ViaVersion.jar")
+                        }
+                        tmp.delete()
+                    }
+                }
+            }.onFailure { e -> Log.w("PluginManager", "Download ViaVersion.jar failed: ${e.message}") }
+        }
+
+        if (!viaBackwardsFile.exists() || viaBackwardsFile.length() < 500_000L) {
+            val dlUrl = fetchModrinthPluginDownloadUrl(context, "viabackwards")
+            if (dlUrl != null) {
+                runCatching {
+                    val req = Request.Builder().url(dlUrl).header("User-Agent", userAgent()).build()
+                    getHttpClient(context).newCall(req).execute().use { resp ->
+                        if (resp.isSuccessful && resp.body != null) {
+                            val tmp = File(pluginsDir, "ViaBackwards.tmp")
+                            resp.body!!.byteStream().use { input -> tmp.outputStream().use { output -> input.copyTo(output) } }
+                            if (tmp.length() > 500_000L) {
+                                tmp.copyTo(viaBackwardsFile, overwrite = true)
+                                Log.i("PluginManager", "Successfully downloaded ViaBackwards.jar")
+                            }
+                            tmp.delete()
+                        }
+                    }
+                }.onFailure { e -> Log.w("PluginManager", "Download ViaBackwards.jar failed: ${e.message}") }
+            }
+        }
+    }
+
     fun ensureGeyserReversionExtension(context: Context, worldName: String) {
         val pluginsDir = getPluginsDir(context, worldName)
         val extDir1 = File(pluginsDir, "Geyser-Spigot/extensions").also { it.mkdirs() }
@@ -485,46 +551,32 @@ object PluginManager {
             return
         }
 
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val url = "https://api.modrinth.com/v2/project/geyserreversion/version"
-                val request = Request.Builder().url(url).header("User-Agent", userAgent()).build()
-                getHttpClient(context).newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@launch
-                    val payload = response.body?.string().orEmpty()
-                    if (payload.isBlank()) return@launch
-                    val array = JSONArray(payload)
-                    if (array.length() > 0) {
-                        val files = array.getJSONObject(0).optJSONArray("files")
-                        if (files != null && files.length() > 0) {
-                            val downloadUrl = files.getJSONObject(0).optString("url")
-                            if (downloadUrl.isNotBlank()) {
-                                val dlReq = Request.Builder().url(downloadUrl).header("User-Agent", userAgent()).build()
-                                getHttpClient(context).newCall(dlReq).execute().use { dlResp ->
-                                    if (dlResp.isSuccessful && dlResp.body != null) {
-                                        dlResp.body!!.byteStream().use { input ->
-                                            target1.outputStream().use { output -> input.copyTo(output) }
-                                        }
-                                        runCatching { target1.copyTo(target2, overwrite = true) }
-                                        Log.i("PluginManager", "Successfully downloaded and installed GeyserReversion extension for older Bedrock client support!")
-                                    }
-                                }
-                            }
+        runCatching {
+            val downloadUrl = fetchModrinthPluginDownloadUrl(context, "geyserreversion")
+            if (!downloadUrl.isNullOrBlank()) {
+                val dlReq = Request.Builder().url(downloadUrl).header("User-Agent", userAgent()).build()
+                getHttpClient(context).newCall(dlReq).execute().use { dlResp ->
+                    if (dlResp.isSuccessful && dlResp.body != null) {
+                        dlResp.body!!.byteStream().use { input ->
+                            target1.outputStream().use { output -> input.copyTo(output) }
                         }
+                        runCatching { target1.copyTo(target2, overwrite = true) }
+                        Log.i("PluginManager", "Successfully downloaded and installed GeyserReversion extension for older Bedrock client support!")
                     }
                 }
-            } catch (e: Exception) {
-                Log.w("PluginManager", "Could not auto-download GeyserReversion extension: ${e.message}")
             }
+        }.onFailure { e ->
+            Log.w("PluginManager", "Could not auto-download GeyserReversion extension: ${e.message}")
         }
     }
 
     fun ensureLatestGeyserSpigotPlugin(context: Context, worldName: String) {
         val pluginsDir = getPluginsDir(context, worldName)
         val geyserFile = File(pluginsDir, "Geyser-Spigot.jar")
+        val floodgateFile = File(pluginsDir, "floodgate-spigot.jar")
 
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
+        if (!geyserFile.exists() || geyserFile.length() < 1_000_000L) {
+            runCatching {
                 val url = "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot"
                 val request = Request.Builder().url(url).header("User-Agent", userAgent()).build()
                 getHttpClient(context).newCall(request).execute().use { response ->
@@ -534,17 +586,33 @@ object PluginManager {
                             tempFile.outputStream().use { output -> input.copyTo(output) }
                         }
                         if (tempFile.length() > 5_000_000L) {
-                            if (!geyserFile.exists() || tempFile.length() != geyserFile.length()) {
-                                tempFile.copyTo(geyserFile, overwrite = true)
-                                Log.i("PluginManager", "Successfully updated Geyser-Spigot.jar to latest Bedrock build!")
-                            }
+                            tempFile.copyTo(geyserFile, overwrite = true)
+                            Log.i("PluginManager", "Successfully downloaded Geyser-Spigot.jar")
                         }
                         tempFile.delete()
                     }
                 }
-            } catch (e: Exception) {
-                Log.w("PluginManager", "Geyser-Spigot auto-update check skipped: ${e.message}")
-            }
+            }.onFailure { e -> Log.w("PluginManager", "Download Geyser-Spigot.jar failed: ${e.message}") }
+        }
+
+        if (!floodgateFile.exists() || floodgateFile.length() < 500_000L) {
+            runCatching {
+                val url = "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
+                val request = Request.Builder().url(url).header("User-Agent", userAgent()).build()
+                getHttpClient(context).newCall(request).execute().use { response ->
+                    if (response.isSuccessful && response.body != null) {
+                        val tempFile = File(pluginsDir, "floodgate-spigot.tmp")
+                        response.body!!.byteStream().use { input ->
+                            tempFile.outputStream().use { output -> input.copyTo(output) }
+                        }
+                        if (tempFile.length() > 500_000L) {
+                            tempFile.copyTo(floodgateFile, overwrite = true)
+                            Log.i("PluginManager", "Successfully downloaded floodgate-spigot.jar")
+                        }
+                        tempFile.delete()
+                    }
+                }
+            }.onFailure { e -> Log.w("PluginManager", "Download floodgate-spigot.jar failed: ${e.message}") }
         }
     }
 
@@ -564,34 +632,45 @@ object PluginManager {
         val keyFile = floodgateDirs.map { File(it, "key.pem") }.firstOrNull { it.exists() && it.length() > 0 }
         val backupFile = File(backupDir, "floodgate_key_backup.pem")
 
-        val validKeyPem = when {
-            keyFile != null -> runCatching { keyFile.readText() }.getOrDefault("")
-            backupFile.exists() && backupFile.length() > 0 -> runCatching { backupFile.readText() }.getOrDefault("")
-            else -> generateFloodgateRsaKeyPem()
+        // Purge invalid manually generated PKCS8 keys so Floodgate generates its native key
+        if (keyFile != null) {
+            val text = runCatching { keyFile.readText() }.getOrDefault("")
+            if (text.contains("BEGIN PRIVATE KEY")) {
+                floodgateDirs.forEach { dir -> File(dir, "key.pem").delete() }
+                backupFile.delete()
+                Log.i("PluginManager", "Purged manual PKCS8 key.pem to allow Floodgate native key generation")
+                return
+            }
+        }
+        if (backupFile.exists()) {
+            val text = runCatching { backupFile.readText() }.getOrDefault("")
+            if (text.contains("BEGIN PRIVATE KEY")) {
+                backupFile.delete()
+            }
         }
 
-        if (validKeyPem.isNotBlank()) {
-            floodgateDirs.forEach { dir ->
-                val file = File(dir, "key.pem")
-                runCatching {
-                    file.writeText(validKeyPem)
+        if (keyFile != null && keyFile.length() > 0) {
+            val validKeyPem = runCatching { keyFile.readText() }.getOrDefault("")
+            if (validKeyPem.isNotBlank()) {
+                runCatching { backupFile.writeText(validKeyPem) }
+                floodgateDirs.forEach { dir ->
+                    val target = File(dir, "key.pem")
+                    if (!target.exists() || target.length() == 0L) {
+                        runCatching { target.writeText(validKeyPem) }
+                    }
                 }
             }
-            runCatching {
-                backupFile.writeText(validKeyPem)
+        } else if (backupFile.exists() && backupFile.length() > 0) {
+            val validKeyPem = runCatching { backupFile.readText() }.getOrDefault("")
+            if (validKeyPem.isNotBlank()) {
+                floodgateDirs.forEach { dir ->
+                    val target = File(dir, "key.pem")
+                    if (!target.exists() || target.length() == 0L) {
+                        runCatching { target.writeText(validKeyPem) }
+                    }
+                }
             }
         }
-    }
-
-    private fun generateFloodgateRsaKeyPem(): String {
-        return runCatching {
-            val kpg = java.security.KeyPairGenerator.getInstance("RSA")
-            kpg.initialize(2048)
-            val kp = kpg.generateKeyPair()
-            val encoder = java.util.Base64.getMimeEncoder(64, "\n".toByteArray())
-            val privateKeyEncoded = encoder.encodeToString(kp.private.encoded)
-            "-----BEGIN PRIVATE KEY-----\n$privateKeyEncoded\n-----END PRIVATE KEY-----\n"
-        }.getOrElse { "" }
     }
 
     fun readFloodgateConfigValue(context: Context, worldName: String, key: String): String? {

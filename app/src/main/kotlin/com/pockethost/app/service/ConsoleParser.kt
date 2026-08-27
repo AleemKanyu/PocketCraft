@@ -174,9 +174,9 @@ object ConsoleParser {
     // e.g. "[17:30:06 INFO]: [PocketCraftPing] Steve:10@127.0.0.1 Alex:42"
     private val PING_REGEX = Regex("""\[PocketCraftPing\](.*)""")
     // Purpur: "Steve's ping is 42ms"
-    private val PURPUR_PING_REGEX = Regex("""(\S+)'s ping is (\d+)ms""", RegexOption.IGNORE_CASE)
+    private val PURPUR_PING_REGEX = Regex("""(.+?)'s ping is\s+(\d+)\s*ms""", RegexOption.IGNORE_CASE)
     // Paper: "Steve has a ping of 42ms"  (RCON response, may contain §-color codes)
-    private val PAPER_PING_REGEX = Regex("""(\S+)\s+has a ping of\s+(\d+)\s*ms""", RegexOption.IGNORE_CASE)
+    private val PAPER_PING_REGEX = Regex("""(.+?)\s+has a ping of\s+(\d+)\s*ms""", RegexOption.IGNORE_CASE)
 
     /** Strip Minecraft legacy color/format codes (§X). */
     private fun stripMinecraftColors(text: String): String =
@@ -254,9 +254,8 @@ object ConsoleParser {
             }
         }
 
-        // Carpet / Fabric mod ping responses:
-        // e.g. "Steve's ping is 24 ms" or "Steve's ping is 24ms" or "Steve: 24ms"
-        val carpetMatch = Regex("""^(\S+)(?:'s ping is|'s latency is|'s ping:)\s*(\d+)\s*(?:ms)?""", RegexOption.IGNORE_CASE).find(cleanLine)
+        // Carpet / Fabric / Geyser mod ping responses:
+        val carpetMatch = Regex("""^(.+?)(?:'s ping is|'s latency is|'s ping:)\s*(\d+)\s*(?:ms)?""", RegexOption.IGNORE_CASE).find(cleanLine)
         if (carpetMatch != null) {
             val name = carpetMatch.groupValues[1].trim()
             val ping = carpetMatch.groupValues[2].toIntOrNull() ?: -1

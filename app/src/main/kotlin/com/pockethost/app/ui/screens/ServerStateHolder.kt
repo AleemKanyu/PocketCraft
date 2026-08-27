@@ -284,7 +284,7 @@ class ServerStateHolder(
         serverUiState = when {
             isStopping && !isRestartingCycle && !pendingRestart -> ServerUiState.RUNNING
             status == ServerStatus.ONLINE -> ServerUiState.RUNNING
-            isStarting || isRestartingCycle || isRunning -> ServerUiState.STARTING
+            status == ServerStatus.STARTING || isStarting || isRestartingCycle || isRunning -> ServerUiState.STARTING
             else -> ServerUiState.IDLE
         }
         ServerHostService.pushWidgetUpdate(appContext)
@@ -525,6 +525,7 @@ class ServerStateHolder(
             isStarting = false
             isRunning = true
             isStopping = false
+            serverJoinable = true
             startupProgressPercent = 100
             startupStatusMessage = "Server ready!"
             stopStartupProgressTracking(reset = false)
@@ -1653,6 +1654,7 @@ class ServerStateHolder(
         isStarting = false
         isRestartingCycle = false
         isRunning = true
+        serverJoinable = true
         startupProgressPercent = 100
         startupStatusMessage = "Server ready!"
         lastStartRequestedRealtime = 0L
@@ -2081,10 +2083,23 @@ class ServerStateHolder(
         val normalizedName = name.trim()
         if (normalizedName.isBlank()) return
 
-        sendCommand("op $normalizedName")
+        val cmdName = if (normalizedName.contains(" ")) "\"$normalizedName\"" else normalizedName
+        sendCommand("op $cmdName")
 
         val resolvedUuid = onlinePlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid
             ?: knownPlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid.orEmpty()
+
+        // Instantly update UI state on Main thread
+        onlinePlayers.replaceAllMatching(normalizedName, resolvedUuid) { it.copy(isOp = true) }
+        knownPlayers.replaceAllMatching(normalizedName, resolvedUuid) { it.copy(isOp = true) }
+        sessionPlayers.replaceAllMatching(normalizedName, resolvedUuid) { it.copy(isOp = true) }
+
+        if (opPlayers.none { it.name.equals(normalizedName, ignoreCase = true) }) {
+            val opInfo = onlinePlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }
+                ?: PlayerInfo(name = normalizedName, uuid = resolvedUuid, isOp = true)
+            opPlayers.add(opInfo.copy(isOp = true))
+        }
+        notifyStateChanged()
 
         scope.launch(Dispatchers.IO) {
             val error = runCatching {
@@ -2107,22 +2122,6 @@ class ServerStateHolder(
             withContext(Dispatchers.Main) {
                 if (error != null) {
                     appendLog("[PocketHost] Failed to grant OP to $normalizedName: ${error.message}")
-                } else {
-                    val normalizedUuid = onlinePlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid
-                        ?: knownPlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid
-                        .orEmpty()
-                    onlinePlayers.replaceAllMatching(
-                        normalizedName = normalizedName,
-                        uuid = normalizedUuid
-                    ) { player -> player.copy(isOp = true) }
-                    knownPlayers.replaceAllMatching(
-                        normalizedName = normalizedName,
-                        uuid = normalizedUuid
-                    ) { player -> player.copy(isOp = true) }
-                    sessionPlayers.replaceAllMatching(
-                        normalizedName = normalizedName,
-                        uuid = normalizedUuid
-                    ) { player -> player.copy(isOp = true) }
                 }
                 refreshAll()
             }
@@ -2133,32 +2132,29 @@ class ServerStateHolder(
         val normalizedName = name.trim()
         if (normalizedName.isBlank()) return
 
-        sendCommand("deop $normalizedName")
+        val cmdName = if (normalizedName.contains(" ")) "\"$normalizedName\"" else normalizedName
+        sendCommand("deop $cmdName")
+
+        val resolvedUuid = onlinePlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid
+            ?: knownPlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid.orEmpty()
+
+        // Instantly update UI state on Main thread
+        onlinePlayers.replaceAllMatching(normalizedName, resolvedUuid) { it.copy(isOp = false) }
+        knownPlayers.replaceAllMatching(normalizedName, resolvedUuid) { it.copy(isOp = false) }
+        sessionPlayers.replaceAllMatching(normalizedName, resolvedUuid) { it.copy(isOp = false) }
+        opPlayers.removeAll { it.name.equals(normalizedName, ignoreCase = true) }
+        notifyStateChanged()
 
         scope.launch(Dispatchers.IO) {
-            val error = mutateNamedList("ops.json") { list ->
-                list.filterNot { it.name.equals(normalizedName, ignoreCase = true) }
+            val error = runCatching {
+                mutateNamedList("ops.json") { list ->
+                    list.filterNot { it.name.equals(normalizedName, ignoreCase = true) }
+                }
             }.exceptionOrNull()
 
             withContext(Dispatchers.Main) {
                 if (error != null) {
                     appendLog("[PocketHost] Failed to remove OP from $normalizedName: ${error.message}")
-                } else {
-                    val normalizedUuid = onlinePlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid
-                        ?: knownPlayers.firstOrNull { it.name.equals(normalizedName, ignoreCase = true) }?.uuid
-                        .orEmpty()
-                    onlinePlayers.replaceAllMatching(
-                        normalizedName = normalizedName,
-                        uuid = normalizedUuid
-                    ) { player -> player.copy(isOp = false) }
-                    knownPlayers.replaceAllMatching(
-                        normalizedName = normalizedName,
-                        uuid = normalizedUuid
-                    ) { player -> player.copy(isOp = false) }
-                    sessionPlayers.replaceAllMatching(
-                        normalizedName = normalizedName,
-                        uuid = normalizedUuid
-                    ) { player -> player.copy(isOp = false) }
                 }
                 refreshAll()
             }
@@ -4017,7 +4013,7 @@ class ServerStateHolder(
             var currentFloat = 1.0f
             var lastPersistedProgress = -1
 
-            while (isStarting && !isRunning) {
+            while ((isStarting || isRunning) && !isJavaServerDone && !serverJoinable) {
                 if (!isStopping) {
                     val elapsedMs = (SystemClock.elapsedRealtime() - (startupStartedAtRealtime ?: SystemClock.elapsedRealtime())).coerceAtLeast(0L)
                     if (elapsedMs > 720_000L) {
@@ -4042,7 +4038,7 @@ class ServerStateHolder(
 
                     val displayPct = currentFloat.toInt().coerceIn(1, if (maxCap >= 100f) 100 else 99)
 
-                    if (!isStarting || (isRunning && displayPct >= 100)) break
+                    if (isStopping) break
 
                     withContext(Dispatchers.Main) {
                         if (isServerActuallyReady) {

@@ -81,8 +81,13 @@ class BedrockUdpBridge(
     }
 
     private fun startListening(socket: DatagramSocket, clientIp: String, clientPort: Int) {
-        val ipParts = clientIp.split(".").map { it.toIntOrNull() ?: 0 }
-        val ipBytes = byteArrayOf(ipParts[0].toByte(), ipParts[1].toByte(), ipParts[2].toByte(), ipParts[3].toByte())
+        val ipBytes = runCatching {
+            val addr = InetAddress.getByName(clientIp)
+            if (addr is java.net.Inet4Address) addr.address else null
+        }.getOrNull() ?: runCatching {
+            val parts = clientIp.split(".").map { it.toIntOrNull() ?: 0 }
+            if (parts.size == 4) byteArrayOf(parts[0].toByte(), parts[1].toByte(), parts[2].toByte(), parts[3].toByte()) else null
+        }.getOrNull() ?: byteArrayOf(127, 0, 0, 1)
 
         val thread = Thread {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)

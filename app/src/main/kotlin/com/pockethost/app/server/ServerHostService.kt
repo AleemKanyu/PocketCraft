@@ -368,6 +368,7 @@ class ServerHostService : Service() {
         currentVersionId = versionId
         currentWorldName = worldName
         stopReason = "unknown"
+        com.pockethost.app.data.preferences.AppPreferences(applicationContext).isUserStopped = false
         serverReadyNotificationShown = false
         serverReadyHandled.set(false)
         setServerReadyState(false)
@@ -905,6 +906,10 @@ class ServerHostService : Service() {
                 context = applicationContext,
                 worldName = currentWorldName ?: "world"
             )
+        } else {
+            val wName = currentWorldName ?: "world"
+            com.pockethost.app.server.BundledPluginInstaller.installBundledPlugins(applicationContext, serverDir)
+            com.pockethost.app.service.PluginManager.enforceBedrockBridgeLocalConfig(applicationContext, wName)
         }
         jar
     }

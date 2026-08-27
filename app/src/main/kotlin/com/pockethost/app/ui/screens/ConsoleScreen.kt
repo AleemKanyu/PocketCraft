@@ -1820,7 +1820,7 @@ private fun ServerIdentityCard(
             .takeIf(::isShareableLanIp)
             ?.let { "$it:${stateHolder.config.port}" }
         val relayReady = !publicAddress.isNullOrBlank()
-        val canShareAddresses = (stateHolder.status == ServerStatus.ONLINE || stateHolder.isRunning || stateHolder.isJavaServerDone || stateHolder.serverJoinable) && !stateHolder.isStopping
+        val canShareAddresses = stateHolder.status == ServerStatus.ONLINE
 
 
 
