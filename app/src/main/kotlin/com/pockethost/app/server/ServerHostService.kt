@@ -1840,7 +1840,11 @@ class ServerHostService : Service() {
         serverReadyHandled.set(false)
         relayStatusPlayerCount.set(0)
         synchronized(relayOnlinePlayers) { relayOnlinePlayers.clear() }
-        persistRuntimeState(applicationContext, versionId, worldName, RUNTIME_STATE_RUNNING)
+        // The JVM has only just been launched here — the server is not accepting players
+        // yet. Persisting RUNNING at this point made the state file claim readiness for the
+        // whole boot, which the UI then adopted on launch and treated as "already ready".
+        // onServerReady() writes RUNNING once the server actually reports Done.
+        persistRuntimeState(applicationContext, versionId, worldName, RUNTIME_STATE_STARTING)
         val attachedAt = System.currentTimeMillis()
         serverStartTimeMillis = attachedAt
         serviceScope.launch { AppPreferencesStore.setServerStartedAtMillis(applicationContext, attachedAt) }

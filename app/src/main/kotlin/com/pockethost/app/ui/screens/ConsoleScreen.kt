@@ -1842,8 +1842,11 @@ private fun ServerIdentityCard(
         val internetRelayAddress = when {
             isOfflineMode -> "Offline Mode (Local Wi-Fi / LAN Only)"
             relaySwitching -> "Switching relay connection..."
-            relayConnecting && stateHolder.isRunning -> "Reconnecting to the servers..."
-            relayConnecting -> "Opening internet relay..."
+            // Only call it a *re*connect once the server actually reached ONLINE. isRunning
+            // turns true the moment the process launches, so keying off it labelled the very
+            // first relay attempt of every startup as "Reconnecting".
+            relayConnecting && stateHolder.status == ServerStatus.ONLINE -> "Reconnecting to the servers..."
+            relayConnecting -> "Connecting to the servers..."
             !publicAddress.isNullOrBlank() -> publicAddress
             else -> "Opening internet relay..."
         }
@@ -1873,8 +1876,8 @@ private fun ServerIdentityCard(
                     .background(if (pocketIsDarkTheme()) PocketColors.SurfaceCardDark else PocketColors.SurfaceCard)
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1918,8 +1921,8 @@ private fun ServerIdentityCard(
                                 Text(
                                     when {
                                         relaySwitching -> "Relay Switching"
-                                        relayConnecting && stateHolder.isRunning -> "Reconnecting"
-                                        relayConnecting -> "Relay Connecting"
+                                        relayConnecting && stateHolder.status == ServerStatus.ONLINE -> "Reconnecting"
+                                        relayConnecting -> "Connecting"
                                         relayReady -> "Relay Ready"
                                         stateHolder.tunnelError != null -> "Relay Error"
                                         else -> "Relay Offline"
@@ -2237,36 +2240,43 @@ private fun AddressValueRow(
     onRetryClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
-    Column(
+    // The label sits beside the action buttons rather than above them, so both text lines
+    // fit inside the height the 48dp touch targets already occupy. Stacking the label on
+    // top previously made every row ~68dp tall for no extra information.
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(1.dp)
         ) {
             Text(
+                text = label,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+            Text(
                 text = address,
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                softWrap = true,
+                // Addresses stay on a single line; a long relay hostname ellipsises rather
+                // than wrapping and growing the card.
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
                 fontFamily = FontFamily.Monospace,
-                letterSpacing = (-0.2).sp,
-                modifier = Modifier.weight(1f)
+                letterSpacing = (-0.3).sp
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(0.dp)
+        ) {
                 if (onRetryClick != null) {
                     IconButton(
                         onClick = onRetryClick,
@@ -2299,6 +2309,7 @@ private fun AddressValueRow(
                     address != "No internet" &&
                     address != "Opening internet relay..." &&
                     address != "Reconnecting to the servers..." &&
+                    address != "Connecting to the servers..." &&
                     address != "Switching relay connection..." &&
                     address != "Start the server to generate internet join addresses."
                 if (canCopy) {
@@ -2320,7 +2331,6 @@ private fun AddressValueRow(
                     }
                 }
             }
-        }
     }
 }
 
