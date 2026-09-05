@@ -4,6 +4,7 @@ import com.pockethost.app.BuildConfig
 
 import android.Manifest
 import android.app.Activity
+import android.content.ContextWrapper
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -43,6 +44,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -220,6 +222,30 @@ private fun onboardingBorderColor(): Color = if (pocketIsDarkTheme()) {
 
 @Composable
 private fun onboardingTextPrimary(): Color = MaterialTheme.colorScheme.onSurface
+
+// Theme-aware equivalents of the warning/error banners' colors. These used to be
+// hardcoded light-mode-only hex literals (a near-white pink bg / dark-red text),
+// which rendered as a jarring bright patch stamped on top of dark surfaces in dark mode.
+@Composable
+private fun onboardingErrorSurfaceColor(): Color = if (pocketIsDarkTheme()) {
+    MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.28f)
+} else {
+    Color(0xFFFFF1F0)
+}
+
+@Composable
+private fun onboardingErrorBorderColor(): Color = if (pocketIsDarkTheme()) {
+    MaterialTheme.colorScheme.error.copy(alpha = 0.55f)
+} else {
+    Color(0xFFFFB3AE)
+}
+
+@Composable
+private fun onboardingErrorTextColor(): Color = if (pocketIsDarkTheme()) {
+    MaterialTheme.colorScheme.error
+} else {
+    Color(0xFF9F2D2D)
+}
 
 @Composable
 private fun onboardingTextSecondary(): Color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -405,9 +431,11 @@ private fun OnboardingScreen(
     var setupFormError by rememberSaveable { mutableStateOf("") }
     var versionSelectionError by rememberSaveable { mutableStateOf(false) }
     var versionShakeTick by rememberSaveable { mutableIntStateOf(0) }
+    var versionShakeConsumed by rememberSaveable { mutableStateOf(false) }
     var notificationsPermissionGranted by remember { mutableStateOf(isNotificationPermissionGranted(context)) }
     var permissionStepError by rememberSaveable { mutableStateOf("") }
     var permissionWarningTick by rememberSaveable { mutableIntStateOf(0) }
+    var permissionShakeConsumed by rememberSaveable { mutableStateOf(false) }
     var signedInAccountEmail by rememberSaveable { mutableStateOf(AccountManager.currentDriveAccount(context)?.email.orEmpty()) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -434,7 +462,18 @@ private fun OnboardingScreen(
             permissionStepError = ""
         }
         if (!notificationsPermissionGranted) {
-            openAppNotificationSettings(context)
+            // Only bounce out to system Settings once the OS itself says it won't show the
+            // in-app request again (permanently denied / "Don't ask again"). On an ordinary
+            // first "Deny", shouldShowRequestPermissionRationale is still true (or the
+            // permission hasn't been asked before at all) — let the existing in-app error
+            // banner handle it so the user can just retry the in-app Allow button instead of
+            // being yanked out of onboarding.
+            val activity = context.findActivity()
+            val permanentlyDenied = activity != null &&
+                !activity.shouldShowRequestPermissionRationale(android.Manifest.permission.POST_NOTIFICATIONS)
+            if (permanentlyDenied) {
+                openAppNotificationSettings(context)
+            }
         }
     }
     val googleSignInLauncher = rememberLauncherForActivityResult(
@@ -590,7 +629,9 @@ private fun OnboardingScreen(
                                     }
                                 },
                                 errorText = permissionStepError,
-                                warningTick = permissionWarningTick
+                                warningTick = permissionWarningTick,
+                                shakeConsumed = permissionShakeConsumed,
+                                onShakeConsumed = { permissionShakeConsumed = true }
                             )
                             else -> OnboardingSetupScreen(
                                 serverName = setupServerName,
@@ -613,7 +654,9 @@ private fun OnboardingScreen(
                                 worldSeed = setupSeed,
                                 onWorldSeedChange = { setupSeed = it },
                                 showVersionError = versionSelectionError,
-                                versionShakeTick = versionShakeTick
+                                versionShakeTick = versionShakeTick,
+                                shakeConsumed = versionShakeConsumed,
+                                onShakeConsumed = { versionShakeConsumed = true }
                             )
                         }
                     }
@@ -731,7 +774,7 @@ private fun OnboardingScreen(
                     .align(Alignment.BottomEnd)
                     .navigationBarsPadding()
                     .padding(end = 20.dp, bottom = 18.dp)
-                    .size(46.dp),
+                    .size(48.dp),
                 shape = CircleShape,
                 color = PocketColors.Primary,
                 border = BorderStroke(1.5.dp, PocketColors.PrimaryBorder),
@@ -1143,39 +1186,45 @@ private fun TopHeader(
             ) {
                 Surface(
                     onClick = onSkipAll,
+                    modifier = Modifier.defaultMinSize(minHeight = 48.dp),
                     shape = RoundedCornerShape(12.dp),
                     color = onboardingAccentGreen().copy(alpha = 0.18f),
                     border = BorderStroke(1.dp, onboardingAccentGreen().copy(alpha = 0.6f))
                 ) {
-                    Text(
-                        text = "Skip All ⏭",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = onboardingTextPrimary()
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "Skip All ⏭",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = onboardingTextPrimary()
+                        )
+                    }
                 }
 
                 Box {
                     var showThemeMenu by remember { mutableStateOf(false) }
                     Surface(
                         onClick = { showThemeMenu = true },
+                        modifier = Modifier.defaultMinSize(minHeight = 48.dp),
                         shape = RoundedCornerShape(12.dp),
                         color = onboardingSurfaceSoftColor(),
                         border = BorderStroke(1.dp, onboardingBorderColor())
                     ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text("🎨", fontSize = 14.sp)
-                        Text(
-                            text = currentMobTheme.themeName,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = onboardingTextPrimary()
-                        )
+                    Box(contentAlignment = Alignment.Center) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text("🎨", fontSize = 14.sp)
+                            Text(
+                                text = currentMobTheme.themeName,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = onboardingTextPrimary()
+                            )
+                        }
                     }
                 }
 
@@ -1726,14 +1775,24 @@ private fun PermissionsScreen(
     notificationsPermissionGranted: Boolean,
     onAllowNotifications: () -> Unit,
     errorText: String,
-    warningTick: Int
+    warningTick: Int,
+    shakeConsumed: Boolean = false,
+    onShakeConsumed: () -> Unit = {}
 ) {
     val notificationsShakeOffset = remember { Animatable(0f) }
 
     fun shouldWarnNotifications(): Boolean = warningTick > 0 && !notificationsPermissionGranted
 
     LaunchedEffect(warningTick, notificationsPermissionGranted) {
+        // warningTick lives in the parent (rememberSaveable) and survives this composable
+        // being torn down and recreated by the outer AnimatedContent on Back/Next — but that
+        // teardown/recreate means THIS LaunchedEffect restarts too, even though warningTick
+        // itself didn't change. shakeConsumed is the parent-owned guard against replaying the
+        // shake on every re-entry into this step; it's only meaningful once, so it's marked
+        // consumed here regardless of whether the animation actually got to play.
+        if (shakeConsumed) return@LaunchedEffect
         if (!shouldWarnNotifications()) return@LaunchedEffect
+        onShakeConsumed()
         val keyframes = listOf(0f, -8f, 8f, -6f, 6f, -3f, 3f, 0f)
         keyframes.forEach { x ->
             notificationsShakeOffset.animateTo(x, animationSpec = tween(durationMillis = 32))
@@ -1805,7 +1864,7 @@ private fun PermissionsScreen(
         Surface(
             color = when {
                 notificationsPermissionGranted -> onboardingAccentGreen().copy(alpha = 0.1f)
-                shouldWarnNotifications() -> Color(0xFFFFF1F0)
+                shouldWarnNotifications() -> onboardingErrorSurfaceColor()
                 else -> onboardingSurfaceSoftColor()
             },
             shape = RoundedCornerShape(14.dp),
@@ -1813,7 +1872,7 @@ private fun PermissionsScreen(
                 1.dp,
                 when {
                     notificationsPermissionGranted -> onboardingAccentGreen().copy(alpha = 0.35f)
-                    shouldWarnNotifications() -> Color(0xFFFFB3AE)
+                    shouldWarnNotifications() -> onboardingErrorBorderColor()
                     else -> onboardingBorderColor().copy(alpha = 0.8f)
                 }
             ),
@@ -1826,7 +1885,7 @@ private fun PermissionsScreen(
                     else -> s.onboardingPermissionsStatusTap
                 },
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                color = if (shouldWarnNotifications()) Color(0xFF9F2D2D) else onboardingTextPrimary(),
+                color = if (shouldWarnNotifications()) onboardingErrorTextColor() else onboardingTextPrimary(),
                 fontSize = 11.sp,
                 lineHeight = 16.sp,
                 fontWeight = FontWeight.Bold,
@@ -1836,15 +1895,15 @@ private fun PermissionsScreen(
 
         if (errorText.isNotBlank()) {
             Surface(
-                color = Color(0xFFFFF1F0),
+                color = onboardingErrorSurfaceColor(),
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color(0xFFFFB3AE)),
+                border = BorderStroke(1.dp, onboardingErrorBorderColor()),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = errorText,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    color = Color(0xFF9F2D2D),
+                    color = onboardingErrorTextColor(),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -1865,12 +1924,20 @@ private fun OnboardingSetupScreen(
     worldSeed: String,
     onWorldSeedChange: (String) -> Unit,
     showVersionError: Boolean,
-    versionShakeTick: Int
+    versionShakeTick: Int,
+    shakeConsumed: Boolean = false,
+    onShakeConsumed: () -> Unit = {}
 ) {
     val s = LocalAppStrings.current
     val versionShakeOffset = remember { Animatable(0f) }
     LaunchedEffect(versionShakeTick) {
+        // Same re-entry issue as PermissionsScreen's shake: versionShakeTick survives the
+        // outer AnimatedContent tearing this composable down and recreating it on Back/Next,
+        // but this LaunchedEffect itself restarts on that recreate even with an unchanged
+        // tick value — shakeConsumed (owned by the parent) stops it from replaying.
+        if (shakeConsumed) return@LaunchedEffect
         if (versionShakeTick == 0) return@LaunchedEffect
+        onShakeConsumed()
         val keyframes = listOf(0f, -7f, 7f, -5f, 5f, -3f, 3f, 0f)
         keyframes.forEach {
             versionShakeOffset.animateTo(it, animationSpec = tween(durationMillis = 32))
@@ -1964,15 +2031,15 @@ private fun OnboardingSetupScreen(
 
         if (showVersionError) {
             Surface(
-                color = Color(0xFFFFF1F0),
+                color = onboardingErrorSurfaceColor(),
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color(0xFFFFB3AE)),
+                border = BorderStroke(1.dp, onboardingErrorBorderColor()),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = s.onboardingSetupVersionError,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    color = Color(0xFF9F2D2D),
+                    color = onboardingErrorTextColor(),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -2449,6 +2516,12 @@ private fun SkipButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
         minHeight = 56.dp,
         modifier = modifier
     )
+}
+
+private tailrec fun android.content.Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 private fun openExternalUrl(context: android.content.Context, url: String): Boolean {

@@ -70,7 +70,11 @@ import com.pockethost.app.ui.util.ThemePreference
 import com.pockethost.app.ui.util.ThemePreferenceStore
 import com.pockethost.app.ui.util.AppIcon
 import com.pockethost.app.ui.util.AppIconManager
+import androidx.compose.animation.animateContentSize
+import com.pockethost.app.ui.components.DuoButton
+import com.pockethost.app.ui.components.DuoButtonVariant
 import com.pockethost.app.ui.theme.PocketColors
+import com.pockethost.app.ui.theme.PocketMotion
 import com.pockethost.app.ui.theme.card3d
 import com.pockethost.app.ui.util.playAppHaptic
 import com.pockethost.app.ui.util.playTickHaptic
@@ -191,7 +195,6 @@ fun SettingsScreen(
     var deleteReAuthPasswordVisible by rememberSaveable { mutableStateOf(false) }
     var deleteReAuthError by remember { mutableStateOf("") }
     var accountActionError by remember { mutableStateOf("") }
-    android.util.Log.d("POCKETCRAFT_TEST", "SettingsScreen composition! showSignOutConfirm=$showSignOutConfirm")
     val authRecoveryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -272,7 +275,7 @@ fun SettingsScreen(
     var hasLoadedInitial by remember { mutableStateOf(false) }
     var saveStatus by remember { mutableStateOf(SaveStatus.IDLE) }
     
-    var feedbackText by remember { mutableStateOf("") }
+    var feedbackText by rememberSaveable { mutableStateOf("") }
     var submittingFeedback by remember { mutableStateOf(false) }
     var showUnsavedDialog by remember { mutableStateOf(false) }
     var showStorageManager by remember { mutableStateOf(false) }
@@ -469,7 +472,6 @@ fun SettingsScreen(
 
 
     Box(modifier = Modifier.fillMaxSize()) {
-        android.util.Log.d("POCKETCRAFT_TEST", "SettingsScreen Box block is composed!")
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -781,23 +783,6 @@ fun SettingsScreen(
                                 currentState = currentState.copy(config = currentState.config.copy(maxPlayers = it))
                             }
                         )
-                    }
-                }
-
-                if (currentState.config.serverType != com.pockethost.app.data.model.ServerType.VANILLA &&
-                    currentState.config.serverType != com.pockethost.app.data.model.ServerType.MODPACK) {
-                    item {
-                        AnimatedEntranceContainer(index = 8) {
-                            SettingsToggleRow(
-                                vectorIcon = Icons.Default.Devices,
-                                label = "Bedrock Crossplay Support",
-                                description = if (stateHolder.bedrockBridgeEnabled) "Geyser & Floodgate enabled. Bedrock mobile and console players can join." else "Disabled. Server boots faster and saves memory (Java players only).",
-                                checked = stateHolder.bedrockBridgeEnabled,
-                                onToggle = { enabled ->
-                                    stateHolder.toggleBedrockBridge(enabled)
-                                }
-                            )
-                        }
                     }
                 }
 
@@ -1459,8 +1444,8 @@ fun SettingsScreen(
 
         AnimatedVisibility(
             visible = saveStatus != SaveStatus.IDLE,
-            enter = fadeIn() + slideInVertically { -it },
-            exit = fadeOut() + slideOutVertically { -it },
+            enter = fadeIn(PocketMotion.softFloatTween()) + slideInVertically(PocketMotion.softIntOffsetTween()) { -it },
+            exit = fadeOut(PocketMotion.softFloatTween()) + slideOutVertically(PocketMotion.softIntOffsetTween()) { -it },
             modifier = Modifier.align(Alignment.TopCenter)
         ) {
             Surface(
@@ -1545,22 +1530,29 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (saveStatus == SaveStatus.DIRTY || saveStatus == SaveStatus.FAILED) {
-                                Button(
+                                DuoButton(
+                                    text = "Undo",
                                     onClick = {
                                         playHaptic()
                                         currentState = savedState
                                         saveStatus = SaveStatus.IDLE
                                     },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFFFF4757),
-                                        contentColor = Color.White
-                                    ),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Text("Undo")
-                                }
+                                    variant = DuoButtonVariant.Danger,
+                                    fillMaxWidth = false,
+                                    minHeight = 48.dp
+                                )
                             }
-                            Button(
+                            DuoButton(
+                                text = when (saveStatus) {
+                                    SaveStatus.SAVING -> LocalAppStrings.current.saving
+                                    SaveStatus.FAILED -> "Retry"
+                                    else -> LocalAppStrings.current.save
+                                },
+                                enabled = saveStatus != SaveStatus.SAVING,
+                                isLoading = saveStatus == SaveStatus.SAVING,
+                                variant = if (saveStatus == SaveStatus.FAILED) DuoButtonVariant.Danger else DuoButtonVariant.Primary,
+                                fillMaxWidth = false,
+                                minHeight = 48.dp,
                                 onClick = {
                                     playHaptic(doublePulse = true)
                                     scope.launch {
@@ -1612,27 +1604,13 @@ fun SettingsScreen(
                                             onMessage(result.exceptionOrNull()?.message ?: "Failed to save settings")
                                         }
                                     }
-                                },
-                                enabled = saveStatus != SaveStatus.SAVING,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (saveStatus == SaveStatus.FAILED) Color(0xFFFF4757) else PocketColors.Primary
-                                ),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text(
-                                    text = when (saveStatus) {
-                                        SaveStatus.SAVING -> LocalAppStrings.current.saving
-                                        SaveStatus.FAILED -> "Retry"
-                                        else -> LocalAppStrings.current.save
-                                    }
-                                )
-                            }
+                                }
+                            )
                         }
                     }
                 }
             }
         }
-    android.util.Log.d("POCKETCRAFT_TEST", "SettingsScreen after Box block is composed!")
 
     // Storage Manager Bottom Sheet
     if (showStorageManager) {
@@ -1657,7 +1635,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(installedVersions) { version ->
+                        items(installedVersions, key = { it.id }) { version ->
                             val isCurrentVersion = version.id == stateHolder.config.gameVersion ||
                                 version.displayName.contains(stateHolder.config.gameVersion, ignoreCase = true)
                             Row(
@@ -1762,7 +1740,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(deletableItems) { item ->
+                        items(deletableItems, key = { it.id }) { item ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -2213,7 +2191,7 @@ private fun SettingsSliderRow(
 ) {
     var internalValue by remember(value) { mutableIntStateOf(value) }
     GameCard(modifier = Modifier.fillMaxWidth()) {
-        Column {
+        Column(modifier = Modifier.animateContentSize(PocketMotion.gentleSpringIntSize())) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,

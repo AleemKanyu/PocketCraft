@@ -425,9 +425,11 @@ fun PlayerDetailScreen(
                             actionType = PlayerActionType.HEAL,
                             onClick = {
                                 if (isPlayerOnline) {
-                                    stateHolder.sendCommand("effect clear $commandTarget minecraft:instant_health")
-                                    stateHolder.sendCommand("effect give $commandTarget minecraft:instant_health 1 255 true")
+                                    stateHolder.sendCommand("heal $commandTarget")
+                                    stateHolder.sendCommand("effect give $commandTarget minecraft:instant_health 1 125 true")
+                                    stateHolder.sendCommand("effect give $commandTarget minecraft:saturation 1 255 true")
                                     health = 20f
+                                    hunger = 20
                                 } else {
                                     scope.launch(Dispatchers.IO) {
                                         val datFile = PlayerDataManager.getPlayerDataFile(context, stateHolder.activeWorld, offlineUuid)
@@ -1093,8 +1095,8 @@ private fun formatPlaytime(ticks: Long): String {
     val minutes = totalMinutes % 60L
     return when {
         hours > 0 && minutes > 0 -> "${hours}h ${minutes}m"
-        hours > 0 -> "${hours}h"
+        hours > 0 -> "${hours}h 0m"
         minutes > 0 -> "${minutes}m"
-        else -> "<1m"
+        else -> "0m"
     }
 }

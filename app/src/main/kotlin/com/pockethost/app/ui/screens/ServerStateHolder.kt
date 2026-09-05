@@ -17,6 +17,7 @@ import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.derivedStateOf
 import androidx.core.content.ContextCompat
@@ -177,6 +178,33 @@ class ServerStateHolder(
     private var startedAtRealtime: Long? = null
     @Volatile private var startupStartedAtRealtime: Long? = null
     @Volatile private var targetStartupProgressPercent = 1
+
+    /**
+     * Percentages the boot milestones map onto, in order. The animation uses this to find
+     * the next milestone so it can creep toward it without ever overshooting.
+     */
+    private val STARTUP_MILESTONES = intArrayOf(1, 10, 15, 22, 28, 35, 42, 50, 58, 65, 72, 80, 88, 97)
+
+    /** How long the bar takes to drift across a phase when no new milestone arrives. */
+    private val PHASE_CREEP_MS = 25_000.0
+
+    /** Pulls the Minecraft version out of Paper's "... for Minecraft <version>" boot line. */
+    private val STARTUP_VERSION_REGEX = Regex("for Minecraft ([0-9][0-9A-Za-z.\\-]*)")
+
+    /** When the most recent boot milestone was observed, for easing within a phase. */
+    @Volatile private var lastMilestoneAtRealtime: Long? = null
+
+    /**
+     * Records a boot milestone seen in the server log. Progress is driven by these, not by
+     * elapsed time: a slow boot must not let the bar run ahead of what the server has
+     * actually done.
+     */
+    private fun raiseStartupMilestone(percent: Int) {
+        if (percent > targetStartupProgressPercent) {
+            targetStartupProgressPercent = percent
+            lastMilestoneAtRealtime = SystemClock.elapsedRealtime()
+        }
+    }
     private var jvmStartedTracking = false
     private var startupProgressJob: Job? = null
     private var startupLaunchJob: Job? = null
@@ -489,6 +517,12 @@ class ServerStateHolder(
         private set
 
     val logs = mutableStateListOf<String>()
+    // Monotonically increasing — never decremented, unlike logs.size. Once the 2000-line cap
+    // is hit, every new append is paired with a removeAt(0) trim of the same size, so
+    // logs.size stops changing at all; any LaunchedEffect(logs.size) silently stops firing
+    // for the rest of the session right when the cap is first reached. Key on this instead.
+    var logAppendSeq by mutableIntStateOf(0)
+        private set
     val onlinePlayers = mutableStateListOf<PlayerInfo>()
     val sessionPlayers = mutableStateListOf<PlayerInfo>()
     val knownPlayers = mutableStateListOf<PlayerInfo>()
@@ -507,6 +541,12 @@ class ServerStateHolder(
 
     private fun attemptTransitionToOnline() {
         if (!isStarting && !isRestartingCycle && !isRunning) return
+        // Multiple independent signals (EVENT_SERVER_READY, log-line parsing, the
+        // startup-progress poller) can all call this for the same boot. Once we've
+        // already completed the transition this cycle, re-running markServerReady()
+        // would double-increment successfulServerStarts and restart the periodic
+        // world-save/location/ping polling jobs on top of the still-running ones.
+        if (isRunning && serverJoinable) return
 
         val persistedAddr = ServerHostService.getPersistedPublicAddress(appContext, versionId)
         if (!persistedAddr.isNullOrBlank() && publicAddress.isNullOrBlank()) {
@@ -567,10 +607,18 @@ class ServerStateHolder(
                 type == ServerHostService.EVENT_CHUNKS_LOADING
             val isStopSignal = type == ServerHostService.EVENT_STOPPED ||
                 type == ServerHostService.EVENT_SERVER_CRASHED
+            // onReceive runs on a dedicated background HandlerThread (see registerReceiver()),
+            // but the rest of this handler marshals its state writes onto Main via
+            // scope.launch (Dispatchers.Main.immediate). Doing this write synchronously,
+            // right here, let it race ahead of an earlier broadcast's still-pending
+            // Main-thread work for the same isStarting/isRunning fields. Posting it the
+            // same way keeps writes ordered by broadcast-arrival order.
             if (!isStopSignal && !isStopping) {
                 if (!isRunning && !isStarting && isLaunchSignal) {
-                    isStarting = true
-                    isRunning = false
+                    scope.launch {
+                        isStarting = true
+                        isRunning = false
+                    }
                 }
             }
 
@@ -753,7 +801,6 @@ class ServerStateHolder(
         consoleVisibleAfterStart = false
         refreshAll()
         ensureBedrockBridgeProvisioned()
-        performOneTimeEmergencyRecovery()
         syncRunningStateWithService()
         
         scope.launch {
@@ -806,82 +853,6 @@ class ServerStateHolder(
                 serverJoinable = false
                 updateServerUiState()
                 startStartupProgressTracking()
-            }
-        }
-    }
-
-    private fun performOneTimeEmergencyRecovery() {
-        scope.launch(Dispatchers.IO) {
-            val marker = File(appContext.filesDir, ".emergency_playerdata_recovery_done")
-            if (marker.exists()) return@launch
-
-            android.util.Log.i("PocketHost", "Running emergency playerdata recovery...")
-            val backupDir = File("/sdcard/Download/PocketCraftWorldBackups/Mainworld")
-            if (!backupDir.exists()) {
-                android.util.Log.w("PocketHost", "Emergency recovery: Backup dir not found")
-                return@launch
-            }
-
-            val backupFiles = backupDir.listFiles()?.filter { it.name.endsWith(".zip") }
-                ?.sortedByDescending { it.lastModified() }
-            if (backupFiles.isNullOrEmpty()) {
-                android.util.Log.w("PocketHost", "Emergency recovery: No backup zips found")
-                return@launch
-            }
-
-            // Find the 20260718-202719 backup or fall back to the most recent zip
-            val targetZip = backupFiles.firstOrNull { it.name.contains("20260718-202719") }
-                ?: backupFiles.first()
-
-            android.util.Log.i("PocketHost", "Emergency recovery: Extracting playerdata from zip: ${targetZip.absolutePath}")
-            val targetServerDir = ServerFileManager.getServerDir(appContext, "Mainworld")
-            val baseWorldDir = File(targetServerDir, "Mainworld")
-
-            val pdDir = File(baseWorldDir, "playerdata")
-            val statsDir = File(baseWorldDir, "stats")
-            val advDir = File(baseWorldDir, "advancements")
-
-            pdDir.mkdirs()
-            statsDir.mkdirs()
-            advDir.mkdirs()
-
-            runCatching {
-                java.util.zip.ZipFile(targetZip).use { zip ->
-                    val entries = zip.entries()
-                    while (entries.hasMoreElements()) {
-                        val entry = entries.nextElement()
-                        if (entry.isDirectory) continue
-
-                        val name = entry.name
-                        val isPd = name.startsWith("world/playerdata/") || name.startsWith("Mainworld/playerdata/")
-                        val isStats = name.startsWith("world/stats/") || name.startsWith("Mainworld/stats/")
-                        val isAdv = name.startsWith("world/advancements/") || name.startsWith("Mainworld/advancements/")
-
-                        if (isPd || isStats || isAdv) {
-                            val fileName = name.substringAfterLast('/')
-                            if (fileName.isBlank()) continue
-
-                            val destFolder = when {
-                                isPd -> pdDir
-                                isStats -> statsDir
-                                else -> advDir
-                            }
-
-                            val destFile = File(destFolder, fileName)
-                            // Extract file
-                            zip.getInputStream(entry).use { input ->
-                                destFile.outputStream().use { output ->
-                                    input.copyTo(output)
-                                }
-                            }
-                        }
-                    }
-                }
-                marker.createNewFile()
-                android.util.Log.i("PocketHost", "Emergency playerdata recovery completed successfully!")
-                refreshAll()
-            }.onFailure {
-                android.util.Log.e("PocketHost", "Emergency recovery failed: ${it.message}", it)
             }
         }
     }
@@ -1207,6 +1178,7 @@ class ServerStateHolder(
         tunnelError = null
         relayFallbackActive = false
         startupProgressPercent = 0
+        targetStartupProgressPercent = 1
         startupStatusMessage = "Initializing..."
         hasAnnouncedServerOnline = false
         chunkyProgressPercent = null
@@ -1428,16 +1400,7 @@ class ServerStateHolder(
             return
         }
 
-        // Debug: log important lines
-        if (cleanLine.contains("Done (", ignoreCase = true) && cleanLine.contains("help", ignoreCase = true)) {
-            android.util.Log.d("ServerStateHolder", "appendLog received Done line -> transitioning server to ONLINE: $cleanLine")
-            isJavaServerDone = true
-            isGeyserDone = true
-            areSpawnChunksLoaded = true
-            startupProgressPercent = 100
-            startupStatusMessage = "Server ready!"
-            attemptTransitionToOnline()
-        } else if (cleanLine.contains("Done", ignoreCase = true) || cleanLine.contains("Server port", ignoreCase = true)) {
+        if (cleanLine.contains("Done", ignoreCase = true) || cleanLine.contains("Server port", ignoreCase = true)) {
             android.util.Log.d("ServerStateHolder", "appendLog received: $cleanLine")
         }
 
@@ -1445,45 +1408,52 @@ class ServerStateHolder(
         // Track startup progress with exact Paper boot log milestones
         if (isStarting) {
             when {
-                cleanLine.contains("Running Java 21", ignoreCase = true) ||
+                cleanLine.contains("Running Java", ignoreCase = true) ||
                     cleanLine.contains("Loading Paper", ignoreCase = true) -> {
-                    startupStatusMessage = "Starting Paper 1.21.11 runtime..."
-                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 12)
+                    // Read the version off the boot line instead of hardcoding one; the
+                    // bundled JRE and the server version both change between releases.
+                    val bootVersion = STARTUP_VERSION_REGEX.find(cleanLine)?.groupValues?.get(1)
+                    startupStatusMessage = if (bootVersion != null) {
+                        "Starting Minecraft $bootVersion runtime..."
+                    } else {
+                        "Starting server runtime..."
+                    }
+                    raiseStartupMilestone(10)
                 }
                 cleanLine.contains("PluginInitializerManager] Initializing plugins", ignoreCase = true) -> {
                     startupStatusMessage = "Initializing plugins..."
-                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 22)
+                    raiseStartupMilestone(22)
                 }
                 cleanLine.contains("boot Floodgate", ignoreCase = true) ||
                     cleanLine.contains("Loading server plugin floodgate", ignoreCase = true) -> {
                     startupStatusMessage = "Initializing Floodgate Bedrock auth..."
-                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 35)
+                    raiseStartupMilestone(28)
                 }
                 cleanLine.contains("Environment: Environment", ignoreCase = true) -> {
                     startupStatusMessage = "Loading game environment & registry..."
-                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 45)
+                    raiseStartupMilestone(35)
                 }
                 cleanLine.contains("recipes", ignoreCase = true) && cleanLine.contains("Loaded", ignoreCase = true) -> {
-                    startupStatusMessage = "Loaded 1,470 recipes & 1,584 advancements..."
-                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 55)
+                    startupStatusMessage = "Loading recipes & advancements..."
+                    raiseStartupMilestone(42)
                 }
                 cleanLine.contains("Initialising converters", ignoreCase = true) -> {
                     startupStatusMessage = "Initializing DataConverters..."
-                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 65)
+                    raiseStartupMilestone(50)
                 }
                 cleanLine.contains("Via-Mappingloader", ignoreCase = true) ||
                     cleanLine.contains("Loading server plugin ViaVersion", ignoreCase = true) -> {
                     startupStatusMessage = "Loading ViaVersion protocol mappings..."
-                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 75)
+                    raiseStartupMilestone(58)
                 }
                 cleanLine.contains("Loading server plugin Geyser", ignoreCase = true) ||
                     cleanLine.contains("Loaded 1 extension", ignoreCase = true) -> {
                     startupStatusMessage = "Loading Geyser Bedrock bridge..."
-                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 85)
+                    raiseStartupMilestone(65)
                 }
                 cleanLine.contains("Preparing level", ignoreCase = true) -> {
                     startupStatusMessage = "Loading world level 'world'..."
-                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 90)
+                    raiseStartupMilestone(72)
                 }
                 cleanLine.contains("Preparing spawn area", ignoreCase = true) -> {
                     val pctMatch = Regex("""Preparing spawn area:\s*(\d+)%""", RegexOption.IGNORE_CASE).find(cleanLine)
@@ -1491,8 +1461,8 @@ class ServerStateHolder(
                         val pct = pctMatch.groupValues[1]
                         startupStatusMessage = "Preparing spawn area ($pct%)..."
                         val rawPct = pct.toIntOrNull() ?: 0
-                        val mapped = 90 + ((rawPct * 5) / 100)
-                        targetStartupProgressPercent = maxOf(targetStartupProgressPercent, mapped)
+                        val mapped = 72 + ((rawPct * 25) / 100)
+                        raiseStartupMilestone(mapped)
                     } else {
                         startupStatusMessage = "Preparing spawn area..."
                     }
@@ -1500,7 +1470,7 @@ class ServerStateHolder(
                 cleanLine.contains("Connecting tunnel", ignoreCase = true) ||
                     cleanLine.contains("Opening internet relay", ignoreCase = true) -> {
                     startupStatusMessage = "Opening internet relay..."
-                    targetStartupProgressPercent = maxOf(targetStartupProgressPercent, 96)
+                    raiseStartupMilestone(15)
                 }
             }
         }
@@ -1517,6 +1487,7 @@ class ServerStateHolder(
             logsQueue.addLast(cleanLine)
             if (consoleVisibleAfterStart) {
                 logs.add(cleanLine)
+                logAppendSeq++
             }
         }
 
@@ -1532,6 +1503,7 @@ class ServerStateHolder(
                 logsQueue.addLast(hint)
                 if (consoleVisibleAfterStart) {
                     logs.add(hint)
+                    logAppendSeq++
                 }
             }
         }
@@ -1621,7 +1593,13 @@ class ServerStateHolder(
             areSpawnChunksLoaded = true
         }
 
-        if ((isStarting || isRestartingCycle) && ConsoleParser.isDone(cleanLine)) {
+        // The server's own ready line is authoritative, so it is honoured whenever the
+        // server is not on its way down — not only while isStarting is true. Gating it on
+        // isStarting used to make the state unreachable: if anything marked the server
+        // ready early (for example adopting a persisted "running" state at launch),
+        // isStarting was already false by the time this line arrived, isJavaServerDone was
+        // never set, and `status` stayed STARTING for the rest of the session.
+        if (!isStopping && !isJavaServerDone && ConsoleParser.isDone(cleanLine)) {
             areSpawnChunksLoaded = true
             isJavaServerDone = true
             markServerReady()
@@ -1655,6 +1633,9 @@ class ServerStateHolder(
         isRestartingCycle = false
         isRunning = true
         serverJoinable = true
+        // `status` only reports ONLINE when this is set. Marking the server ready without
+        // it leaves the UI showing STARTING while every control behaves as if it is running.
+        isJavaServerDone = true
         startupProgressPercent = 100
         startupStatusMessage = "Server ready!"
         lastStartRequestedRealtime = 0L
@@ -1724,6 +1705,7 @@ class ServerStateHolder(
                         logsQueue.addAll(lines)
                         logs.clear()
                         logs.addAll(lines)
+                        logAppendSeq++
                         consoleVisibleAfterStart = true
                     }
                 }
@@ -2021,6 +2003,7 @@ class ServerStateHolder(
         if (normalizedName.isBlank()) return
 
         runCatching {
+            sendCommand("""kick "$normalizedName" Removed by PocketCraft""")
             sendCommand("""kick @a[name="${escapeSelectorName(normalizedName)}"] Removed by PocketCraft""")
             // Remove immediately for UI feedback; parser/refresh will reconcile authoritative state.
             onlinePlayers.removeAll { it.name.equals(normalizedName, ignoreCase = true) }
@@ -4007,10 +3990,17 @@ class ServerStateHolder(
     }
 
     private fun startStartupProgressTracking() {
+        // Reset phase easing so a fresh boot does not inherit the previous run's timing.
+        lastMilestoneAtRealtime = SystemClock.elapsedRealtime()
         startupProgressJob?.cancel()
-        targetStartupProgressPercent = 1
+        // Preserve targetStartupProgressPercent if we're reattaching mid-boot
+        // (e.g. syncRunningStateWithService) — only reset if starting fresh.
+        if (targetStartupProgressPercent <= 1) {
+            targetStartupProgressPercent = 1
+        }
         startupProgressJob = scope.launch(Dispatchers.IO) {
-            var currentFloat = 1.0f
+            // Seed currentFloat from any already-displayed progress so we don't jump
+            var currentFloat = startupProgressPercent.toFloat().coerceIn(1f, 99f)
             var lastPersistedProgress = -1
 
             while ((isStarting || isRunning) && !isJavaServerDone && !serverJoinable) {
@@ -4023,17 +4013,28 @@ class ServerStateHolder(
                         break
                     }
 
-                    // Realistic, continuous easing progress over 3 minutes (180s), smoothly decelerating towards 99%
-                    val t = (elapsedMs.toDouble() / 180_000.0).coerceIn(0.0, 1.0)
-                    // Deceleration easing curve: faster in the beginning, easing smoothly toward 99%
-                    val curveProgress = 99.0 * (1.0 - Math.pow(1.0 - t, 2.2))
+                    // Progress reflects boot milestones observed in the log. Within a phase
+                    // the bar creeps toward — but never reaches — the next milestone, so it
+                    // still feels alive without claiming progress the server hasn't made.
+                    // A purely time-based curve used to sit at 99% for minutes on a slow boot.
+                    val milestone = targetStartupProgressPercent.coerceIn(1, 99)
+                    val nextMilestone = STARTUP_MILESTONES.firstOrNull { it > milestone } ?: 99
+                    val phaseCeiling = (nextMilestone - 1).coerceAtLeast(milestone).toFloat()
+
+                    val sinceMilestone = lastMilestoneAtRealtime
+                        ?.let { (SystemClock.elapsedRealtime() - it).coerceAtLeast(0L) }
+                        ?: elapsedMs
+                    val phaseT = (sinceMilestone.toDouble() / PHASE_CREEP_MS).coerceIn(0.0, 1.0)
+                    // Decelerating creep: most of the movement happens early in a phase.
+                    val creep = milestone + (phaseCeiling - milestone) * (1.0 - Math.pow(1.0 - phaseT, 2.0)).toFloat()
 
                     val isServerActuallyReady = isJavaServerDone || serverJoinable || targetStartupProgressPercent >= 100
                     val maxCap = if (isServerActuallyReady) 100f else 99f
-                    val desiredTarget = if (isServerActuallyReady) 100f else maxOf(targetStartupProgressPercent.toFloat(), curveProgress.toFloat()).coerceIn(1f, 99f)
+                    val desiredTarget = if (isServerActuallyReady) 100f else creep.coerceIn(1f, 99f)
 
-                    // Advance smoothly and continuously toward desiredTarget
-                    val step = (desiredTarget - currentFloat) * 0.15f + 0.05f
+                    // Advance smoothly, steadily, and continuously toward desiredTarget.
+                    val gap = desiredTarget - currentFloat
+                    val step = if (gap > 0) (gap * 0.03f + 0.02f).coerceAtMost(0.5f) else 0f
                     currentFloat = (currentFloat + step).coerceIn(1f, maxCap)
 
                     val displayPct = currentFloat.toInt().coerceIn(1, if (maxCap >= 100f) 100 else 99)
@@ -5265,7 +5266,7 @@ class ServerStateHolder(
         
         scope.launch {
             try {
-                WorldImporter.importWorld(
+                val result = WorldImporter.importWorld(
                     context = context,
                     zipUri = uri,
                     serverType = config.serverType,
@@ -5278,7 +5279,24 @@ class ServerStateHolder(
                         }
                     }
                 )
-                refreshAll()
+                result.onFailure { e ->
+                    android.util.Log.e("ServerStateHolder", "Failed to import dimension", e)
+                    withContext(Dispatchers.Main) {
+                        importProgressMessage = "Import failed: ${e.message ?: "unknown error"}"
+                    }
+                }
+                if (result.isSuccess) {
+                    // A Nether/End dimension zip commonly nests its .mca region files under a
+                    // world_nether/DIM-1 (or world_the_end/DIM1) style path, but importWorld()
+                    // always extracts flat into the world's own root directory rather than
+                    // routing dimension-specific content to its proper unified-world location —
+                    // without this, importing "Nether" or "End" can silently land region files
+                    // in the same folder as the Overworld's own region/ data. Reuse the same
+                    // post-import normalization already applied after a backup restore.
+                    flattenWorldStructure(targetWorld)
+                    DimensionMigrator.syncDimensionsForServerType(appContext, targetWorld, config.serverType)
+                    refreshAll()
+                }
             } catch (e: Exception) {
                 android.util.Log.e("ServerStateHolder", "Failed to import dimension", e)
             } finally {
@@ -5813,11 +5831,17 @@ class ServerStateHolder(
 
     private fun extractDeathVictim(line: String): String? {
         val lower = line.lowercase()
-        // Most death messages start with the player name.
-        // We can check against onlinePlayers names.
-        return onlinePlayers.firstOrNull { 
-            lower.startsWith(it.name.lowercase()) 
-        }?.name
+        // Most death messages start with the player name, followed by a space
+        // and the rest of the message. Require a word boundary and prefer the
+        // longest match so one player's name being a prefix of another's
+        // (e.g. "Al" vs "Alex") can't misattribute the death.
+        return onlinePlayers
+            .filter { player ->
+                val name = player.name.lowercase()
+                lower == name || lower.startsWith("$name ")
+            }
+            .maxByOrNull { it.name.length }
+            ?.name
     }
 
     fun changePlayerGamemode(player: PlayerInfo, mode: String) {

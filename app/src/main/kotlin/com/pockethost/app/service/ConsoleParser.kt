@@ -34,6 +34,13 @@ object ConsoleParser {
     // instead of depending on a specific help suffix.
     private val DONE_PREFIX_REGEX = Regex("""^Done \([\d.,]+s\)!""", RegexOption.IGNORE_CASE)
 
+    // A leading thread tag such as "[Server thread/INFO]: " on lines that carry no timestamp.
+    // Requiring the log level keeps this from eating a plugin tag like "[Geyser-Spigot] ".
+    private val THREAD_TAG_REGEX = Regex(
+        """^\[[^\]]*(?:INFO|WARN|ERROR|FATAL|ALERT|DEBUG|TRACE)\]:\s*""",
+        RegexOption.IGNORE_CASE
+    )
+
     // e.g. "[17:30:00 INFO]: Preparing start region for dimension minecraft:overworld"
     private val PREPARING_START_REGION_REGEX = Regex("""Preparing start region for dimension""")
 
@@ -104,31 +111,34 @@ object ConsoleParser {
         )
     }
 
+    /**
+     * True only for the server's own "Done (12.345s)! For help, type "help"" line, which is
+     * what marks the server as fully started.
+     *
+     * Plugins print their own "Done (...)" lines, so the message body is examined after the
+     * log prefix is stripped: a plugin's line still begins with its "[Name]" tag, the
+     * server's own line begins with "Done (".
+     */
     fun isDone(line: String): Boolean {
         val clean = stripAnsi(line).trim()
         if (!clean.contains("Done (", ignoreCase = true)) return false
-        
-        // Ignore plugin loading & level prep completion lines (e.g. Geyser, ViaVersion, floodgate, "Done preparing level")
-        if (clean.contains("[Geyser", ignoreCase = true) ||
-            clean.contains("Geyser-Spigot", ignoreCase = true) ||
-            clean.contains("[ViaVersion", ignoreCase = true) ||
-            clean.contains("[floodgate", ignoreCase = true) ||
-            clean.contains("[Companion", ignoreCase = true) ||
-            clean.contains("[dummyplayers", ignoreCase = true) ||
-            clean.contains("preparing level", ignoreCase = true) ||
-            clean.contains("preparing spawn", ignoreCase = true)) {
+
+        // "Done preparing level ..." is a progress line, not the ready signal.
+        if (clean.contains("preparing level", ignoreCase = true) ||
+            clean.contains("preparing spawn", ignoreCase = true)
+        ) {
             return false
         }
 
-        val afterThread = clean.substringAfter("]: ", clean).substringAfter(" - ", clean)
-        if (afterThread.startsWith("[")) {
-            return false
-        }
-        val text = stripLogDecorations(clean)
-        if (text.contains("geyser", ignoreCase = true)) return false
-        return DONE_PREFIX_REGEX.containsMatchIn(text) ||
-                (text.startsWith("Done (", ignoreCase = true) && text.contains("help", ignoreCase = true)) ||
-                (clean.contains("Done (", ignoreCase = true) && clean.contains("help", ignoreCase = true))
+        // Strip "[12:34:56] [Server thread/INFO]: " and friends to get the bare message.
+        // A thread tag can also appear without a timestamp, so remove that separately; it is
+        // distinguishable from a plugin tag because it carries a log level and ends in "]:".
+        val message = THREAD_TAG_REGEX.replaceFirst(stripLogDecorations(clean), "").trim()
+
+        // Anything still starting with a bracketed tag belongs to a plugin, not the server.
+        if (message.startsWith("[")) return false
+
+        return DONE_PREFIX_REGEX.containsMatchIn(message)
     }
 
 

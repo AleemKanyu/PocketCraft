@@ -146,9 +146,7 @@ class BackupForegroundService : Service() {
                 BackupProgressTracker.progress.value = 0
                 BackupProgressTracker.statusText.value = "Preparing backup..."
 
-                val worldName = runBlocking {
-                    AppPreferencesStore.getSelectedWorldFlow(applicationContext).first()
-                }.ifBlank { "world" }
+                val worldName = AppPreferences(applicationContext).selectedWorld.ifBlank { "world" }
 
                 performBackup(worldName)
             } catch (e: CancellationException) {

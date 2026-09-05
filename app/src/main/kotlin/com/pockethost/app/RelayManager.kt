@@ -81,6 +81,14 @@ class RelayManager(private val context: Context) {
         private const val READY_POOL_SIZE = 2
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
+        // Shared across all resolveRelayIp() calls (register/heartbeat/every pool-socket-open)
+        // instead of a fresh single-thread Executor per call — see resolveRelayIp() for why.
+        // Bounded at 2 so even sustained bad-network DNS stalls can't spawn unbounded threads.
+        private val dnsResolutionExecutor: java.util.concurrent.ExecutorService =
+            java.util.concurrent.Executors.newFixedThreadPool(2) { runnable ->
+                Thread(runnable, "RelayManager-DnsResolve").apply { isDaemon = true }
+            }
+
         fun extractIPv4FromNAT64(addr: InetAddress): InetAddress {
             val bytes = addr.address
             if (bytes.size == 16) {
@@ -122,6 +130,13 @@ class RelayManager(private val context: Context) {
     private val poolTargetSize = AtomicInteger(INITIAL_POOL_SIZE)
     private val socketPool = mutableListOf<PooledSocket>()
     private val connectingSockets = AtomicInteger(0)
+    // Sockets currently handed off to bridgePlayerConnection's raw Threads (outside
+    // poolScope/poolJob, so cancelling the pool job alone can't stop them). disconnect()
+    // needs to be able to close these directly, the same way stopBedrockBridge() already
+    // does for activeBedrockSocket — otherwise a player connected at the moment of a
+    // mid-session relay reconnect keeps two MAX_PRIORITY threads and both sockets alive
+    // indefinitely.
+    private val activeBridgeSockets = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<Socket, Boolean>())
     private val poolTopUpScheduled = AtomicBoolean(false)
     /** Blocks phone-ready heartbeats after stop so the relay cannot re-open a dead tunnel. */
     private val relayHostingAllowed = AtomicBoolean(false)
@@ -790,14 +805,22 @@ class RelayManager(private val context: Context) {
         val staticIp = RelayServers.getByHost(relayHost).fallbackIp?.trim()
         if (!staticIp.isNullOrBlank()) {
             val asyncDns = runCatching {
-                val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+                // Shared, bounded pool instead of a fresh single-thread Executor per call.
+                // InetAddress.getAllByName() doesn't respond to interruption, so a timed-out
+                // lookup's underlying thread keeps running past future.get()'s deadline; with
+                // a fresh executor per call that thread is orphaned (never reused, never
+                // tracked) until the OS-level DNS call eventually returns on its own. A shared
+                // pool reclaims that thread for reuse once it does, and caps how many such
+                // blocked lookups can pile up concurrently under sustained bad connectivity
+                // (this runs on every register/heartbeat/pool-socket-open call).
+                val future = dnsResolutionExecutor.submit<String> {
+                    resolvePreferIPv4(relayHost).hostAddress
+                }
                 try {
-                    val future = executor.submit<String> {
-                        resolvePreferIPv4(relayHost).hostAddress
-                    }
                     future.get(1200, java.util.concurrent.TimeUnit.MILLISECONDS)
-                } finally {
-                    executor.shutdownNow()
+                } catch (e: java.util.concurrent.TimeoutException) {
+                    future.cancel(true)
+                    throw e
                 }
             }.getOrNull()?.trim()?.takeIf { it.isNotBlank() }
 
@@ -910,12 +933,13 @@ class RelayManager(private val context: Context) {
                 socket.outputStream.flush()
 
                 pooledSocket = PooledSocket(socket!!)
-                synchronized(socketPool) {
+                val poolSizeAfterAdd = synchronized(socketPool) {
                     socketPool.add(pooledSocket!!)
                     addedToPool = true
+                    socketPool.size
                 }
                 releaseReservedSlot()
-                android.util.Log.v("RelayManager", "Socket added to pool. Size: ${socketPool.size}/${poolTargetSize.get()}")
+                android.util.Log.v("RelayManager", "Socket added to pool. Size: $poolSizeAfterAdd/${poolTargetSize.get()}")
 
                 // Keep idle pool sockets alive long enough to serve a join burst without churn.
                 socket!!.soTimeout = nextIdleSocketTimeoutMs().toInt()
@@ -1125,6 +1149,7 @@ class RelayManager(private val context: Context) {
     ) {
         android.util.Log.i("RelayManager", "Player incoming! Bridging to localhost:$localPort...")
         val bridgeStartedAt = System.nanoTime()
+        activeBridgeSockets.add(relaySocket)
 
         val localSocket = try {
             withContext(Dispatchers.IO) {
@@ -1135,6 +1160,7 @@ class RelayManager(private val context: Context) {
             }
         } catch (e: Exception) {
             android.util.Log.e("RelayManager", "Failed to connect to local Minecraft server: ${e.message}")
+            activeBridgeSockets.remove(relaySocket)
             relaySocket.close()
             return
         }
@@ -1241,6 +1267,7 @@ class RelayManager(private val context: Context) {
             } catch (_: Exception) {}
             runCatching { localSocket.close() }
             runCatching { relaySocket.close() }
+            activeBridgeSockets.remove(relaySocket)
         }
     }
 
@@ -1294,6 +1321,13 @@ class RelayManager(private val context: Context) {
             socketPool.clear()
         }
         connectingSockets.set(0)
+
+        // Closing these unblocks bridgePlayerConnection's relayToLocalThread/localToRelayThread
+        // read() calls (they live outside poolJob and don't otherwise respond to it being
+        // cancelled above), letting them exit and release the socket pair instead of leaking
+        // both threads and sockets across a reconnect.
+        activeBridgeSockets.toList().forEach { runCatching { it.close() } }
+        activeBridgeSockets.clear()
 
         if (!currentUserId.isNullOrBlank()) {
             val relayHost = (activeRelayHost ?: "").ifBlank { RelayServers.MUMBAI.host }

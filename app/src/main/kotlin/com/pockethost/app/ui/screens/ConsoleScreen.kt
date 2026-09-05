@@ -162,6 +162,9 @@ import com.pockethost.app.ui.components.duoOutlinedTextFieldColors
 import com.pockethost.app.ui.components.duoTextFieldShape
 import com.pockethost.app.service.VersionCatalog
 import com.pockethost.app.ui.theme.PocketColors
+import com.pockethost.app.ui.theme.PocketMotion
+import com.pockethost.app.feedback.FeedbackService
+import kotlin.math.roundToInt
 import com.pockethost.app.ui.theme.button3d
 import com.pockethost.app.ui.theme.card3d
 import com.pockethost.app.ui.theme.pill3d
@@ -199,6 +202,7 @@ fun ConsoleScreen(
     onPlayerSelected: (PlayerInfo) -> Unit = {},
     onOpenServerDetails: () -> Unit = {},
     onAddWorld: () -> Unit = {},
+    onOpenWorldMap: () -> Unit = {},
     adContentAfterVersion: (@Composable () -> Unit)? = null,
     topContentBelowServerCard: (@Composable () -> Unit)? = null,
     onNavigateToSignUp: () -> Unit = {}
@@ -244,7 +248,7 @@ fun ConsoleScreen(
     }
     val animatedStartupProgress by animateFloatAsState(
         targetValue = (stateHolder.startupProgressPercent / 100f).coerceIn(0f, 1f),
-        animationSpec = tween(durationMillis = 150, easing = androidx.compose.animation.core.LinearEasing),
+        animationSpec = PocketMotion.softFloatTween(durationMillis = 180),
         label = "startup_progress"
     )
     val uiState = stateHolder.serverUiState
@@ -329,9 +333,22 @@ fun ConsoleScreen(
         }
     }
 
-    LaunchedEffect(stateHolder.logs.size) {
+    // Keyed on logAppendSeq, not logs.size: once the 2000-line cap is hit, every new line
+    // pairs a removeAt(0) with an add(), so size stops changing entirely and a size-keyed
+    // effect would silently stop firing for the rest of the session right when the cap is
+    // first reached.
+    LaunchedEffect(stateHolder.logAppendSeq) {
         if (stateHolder.logs.isNotEmpty()) {
-            logListState.animateScrollToItem(stateHolder.logs.lastIndex)
+            // Only auto-scroll if the user was already at (or near) the bottom before this
+            // line arrived. Otherwise a burst of log lines during startup/active play would
+            // yank someone who scrolled up to read an earlier line straight back down,
+            // sometimes before they can even finish reading it.
+            val layoutInfo = logListState.layoutInfo
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()
+            val wasNearBottom = lastVisible == null || lastVisible.index >= layoutInfo.totalItemsCount - 2
+            if (wasNearBottom) {
+                logListState.animateScrollToItem(stateHolder.logs.lastIndex)
+            }
         }
     }
 
@@ -370,6 +387,18 @@ fun ConsoleScreen(
                     topContentBetweenServerAndAddress = topContentBelowServerCard,
                     onNavigateToSignUp = onNavigateToSignUp
                 )
+            }
+        }
+
+        if (com.pockethost.app.FeatureFlags.WORLD_MAP_ENABLED) {
+            item(key = "world_map_card") {
+                AnimatedEntranceContainer(index = 1) {
+                    WorldMapBannerCard(
+                        worldName = stateHolder.activeWorld,
+                        isServerOnline = stateHolder.status == ServerStatus.ONLINE,
+                        onOpenMap = onOpenWorldMap
+                    )
+                }
             }
         }
 
@@ -453,8 +482,7 @@ fun ConsoleScreen(
                                     },
                                     modifier = Modifier
                                         .align(Alignment.TopEnd)
-                                        .padding(4.dp)
-                                        .size(32.dp)
+                                        .size(48.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Close,
@@ -565,9 +593,13 @@ fun ConsoleScreen(
                         )
                     }
                     ServerUiState.STARTING -> {
-                        val isDone = stateHolder.serverJoinable && (stateHolder.isJavaServerDone || stateHolder.startupStatusMessage == "Server ready!") && !stateHolder.isStopping
-                        val displayPercent = if (isDone) 100 else stateHolder.startupProgressPercent.coerceAtMost(99)
+                        val isDone = stateHolder.serverJoinable && stateHolder.isJavaServerDone && !stateHolder.isStopping
                         val displayProgress = if (isDone) 1f else animatedStartupProgress.coerceAtMost(0.99f)
+                        // Derive the percent label from the same animated value as the bar
+                        // (not the raw, jump-by-milestone stateHolder value) so the number
+                        // and the bar always move in lockstep instead of the label popping
+                        // ahead of the bar visually catching up.
+                        val displayPercent = if (isDone) 100 else (displayProgress * 100f).roundToInt().coerceAtMost(99)
                         StartupProgressCard(
                             progress = displayProgress,
                             progressPercent = displayPercent,
@@ -1023,7 +1055,7 @@ fun ConsoleScreen(
                                     }
                                     IconButton(
                                         onClick = { copyToClipboard(publicHost, "Server Address") },
-                                        modifier = Modifier.size(32.dp)
+                                        modifier = Modifier.size(48.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.ContentCopy,
@@ -1053,7 +1085,7 @@ fun ConsoleScreen(
                                     }
                                     IconButton(
                                         onClick = { copyToClipboard(publicPort, "Port") },
-                                        modifier = Modifier.size(32.dp)
+                                        modifier = Modifier.size(48.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.ContentCopy,
@@ -2238,7 +2270,7 @@ private fun AddressValueRow(
                 if (onRetryClick != null) {
                     IconButton(
                         onClick = onRetryClick,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
@@ -2251,7 +2283,7 @@ private fun AddressValueRow(
                 if (onEditClick != null) {
                     IconButton(
                         onClick = onEditClick,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Edit,
@@ -2277,7 +2309,7 @@ private fun AddressValueRow(
                             clipboard.setPrimaryClip(clip)
                             Toast.makeText(context, "Address copied to clipboard!", Toast.LENGTH_SHORT).show()
                         },
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.ContentCopy,
@@ -2487,6 +2519,12 @@ private fun ConsoleCard(
 ) {
     val context = LocalContext.current
     var isUploading by remember { mutableStateOf(false) }
+    val bugReportScope = rememberCoroutineScope()
+    var showBugReportDialog by remember { mutableStateOf(false) }
+    var bugReportNote by remember { mutableStateOf("") }
+    var bugReportSubmitting by remember { mutableStateOf(false) }
+    var bugReportToken by remember { mutableStateOf<String?>(null) }
+    var bugReportError by remember { mutableStateOf<String?>(null) }
 
     Box(
         modifier = Modifier
@@ -2524,21 +2562,30 @@ private fun ConsoleCard(
                         clipboard.setPrimaryClip(clip)
                         Toast.makeText(context, "Logs copied to clipboard", Toast.LENGTH_SHORT).show()
                     },
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Share,
+                        imageVector = Icons.Default.ContentCopy,
                         contentDescription = "Copy logs",
                         modifier = Modifier.size(18.dp),
                         tint = PocketColors.ConsoleBright.copy(alpha = 0.85f)
                     )
                 }
-                TextButton(onClick = stateHolder::clearLogs) {
-                    Text(
-                        text = LocalAppStrings.current.clearLog,
-                        fontSize = 12.sp,
-                        fontFamily = ButtonFont,
-                        color = PocketColors.ConsoleBright.copy(alpha = 0.85f)
+                IconButton(
+                    onClick = {
+                        bugReportNote = ""
+                        bugReportToken = null
+                        bugReportError = null
+                        bugReportSubmitting = false
+                        showBugReportDialog = true
+                    },
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Report a bug",
+                        modifier = Modifier.size(18.dp),
+                        tint = PocketColors.ConsoleBright.copy(alpha = 0.85f)
                     )
                 }
             }
@@ -2552,11 +2599,11 @@ private fun ConsoleCard(
                 .background(PocketColors.ConsoleBg.copy(alpha = 0.92f))
                 .padding(10.dp)
         ) {
-            val displayedLogs = if (stateHolder.status == ServerStatus.OFFLINE) {
-                emptyList()
-            } else {
-                stateHolder.logs
-            }
+            // Always show the server's own log history, online or not — it's preserved
+            // permanently by design (see ServerStateHolder.clearLogs()) precisely so a user
+            // can still read what happened after the server stops or crashes, instead of the
+            // console silently going blank the moment it's not running.
+            val displayedLogs = stateHolder.logs
 
             if (displayedLogs.isEmpty()) {
                 Text(
@@ -2621,6 +2668,140 @@ private fun ConsoleCard(
             }
         }
         }
+    }
+
+    if (showBugReportDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!bugReportSubmitting) showBugReportDialog = false },
+            title = {
+                Text(
+                    text = if (bugReportToken != null) "Bug Report Sent" else "Report a Bug",
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 18.sp,
+                    fontFamily = Monocraft,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                val token = bugReportToken
+                if (token != null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "Your server log has been sent to the developer.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = PocketColors.ConsoleBg,
+                            border = BorderStroke(1.dp, PocketColors.ConsoleBorder)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = token,
+                                    fontFamily = DMMono,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = PocketColors.ConsoleBright
+                                )
+                                IconButton(
+                                    onClick = {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Bug report token", token))
+                                        Toast.makeText(context, "Token copied", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentCopy,
+                                        contentDescription = "Copy token",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = PocketColors.ConsoleBright.copy(alpha = 0.85f)
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            text = "Report this bug on Discord by posting this token in the #bugs channel — " +
+                                "or just wait, the developer is very active on this project and usually fixes " +
+                                "reported bugs within a day.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "This sends your current server log to the developer for review, along " +
+                                "with basic device info. Add a note if you can describe what went wrong.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = bugReportNote,
+                            onValueChange = { bugReportNote = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("What went wrong? (optional)") },
+                            enabled = !bugReportSubmitting,
+                            shape = duoTextFieldShape(),
+                            colors = duoOutlinedTextFieldColors()
+                        )
+                        bugReportError?.let { err ->
+                            Text(
+                                text = err,
+                                fontSize = 12.sp,
+                                color = PocketColors.DangerText
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (bugReportToken != null) {
+                    DuoButton(
+                        text = "Done",
+                        onClick = { showBugReportDialog = false }
+                    )
+                } else {
+                    DuoButton(
+                        text = if (bugReportSubmitting) "SENDING..." else "SEND",
+                        enabled = !bugReportSubmitting,
+                        onClick = {
+                            bugReportScope.launch {
+                                bugReportSubmitting = true
+                                bugReportError = null
+                                val result = FeedbackService.submitFeedback(
+                                    context = context,
+                                    message = bugReportNote.trim().ifBlank { "Bug report from console log" },
+                                    serverVersion = stateHolder.config.gameVersion.ifBlank { "unknown" },
+                                    source = "console_bug_report"
+                                )
+                                bugReportSubmitting = false
+                                result
+                                    .onSuccess { token -> bugReportToken = token }
+                                    .onFailure { e -> bugReportError = e.message ?: "Could not send bug report right now." }
+                            }
+                        }
+                    )
+                }
+            },
+            dismissButton = {
+                if (bugReportToken == null) {
+                    TextButton(
+                        onClick = { showBugReportDialog = false },
+                        enabled = !bugReportSubmitting
+                    ) {
+                        Text("CANCEL", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        )
     }
 }
 
@@ -2858,3 +3039,70 @@ private fun isLikelyModpackRuntimeId(value: String): Boolean {
     if (trimmed.matches(Regex("""\d+(?:\.\d+){1,3}(?:[-+][A-Za-z0-9_.-]+)?"""))) return false
     return trimmed.any { it.isLetter() } && trimmed.any { it == '-' || it == '_' }
 }
+
+@Composable
+private fun WorldMapBannerCard(
+    worldName: String,
+    isServerOnline: Boolean,
+    onOpenMap: () -> Unit
+) {
+    val isDark = pocketIsDarkTheme()
+    GameCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpenMap)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(PocketColors.Primary.copy(alpha = 0.15f))
+                            .border(1.dp, PocketColors.Primary.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("🌍", fontSize = 22.sp)
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "3D World Map",
+                            fontFamily = Monocraft,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (isServerOnline) "Interactive 3D terrain & live player tracking" else "Explore cached 3D world terrain",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                DuoButton(
+                    text = "MAP",
+                    onClick = onOpenMap,
+                    variant = DuoButtonVariant.Primary,
+                    minHeight = 34.dp,
+                    fillMaxWidth = false
+                )
+            }
+        }
+    }
+}
+

@@ -217,6 +217,10 @@ fun PocketHostApp(
     var pendingDonationReminderDialog by remember { mutableStateOf(false) }
     // Only one non-consent popup shows per app launch to avoid overwhelming the user.
     var popupShownThisLaunch by remember { mutableStateOf(false) }
+    // Set once the promotions Firestore query has actually run and completed (match or no
+    // match), so re-evaluating the LaunchedEffect below on an unrelated dialog toggle doesn't
+    // re-hit the network every time.
+    var promotionCheckResolvedThisLaunch by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -240,9 +244,7 @@ fun PocketHostApp(
     }
     val colorScheme = MaterialTheme.colorScheme
     val popupAccentContainerColor = pocketPopupAccentContainerColor()
-    val hasPendingBroadcast by remember(configBanner, broadcasts) {
-        mutableStateOf(configBanner != null || broadcasts.isNotEmpty())
-    }
+    val hasPendingBroadcast = configBanner != null || broadcasts.isNotEmpty()
     val hasBlockingSheet = showVersionPickerDialog ||
         showVersionRiskDialog ||
         showConsentDialog ||
@@ -802,6 +804,10 @@ fun PocketHostApp(
     ) {
         if (pendingDonationReminderDialog || showDonationReminderDialog || showNewFeaturesDialog) return@LaunchedEffect
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
+        // The keys above legitimately need to retrigger a retry once a blocking dialog
+        // clears, but a completed check (found nothing, or a promo is already showing)
+        // shouldn't re-hit Firestore every time an unrelated dialog opens/closes afterward.
+        if (promotionCheckResolvedThisLaunch || showPromotionDialog) return@LaunchedEffect
         val targetGroup = when (entitlement.tier) {
             PremiumTier.NONE -> "free"
             PremiumTier.PREMIUM -> "pro"
@@ -841,6 +847,7 @@ fun PocketHostApp(
             }.onFailure { e ->
                 Log.e(TAG_POCKETCRAFT_APP, "Failed to fetch active promotions: ${e.message}", e)
             }
+            promotionCheckResolvedThisLaunch = true
         }
     }
 
@@ -1147,151 +1154,7 @@ fun PocketHostApp(
     }
 
     if (stateHolder.isRestoringBackup) {
-        val isBackingUp = false
-        val progress = stateHolder.restoreProgressPercent
-        val statusMessage = stateHolder.restoreStatusMessage
-        val title = "Restoring World"
-        
-        val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
-            targetValue = (progress / 100f).coerceIn(0f, 1f),
-            animationSpec = androidx.compose.animation.core.tween(durationMillis = 300),
-            label = "backup_restore_dialog_progress"
-        )
-        
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = {},
-            properties = androidx.compose.ui.window.DialogProperties(
-                dismissOnBackPress = false,
-                dismissOnClickOutside = false,
-                usePlatformDefaultWidth = false
-            )
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.82f))
-                    .padding(24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .clip(RoundedCornerShape(24.dp))
-                        .border(
-                            1.5.dp, 
-                            Brush.linearGradient(
-                                listOf(
-                                    Color.White.copy(alpha = 0.2f),
-                                    Color.White.copy(alpha = 0.05f)
-                                )
-                            ), 
-                            RoundedCornerShape(24.dp)
-                        ),
-                    shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 6.dp
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(28.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(20.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(
-                                    Brush.linearGradient(
-                                        listOf(
-                                            PocketColors.Primary.copy(alpha = 0.15f),
-                                            PocketColors.PrimaryMuted.copy(alpha = 0.35f)
-                                        )
-                                    )
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isBackingUp) {
-                                Icon(
-                                    imageVector = Icons.Default.CloudUpload,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(32.dp),
-                                    tint = PocketColors.Primary
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Restore,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(32.dp),
-                                    tint = PocketColors.Primary
-                                )
-                            }
-                        }
-                        
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = title,
-                                fontFamily = com.pockethost.app.ui.theme.Monocraft,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = "Do not close the app or switch screens",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = FontWeight.Medium,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            LinearProgressIndicator(
-                                progress = { animatedProgress },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(10.dp)
-                                    .clip(RoundedCornerShape(999.dp)),
-                                color = PocketColors.Primary,
-                                trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f)
-                            )
-                            
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = statusMessage,
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    text = "$progress%",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = PocketColors.Primary,
-                                    fontFamily = com.pockethost.app.ui.theme.Monocraft
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        RestoreProgressDialog(stateHolder)
     }
 
     if (showForceReconnectPrompt) {
@@ -2099,6 +1962,7 @@ private fun ModpackImportProgressCard(
     var offsetX by remember { mutableFloatStateOf(0f) }
     val animatedOffsetX by androidx.compose.animation.core.animateFloatAsState(
         targetValue = offsetX,
+        animationSpec = PocketMotion.gentleSpringFloat(),
         label = "modpack_swipe_offset"
     )
 
@@ -2174,7 +2038,7 @@ private fun ModpackImportProgressCard(
                 } else if (onDismiss != null) {
                     IconButton(
                         onClick = onDismiss,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -2245,6 +2109,158 @@ private fun compareVersionIdsDescending(left: String, right: String): Int {
         if (comparison != 0) return comparison
     }
     return 0
+}
+
+// Extracted out of PocketHostApp() so restoreProgressPercent/restoreStatusMessage ticking
+// during a world restore only recomposes this small dialog instead of the ~2000-line
+// top-level composable (which owns dozens of other remember/LaunchedEffect state holders).
+@Composable
+private fun RestoreProgressDialog(stateHolder: ServerStateHolder) {
+    val isBackingUp = false
+    val progress = stateHolder.restoreProgressPercent
+    val statusMessage = stateHolder.restoreStatusMessage
+    val title = "Restoring World"
+
+    val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = (progress / 100f).coerceIn(0f, 1f),
+        animationSpec = PocketMotion.softFloatTween(durationMillis = 300),
+        label = "backup_restore_dialog_progress"
+    )
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = {},
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.82f))
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .clip(RoundedCornerShape(24.dp))
+                    .border(
+                        1.5.dp,
+                        Brush.linearGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.2f),
+                                Color.White.copy(alpha = 0.05f)
+                            )
+                        ),
+                        RoundedCornerShape(24.dp)
+                    ),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        PocketColors.Primary.copy(alpha = 0.15f),
+                                        PocketColors.PrimaryMuted.copy(alpha = 0.35f)
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isBackingUp) {
+                            Icon(
+                                imageVector = Icons.Default.CloudUpload,
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp),
+                                tint = PocketColors.Primary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Restore,
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp),
+                                tint = PocketColors.Primary
+                            )
+                        }
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = title,
+                            fontFamily = com.pockethost.app.ui.theme.Monocraft,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            text = "Do not close the app or switch screens",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        LinearProgressIndicator(
+                            progress = { animatedProgress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(10.dp)
+                                .clip(RoundedCornerShape(999.dp)),
+                            color = PocketColors.Primary,
+                            trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f)
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = statusMessage,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = "$progress%",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = PocketColors.Primary,
+                                fontFamily = com.pockethost.app.ui.theme.Monocraft
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {

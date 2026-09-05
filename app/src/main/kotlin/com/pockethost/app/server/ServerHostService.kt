@@ -96,7 +96,10 @@ class ServerHostService : Service() {
     private var currentVersionId: String? = null
     private var currentWorldName: String? = null
     private var serverProcess: java.lang.Process? = null
-    private var isLaunching = false
+    // Volatile: written from onStopped's plain background Thread (mc-server-thread /
+    // ServerLauncher's finally block) and read/written from coroutines on other
+    // dispatchers — needs cross-thread visibility, not just atomic reference swap.
+    @Volatile private var isLaunching = false
     private var launchJob: kotlinx.coroutines.Job? = null
     private var isNewWorld = false
     private var logcatThread: Thread? = null
@@ -113,7 +116,7 @@ class ServerHostService : Service() {
         get() = com.pockethost.app.data.preferences.AppPreferences(applicationContext).alwaysAliveBackground || keepListenerRunningManual
     private val logBuffer = ArrayDeque<String>(1000)
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var relayJob: Job? = null
+    @Volatile private var relayJob: Job? = null
     private var relayReconnectJob: Job? = null
     private var currentServerPort: Int = 25565
     private val relayManager by lazy { RelayManager(this) }
@@ -121,7 +124,7 @@ class ServerHostService : Service() {
     private var wifiLock: WifiManager.WifiLock? = null
     private var wifiLowLatencyLock: WifiManager.WifiLock? = null
     private var multicastLock: WifiManager.MulticastLock? = null
-    private var stopReason: String = "unknown"
+    @Volatile private var stopReason: String = "unknown"
     private var autoRecoverWindowStartMs: Long = 0L
     private var autoRecoverAttempts: Int = 0
     private var autoRestartEnabled: Boolean = false
@@ -137,14 +140,14 @@ class ServerHostService : Service() {
     private val relayStatusPlayerCount = AtomicInteger(0)
     private val relayOnlinePlayers = linkedSetOf<String>()
     private val relayHealthFailures = AtomicInteger(0)
-    private var relayStatusJob: Job? = null
-    private var widgetUpdateJob: Job? = null
+    @Volatile private var relayStatusJob: Job? = null
+    @Volatile private var widgetUpdateJob: Job? = null
     private val chunkResendJobs = ConcurrentHashMap<String, Job>()
     private val currentPlayersList = mutableListOf<PlayerInfo>()
     private var dashboardStatusJob: Job? = null
     private var dashboardCommandListener: com.pockethost.app.broadcast.DashboardCommandListener? = null
     private var currentServerTps: Float = 20.0f
-    private var serverReadyFallbackJob: Job? = null
+    @Volatile private var serverReadyFallbackJob: Job? = null
     private var bootStartedAt: Long = 0L
     /** Set to true when MIUI's socket permission check message is seen in the output. */
     private var miuiSocketCheckSeen = false
@@ -213,7 +216,7 @@ class ServerHostService : Service() {
         }
         val requestedVersionId = intent?.getStringExtra(EXTRA_VERSION_ID).orEmpty().trim()
         val versionId = if (intent?.action == ACTION_START && requestedVersionId.isBlank()) {
-            runBlocking { AppPreferencesStore.getSelectedVersionFlow(applicationContext).first().orEmpty() }
+            com.pockethost.app.data.preferences.AppPreferences(applicationContext).selectedVersion
         } else {
             requestedVersionId
         }
@@ -589,16 +592,15 @@ class ServerHostService : Service() {
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (_: Exception) {}
+        // Capture this BEFORE forceTerminateHostedServer(), which calls
+        // ServerLauncher.requestForceStop() and nulls its activeExternalProcess —
+        // after that, hasActiveExternalProcess() always reports false, which would
+        // make inProcessRuntime always true below regardless of how the server
+        // actually ran.
+        val inProcessRuntime = !ServerLauncher.hasActiveExternalProcess()
         // If this service is being destroyed unexpectedly, avoid leaving
         // a detached JVM process running without relay/control.
         forceTerminateHostedServer()
-        val inProcessRuntime = !ServerLauncher.hasActiveExternalProcess()
-        if (inProcessRuntime) {
-            android.util.Log.i("PocketHost", "Service destroyed. Killing :server process to allow fresh JVM launch on next start.")
-            currentVersionId?.let { persistRuntimeState(applicationContext, it, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE) }
-            android.os.Process.killProcess(android.os.Process.myPid())
-        }
-
         // Clean up relay registration on service destruction
         runBlocking {
             runCatching {
@@ -619,6 +621,12 @@ class ServerHostService : Service() {
         releaseWakeLock()
         // Ensure widget is updated to OFFLINE when the service is destroyed
         pushWidgetUpdate(applicationContext)
+
+        if (inProcessRuntime) {
+            android.util.Log.i("PocketHost", "Service destroyed. Killing :server process to allow fresh JVM launch on next start.")
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
+
         super.onDestroy()
         serviceScope.cancel()
     }
@@ -835,8 +843,10 @@ class ServerHostService : Service() {
         relayManager.disconnect()
         setServerReadyState(false)
         serverReadyHandled.set(false)
-        stopReason = "user"
-        AppPreferences(applicationContext).isUserStopped = true
+        // Unlike markServerStoppingState(), this runs from non-user-initiated paths
+        // (crash / exhausted auto-recover) — do not mark it as a user stop, and keep
+        // whatever stopReason the caller already set (e.g. "crashed") so downstream
+        // checks like `if (stopReason != "user") restart(...)` still work correctly.
         persistPublicAddress(applicationContext, "")
         currentVersionId?.let { versionId ->
             persistRuntimeState(applicationContext, versionId, activeWorldNameOrDefault(), RUNTIME_STATE_OFFLINE)
@@ -2958,7 +2968,9 @@ class ServerHostService : Service() {
             if (state == RUNTIME_STATE_OFFLINE) {
                 obj.put(KEY_PLAYER_COUNT, 0)
                 obj.put("server_pid", -1)
-                AppPreferences(context).isUserStopped = true
+                // Do NOT set isUserStopped here — this runs on every transition to
+                // offline (crashes, exhausted auto-recover, etc.), not just explicit
+                // user stops. isUserStopped is the ACTION_STOP handler's job (above).
             } else {
                 obj.put("server_pid", android.os.Process.myPid())
             }
@@ -2991,24 +3003,41 @@ class ServerHostService : Service() {
             writeStateFile(context, obj)
         }
 
+        private val stateFileLock = Any()
+
         private fun getStateFile(context: Context): File {
             return File(context.filesDir, "runtime_state.json")
         }
 
         private fun readStateFile(context: Context): org.json.JSONObject {
-            val file = getStateFile(context)
-            if (!file.exists()) return org.json.JSONObject()
-            return runCatching { org.json.JSONObject(file.readText()) }.getOrDefault(org.json.JSONObject())
+            synchronized(stateFileLock) {
+                val file = getStateFile(context)
+                if (!file.exists()) return org.json.JSONObject()
+                return runCatching { org.json.JSONObject(file.readText()) }.getOrDefault(org.json.JSONObject())
+            }
         }
 
         private fun writeStateFile(context: Context, obj: org.json.JSONObject) {
-            val file = getStateFile(context)
-            runCatching {
-                val bytes = obj.toString().toByteArray(Charsets.UTF_8)
-                java.io.FileOutputStream(file).use { fos ->
-                    fos.write(bytes)
-                    fos.flush()
-                    fos.fd.sync()
+            synchronized(stateFileLock) {
+                val file = getStateFile(context)
+                runCatching {
+                    // Write to a temp file and rename over the target so a process kill
+                    // mid-write (e.g. our own killProcess() calls) can never leave
+                    // runtime_state.json truncated/corrupted — readStateFile()'s
+                    // getOrDefault(JSONObject()) would otherwise silently reset all
+                    // persisted state on the next read.
+                    val tmp = File(file.parentFile, "${file.name}.tmp")
+                    val bytes = obj.toString().toByteArray(Charsets.UTF_8)
+                    java.io.FileOutputStream(tmp).use { fos ->
+                        fos.write(bytes)
+                        fos.flush()
+                        fos.fd.sync()
+                    }
+                    if (!tmp.renameTo(file)) {
+                        // Fallback for filesystems where atomic rename can fail
+                        file.writeBytes(bytes)
+                        tmp.delete()
+                    }
                 }
             }
         }

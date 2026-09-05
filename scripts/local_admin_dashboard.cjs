@@ -606,7 +606,7 @@ async function saveUpdateConfig(input) {
 
   payload.versionCode = versionCode ? ensureNumber(versionCode, 0) : FieldValue.delete();
   payload.latestVersion = latestVersion || FieldValue.delete();
-  payload.latestVersionCode = latestVersion ? FieldValue.delete() : (latestVersionCode ? ensureNumber(latestVersionCode, 0) : FieldValue.delete());
+  payload.latestVersionCode = latestVersionCode ? ensureNumber(latestVersionCode, 0) : FieldValue.delete();
   payload.excludeVersionCode = excludeVersionCode ? ensureNumber(excludeVersionCode, 0) : FieldValue.delete();
 
   await ref.set(payload, { merge: true });

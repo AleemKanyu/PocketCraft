@@ -10,6 +10,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -24,6 +25,9 @@ import kotlin.concurrent.thread
 
 object ModpackManager {
     private const val TAG = "ModpackManager"
+    // Guards importModpackZip per world so a double-tap/retry can't run two installs
+    // (clearManagedModpackFiles + extraction + downloads) against the same serverDir at once.
+    private val worldInstallLocks = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
     private const val FORGE_INSTALL_TIMEOUT_MINUTES = 15L
     private const val MODRINTH_BASE_URL = "https://api.modrinth.com/v2"
     private const val CURSE_TOOLS_BASE_URL = "https://api.curse.tools/v1/cf"
@@ -202,6 +206,25 @@ object ModpackManager {
         modpackId: String,
         onStatus: (String) -> Unit = {},
         onProgress: (Int) -> Unit = {}
+    ): Result<Unit> {
+        val lock = worldInstallLocks.getOrPut(worldName) { Mutex() }
+        if (!lock.tryLock()) {
+            return Result.failure(Exception("A modpack install is already in progress for this world."))
+        }
+        try {
+            return importModpackZipLocked(context, zipUri, worldName, modpackId, onStatus, onProgress)
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    private suspend fun importModpackZipLocked(
+        context: Context,
+        zipUri: Uri,
+        worldName: String,
+        modpackId: String,
+        onStatus: (String) -> Unit,
+        onProgress: (Int) -> Unit
     ): Result<Unit> = withContext(Dispatchers.IO) {
         val tempFile = File(context.cacheDir, "modpack_import_${System.currentTimeMillis()}.zip")
         try {
@@ -255,7 +278,9 @@ object ModpackManager {
                         continue
                     }
                     val entryFile = File(serverDir, normalizedName)
-                    if (!entryFile.canonicalPath.startsWith(serverDir.canonicalPath)) {
+                    val serverDirCanonical = serverDir.canonicalPath
+                    val entryCanonical = entryFile.canonicalPath
+                    if (entryCanonical != serverDirCanonical && !entryCanonical.startsWith(serverDirCanonical + File.separator)) {
                         processed++
                         val currentProgress = ((processed / totalEntries) * 80).toInt()
                         if (currentProgress != lastProgressPercent) {
@@ -916,8 +941,7 @@ object ModpackManager {
                         verifyManifestFileHash(dest, manifestFile)
                     }.onFailure { error ->
                         val isRequired = manifestFile.serverSupport.trim().lowercase() == "required"
-                        val isModJar = relativePath.startsWith("mods/")
-                        if (isRequired && !isModJar) {
+                        if (isRequired) {
                             throw Exception("Could not download required modpack file: ${manifestFile.path}", error)
                         } else {
                             Log.w(TAG, "Skipping failed optional/client modpack file ${manifestFile.path}: ${error.message}")

@@ -191,7 +191,7 @@ fun PlayersScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF1A0800))
+                    .background(PocketColors.DangerBg)
                     .padding(horizontal = 16.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -337,7 +337,7 @@ fun PlayersOnlineTab(
             IconButton(
                 onClick = { scope.launch { stateHolder.refreshAll() } },
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(48.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(PocketColors.Primary.copy(0.15f))
             ) {
@@ -411,7 +411,7 @@ fun PlayersOnlineTab(
             contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
-            itemsIndexed(filtered.take(visibleCount)) { idx, player ->
+            itemsIndexed(filtered.take(visibleCount), key = { _, player -> player.name }) { idx, player ->
                 val isOnline = stateHolder.onlinePlayers.any { canonicalPlayerName(it.name) == canonicalPlayerName(player.name) }
                 AnimatedEntranceContainer(index = minOf(idx, 8)) {
                     PlayerOnlineCard(
@@ -635,7 +635,7 @@ private fun AfkHelpersSection(
                                 }
                             },
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(48.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(PocketColors.InactiveBg)
                         ) {
@@ -885,7 +885,7 @@ private fun AfkHelperRow(
                     onClick = { showEditDialog = true },
                     enabled = !stateHolder.isAfkHelperBusy,
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(48.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(PocketColors.Primary.copy(alpha = 0.12f))
                 ) {
@@ -905,7 +905,7 @@ private fun AfkHelperRow(
                     },
                     enabled = !stateHolder.isAfkHelperBusy,
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(48.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(PocketColors.DangerBg.copy(alpha = 0.12f))
                 ) {
@@ -1053,7 +1053,7 @@ private fun AddAfkFarmDialog(
             if (!error.isNullOrBlank()) {
                 Text(
                     error!!,
-                    color = Color(0xFFFF7A7A),
+                    color = PocketColors.Danger,
                     fontSize = 12.sp
                 )
             }
@@ -1259,7 +1259,7 @@ private fun EditAfkFarmDialog(
             if (!error.isNullOrBlank()) {
                 Text(
                     error!!,
-                    color = Color(0xFFFF7A7A),
+                    color = PocketColors.Danger,
                     fontSize = 12.sp
                 )
             }
@@ -1377,7 +1377,7 @@ private fun OnlinePlayerSelectionSheet(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)
             ) {
-                items(stateHolder.onlinePlayers) { player ->
+                items(stateHolder.onlinePlayers, key = { it.name }) { player ->
                     OutlinedButton(
                         onClick = {
                             scope.launch {
@@ -1582,9 +1582,12 @@ fun WhitelistTab(
                             )
                         )
                     } else {
-                        val isAdded = remember(addedNames, player.name) {
-                            addedNames.contains(player.name.lowercase())
-                        }
+                        // addedNames is a SnapshotStateList — reading .contains() directly here
+                        // (not wrapped in remember, whose keys never actually change since
+                        // addedNames is the same instance across recompositions) is what makes
+                        // this scope correctly subscribe to its mutations, so the button
+                        // updates immediately when the user taps Add.
+                        val isAdded = addedNames.contains(player.name.lowercase())
                         PlayerCard(
                             username = player.name,
                             subtitle = "Already joined player",
@@ -1742,7 +1745,7 @@ fun PlayersListTab(
             contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            itemsIndexed(dedupedPlayers) { idx, player ->
+            itemsIndexed(dedupedPlayers, key = { _, player -> player.name }) { idx, player ->
                 AnimatedEntranceContainer(index = minOf(idx, 8)) {
                     PlayerCard(
                         username = player.name,

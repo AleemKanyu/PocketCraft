@@ -109,21 +109,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        var initialJreReady = false
-        runBlocking {
-            try {
-                withTimeout(150) {
-                    val selectedVersion = AppPreferencesStore
-                        .getSelectedVersionFlow(applicationContext)
-                        .first()
-                        .orEmpty()
-                    val runtime = JreExtractor.runtimeForVersion(selectedVersion)
-                    initialJreReady = JreExtractor.isExtracted(applicationContext, runtime)
-                }
-            } catch (e: Exception) {
-                // Ignore timeout or other errors, fallback to false
-            }
-        }
+        val selectedVersion = AppPreferences(applicationContext).selectedVersion
+        val runtime = JreExtractor.runtimeForVersion(selectedVersion)
+        val initialJreReady = JreExtractor.isExtracted(applicationContext, runtime)
 
         val preferences = AppPreferences(this)
         // Sync Firebase auth state to preferences for multi-process safety

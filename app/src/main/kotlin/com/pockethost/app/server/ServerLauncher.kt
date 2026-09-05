@@ -2327,17 +2327,17 @@ class ServerLauncher(private val context: Context) {
                 'm'.code.toByte(), '.'.code.toByte(), 's'.code.toByte(),
                 'o'.code.toByte(), 0, 0
             ),
-            // libutil.so.1\0 -> libc.so\0 + five zero pads  (13 -> 8 bytes + 5 nulls)
+            // libutil.so.1 (12 bytes, no null) -> libc.so\0 + four zero pads (12 bytes total)
             "libutil.so.1".toByteArray() to byteArrayOf(
                 'l'.code.toByte(), 'i'.code.toByte(), 'b'.code.toByte(),
                 'c'.code.toByte(), '.'.code.toByte(), 's'.code.toByte(),
-                'o'.code.toByte(), 0, 0, 0, 0, 0, 0
+                'o'.code.toByte(), 0, 0, 0, 0, 0
             ),
-            // libpthread.so.0\0 -> libc.so\0 + seven zero pads (16 -> 8 bytes + 8 nulls)
+            // libpthread.so.0 (15 bytes, no null) -> libc.so\0 + seven zero pads (15 bytes total)
             "libpthread.so.0".toByteArray() to byteArrayOf(
                 'l'.code.toByte(), 'i'.code.toByte(), 'b'.code.toByte(),
                 'c'.code.toByte(), '.'.code.toByte(), 's'.code.toByte(),
-                'o'.code.toByte(), 0, 0, 0, 0, 0, 0, 0, 0, 0
+                'o'.code.toByte(), 0, 0, 0, 0, 0, 0, 0, 0
             ),
             // libdl.so.2\0 -> libdl.so\0 + one zero pad
             "libdl.so.2".toByteArray() to byteArrayOf(

@@ -129,21 +129,28 @@ object PluginManager {
     )
 
     private fun getHttpClient(context: Context): OkHttpClient {
-        if (httpClient == null) {
-            if (cacheDir == null) {
-                cacheDir = File(context.cacheDir, "content_catalog_cache")
+        // Synchronized: httpClient/cacheDir are read/written from many suspend functions
+        // dispatched across Dispatchers.IO's thread pool. Without a lock, two coroutines
+        // racing in before first init could each build an independent Cache pointed at the
+        // same cacheDir, and two DiskLruCache instances writing the same journal files
+        // concurrently can corrupt the on-disk HTTP cache.
+        synchronized(this) {
+            if (httpClient == null) {
+                if (cacheDir == null) {
+                    cacheDir = File(context.cacheDir, "content_catalog_cache")
+                }
+                val cache = Cache(cacheDir!!, HTTP_CACHE_BYTES)
+                httpClient = OkHttpClient.Builder()
+                    .cache(cache)
+                    .connectTimeout(15, TimeUnit.SECONDS)
+                    .readTimeout(30, TimeUnit.SECONDS)
+                    .writeTimeout(30, TimeUnit.SECONDS)
+                    .followRedirects(true)
+                    .followSslRedirects(true)
+                    .build()
             }
-            val cache = Cache(cacheDir!!, HTTP_CACHE_BYTES)
-            httpClient = OkHttpClient.Builder()
-                .cache(cache)
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS)
-                .followRedirects(true)
-                .followSslRedirects(true)
-                .build()
+            return httpClient!!
         }
-        return httpClient!!
     }
 
     fun getPluginsDir(context: Context, worldName: String): File =
@@ -265,6 +272,26 @@ object PluginManager {
             ensureManagedPluginEnabled(context, worldName, "viaversion")
             preserveFloodgateKey(context, worldName)
             enforceBedrockBridgeLocalConfig(context, worldName)
+
+            // enforceBedrockBridgeLocalConfig's own plugin/download steps swallow individual
+            // failures internally (runCatching + log warning) and always return normally, so
+            // this was previously the only place that could notice Bedrock join support isn't
+            // actually going to work and tell the caller. Geyser/Floodgate ship bundled in the
+            // app (no network needed), so a missing jar here means the bundled install itself
+            // failed (disk full, permission error) rather than a network hiccup — worth
+            // surfacing rather than reporting success.
+            val pluginsDir = getPluginsDir(context, worldName)
+            val hasGeyserJar = hasEnabledPluginJar(pluginsDir, "geyser")
+            val hasFloodgateJar = hasEnabledPluginJar(pluginsDir, "floodgate")
+            if (!hasGeyserJar || !hasFloodgateJar) {
+                val missing = listOfNotNull(
+                    "Geyser".takeIf { !hasGeyserJar },
+                    "Floodgate".takeIf { !hasFloodgateJar }
+                ).joinToString(" and ")
+                return@withContext Result.failure(
+                    IllegalStateException("Bedrock bridge setup incomplete: $missing failed to install.")
+                )
+            }
         } else {
             onProgress("Bedrock crossplay disabled. Skipping Geyser & Floodgate...")
             disableManagedPlugin(context, worldName, "geyser")
@@ -272,6 +299,13 @@ object PluginManager {
         }
 
         Result.success(Unit)
+    }
+
+    private fun hasEnabledPluginJar(pluginsDir: File, projectId: String): Boolean {
+        val files = pluginsDir.listFiles() ?: return false
+        return files.any { file ->
+            file.name.endsWith(".jar") && file.length() > 0 && file.name.lowercase().contains(projectId.lowercase())
+        }
     }
 
     fun setBedrockBridgeEnabled(context: Context, worldName: String, enabled: Boolean) {
@@ -384,6 +418,7 @@ object PluginManager {
         // MTU set to 1400 (standard WiFi MTU, eliminates UDP packet fragmentation & packet queues)
         updated = ensureYamlPathValue(updated, listOf("advanced", "bedrock"), "mtu", "1400")
         updated = ensureTopLevelYamlValue(updated, "mtu", "1400")
+        updated = ensureTopLevelYamlValue(updated, "floodgate-key-file", floodgateKeyPath)
         updated = ensureYamlSectionValue(updated, "advanced", "floodgate-key-file", floodgateKeyPath)
 
         val geyserAuthType = "floodgate"
@@ -648,6 +683,8 @@ object PluginManager {
                 backupFile.delete()
             }
         }
+
+        // Preserve and sync valid Floodgate RSA private key across all required directories
 
         if (keyFile != null && keyFile.length() > 0) {
             val validKeyPem = runCatching { keyFile.readText() }.getOrDefault("")
@@ -1096,7 +1133,7 @@ object PluginManager {
             }
             val inputStream = context.contentResolver.openInputStream(uri)
                 ?: throw IllegalStateException("Could not open selected file")
-            val totalBytes = context.contentResolver.openFileDescriptor(uri, "r")?.statSize ?: -1L
+            val totalBytes = context.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize } ?: -1L
 
             inputStream.use { input ->
                 FileOutputStream(destFile).use { output ->
@@ -1143,56 +1180,57 @@ object PluginManager {
                 .header("User-Agent", userAgent())
                 .build()
 
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                return@withContext Result.failure(Exception("HTTP ${response.code} download failed"))
-            }
-
-            val body = response.body ?: return@withContext Result.failure(Exception("Empty download response"))
-            val totalBytes = body.contentLength()
-            val targetDir = getContentDir(context, worldName, type)
-
-            var name = fileNameHint
-            if (name.isNullOrBlank()) {
-                val cd = response.header("Content-Disposition")
-                if (cd != null && cd.contains("filename=")) {
-                    name = cd.substringAfter("filename=").trim('"').trim('\'')
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(Exception("HTTP ${response.code} download failed"))
                 }
-            }
-            if (name.isNullOrBlank()) {
-                name = sourceUrl.substringAfterLast('/').substringBefore('?')
-            }
-            if (name.isBlank()) name = "downloaded_content_${System.currentTimeMillis()}"
-            if (!name.endsWith(".jar") && (type == ContentType.PLUGINS || type == ContentType.MODS)) {
-                name = "$name.jar"
-            }
 
-            val destFile = File(targetDir, sanitizeFileName(name))
+                val body = response.body ?: return@withContext Result.failure(Exception("Empty download response"))
+                val totalBytes = body.contentLength()
+                val targetDir = getContentDir(context, worldName, type)
 
-            body.byteStream().use { input ->
-                FileOutputStream(destFile).use { output ->
-                    val buffer = ByteArray(16 * 1024)
-                    var downloaded = 0L
-                    var bytes = input.read(buffer)
-                    while (bytes != -1) {
-                        output.write(buffer, 0, bytes)
-                        downloaded += bytes
-                        if (totalBytes > 0) {
-                            withContext(Dispatchers.Main) {
-                                onProgress(((downloaded * 100) / totalBytes).toInt().coerceIn(0, 100))
-                            }
-                        }
-                        bytes = input.read(buffer)
+                var name = fileNameHint
+                if (name.isNullOrBlank()) {
+                    val cd = response.header("Content-Disposition")
+                    if (cd != null && cd.contains("filename=")) {
+                        name = cd.substringAfter("filename=").trim('"').trim('\'')
                     }
                 }
-            }
+                if (name.isNullOrBlank()) {
+                    name = sourceUrl.substringAfterLast('/').substringBefore('?')
+                }
+                if (name.isBlank()) name = "downloaded_content_${System.currentTimeMillis()}"
+                if (!name.endsWith(".jar") && (type == ContentType.PLUGINS || type == ContentType.MODS)) {
+                    name = "$name.jar"
+                }
 
-            validateInstalledFile(destFile, type, runtimeKey)?.let { error ->
-                destFile.delete()
-                return@withContext Result.failure(Exception(error))
-            }
+                val destFile = File(targetDir, sanitizeFileName(name))
 
-            Result.success(destFile)
+                body.byteStream().use { input ->
+                    FileOutputStream(destFile).use { output ->
+                        val buffer = ByteArray(16 * 1024)
+                        var downloaded = 0L
+                        var bytes = input.read(buffer)
+                        while (bytes != -1) {
+                            output.write(buffer, 0, bytes)
+                            downloaded += bytes
+                            if (totalBytes > 0) {
+                                withContext(Dispatchers.Main) {
+                                    onProgress(((downloaded * 100) / totalBytes).toInt().coerceIn(0, 100))
+                                }
+                            }
+                            bytes = input.read(buffer)
+                        }
+                    }
+                }
+
+                validateInstalledFile(destFile, type, runtimeKey)?.let { error ->
+                    destFile.delete()
+                    return@withContext Result.failure(Exception(error))
+                }
+
+                Result.success(destFile)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }

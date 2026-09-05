@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PocketHost Map</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#0d1217; touch-action:none;
+               font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  #view { position:fixed; inset:0; display:block; }
+  #tags { position:fixed; inset:0; pointer-events:none; z-index:5; }
+  .tag { position:absolute; transform:translate(-50%,-100%);
+         background:rgba(13,18,23,.85); border:1px solid #334155; color:#fff;
+         font-size:11px; font-weight:700; padding:3px 7px; border-radius:6px; white-space:nowrap; }
+  #hint { position:fixed; left:50%; top:12px; transform:translateX(-50%);
+          background:rgba(22,31,40,.9); border:1px solid #334155; color:#94a3b8;
+          font-size:11px; font-weight:600; padding:6px 14px; border-radius:999px;
+          z-index:10; transition:opacity .3s; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="tags"></div>
+<div id="hint">Loading map…</div>
+
+<script>
+// Tiles are one pixel per block, 512 blocks square, served by the app's loopback server.
+var TILE = 512;
+var LODS = [512, 256, 128, 64];
+var ORIGIN = "http://127.0.0.1:8101";
+
+var canvas = document.getElementById('view');
+var ctx = canvas.getContext('2d', { alpha: false });
+var tagsEl = document.getElementById('tags');
+var hintEl = document.getElementById('hint');
+
+var dim = "overworld";
+var camX = 0, camZ = 0;   // world block at screen centre
+var scale = 1;            // screen pixels per block
+var dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+var tiles = {};           // key -> {img, ok}
+var players = [];
+var lastCoordReport = null;
+
+function resize() {
+  canvas.width = Math.floor(window.innerWidth * dpr);
+  canvas.height = Math.floor(window.innerHeight * dpr);
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  draw();
+}
+
+/** Pick the smallest tile image that still covers the on-screen density. */
+function lodFor(s) {
+  var want = TILE * s;
+  for (var i = LODS.length - 1; i >= 0; i--) {
+    if (LODS[i] >= want) return LODS[i];
+  }
+  return LODS[0];
+}
+
+function tileUrl(rx, rz, lod) {
+  var base = ORIGIN + "/tiles/" + dim;
+  return lod === TILE ? base + "/r." + rx + "." + rz + ".png"
+                      : base + "/lod" + lod + "/r." + rx + "." + rz + ".png";
+}
+
+function getTile(rx, rz, lod) {
+  var key = dim + "/" + lod + "/" + rx + "/" + rz;
+  var t = tiles[key];
+  if (t) return t;
+  t = { img: new Image(), ok: false };
+  t.img.onload = function () { t.ok = true; draw(); };
+  t.img.onerror = function () { t.ok = false; };
+  t.img.src = tileUrl(rx, rz, lod);
+  tiles[key] = t;
+  return t;
+}
+
+function draw() {
+  var w = canvas.width, h = canvas.height;
+  ctx.fillStyle = '#0d1217';
+  ctx.fillRect(0, 0, w, h);
+
+  var s = scale * dpr;
+  var lod = lodFor(scale);
+  // World block at the top-left corner of the canvas.
+  var originX = camX - (w / 2) / s;
+  var originZ = camZ - (h / 2) / s;
+
+  var r0x = Math.floor(originX / TILE), r1x = Math.floor((originX + w / s) / TILE);
+  var r0z = Math.floor(originZ / TILE), r1z = Math.floor((originZ + h / s) / TILE);
+
+  ctx.imageSmoothingEnabled = scale < 1;
+  var any = false;
+
+  for (var rz = r0z; rz <= r1z; rz++) {
+    for (var rx = r0x; rx <= r1x; rx++) {
+      var t = getTile(rx, rz, lod);
+      if (!t.ok) continue;
+      any = true;
+      var dx = (rx * TILE - originX) * s;
+      var dy = (rz * TILE - originZ) * s;
+      var size = TILE * s;
+      // +1 closes the hairline seam that rounding leaves between neighbouring tiles.
+      ctx.drawImage(t.img, Math.floor(dx), Math.floor(dy), Math.ceil(size) + 1, Math.ceil(size) + 1);
+    }
+  }
+
+  drawPlayers(originX, originZ, s);
+  reportCoords();
+
+  if (any && hintEl.style.opacity !== '0') hintEl.style.opacity = '0';
+}
+
+function drawPlayers(originX, originZ, s) {
+  while (tagsEl.firstChild) tagsEl.removeChild(tagsEl.firstChild);
+  for (var i = 0; i < players.length; i++) {
+    var p = players[i];
+    var sx = (p.x - originX) * s / dpr;
+    var sy = (p.z - originZ) * s / dpr;
+    if (sx < -40 || sy < -40 || sx > window.innerWidth + 40 || sy > window.innerHeight + 40) continue;
+
+    ctx.beginPath();
+    ctx.arc(sx * dpr, sy * dpr, 5 * dpr, 0, Math.PI * 2);
+    ctx.fillStyle = '#4ade80';
+    ctx.fill();
+    ctx.lineWidth = 2 * dpr;
+    ctx.strokeStyle = '#0d1217';
+    ctx.stroke();
+
+    var tag = document.createElement('div');
+    tag.className = 'tag';
+    tag.textContent = p.name;
+    tag.style.left = sx + 'px';
+    tag.style.top = (sy - 10) + 'px';
+    tagsEl.appendChild(tag);
+  }
+}
+
+function reportCoords() {
+  var x = Math.round(camX), z = Math.round(camZ);
+  var key = x + ',' + z;
+  if (key === lastCoordReport) return;
+  lastCoordReport = key;
+  if (window.PocketHostBridge && window.PocketHostBridge.onCoordinates) {
+    try { window.PocketHostBridge.onCoordinates(x, 64, z); } catch (e) {}
+  }
+}
+
+// --- input -----------------------------------------------------------------
+var dragging = false, lastX = 0, lastY = 0, pinchDist = 0;
+
+canvas.addEventListener('touchstart', function (e) {
+  if (e.touches.length === 1) {
+    dragging = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+  } else if (e.touches.length === 2) {
+    dragging = false; pinchDist = touchDist(e);
+  }
+}, { passive: true });
+
+canvas.addEventListener('touchmove', function (e) {
+  if (e.touches.length === 1 && dragging) {
+    var dx = e.touches[0].clientX - lastX, dy = e.touches[0].clientY - lastY;
+    lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+    camX -= dx / scale; camZ -= dy / scale;
+    draw();
+  } else if (e.touches.length === 2) {
+    var d = touchDist(e);
+    if (pinchDist > 0) setScale(scale * (d / pinchDist));
+    pinchDist = d;
+  }
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchend', function () { dragging = false; pinchDist = 0; }, { passive: true });
+
+function touchDist(e) {
+  var dx = e.touches[0].clientX - e.touches[1].clientX;
+  var dy = e.touches[0].clientY - e.touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function setScale(s) {
+  scale = Math.max(0.05, Math.min(8, s));
+  draw();
+}
+
+// --- bridge API (called from Kotlin) ---------------------------------------
+window.setDimension = function (id) {
+  var slug = String(id).split(':').pop();
+  if (slug === dim) return;
+  dim = slug;
+  hintEl.style.opacity = '1';
+  hintEl.textContent = 'Loading map…';
+  draw();
+};
+window.setPlayers = function (json) {
+  try { players = JSON.parse(json) || []; } catch (e) { players = []; }
+  draw();
+};
+window.centerOn = function (x, z) { camX = x; camZ = z; draw(); };
+window.zoomBy = function (f) { setScale(scale * f); };
+window.resetView = function () { camX = 0; camZ = 0; setScale(1); };
+window.mapDebug = function () {
+  var loaded = 0, total = 0;
+  for (var k in tiles) { total++; if (tiles[k].ok) loaded++; }
+  return JSON.stringify({
+    dim: dim, cam: [Math.round(camX), Math.round(camZ)], scale: scale,
+    lod: lodFor(scale), tilesLoaded: loaded, tilesTried: total,
+    canvas: [canvas.width, canvas.height], players: players.length
+  });
+};
+
+window.addEventListener('resize', resize);
+resize();
+
+// Poll players; cheap and avoids needing a socket.
+setInterval(function () {
+  if (!window.PocketHostBridge || !window.PocketHostBridge.getOnlinePlayers) return;
+  try { window.setPlayers(window.PocketHostBridge.getOnlinePlayers()); } catch (e) {}
+}, 3000);
+
+// Tiles appear progressively during the first render pass, so retry misses for a while.
+var sweeps = 0;
+var sweep = setInterval(function () {
+  sweeps++;
+  for (var k in tiles) { if (!tiles[k].ok) delete tiles[k]; }
+  draw();
+  if (sweeps > 40) clearInterval(sweep);
+}, 3000);
+</script>
+</body>
+</html>

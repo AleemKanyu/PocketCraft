@@ -439,9 +439,10 @@
         <p class="hint">Controls the Firebase `app_config/update` popup and the Play Store rating prompt flag.</p>
         <form id="updateForm">
           <label>Play Store URL<input id="updatePlayStoreUrl" type="text" placeholder="https://play.google.com/store/apps/details?id=..."></label>
-          <div class="row">
+          <div class="row-3">
             <label>Target Version Code<input id="updateVersionCode" type="number" min="0" placeholder="Optional"></label>
             <label>Latest Version<input id="updateLatestVersion" type="text" placeholder="Example: 1.2.0"></label>
+            <label>Latest Version Code<input id="updateLatestVersionCode" type="number" min="0" placeholder="e.g. 104"></label>
           </div>
           <label>Exclude Version Code<input id="updateExcludeVersionCode" type="number" min="0" placeholder="Optional"></label>
           <label class="checkbox"><input id="updateShowPopup" type="checkbox">Show update popup</label>
@@ -926,7 +927,7 @@
             </div>
           </div>
           <div class="card-body">${escapeHtml(config.playStoreUrl || "No Play Store URL set.")}</div>
-          <small>Target Version Code: ${escapeHtml(config.versionCode || "None")} | Latest Version: ${escapeHtml(config.latestVersion || config.latestVersionCode || "None")} | Exclude Version Code: ${escapeHtml(config.excludeVersionCode || "None")}</small>
+          <small>Target Version Code: ${escapeHtml(config.versionCode || "None")} | Latest Version: ${escapeHtml(config.latestVersion || "None")} | Latest Version Code: ${escapeHtml(config.latestVersionCode || "None")} | Exclude Version Code: ${escapeHtml(config.excludeVersionCode || "None")}</small>
           <small>Play Store Rating Prompt: ${config.enablePlayStoreRatingPrompt ? "Enabled" : "Disabled"}</small>
         </article>
       `;
@@ -1080,7 +1081,8 @@
     function fillUpdateForm(config) {
       document.getElementById("updatePlayStoreUrl").value = config.playStoreUrl || "";
       document.getElementById("updateVersionCode").value = config.versionCode || "";
-      document.getElementById("updateLatestVersion").value = config.latestVersion || config.latestVersionCode || "";
+      document.getElementById("updateLatestVersion").value = config.latestVersion || "";
+      document.getElementById("updateLatestVersionCode").value = config.latestVersionCode == null ? "" : config.latestVersionCode;
       document.getElementById("updateExcludeVersionCode").value = config.excludeVersionCode || "";
       document.getElementById("updateShowPopup").checked = !!config.showUpdatePopup;
       document.getElementById("updateForced").checked = !!config.isForced;
@@ -1354,6 +1356,7 @@
           playStoreUrl: document.getElementById("updatePlayStoreUrl").value.trim(),
           versionCode: document.getElementById("updateVersionCode").value.trim(),
           latestVersion: document.getElementById("updateLatestVersion").value.trim(),
+          latestVersionCode: document.getElementById("updateLatestVersionCode").value.trim(),
           excludeVersionCode: document.getElementById("updateExcludeVersionCode").value.trim(),
           showUpdatePopup: document.getElementById("updateShowPopup").checked,
           isForced: document.getElementById("updateForced").checked,

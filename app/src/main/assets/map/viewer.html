@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PocketHost 3D World Map</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0d1217;
+            touch-action: none;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100vw;
+            height: 100vh;
+            display: block;
+            overflow: hidden;
+        }
+        #canvas-container canvas {
+            display: block;
+        }
+        #loading-overlay {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: inline-flex;
+            align-items: center;
+            background: rgba(22, 31, 40, 0.88);
+            border: 1px solid #334155;
+            color: #94a3b8;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 999px;
+            gap: 8px;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+            z-index: 100;
+            opacity: 0;
+        }
+        .spinner {
+            width: 12px;
+            height: 12px;
+            border: 2px solid #334155;
+            border-top-color: #4ade80;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        #nametag-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 50;
+        }
+        .nametag {
+            position: absolute;
+            background: rgba(13, 18, 23, 0.85);
+            border: 1px solid #334155;
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 6px;
+            pointer-events: none;
+            white-space: nowrap;
+            transform: translate(-50%, -100%);
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <span id="loading-text">Loading terrain...</span>
+    </div>
+    <div id="canvas-container"></div>
+    <div id="nametag-container"></div>
+
+    <script src="three.min.js"></script>
+    <script src="OrbitControls.js"></script>
+
+    <script>
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            lastError = msg + " @" + lineNo;
+            console.error("MapViewer Error: " + msg + " at " + url + ":" + lineNo);
+            return false;
+        };
+
+        // --- 1. Scene, Camera, Renderer Setup ---
+        const container = document.getElementById('canvas-container');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingText = document.getElementById('loading-text');
+        const nametagContainer = document.getElementById('nametag-container');
+
+        let scene, camera, renderer, controls;
+        let terrainMesh = null;
+        let waterMesh = null;
+        let currentDimension = "minecraft:overworld";
+        let is3DMode = true;
+        let playerMarkers = new Map();
+        let lastReportedCoords = { x: 0, y: 64, z: 0 };
+        let frameCount = 0;
+        let lastError = null;
+        let terrainLoadToken = 0;
+        let cameraAnchored = false;
+        let anchoredAt = { x: null, z: null };
+        let terrainOrigin = { x: -32, z: -32, size: 64, avgY: 64, relief: 0, fitDistance: 96 };
+
+        /** Frames the camera on a world-space point, sized to the loaded terrain window. */
+        function centerCameraOn(x, y, z, size, relief) {
+            if (!controls || !camera) return;
+            const span = size || 64;
+            // Distance that fits the terrain's width and its vertical relief in view.
+            const extent = Math.max(span, (relief || 0) * 1.5);
+            const fit = extent / (2 * Math.tan((camera.fov * Math.PI / 180) / 2));
+            const dist = Math.max(span * 0.9, fit * 1.25);
+            terrainOrigin.fitDistance = dist;
+
+            controls.target.set(x, y, z);
+            controls.minDistance = Math.max(8, span * 0.12);
+            controls.maxDistance = dist * 4;
+            if (is3DMode) {
+                camera.position.set(x, y + dist * 0.72, z + dist * 0.72);
+            } else {
+                camera.position.set(x, y + dist * 1.15, z + 0.01);
+            }
+            controls.update();
+        }
+
+        // Exposed for ADB/DevTools introspection: JSON.stringify(window.mapDebug())
+        window.mapDebug = function () {
+            return {
+                three: typeof THREE !== 'undefined' ? THREE.REVISION : null,
+                orbitControls: typeof THREE !== 'undefined' && !!THREE.OrbitControls,
+                sceneReady: !!scene,
+                rendererReady: !!renderer,
+                controlsReady: !!controls,
+                children: scene ? scene.children.length : 0,
+                terrain: !!terrainMesh,
+                water: !!waterMesh,
+                frames: frameCount,
+                dimension: currentDimension,
+                is3DMode: is3DMode,
+                bridge: !!(window.PocketHostBridge && window.PocketHostBridge.getTerrainData),
+                viewport: [window.innerWidth, window.innerHeight],
+                canvas: renderer ? [renderer.domElement.width, renderer.domElement.height] : null,
+                camera: camera ? [Math.round(camera.position.x), Math.round(camera.position.y), Math.round(camera.position.z)] : null,
+                players: playerMarkers.size,
+                origin: terrainOrigin,
+                container: [container.clientWidth, container.clientHeight],
+                lastError: lastError
+            };
+        };
+
+        function init() {
+            if (scene) return;
+            console.log("PocketHost Map Viewer init started");
+
+            if (typeof THREE === 'undefined') {
+                console.error("THREE is undefined! Three.js failed to load.");
+                return;
+            }
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0d1217);
+            scene.fog = new THREE.FogExp2(0x0d1217, 0.0016);
+
+            const width = window.innerWidth || document.documentElement.clientWidth || 360;
+            const height = window.innerHeight || document.documentElement.clientHeight || 640;
+
+            camera = new THREE.PerspectiveCamera(50, width / height, 1, 2000);
+            camera.position.set(32, 130, 105);
+
+            try {
+                renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "default" });
+            } catch (e) {
+                console.error("WebGLRenderer creation failed:", e);
+                return;
+            }
+
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1.0, 2.0));
+            renderer.setSize(width, height);
+            renderer.domElement.style.display = 'block';
+            container.appendChild(renderer.domElement);
+
+            // Orbit Controls with smooth damping
+            if (THREE.OrbitControls) {
+                controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.dampingFactor = 0.08;
+                controls.target.set(32, 70, 32);
+                controls.maxPolarAngle = Math.PI / 2 - 0.05;
+                controls.minDistance = 10;
+                controls.maxDistance = 400;
+            } else {
+                console.warn("THREE.OrbitControls is not available.");
+            }
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xfffaed, 0.75);
+            sunLight.position.set(120, 200, 100);
+            scene.add(sunLight);
+
+            const fillLight = new THREE.DirectionalLight(0x8cb8ff, 0.25);
+            fillLight.position.set(-100, 80, -100);
+            scene.add(fillLight);
+
+            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('orientationchange', () => setTimeout(onWindowResize, 200));
+            setTimeout(onWindowResize, 100);
+            setTimeout(onWindowResize, 400);
+
+            // Load initial terrain
+            loadDimensionTerrain(currentDimension);
+
+            // Start polling players
+            setInterval(updatePlayers, 2000);
+
+            animate();
+            console.log("PocketHost Map Viewer init completed successfully");
+        }
+
+        function onWindowResize() {
+            if (!camera || !renderer) return;
+            const width = window.innerWidth || document.documentElement.clientWidth || 360;
+            const height = window.innerHeight || document.documentElement.clientHeight || 640;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+            container.style.width = width + 'px';
+            container.style.height = height + 'px';
+        }
+
+        // --- 2. Terrain Generation & Meshing ---
+        function loadDimensionTerrain(dimId) {
+            console.log("loadDimensionTerrain called for: " + dimId);
+            if (!scene) return;
+            if (dimId !== currentDimension) { cameraAnchored = false; anchoredAt = { x: null, z: null }; }
+            currentDimension = dimId;
+            loadingText.innerText = "Loading terrain...";
+            loadingOverlay.style.opacity = '1';
+
+            // Atmosphere styling by dimension
+            if (dimId.includes("nether")) {
+                scene.background = new THREE.Color(0x1a0808);
+                scene.fog.color = new THREE.Color(0x1a0808);
+                scene.fog.density = 0.0022;
+            } else if (dimId.includes("end")) {
+                scene.background = new THREE.Color(0x06080d);
+                scene.fog.color = new THREE.Color(0x06080d);
+                scene.fog.density = 0.0009;
+            } else {
+                scene.background = new THREE.Color(0x0d1217);
+                scene.fog.color = new THREE.Color(0x0d1217);
+                scene.fog.density = 0.0016;
+            }
+
+            // Draw procedural terrain immediately so the viewport is never black,
+            // then swap in real Anvil chunk data once the (slow, disk-bound) bridge call returns.
+            buildTerrainMesh(generateProceduralData(dimId, 64));
+
+            const token = ++terrainLoadToken;
+            setTimeout(() => {
+                if (token !== terrainLoadToken) return;
+                let data = null;
+                try {
+                    if (window.PocketHostBridge && window.PocketHostBridge.getTerrainData) {
+                        console.log("Calling PocketHostBridge.getTerrainData for " + dimId);
+                        const raw = window.PocketHostBridge.getTerrainData(dimId);
+                        console.log("Bridge returned terrain data string of length: " + (raw ? raw.length : 0));
+                        if (raw) data = JSON.parse(raw);
+                    } else {
+                        console.warn("PocketHostBridge is not available in viewer");
+                    }
+                } catch (e) {
+                    console.error("Failed to parse bridge terrain data", e);
+                }
+
+                if (token !== terrainLoadToken) return;
+                if (data && data.heights && data.heights.length) {
+                    buildTerrainMesh(data);
+                } else {
+                    console.log("Keeping procedural fallback terrain data");
+                }
+                loadingOverlay.style.opacity = '0';
+
+                if (window.PocketHostBridge && window.PocketHostBridge.onMapReady) {
+                    window.PocketHostBridge.onMapReady();
+                }
+            }, 32);
+        }
+
+        function buildTerrainMesh(data) {
+            console.log("buildTerrainMesh building geometry. GridSize: " + data.gridSize);
+            if (terrainMesh) {
+                scene.remove(terrainMesh);
+                terrainMesh.geometry.dispose();
+                terrainMesh.material.dispose();
+                terrainMesh = null;
+            }
+            if (waterMesh) {
+                scene.remove(waterMesh);
+                waterMesh.geometry.dispose();
+                waterMesh.material.dispose();
+                waterMesh = null;
+            }
+
+            const size = data.gridSize || 64;
+            const heights = data.heights || [];
+            const colors = data.colors || [];
+            // World block coordinate of grid cell (0, 0). 1 scene unit == 1 block, so
+            // player markers (which use raw block coords) land on the right terrain.
+            const originX = (data.originX !== undefined) ? data.originX : -size / 2;
+            const originZ = (data.originZ !== undefined) ? data.originZ : -size / 2;
+            const half = (size - 1) / 2;
+            terrainOrigin = { x: originX, z: originZ, size: size };
+
+            const geometry = new THREE.PlaneGeometry(size - 1, size - 1, size - 1, size - 1);
+            geometry.rotateX(-Math.PI / 2);
+            geometry.translate(originX + half, 0, originZ + half);
+
+            const pos = geometry.attributes.position;
+            const colorAttr = new Float32Array(pos.count * 3);
+
+            for (let i = 0; i < pos.count; i++) {
+                const h = heights[i] !== undefined ? heights[i] : 64;
+                pos.setY(i, h);
+
+                const cInt = colors[i] !== undefined ? colors[i] : 0x5b8c3a;
+                colorAttr[i * 3] = ((cInt >> 16) & 255) / 255;
+                colorAttr[i * 3 + 1] = ((cInt >> 8) & 255) / 255;
+                colorAttr[i * 3 + 2] = (cInt & 255) / 255;
+            }
+
+            pos.needsUpdate = true;
+            geometry.setAttribute('color', new THREE.BufferAttribute(colorAttr, 3));
+            geometry.computeVertexNormals();
+
+            const material = new THREE.MeshLambertMaterial({
+                vertexColors: true,
+                side: THREE.DoubleSide,
+                flatShading: true
+            });
+
+            terrainMesh = new THREE.Mesh(geometry, material);
+            scene.add(terrainMesh);
+            console.log("terrainMesh successfully added to scene");
+
+            // Re-frame whenever the terrain lands somewhere new: the procedural placeholder
+            // is drawn at the scene origin, but real chunk data can sit anywhere in the world.
+            let sum = 0;
+            let loY = Infinity;
+            let hiY = -Infinity;
+            for (let i = 0; i < heights.length; i++) {
+                sum += heights[i];
+                if (heights[i] < loY) loY = heights[i];
+                if (heights[i] > hiY) hiY = heights[i];
+            }
+            const avgY = heights.length ? sum / heights.length : 64;
+            const relief = (hiY > loY) ? (hiY - loY) : 0;
+            terrainOrigin.avgY = avgY;
+            terrainOrigin.relief = relief;
+
+            if (!cameraAnchored || anchoredAt.x !== originX || anchoredAt.z !== originZ) {
+                cameraAnchored = true;
+                anchoredAt = { x: originX, z: originZ };
+                centerCameraOn(originX + half, avgY, originZ + half, size, relief);
+            }
+
+            // Water plane for Overworld
+            if (!currentDimension.includes("nether") && !currentDimension.includes("end")) {
+                const waterGeo = new THREE.PlaneGeometry(size - 1, size - 1);
+                waterGeo.rotateX(-Math.PI / 2);
+                waterGeo.translate(originX + half, 0, originZ + half);
+                const waterMat = new THREE.MeshLambertMaterial({
+                    color: 0x24588a,
+                    transparent: true,
+                    opacity: 0.65,
+                    side: THREE.DoubleSide
+                });
+                waterMesh = new THREE.Mesh(waterGeo, waterMat);
+                waterMesh.position.y = 62.2;
+                scene.add(waterMesh);
+                console.log("waterMesh successfully added to scene");
+            }
+        }
+
+        // --- 3. Camera Modes (3D vs Top-Down) ---
+        function setViewMode(mode) {
+            is3DMode = (mode === '3d' || mode === 'isometric');
+            if (!controls || !camera) return;
+            const target = controls.target.clone();
+            // Preserve how far the user has already zoomed when flipping view modes.
+            const dist = camera.position.distanceTo(target) || terrainOrigin.fitDistance || 96;
+
+            if (is3DMode) {
+                controls.maxPolarAngle = Math.PI / 2 - 0.05;
+                controls.minPolarAngle = 0.1;
+                camera.position.set(target.x, target.y + dist * 0.72, target.z + dist * 0.72);
+            } else {
+                controls.maxPolarAngle = 0.05;
+                controls.minPolarAngle = 0.0;
+                camera.position.set(target.x, target.y + dist, target.z + 0.01);
+            }
+            controls.update();
+        }
+
+        // --- 4. Player Markers ---
+        function updatePlayers() {
+            let players = [];
+            try {
+                if (window.PocketHostBridge && window.PocketHostBridge.getOnlinePlayers) {
+                    const raw = window.PocketHostBridge.getOnlinePlayers();
+                    if (raw) players = JSON.parse(raw);
+                }
+            } catch (e) {}
+
+            const activeNames = new Set(players.map(p => p.name));
+
+            for (let [name, marker] of playerMarkers.entries()) {
+                if (!activeNames.has(name)) {
+                    scene.remove(marker.mesh);
+                    if (marker.tag) marker.tag.remove();
+                    playerMarkers.delete(name);
+                }
+            }
+
+            players.forEach(p => {
+                let marker = playerMarkers.get(p.name);
+                if (!marker) {
+                    const group = new THREE.Group();
+                    const headGeo = new THREE.BoxGeometry(1.6, 1.6, 1.6);
+                    const headMat = new THREE.MeshLambertMaterial({ color: 0x4ade80 });
+                    const head = new THREE.Mesh(headGeo, headMat);
+                    head.position.y = 2.4;
+                    group.add(head);
+
+                    const pinGeo = new THREE.ConeGeometry(0.9, 1.8, 4);
+                    pinGeo.rotateX(Math.PI);
+                    const pinMat = new THREE.MeshLambertMaterial({ color: 0x22c55e });
+                    const pin = new THREE.Mesh(pinGeo, pinMat);
+                    pin.position.y = 0;
+                    group.add(pin);
+
+                    scene.add(group);
+
+                    const tag = document.createElement('div');
+                    tag.className = 'nametag';
+                    tag.innerText = p.name;
+                    nametagContainer.appendChild(tag);
+
+                    marker = { mesh: group, tag: tag };
+                    playerMarkers.set(p.name, marker);
+                }
+
+                const targetY = (p.y !== undefined ? p.y : 64) + 2;
+                marker.mesh.position.set(p.x || 0, targetY, p.z || 0);
+            });
+        }
+
+        function focusPlayer(name) {
+            const marker = playerMarkers.get(name);
+            if (marker && controls && camera) {
+                const pPos = marker.mesh.position;
+                controls.target.set(pPos.x, pPos.y, pPos.z);
+                if (is3DMode) {
+                    camera.position.set(pPos.x, pPos.y + 45, pPos.z + 55);
+                } else {
+                    camera.position.set(pPos.x, pPos.y + 90, pPos.z + 0.01);
+                }
+                controls.update();
+            }
+        }
+
+        function resetCamera() {
+            if (!controls || !camera) return;
+            const span = terrainOrigin.size || 64;
+            const half = (span - 1) / 2;
+            centerCameraOn(terrainOrigin.x + half, terrainOrigin.avgY || 64, terrainOrigin.z + half, span, terrainOrigin.relief);
+        }
+
+        function switchDimension(dimId) {
+            if (!scene) { currentDimension = dimId; return; }
+            if (dimId === currentDimension && terrainMesh) return;
+            loadDimensionTerrain(dimId);
+        }
+
+        // --- 5. Animation Loop & Coordinates Tracking ---
+        function animate() {
+            requestAnimationFrame(animate);
+            if (!renderer || !scene || !camera) return;
+            try {
+                renderFrame();
+            } catch (e) {
+                lastError = "animate: " + e.message;
+            }
+        }
+
+        function renderFrame() {
+            frameCount++;
+            if (controls) controls.update();
+
+            const focus = controls ? controls.target : camera.position;
+            const cx = Math.round(focus.x);
+            const cy = Math.round(focus.y);
+            const cz = Math.round(focus.z);
+
+            if (cx !== lastReportedCoords.x || cy !== lastReportedCoords.y || cz !== lastReportedCoords.z) {
+                lastReportedCoords = { x: cx, y: cy, z: cz };
+                if (window.PocketHostBridge && window.PocketHostBridge.onCoordinates) {
+                    window.PocketHostBridge.onCoordinates(cx, cy, cz);
+                }
+            }
+
+            playerMarkers.forEach(marker => {
+                const screenPos = marker.mesh.position.clone().project(camera);
+                if (screenPos.z < 1) {
+                    const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+                    const y = (-(screenPos.y * 0.5) + 0.5) * window.innerHeight - 20;
+                    marker.tag.style.transform = `translate(-50%, -100%) translate(${x}px, ${y}px)`;
+                    marker.tag.style.display = 'block';
+                } else {
+                    marker.tag.style.display = 'none';
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        // --- 6. Procedural Fallback ---
+        function generateProceduralData(dimId, size) {
+            const heights = [];
+            const colors = [];
+            const isNether = dimId.includes("nether");
+            const isEnd = dimId.includes("end");
+            const half = size / 2;
+
+            for (let z = 0; z < size; z++) {
+                for (let x = 0; x < size; x++) {
+                    const dx = (x - half) / half;
+                    const dz = (z - half) / half;
+                    const dist = Math.sqrt(dx * dx + dz * dz);
+
+                    let h = 64;
+                    let c = 0x5b8c3a;
+
+                    if (isNether) {
+                        h = Math.round(45 + Math.sin(x * 0.15) * Math.cos(z * 0.15) * 15);
+                        c = (h <= 32) ? 0xd45014 : 0x691f1f;
+                    } else if (isEnd) {
+                        h = (dist > 0.75) ? 0 : Math.round((1.0 - dist / 0.75) * 35 + Math.sin(x * 0.2) * 5);
+                        c = (h <= 5) ? 0x0a0e14 : 0xdadb9c;
+                    } else {
+                        const hill = Math.sin(x * 0.08) * Math.cos(z * 0.08) * 18;
+                        h = Math.round(62 + (1.0 - dist * 0.7) * 20 + hill);
+                        if (h <= 62) c = 0x2e5c8a;
+                        else if (h <= 64) c = 0xd2b55b;
+                        else if (h > 115) c = 0x6e6e6e;
+                        else c = 0x5b8c3a;
+                    }
+
+                    heights.push(h);
+                    colors.push(c);
+                }
+            }
+
+            return { gridSize: size, heights: heights, colors: colors };
+        }
+
+        // Expose functions globally for Android WebView evaluateJavascript
+        window.setViewMode = setViewMode;
+        window.switchDimension = switchDimension;
+        window.focusPlayer = focusPlayer;
+        window.resetCamera = resetCamera;
+        window.loadDimensionTerrain = loadDimensionTerrain;
+
+        // Initialize immediately if DOM is already parsed, or listen to event
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>

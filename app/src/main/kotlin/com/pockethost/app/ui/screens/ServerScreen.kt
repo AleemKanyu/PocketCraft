@@ -138,6 +138,16 @@ import kotlinx.coroutines.launch
 import com.pockethost.app.service.BackupProgressTracker
 import com.pockethost.app.ui.components.BackupProgressBottomSheet
 
+// Compiled once instead of on every incoming console line (was recompiled inside the chat
+// notification LaunchedEffect body on every new log line while the game is active).
+private val CHAT_REGEX = Regex("""^(?:\[Not Secure\]\s*)?<([^>]+)>\s+(.*)""")
+private val CHAT_BROADCAST_REGEX = Regex("""^(?:\[Not Secure\]\s*)?\[(?:Server|Rcon)\]\s+(.*)""")
+private val CHAT_CONSOLE_WHISPER_REGEX = Regex("""^(?:\[Not Secure\]\s*)?\[(?:[Ss]erver|[Cc]onsole|[Rr][Cc][Oo][Nn]):\s+Whispered\s+(.*)\s+to\s+(\S+)\]""")
+private val CHAT_CONSOLE_WHISPER_NO_BRACKETS_REGEX = Regex("""^(?:\[Not Secure\]\s*)?Whispered\s+(.*)\s+to\s+(\S+)""")
+private val CHAT_YOU_WHISPER_REGEX = Regex("""^(?:\[Not Secure\]\s*)?You\s+whisper(?:ed)?\s+to\s+(\S+):\s+(.*)""")
+private val CHAT_PLAYER_WHISPER_REGEX = Regex("""^(?:\[Not Secure\]\s*)?(\S+)\s+whisper(?:s|ed)?\s+to\s+(?:you|[Ss]erver|[Cc]onsole):\s+(.*)""")
+private val CHAT_PLAYER_WHISPER_ARROW_REGEX = Regex("""^(?:\[Not Secure\]\s*)?\[(\S+)\s+->\s+(?:[Yy]ou|[Ss]erver|[Cc]onsole)\]\s+(.*)""")
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerScreen(
@@ -188,6 +198,7 @@ fun ServerScreen(
     var showConfigEditor by remember { mutableStateOf(false) }
     var showFileEditor by remember { mutableStateOf(false) }
     var showServerDetailsPage by remember { mutableStateOf(false) }
+    var showWorldMapPage by remember { mutableStateOf(false) }
     var worldSetupCreateMode by remember { mutableStateOf(false) }
     var showSetupLoading by remember { mutableStateOf(false) }
     var setupLoadingProgress by remember { mutableStateOf(0f) }
@@ -258,6 +269,9 @@ fun ServerScreen(
             showServerDetailsPage -> {
                 showServerDetailsPage = false
             }
+            showWorldMapPage -> {
+                showWorldMapPage = false
+            }
             showLegalPage -> {
                 showLegalPage = false
                 currentTab = PocketTab.SETTINGS
@@ -304,7 +318,7 @@ fun ServerScreen(
         val topPadding = padding.calculateTopPadding()
         val bottomPadding = padding.calculateBottomPadding()
 
-        val isSubPageOpen = showWorldSetupPage || showServerDetailsPage || showLegalPage || showConfigEditor || showFileEditor || selectedPlayer != null || showSetupLoading
+        val isSubPageOpen = showWorldSetupPage || showServerDetailsPage || showLegalPage || showConfigEditor || showFileEditor || selectedPlayer != null || showSetupLoading || showWorldMapPage
 
         // Full-screen box — nav floats as an overlay at the bottom
         Box(
@@ -323,6 +337,12 @@ fun ServerScreen(
                         .fillMaxSize()
                 ) {
                     when {
+                        showWorldMapPage -> WorldMapScreen(
+                            stateHolder = stateHolder,
+                            onNavigateBack = { showWorldMapPage = false },
+                            onMessage = showMessage
+                        )
+
                         showSetupLoading -> SplashScreen(
                             progress = setupLoadingProgress,
                             status = "Preparing setup..."
@@ -411,6 +431,11 @@ fun ServerScreen(
                                         onOpenServerDetails = {
                                             showServerDetailsPage = true
                                             currentTab = PocketTab.HOME
+                                        },
+                                        onOpenWorldMap = {
+                                            if (com.pockethost.app.FeatureFlags.WORLD_MAP_ENABLED) {
+                                                showWorldMapPage = true
+                                            }
                                         },
                                         onAddWorld = {
                                             openWorldSetup(createMode = true)
@@ -552,7 +577,11 @@ fun ServerScreen(
 
                 // Chat Notification & Animation Logic
                 var chatNotificationCount by remember { mutableIntStateOf(0) }
-                var lastLogSize by remember { mutableIntStateOf(stateHolder.logs.size) }
+                // Tracks logAppendSeq (monotonic, never decremented), not logs.size — once the
+                // console hits its 2000-line cap, every new line pairs a front-trim with an
+                // append so size stops changing at all, which would silently stop this detector
+                // firing for the rest of the session right when the cap is first reached.
+                var lastProcessedSeq by remember { mutableIntStateOf(stateHolder.logAppendSeq) }
                 val scale = remember { Animatable(1f) }
 
                 // Reset notification count when overlay is opened
@@ -563,36 +592,32 @@ fun ServerScreen(
                 }
 
                 // Log observer for incoming chat messages
-                LaunchedEffect(stateHolder.logs.size) {
-                    val currentSize = stateHolder.logs.size
-                    if (currentSize > lastLogSize) {
+                LaunchedEffect(stateHolder.logAppendSeq) {
+                    val currentSeq = stateHolder.logAppendSeq
+                    // How many lines were actually appended since we last looked, capped to
+                    // the list's current size (a reattach/reload can jump the sequence by more
+                    // than the list actually grew) — read from the end since indices aren't
+                    // stable once front-trimming starts.
+                    val newLineCount = (currentSeq - lastProcessedSeq).coerceIn(0, stateHolder.logs.size)
+                    if (newLineCount > 0) {
                         if (!showFloatingChatSheet) {
-                            val chatRegex = Regex("""^(?:\[Not Secure\]\s*)?<([^>]+)>\s+(.*)""")
-                            val broadcastRegex = Regex("""^(?:\[Not Secure\]\s*)?\[(?:Server|Rcon)\]\s+(.*)""")
-                            val consoleWhisperRegex = Regex("""^(?:\[Not Secure\]\s*)?\[(?:[Ss]erver|[Cc]onsole|[Rr][Cc][Oo][Nn]):\s+Whispered\s+(.*)\s+to\s+(\S+)\]""")
-                            val consoleWhisperNoBracketsRegex = Regex("""^(?:\[Not Secure\]\s*)?Whispered\s+(.*)\s+to\s+(\S+)""")
-                            val youWhisperRegex = Regex("""^(?:\[Not Secure\]\s*)?You\s+whisper(?:ed)?\s+to\s+(\S+):\s+(.*)""")
-                            val playerWhisperRegex = Regex("""^(?:\[Not Secure\]\s*)?(\S+)\s+whisper(?:s|ed)?\s+to\s+(?:you|[Ss]erver|[Cc]onsole):\s+(.*)""")
-                            val playerWhisperArrowRegex = Regex("""^(?:\[Not Secure\]\s*)?\[(\S+)\s+->\s+(?:[Yy]ou|[Ss]erver|[Cc]onsole)\]\s+(.*)""")
-
                             var newChatsCount = 0
-                            for (i in lastLogSize until currentSize) {
-                                val line = stateHolder.logs.getOrNull(i) ?: continue
+                            for (line in stateHolder.logs.takeLast(newLineCount)) {
                                 val cleanLine = com.pockethost.app.service.ConsoleParser.parse(line).text.trim()
-                                val isChat = chatRegex.containsMatchIn(cleanLine) ||
-                                             broadcastRegex.containsMatchIn(cleanLine) ||
-                                             consoleWhisperRegex.containsMatchIn(cleanLine) ||
-                                             consoleWhisperNoBracketsRegex.containsMatchIn(cleanLine) ||
-                                             youWhisperRegex.containsMatchIn(cleanLine) ||
-                                             playerWhisperRegex.containsMatchIn(cleanLine) ||
-                                             playerWhisperArrowRegex.containsMatchIn(cleanLine)
+                                val isChat = CHAT_REGEX.containsMatchIn(cleanLine) ||
+                                             CHAT_BROADCAST_REGEX.containsMatchIn(cleanLine) ||
+                                             CHAT_CONSOLE_WHISPER_REGEX.containsMatchIn(cleanLine) ||
+                                             CHAT_CONSOLE_WHISPER_NO_BRACKETS_REGEX.containsMatchIn(cleanLine) ||
+                                             CHAT_YOU_WHISPER_REGEX.containsMatchIn(cleanLine) ||
+                                             CHAT_PLAYER_WHISPER_REGEX.containsMatchIn(cleanLine) ||
+                                             CHAT_PLAYER_WHISPER_ARROW_REGEX.containsMatchIn(cleanLine)
                                 if (isChat) {
                                     newChatsCount++
                                 }
                             }
                             if (newChatsCount > 0) {
                                 chatNotificationCount += newChatsCount
-                                
+
                                 // Pop/bounce animation
                                 scale.animateTo(1.2f, tween(100, easing = LinearEasing))
                                 scale.animateTo(0.9f, tween(100, easing = LinearEasing))
@@ -600,10 +625,8 @@ fun ServerScreen(
                                 scale.animateTo(1f, tween(80, easing = LinearEasing))
                             }
                         }
-                        lastLogSize = currentSize
-                    } else if (currentSize < lastLogSize) {
-                        lastLogSize = currentSize
                     }
+                    lastProcessedSeq = currentSeq
                 }
 
                 val hapticFeedback = LocalHapticFeedback.current
@@ -846,6 +869,7 @@ fun ServerScreen(
                             showConfigEditor = false
                             showFileEditor = false
                             showServerDetailsPage = false
+                            showWorldMapPage = false
                             if (showSetupLoading) {
                                 showSetupLoading = false
                                 setupLoadingProgress = 0f

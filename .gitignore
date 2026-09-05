@@ -50,3 +50,6 @@ window_dump.xml
 *.keystore
 keystore.properties
 upload-keystore.jks
+
+# Graphify knowledge-graph output (regenerated locally, ~80MB)
+graphify-out/

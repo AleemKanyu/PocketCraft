@@ -33,7 +33,19 @@ object FeedbackService {
     private const val SOCIAL_PROMPTS_COLLECTION = "social_prompts"
     private const val FIELD_DISCORD_POPUP_SHOWN = "discordPopupShown"
 
-    suspend fun submitFeedback(context: Context, message: String, serverVersion: String): Result<Unit> {
+    /**
+     * @param source distinguishes where the report came from ("settings" for the general
+     * Send Feedback form, "console_bug_report" for the console screen's Send button) so the
+     * developer can tell them apart on the Firestore dashboard.
+     * @return the Firestore document ID on success — usable as a short "bug report token" the
+     * user can reference (e.g. reporting it on Discord).
+     */
+    suspend fun submitFeedback(
+        context: Context,
+        message: String,
+        serverVersion: String,
+        source: String = "settings"
+    ): Result<String> {
         val trimmed = message.trim()
         if (trimmed.isBlank()) return Result.failure(IllegalArgumentException("Feedback cannot be empty."))
 
@@ -42,6 +54,7 @@ object FeedbackService {
             val logDump = createFeedbackLogDump(context, serverVersion)
             val payload = hashMapOf(
                 "message" to trimmed,
+                "source" to source,
                 "userId" to prefs.userId,
                 "appVersion" to BuildConfig.VERSION_NAME,
                 "appVersionCode" to BuildConfig.VERSION_CODE,
@@ -58,16 +71,14 @@ object FeedbackService {
                 "createdAt" to FieldValue.serverTimestamp()
             )
 
-            val result = withTimeoutOrNull(10.seconds) {
+            val docRef = withTimeoutOrNull(10.seconds) {
                 Firebase.firestore
                     .collection(FEEDBACK_COLLECTION)
                     .add(payload)
                     .awaitTask()
-            }
+            } ?: throw TimeoutException("Feedback submission timed out after 10 seconds")
 
-            if (result == null) {
-                throw TimeoutException("Feedback submission timed out after 10 seconds")
-            }
+            docRef.id
         }
     }
 
