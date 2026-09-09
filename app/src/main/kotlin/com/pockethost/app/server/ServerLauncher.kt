@@ -386,7 +386,8 @@ class ServerLauncher(private val context: Context) {
             val effectiveLaunchTarget = targetToLaunch
 
             try {
-                if (forceExternal) {
+                val shouldLaunchExternal = forceExternal && !isFilesdirNoexec(resolvedRuntime)
+                if (shouldLaunchExternal) {
                     onOutput("[PocketHost] Routing to out-of-process JVM execution (ForceExternal=$forceExternal)")
                     result = launchExternalJvm(
                         runtime = resolvedRuntime,

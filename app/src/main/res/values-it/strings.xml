@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">NOME_APP_PC</string>
+    <string name="app_name">PocketHost</string>
     <string name="server_running">Server in esecuzione</string>
     <string name="server_stopped">Server arrestato</string>
     <string name="server_starting">Avvio del server…</string>

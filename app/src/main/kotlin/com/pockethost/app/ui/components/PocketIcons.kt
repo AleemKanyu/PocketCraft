@@ -13,12 +13,16 @@ import com.pockethost.app.ui.theme.pocketIsDarkTheme
 fun PocketAppLogo(
     modifier: Modifier = Modifier,
     contentDescription: String? = "PocketCraft",
-    onPureBlackBackground: Boolean = false
+    onPureBlackBackground: Boolean = false,
+    tint: Color = Color.Unspecified
 ) {
-    Image(
+    val isDark = pocketIsDarkTheme()
+    val resolvedTint = if (tint != Color.Unspecified) tint else if (isDark || onPureBlackBackground) Color.White else Color.Black
+    Icon(
         painter = painterResource(if (onPureBlackBackground) R.drawable.app_logo_dark else R.drawable.app_logo_light),
         contentDescription = contentDescription,
-        modifier = modifier
+        modifier = modifier,
+        tint = resolvedTint
     )
 }
 
@@ -28,10 +32,13 @@ fun PocketWorldIcon(
     tint: Color = Color.Unspecified,
     onPureBlackBackground: Boolean = false
 ) {
-    Image(
+    val isDark = pocketIsDarkTheme()
+    val resolvedTint = if (tint != Color.Unspecified) tint else if (isDark || onPureBlackBackground) Color.White else Color.Black
+    Icon(
         painter = painterResource(if (onPureBlackBackground) R.drawable.app_logo_dark else R.drawable.app_logo_light),
         contentDescription = null,
-        modifier = modifier
+        modifier = modifier,
+        tint = resolvedTint
     )
 }
 

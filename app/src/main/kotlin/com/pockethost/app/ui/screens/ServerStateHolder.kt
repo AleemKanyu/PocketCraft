@@ -548,12 +548,6 @@ class ServerStateHolder(
         // world-save/location/ping polling jobs on top of the still-running ones.
         if (isRunning && serverJoinable) return
 
-        val persistedAddr = ServerHostService.getPersistedPublicAddress(appContext, versionId)
-        if (!persistedAddr.isNullOrBlank() && publicAddress.isNullOrBlank()) {
-            publicAddress = persistedAddr
-            tunnelConnecting = false
-        }
-
         val isRelayPending = tunnelConnecting && publicAddress.isNullOrBlank() && tunnelError == null
         if (isJavaServerDone) {
 
@@ -561,23 +555,24 @@ class ServerStateHolder(
             areSpawnChunksLoaded = true
             val bridgeEnabled = try { PluginManager.isBedrockBridgeEnabled(appContext, activeWorld.ifBlank { "world" }) } catch (e: Exception) { false }
             
-            // Transition state from STARTING to RUNNING
-            isStarting = false
-            isRunning = true
-            isStopping = false
-            serverJoinable = true
+            // Set 100% progress and "Server ready!" status
             startupProgressPercent = 100
             startupStatusMessage = "Server ready!"
             stopStartupProgressTracking(reset = false)
 
-            markServerReady()
-            markJoinable()
-            bedrockBridgeEnabled = bridgeEnabled
-
-            // Force UI state to RUNNING immediately so the loading card dismisses without
-            // waiting for the async refreshAll() disk read to complete.
-            updateServerUiState()
-            refreshAll()
+            // Hold 100% state briefly (750ms) so the full progress is displayed before transitioning to the running UI
+            scope.launch {
+                delay(750)
+                isStarting = false
+                isRunning = true
+                isStopping = false
+                serverJoinable = true
+                markServerReady()
+                markJoinable()
+                bedrockBridgeEnabled = bridgeEnabled
+                updateServerUiState()
+                refreshAll()
+            }
         } else if (isRelayPending) {
             startupStatusMessage = "Opening internet relay..."
         }
@@ -718,8 +713,6 @@ class ServerStateHolder(
                         isJavaServerDone = true
                         isGeyserDone = true
                         areSpawnChunksLoaded = true
-                        isStarting = false
-                        isRunning = true
                         attemptTransitionToOnline()
                     }
                     ServerHostService.EVENT_OUTPUT -> appendLog(line)
@@ -1599,10 +1592,10 @@ class ServerStateHolder(
         // ready early (for example adopting a persisted "running" state at launch),
         // isStarting was already false by the time this line arrived, isJavaServerDone was
         // never set, and `status` stayed STARTING for the rest of the session.
-        if (!isStopping && !isJavaServerDone && ConsoleParser.isDone(cleanLine)) {
+        val timeSinceStart = SystemClock.elapsedRealtime() - (startupStartedAtRealtime ?: 0L)
+        if (isStarting && !isStopping && !isJavaServerDone && timeSinceStart >= 4000L && ConsoleParser.isDone(cleanLine)) {
             areSpawnChunksLoaded = true
             isJavaServerDone = true
-            markServerReady()
             attemptTransitionToOnline()
         }
 
@@ -1847,7 +1840,7 @@ class ServerStateHolder(
         }
 
         val persistedAddr = ServerHostService.getPersistedPublicAddress(appContext, versionId)
-        if (!persistedAddr.isNullOrBlank() && publicAddress.isNullOrBlank()) {
+        if (state.isRunning && !persistedAddr.isNullOrBlank() && publicAddress.isNullOrBlank()) {
             publicAddress = persistedAddr
             tunnelConnecting = false
         }
@@ -1952,16 +1945,16 @@ class ServerStateHolder(
     private fun readPersistedRuntimeState(): PersistedRuntimeState {
         val rawState = ServerHostService.getPersistedRuntimeState(appContext, versionId)
         val address = ServerHostService.getPersistedPublicAddress(appContext, versionId)
-        if (!address.isNullOrBlank() && publicAddress.isNullOrBlank()) {
-            publicAddress = address
-            tunnelConnecting = false
-        }
         val portOpen = isServerPortOpen(config.port)
         val processAlive = isServerProcessAlive()
 
         val isRelayPending = tunnelConnecting && publicAddress.isNullOrBlank() && tunnelError == null
         // Server is truly RUNNING if Java server boot is done and process is alive.
         if (isJavaServerDone && processAlive) {
+            if (!address.isNullOrBlank() && publicAddress.isNullOrBlank()) {
+                publicAddress = address
+                tunnelConnecting = false
+            }
             return PersistedRuntimeState(isRunning = true, publicAddress = address)
         }
 
@@ -4028,7 +4021,7 @@ class ServerStateHolder(
                     // Decelerating creep: most of the movement happens early in a phase.
                     val creep = milestone + (phaseCeiling - milestone) * (1.0 - Math.pow(1.0 - phaseT, 2.0)).toFloat()
 
-                    val isServerActuallyReady = isJavaServerDone || serverJoinable || targetStartupProgressPercent >= 100
+                    val isServerActuallyReady = isJavaServerDone
                     val maxCap = if (isServerActuallyReady) 100f else 99f
                     val desiredTarget = if (isServerActuallyReady) 100f else creep.coerceIn(1f, 99f)
 

@@ -3,7 +3,15 @@ package com.pockethost.app.ui.components
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -17,12 +25,15 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -43,26 +54,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.painterResource
+import com.pockethost.app.R
 import com.google.firebase.auth.FirebaseAuth
 import com.pockethost.app.billing.BillingManager
 import com.pockethost.app.billing.PremiumTier
+import com.pockethost.app.billing.SubscriptionOffer
 import com.pockethost.app.ui.theme.Monocraft
 import com.pockethost.app.ui.theme.PocketColors
 import kotlinx.coroutines.launch
 
-private val proGradientColors = listOf(
-    Color(0xFF7B1FA2), // deep purple
-    Color(0xFFAB47BC), // medium purple
-    Color(0xFFFF6F00), // amber
-    Color(0xFFFFB300)  // gold
-)
+private const val KOFI_URL = "https://ko-fi.com/aleemkanyu"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,213 +108,216 @@ fun PremiumUpgradeBottomSheet(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
-                .padding(bottom = 36.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp)
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // ── Premium gradient header ──
+            // ── Animated Ambient Hero Header ──
+            val heartTransition = rememberInfiniteTransition(label = "support_heart_pulse")
+            val heartPulseScale by heartTransition.animateFloat(
+                initialValue = 1f,
+                targetValue = 1.10f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1300, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "heart_pulse_scale"
+            )
+            val haloAlpha by heartTransition.animateFloat(
+                initialValue = 0.25f,
+                targetValue = 0.60f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1300, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "halo_alpha"
+            )
+
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .height(75.dp)
-                    .background(
-                        brush = Brush.linearGradient(colors = proGradientColors),
-                        shape = RoundedCornerShape(16.dp)
-                    ),
+                modifier = Modifier.size(62.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(Color.White.copy(alpha = 0.18f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
+                // Radiant outer glow
+                Box(
+                    modifier = Modifier
+                        .size(58.dp)
+                        .graphicsLayer {
+                            scaleX = heartPulseScale
+                            scaleY = heartPulseScale
+                            alpha = haloAlpha
+                        }
+                        .background(
+                            brush = Brush.radialGradient(
+                                colors = listOf(Color(0xFFFF4B72), Color(0xFFFF8A9A).copy(alpha = 0f))
+                            ),
+                            shape = CircleShape
                         )
-                    }
-                    Text(
-                        text = buildAnnotatedString {
-                            append("Support ")
-                            withStyle(SpanStyle(
-                                color = Color(0xFFFFD700)
-                            )) {
-                                append("PocketHost")
-                            }
-                        },
-                        fontSize = when {
-                            androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 360 -> 14.sp
-                            androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 400 -> 17.sp
-                            else -> 20.sp
-                        },
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = Monocraft,
-                        color = Color.White,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1
+                )
+
+                // Heart badge (hollow with colored outline)
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .background(
+                            Color(0xFFFF4B72).copy(alpha = 0.12f),
+                            shape = CircleShape
+                        )
+                        .border(
+                            width = 1.5.dp,
+                            color = Color(0xFFFF4B72).copy(alpha = 0.6f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_heart_outline),
+                        contentDescription = null,
+                        tint = Color(0xFFFF4B72),
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.height(10.dp))
 
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = "All server features, 50 players, unlimited worlds, and custom themes are 100% free! If you enjoy PocketHost and want to support ongoing server hosting, relays, and open-source updates, consider donating below.",
-                    fontSize = 13.sp,
+                    text = "Support PocketHost",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = Monocraft,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "100% free & open source. Help us fund high-speed multiplayer relays & continuous development.",
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text(
-                    text = "Voluntary contribution via secure Google Play billing. Cancel anytime.",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (currentUser == null) {
-                    Text(
-                        text = "Sign in with your PocketHost account before contributing so your supporter badge is linked to your account.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                if (offers.isEmpty()) {
-                    Text(
-                        text = "Loading Play Store pricing...",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    offers.forEach { offer ->
-                        val isCurrentTier = entitlement.tier == offer.tier
-                        val isProOnly = entitlement.tier == PremiumTier.PREMIUM
-
-                        val buttonLabel = when {
-                            purchasingProductId == offer.productId -> "CONNECTING..."
-                            isCurrentTier -> "ACTIVE SUBSCRIPTION"
-                            isProOnly && offer.tier == PremiumTier.SUPPORTIVE -> "UPGRADE MEMBERSHIP"
-                            offer.tier == PremiumTier.SUPPORTIVE -> "BECOME MEMBER"
-                            offer.tier == PremiumTier.PREMIUM -> {
-                                if (offer.hasFreeTrial) {
-                                    "START FREE, CANCEL ANYTIME"
-                                } else {
-                                    "GET PRO"
-                                }
-                            }
-                            else -> "GET PRO"
-                        }
-
-                        val enabled = !isCurrentTier && purchasingProductId == null
-
-                        SubscriptionOfferCard(
-                            title = displayTitleForTier(offer.tier),
-                            price = offer.recurringPrice,
-                            tier = offer.tier,
-                            buttonLabel = buttonLabel,
-                            freeTrialDays = offer.freeTrialDays,
-                            showMostPopular = offer.tier == PremiumTier.PREMIUM,
-                            enabled = enabled,
-                            onClick = {
-                                if (currentUser == null) {
-                                    Toast.makeText(context, "Please sign up or sign in to continue.", Toast.LENGTH_LONG).show()
-                                    onNavigateToSignUp()
-                                    return@SubscriptionOfferCard
-                                }
-                                val activity = context.findActivity()
-                                if (activity == null) {
-                                    Toast.makeText(context, "Could not launch purchase: invalid activity.", Toast.LENGTH_LONG).show()
-                                    return@SubscriptionOfferCard
-                                }
-                                purchasingProductId = offer.productId
-                                billingManager.launchBillingFlow(activity, offer.productId) { error ->
-                                    purchasingProductId = null
-                                    if (error != null) {
-                                        Toast.makeText(context, error, Toast.LENGTH_LONG).show()
-                                    } else {
-                                        scope.launch {
-                                            sheetState.hide()
-                                            onDismissRequest()
-                                        }
-                                    }
-                                }
-                            }
-                        )
-                    }
-                }
-
-                DuoButton(
-                    text = "RESTORE PURCHASES",
-                    onClick = {
-                        billingManager.restorePurchases { result ->
-                            Toast.makeText(context, result, Toast.LENGTH_LONG).show()
-                        }
-                    },
-                    variant = DuoButtonVariant.Secondary,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    minHeight = 38.dp
-                )
-
-                DuoButton(
-                    text = "MAYBE LATER",
-                    onClick = {
-                        scope.launch {
-                            sheetState.hide()
-                            onDismissRequest()
-                        }
-                    },
-                    variant = DuoButtonVariant.SecondaryGray,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    minHeight = 38.dp
-                )
-
-                val premiumOffer = offers.firstOrNull { it.tier == PremiumTier.PREMIUM }
-                val showFreeTrialWarning = premiumOffer?.hasFreeTrial == true && entitlement.tier != PremiumTier.PREMIUM
-                if (showFreeTrialWarning) {
-                    Text(
-                        text = "After your ${premiumOffer!!.freeTrialDays}-day free trial, you will be automatically charged ${premiumOffer.recurringPrice}/month unless canceled.",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
-                    )
-                } else {
-                    Text(
-                        text = "You will be automatically charged ${premiumOffer?.recurringPrice ?: "the monthly rate"}/month unless canceled.",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
-                    )
-                }
-
-                Text(
-                    text = "You can manage or upgrade your plan any time from Account Settings.",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                    lineHeight = 17.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp)
                 )
             }
+
+            if (currentUser == null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Sign in first so your supporter badge links to your account.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 15.sp
+                    )
+                }
+            }
+
+            // Option 1: Monthly Membership (₹299/mo)
+            val supporterOffer = offers.firstOrNull { it.productId == BillingManager.PRODUCT_PREMIUM }
+                ?: remember {
+                    SubscriptionOffer(
+                        productId = BillingManager.PRODUCT_PREMIUM,
+                        title = "Supporter Membership",
+                        price = "₹299",
+                        recurringPrice = "₹299",
+                        tier = PremiumTier.PREMIUM,
+                        description = "Voluntary monthly contribution to support PocketHost relays and development.",
+                        freeTrialDays = 0,
+                        offerToken = ""
+                    )
+                }
+
+            val isCurrentTier = entitlement.tier == PremiumTier.PREMIUM || entitlement.tier == PremiumTier.SUPPORTIVE
+            val buttonLabel = when {
+                purchasingProductId == supporterOffer.productId -> "CONNECTING..."
+                isCurrentTier -> "ACTIVE CONTRIBUTOR"
+                else -> "DONATE ${supporterOffer.recurringPrice}/MO"
+            }
+            val enabled = !isCurrentTier && purchasingProductId == null
+
+            SupporterMembershipCard(
+                price = supporterOffer.recurringPrice,
+                buttonLabel = buttonLabel,
+                enabled = enabled,
+                onClick = {
+                    if (currentUser == null) {
+                        Toast.makeText(context, "Please sign up or sign in to continue.", Toast.LENGTH_LONG).show()
+                        onNavigateToSignUp()
+                        return@SupporterMembershipCard
+                    }
+                    val activity = context.findActivity()
+                    if (activity == null) {
+                        Toast.makeText(context, "Could not launch purchase: invalid activity.", Toast.LENGTH_LONG).show()
+                        return@SupporterMembershipCard
+                    }
+                    purchasingProductId = supporterOffer.productId
+                    billingManager.launchBillingFlow(activity, supporterOffer.productId) { error ->
+                        purchasingProductId = null
+                        if (error != null) {
+                            Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                        } else {
+                            scope.launch {
+                                sheetState.hide()
+                                onDismissRequest()
+                            }
+                        }
+                    }
+                }
+            )
+
+            // Option 2: Ko-fi Support
+            KofiSupportCard(
+                onClick = {
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(KOFI_URL))
+                        context.startActivity(intent)
+                    } catch (_: Exception) {
+                        Toast.makeText(context, "Could not open browser.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
+
+            // ── Footer ──
+            DuoButton(
+                text = "RESTORE PURCHASES",
+                onClick = {
+                    billingManager.restorePurchases { result ->
+                        Toast.makeText(context, result, Toast.LENGTH_LONG).show()
+                    }
+                },
+                variant = DuoButtonVariant.Secondary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp),
+                minHeight = 36.dp
+            )
+
+            Text(
+                text = "Voluntary contribution · Cancel membership anytime in Google Play · External link for Ko-fi",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+            )
         }
     }
 }
@@ -318,247 +328,271 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
-private fun displayTitleForTier(tier: PremiumTier): String {
-    return when (tier) {
-        PremiumTier.PREMIUM -> "Supporter Contribution"
-        PremiumTier.SUPPORTIVE -> "Champion Contribution"
-        PremiumTier.NONE -> ""
-    }
-}
-
-private fun buildOfferSubtitle(
-    tier: PremiumTier,
-    eligibleForFreeTrial: Boolean,
-    price: String,
-    freeTrialDays: Int
-): String {
-    return when (tier) {
-        PremiumTier.PREMIUM -> "Voluntary $price/month contribution to fund PocketHost relays and development."
-        PremiumTier.SUPPORTIVE -> "Generous $price/month contribution to expand server infrastructure."
-        PremiumTier.NONE -> ""
-    }
-}
-
-private fun benefitsForTier(tier: PremiumTier): List<String> {
-    return when (tier) {
-        PremiumTier.PREMIUM -> listOf(
-            "Directly funds high-speed relay bandwidth",
-            "Supporter badge on your account",
-            "Supports ongoing open-source development",
-            "Cancel anytime via Google Play"
-        )
-        PremiumTier.SUPPORTIVE -> listOf(
-            "Funds multi-region server relays",
-            "Champion Supporter badge on profile",
-            "Direct community development support",
-            "Cancel anytime via Google Play"
-        )
-        PremiumTier.NONE -> emptyList()
-    }
-}
-
 @Composable
-private fun SubscriptionOfferCard(
-    title: String,
+private fun SupporterMembershipCard(
     price: String,
-    tier: PremiumTier,
     buttonLabel: String,
-    freeTrialDays: Int = 0,
-    showMostPopular: Boolean = false,
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
+    val accentColor = PocketColors.Primary
+    val perks = listOf(
+        "High-speed server relays",
+        "Supporter badge on profile",
+        "Continuous open-source updates"
+    )
+
     GameCard(modifier = Modifier.fillMaxWidth()) {
-        val isMember = tier == PremiumTier.SUPPORTIVE
-        val hasFreeTrial = freeTrialDays > 0
-        val effectiveSubtitle = buildOfferSubtitle(
-            tier = tier,
-            eligibleForFreeTrial = hasFreeTrial && enabled,
-            price = price,
-            freeTrialDays = freeTrialDays
-        )
-        val benefitItems = benefitsForTier(tier)
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (showMostPopular) {
-                val badgeText = if (tier == PremiumTier.PREMIUM && hasFreeTrial && enabled) {
-                    "MOST POPULAR · $freeTrialDays DAYS FREE"
-                } else {
-                    "MOST POPULAR"
-                }
+            // Top Row: Title + Badge + Price
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors = listOf(Color(0xFF8C4DFF), Color(0xFF5E17EB))
-                                )
-                            )
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            .size(34.dp)
+                            .background(accentColor.copy(alpha = 0.12f), RoundedCornerShape(9.dp))
+                            .border(1.dp, accentColor.copy(alpha = 0.4f), RoundedCornerShape(9.dp)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = badgeText,
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.ExtraBold
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_heart_outline),
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(17.dp)
                         )
                     }
+
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Supporter",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 15.sp,
+                                fontFamily = Monocraft,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            listOf(Color(0xFF8C4DFF), Color(0xFF5E17EB))
+                                        )
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "MONTHLY",
+                                    color = Color.White,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                        }
+                    }
                 }
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Star,
-                    contentDescription = null,
-                    tint = if (isMember) Color(0xFFFFB300) else PocketColors.Primary
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(title, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, fontFamily = Monocraft)
+
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     Text(
-                        effectiveSubtitle,
+                        text = price,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = accentColor,
+                        fontSize = 18.sp,
+                        fontFamily = Monocraft
+                    )
+                    Text(
+                        text = "/mo",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f),
-                        lineHeight = 15.sp
+                        modifier = Modifier.padding(bottom = 2.dp)
                     )
                 }
-                Column(horizontalAlignment = Alignment.End) {
-                    if (tier == PremiumTier.PREMIUM && hasFreeTrial && enabled) {
-                        Text(
-                            text = price,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                            fontSize = 14.sp,
-                            style = androidx.compose.ui.text.TextStyle(
-                                textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough
-                            )
+            }
+
+            // Clean 3-bullet Perks List
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                perks.forEach { perk ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(14.dp)
                         )
                         Text(
-                            text = "Free today",
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF00C853),
-                            fontSize = 15.sp
-                        )
-                        Text(
-                            text = "then $price/month",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                            fontSize = 9.sp
-                        )
-                    } else {
-                        Text(
-                            price,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (isMember) Color(0xFFE28026) else PocketColors.Primary,
-                            fontSize = 18.sp
-                        )
-                        Text(
-                            text = "/month",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
-                            fontSize = 11.sp
+                            text = perk,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f)
                         )
                     }
                 }
             }
-            if (benefitItems.isNotEmpty()) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    benefitItems.forEach { benefit ->
-                        OfferFeatureRow(
-                            text = benefit,
-                            highlight = isMember && benefit == "Pro features included"
-                        )
-                    }
-                }
-            }
+
+            // Action Button
             DuoButton(
                 text = buttonLabel,
                 onClick = onClick,
-                variant = if (enabled) {
-                    if (isMember) DuoButtonVariant.Warning else DuoButtonVariant.Primary
-                } else {
-                    DuoButtonVariant.Secondary
-                },
+                variant = if (enabled) DuoButtonVariant.Primary else DuoButtonVariant.Secondary,
                 enabled = enabled,
                 modifier = Modifier.fillMaxWidth(),
                 minHeight = 38.dp,
                 fontWeight = FontWeight.Bold,
                 backgroundBrush = if (enabled) {
-                    if (isMember) {
-                        Brush.linearGradient(
-                            colors = listOf(Color(0xFFF2994A), Color(0xFFE28026))
-                        )
-                    } else {
-                        Brush.linearGradient(
-                            colors = listOf(Color(0xFF8C4DFF), Color(0xFF5E17EB))
-                        )
-                    }
+                    Brush.linearGradient(
+                        listOf(Color(0xFF8C4DFF), Color(0xFF5E17EB))
+                    )
                 } else {
                     null
                 }
             )
-            if (tier == PremiumTier.PREMIUM && hasFreeTrial && enabled) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "No charge today · cancel anytime in Google Play.",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
         }
     }
 }
 
 @Composable
-private fun OfferFeatureRow(
-    text: String,
-    highlight: Boolean = false
+private fun KofiSupportCard(
+    onClick: () -> Unit
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = Icons.Default.CheckCircle,
-            contentDescription = null,
-            tint = if (highlight) Color(0xFFF2994A) else PocketColors.Primary,
-            modifier = Modifier.size(15.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = text,
-            fontSize = 11.sp,
-            fontWeight = if (highlight) FontWeight.Bold else FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f)
-        )
-        if (text == "Custom IP") {
-            Spacer(modifier = Modifier.width(6.dp))
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(Color(0xFF8C4DFF), Color(0xFF5E17EB))
-                        )
-                    )
-                    .padding(horizontal = 5.dp, vertical = 2.dp)
+    val kofiColor = Color(0xFFFF5E5B)
+    val perks = listOf(
+        "Direct support via Ko-fi",
+        "One-time custom amount",
+        "Card, PayPal, or UPI support"
+    )
+
+    GameCard(modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Top Row: Title + Badge + Type
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
             ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .background(kofiColor.copy(alpha = 0.12f), RoundedCornerShape(9.dp))
+                            .border(1.dp, kofiColor.copy(alpha = 0.4f), RoundedCornerShape(9.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.OpenInNew,
+                            contentDescription = null,
+                            tint = kofiColor,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Ko-fi Support",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 15.sp,
+                                fontFamily = Monocraft,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            listOf(Color(0xFFFF5E5B), Color(0xFFFF416C))
+                                        )
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "ONE-TIME",
+                                    color = Color.White,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Text(
-                    text = "NEW",
-                    color = Color.White,
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.ExtraBold
+                    text = "Custom",
+                    fontWeight = FontWeight.ExtraBold,
+                    color = kofiColor,
+                    fontSize = 15.sp,
+                    fontFamily = Monocraft
                 )
             }
+
+            // Clean 3-bullet Perks List
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                perks.forEach { perk ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = kofiColor,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = perk,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f)
+                        )
+                    }
+                }
+            }
+
+            // Action Button
+            DuoButton(
+                text = "SUPPORT ON KO-FI",
+                onClick = onClick,
+                variant = DuoButtonVariant.Warning,
+                enabled = true,
+                modifier = Modifier.fillMaxWidth(),
+                minHeight = 38.dp,
+                fontWeight = FontWeight.Bold,
+                backgroundBrush = Brush.linearGradient(
+                    listOf(Color(0xFFFF5E5B), Color(0xFFFF416C))
+                )
+            )
         }
     }
 }

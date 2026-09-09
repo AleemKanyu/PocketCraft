@@ -11,6 +11,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -30,6 +31,7 @@ import com.pockethost.app.config.RelayServers
 import com.pockethost.app.config.RemoteConfigManager
 import android.net.Uri
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -235,39 +237,51 @@ fun PocketTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Pro star button
-                if (!isPremium) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .raisedBorder(
-                                color = Color(0xFFFFD700), // Gold
-                                depthColor = Color(0xFFB8860B),
-                                cornerRadius = 14.dp,
-                                borderWidth = 1.dp,
-                                depthWidth = 2.dp
-                            )
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Color(0xFFFFF8DC),
-                                        Color(0xFFFFD700)
-                                    )
-                                )
-                            )
-                            .clickable {
-                                onPremiumUpgradeClick()
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = "Upgrade to Pro",
-                            modifier = Modifier.size(14.dp),
-                            tint = Color(0xFFD4AF37)
+                // Support & Donate button with subtle heartbeat pulse and hollow colored outline
+                val heartTransition = rememberInfiniteTransition(label = "topbar_heart_pulse")
+                val heartPulseScale by heartTransition.animateFloat(
+                    initialValue = 1f,
+                    targetValue = 1.08f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1400, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "heart_pulse_scale"
+                )
+
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .graphicsLayer {
+                            scaleX = heartPulseScale
+                            scaleY = heartPulseScale
+                        }
+                        .raisedBorder(
+                            color = Color(0xFFFF4B72).copy(alpha = 0.55f),
+                            depthColor = Color(0xFFC2185B).copy(alpha = 0.65f),
+                            cornerRadius = 17.dp,
+                            borderWidth = 1.dp,
+                            depthWidth = 2.5.dp
                         )
-                    }
+                        .clip(RoundedCornerShape(17.dp))
+                        .background(
+                            if (pocketIsDarkTheme()) {
+                                Color(0xFFFF4B72).copy(alpha = 0.14f)
+                            } else {
+                                Color(0xFFFF4B72).copy(alpha = 0.08f)
+                            }
+                        )
+                        .clickable {
+                            onPremiumUpgradeClick()
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_heart_outline),
+                        contentDescription = "Support & Donate",
+                        modifier = Modifier.size(17.dp),
+                        tint = Color(0xFFFF4B72)
+                    )
                 }
 
                 // Discord button

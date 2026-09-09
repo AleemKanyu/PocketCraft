@@ -1320,11 +1320,9 @@ class ServerHostService : Service() {
         if (logTailRunning.getAndSet(true)) return
 
         val serverDir = ServerFileManager.getServerDir(applicationContext, activeWorldNameOrDefault())
-        val latestLog = File(serverDir, "logs/server.log").takeIf { it.exists() }
-            ?: File(serverDir, "logs/latest.log")
+        val latestLog = File(serverDir, "logs/latest.log")
         val tailStartLength = latestLog.takeIf { it.exists() }?.length() ?: 0L
-        // Read up to 128KB of backlog so the user sees the start-up logs even if the tailer starts a bit late.
-        val initialOffset = latestLog.takeIf { it.exists() }?.let { (it.length() - 131072).coerceAtLeast(0L) } ?: 0L
+        val initialOffset = tailStartLength
 
         logTailThread = Thread {
             var offset = initialOffset
@@ -1943,7 +1941,12 @@ class ServerHostService : Service() {
             val nukkitLog = File(serverDir, "logs/server.log")
             if (nukkitLog.exists()) nukkitLog.delete()
             val latestLog = File(serverDir, "logs/latest.log")
-            if (latestLog.exists()) latestLog.delete()
+            if (latestLog.exists()) {
+                latestLog.delete()
+                if (latestLog.exists()) {
+                    runCatching { java.io.FileOutputStream(latestLog).close() }
+                }
+            }
         }
         stopReason = "unknown"
         serverReadyNotificationShown = false
@@ -2262,8 +2265,8 @@ class ServerHostService : Service() {
         }
 
         val elapsedSinceLaunch = SystemClock.elapsedRealtime() - serviceLaunchRealtimeMs
-        if (serviceLaunchRealtimeMs == 0L || elapsedSinceLaunch >= 2000L) {
-            if (looksLikeServerReady(line) || (line.contains("Done (", ignoreCase = true) && line.contains("help", ignoreCase = true))) {
+        if (serviceLaunchRealtimeMs > 0L && elapsedSinceLaunch >= 3000L && !isBacklog) {
+            if (looksLikeServerReady(line)) {
                 android.util.Log.i("ServerHostService", "Server ready signal detected on log line (isBacklog=$isBacklog): $line")
                 onServerReady()
             }

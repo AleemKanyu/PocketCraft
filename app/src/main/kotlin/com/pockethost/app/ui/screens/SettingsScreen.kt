@@ -1245,11 +1245,107 @@ fun SettingsScreen(
             if (activeTab == 2) {
                 item {
                     AnimatedEntranceContainer(index = 0) {
-                        SettingsSection("FIND US ONLINE", Icons.Default.Share, isFirstSection = true)
+                        SettingsSection("DONATIONS & SUPPORT", Icons.Default.Favorite, isFirstSection = true)
                     }
                 }
                 item {
                     AnimatedEntranceContainer(index = 1) {
+                        GameCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .background(Color(0xFFFF4B72).copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Favorite,
+                                            contentDescription = null,
+                                            tint = Color(0xFFFF4B72),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text("Support PocketHost", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text(
+                                            "Help fund server relays & updates",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    "PocketHost is 100% free with unlimited player slots, worlds, and features. If you love the app and want to support our high-speed server relay infrastructure and development, consider donating below!",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = 16.sp
+                                )
+
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    DuoButton(
+                                        text = "Supporter Membership — ₹299 / month",
+                                        onClick = {
+                                            val activity = context.findActivity()
+                                            if (activity != null && firebaseUser != null) {
+                                                billingManager.launchBillingFlow(activity, BillingManager.PRODUCT_PREMIUM) { error ->
+                                                    if (error != null) {
+                                                        showPremiumBottomSheet = true
+                                                    }
+                                                }
+                                            } else {
+                                                showPremiumBottomSheet = true
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        minHeight = 42.dp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+
+                                    DuoButton(
+                                        text = "Support on Ko-fi",
+                                        onClick = {
+                                            try {
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://ko-fi.com/aleemkanyu"))
+                                                context.startActivity(intent)
+                                            } catch (_: Exception) {}
+                                        },
+                                        variant = DuoButtonVariant.Warning,
+                                        backgroundBrush = Brush.linearGradient(
+                                            colors = listOf(Color(0xFFFF5E5B), Color(0xFFFF416C))
+                                        ),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        minHeight = 42.dp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                Text(
+                                    "Billed monthly via Google Play · External link for Ko-fi",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    AnimatedEntranceContainer(index = 2) {
+                        SettingsSection("FIND US ONLINE", Icons.Default.Share)
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 3) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1299,12 +1395,12 @@ fun SettingsScreen(
                 }
 
                 item {
-                    AnimatedEntranceContainer(index = 2) {
+                    AnimatedEntranceContainer(index = 4) {
                         SettingsSection("FEEDBACK & COMMUNITY", Icons.Default.Forum)
                     }
                 }
                 item {
-                    AnimatedEntranceContainer(index = 3) {
+                    AnimatedEntranceContainer(index = 5) {
                         GameCard(modifier = Modifier.fillMaxWidth()) {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text("Send Feedback", fontWeight = FontWeight.Bold)
@@ -1346,12 +1442,12 @@ fun SettingsScreen(
                 }
 
                 item {
-                    AnimatedEntranceContainer(index = 4) {
+                    AnimatedEntranceContainer(index = 6) {
                         SettingsSection("HELP & LINKS", Icons.Default.Help)
                     }
                 }
                 item {
-                    AnimatedEntranceContainer(index = 5) {
+                    AnimatedEntranceContainer(index = 7) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             SettingsLinkRow(icon = Icons.Default.Policy, label = activeS.legalCenter, description = activeS.legalCenterDesc, onClick = onOpenLegalPage)
                             SettingsLinkRow(icon = Icons.Default.BugReport, label = "Report a Bug", description = "Report on our Discord server", onClick = {
@@ -1369,12 +1465,12 @@ fun SettingsScreen(
                 }
 
                 item {
-                    AnimatedEntranceContainer(index = 6) {
+                    AnimatedEntranceContainer(index = 8) {
                         SettingsSection(activeS.sectionAbout, Icons.Default.Info)
                     }
                 }
                 item {
-                    AnimatedEntranceContainer(index = 7) {
+                    AnimatedEntranceContainer(index = 9) {
                         GameCard(modifier = Modifier.fillMaxWidth()) {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

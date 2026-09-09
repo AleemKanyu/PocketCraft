@@ -652,8 +652,9 @@ object PluginManager {
     }
 
     /**
-     * Preserves and pre-generates the Floodgate encryption key (key.pem) across server resets and plugin directories.
-     * Guarantees key.pem exists before server startup so Geyser and Floodgate can authenticate Bedrock players cleanly.
+     * Preserves and synchronizes the Floodgate AES encryption key (key.pem) across server resets and plugin directories.
+     * Validates that key.pem is a valid 128-bit (16-byte) binary AES key, purges any corrupted or invalid keys,
+     * generates a fresh key if missing, and replicates the exact raw bytes to all Floodgate and Geyser directories.
      */
     fun preserveFloodgateKey(context: Context, worldName: String) {
         val serverDir = ServerFileManager.getServerDir(context, worldName)
@@ -664,50 +665,48 @@ object PluginManager {
             File(serverDir, "plugins/Geyser-Spigot")
         ).onEach { it.mkdirs() }
 
-        val keyFile = floodgateDirs.map { File(it, "key.pem") }.firstOrNull { it.exists() && it.length() > 0 }
         val backupFile = File(backupDir, "floodgate_key_backup.pem")
+        val allKeyFiles = floodgateDirs.map { File(it, "key.pem") }
 
-        // Purge invalid manually generated PKCS8 keys so Floodgate generates its native key
-        if (keyFile != null) {
-            val text = runCatching { keyFile.readText() }.getOrDefault("")
-            if (text.contains("BEGIN PRIVATE KEY")) {
-                floodgateDirs.forEach { dir -> File(dir, "key.pem").delete() }
-                backupFile.delete()
-                Log.i("PluginManager", "Purged manual PKCS8 key.pem to allow Floodgate native key generation")
-                return
-            }
-        }
-        if (backupFile.exists()) {
-            val text = runCatching { backupFile.readText() }.getOrDefault("")
-            if (text.contains("BEGIN PRIVATE KEY")) {
-                backupFile.delete()
-            }
+        fun isValidAesKey(bytes: ByteArray): Boolean {
+            // Floodgate 2.0 uses raw AES keys: 16 bytes (128-bit), 24 bytes (192-bit), or 32 bytes (256-bit)
+            if (bytes.size != 16 && bytes.size != 24 && bytes.size != 32) return false
+            // Reject any ASCII/PEM text like "-----BEGIN..."
+            val ascii = String(bytes, Charsets.US_ASCII)
+            if (ascii.contains("BEGIN") || ascii.contains("PRIVATE") || ascii.contains("KEY")) return false
+            return true
         }
 
-        // Preserve and sync valid Floodgate RSA private key across all required directories
-
-        if (keyFile != null && keyFile.length() > 0) {
-            val validKeyPem = runCatching { keyFile.readText() }.getOrDefault("")
-            if (validKeyPem.isNotBlank()) {
-                runCatching { backupFile.writeText(validKeyPem) }
-                floodgateDirs.forEach { dir ->
-                    val target = File(dir, "key.pem")
-                    if (!target.exists() || target.length() == 0L) {
-                        runCatching { target.writeText(validKeyPem) }
-                    }
-                }
-            }
-        } else if (backupFile.exists() && backupFile.length() > 0) {
-            val validKeyPem = runCatching { backupFile.readText() }.getOrDefault("")
-            if (validKeyPem.isNotBlank()) {
-                floodgateDirs.forEach { dir ->
-                    val target = File(dir, "key.pem")
-                    if (!target.exists() || target.length() == 0L) {
-                        runCatching { target.writeText(validKeyPem) }
-                    }
+        // Check if any existing key file has valid AES bytes
+        var validKeyBytes: ByteArray? = null
+        for (file in allKeyFiles + backupFile) {
+            if (file.exists() && file.length() > 0L) {
+                val bytes = runCatching { file.readBytes() }.getOrNull()
+                if (bytes != null && isValidAesKey(bytes)) {
+                    validKeyBytes = bytes
+                    break
                 }
             }
         }
+
+        // If no valid key exists or existing keys are corrupted (e.g. invalid length),
+        // purge corrupted files and generate a standard 128-bit (16-byte) AES key
+        val keyBytes = validKeyBytes ?: run {
+            Log.i("PluginManager", "Generating fresh 16-byte AES key for Floodgate and Geyser")
+            allKeyFiles.forEach { runCatching { it.delete() } }
+            runCatching { backupFile.delete() }
+            val keyGen = javax.crypto.KeyGenerator.getInstance("AES")
+            keyGen.init(128, java.security.SecureRandom())
+            keyGen.generateKey().encoded
+        }
+
+        // Synchronize the raw binary AES key to backup and all plugin directories
+        runCatching { backupFile.writeBytes(keyBytes) }
+        floodgateDirs.forEach { dir ->
+            val target = File(dir, "key.pem")
+            runCatching { target.writeBytes(keyBytes) }
+        }
+        Log.i("PluginManager", "Floodgate AES key synchronized (${keyBytes.size} bytes)")
     }
 
     fun readFloodgateConfigValue(context: Context, worldName: String, key: String): String? {

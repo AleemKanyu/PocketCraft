@@ -332,8 +332,8 @@ class ServerConfigRepository @Inject constructor(
             serverType = props["pocketcraft-server-type"]?.let { ServerType.fromString(it) }
                 ?: fallbackConfig?.serverType
                 ?: ServerType.fromString(com.pockethost.app.data.preferences.AppPreferences(context).selectedServerType),
-            gameVersion = props["pocketcraft-game-version"]?.takeIf { it.isNotBlank() }
-                ?: fallbackConfig?.gameVersion?.takeIf { it.isNotBlank() }
+            gameVersion = props["pocketcraft-game-version"]?.takeIf { it.isNotBlank() && !it.contains("1.21.60") }
+                ?: fallbackConfig?.gameVersion?.takeIf { it.isNotBlank() && !it.contains("1.21.60") }
                 ?: com.pockethost.app.data.preferences.AppPreferences(context).selectedVersion,
             customJarPath = props["pocketcraft-custom-jar-path"]
                 ?: fallbackConfig?.customJarPath

@@ -1108,7 +1108,7 @@ fun PocketHostApp(
                     onDarkThemeChange = onDarkThemeChange,
                     currentMobTheme = currentMobTheme,
                     onMobThemeChange = onMobThemeChange,
-                    onOpenBedrockCreation = { showBedrockCreationDialog = true },
+                    onOpenBedrockCreation = {},
                     homeTopContent = {
                         if (modpackImportInProgress || modpackImportError != null) {
                             ModpackImportProgressCard(
@@ -1309,7 +1309,7 @@ fun PocketHostApp(
         }
     }
 
-    if (showBedrockCreationDialog) {
+    if (false && showBedrockCreationDialog) {
         com.pockethost.app.ui.components.BedrockServerCreationBottomSheet(
             onDismiss = { showBedrockCreationDialog = false },
             onCreateBedrockServer = { name, port, gamemode, difficulty, maxPlayers ->

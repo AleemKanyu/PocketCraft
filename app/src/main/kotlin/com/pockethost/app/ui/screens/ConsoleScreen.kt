@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -15,12 +16,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
@@ -593,13 +596,14 @@ fun ConsoleScreen(
                         )
                     }
                     ServerUiState.STARTING -> {
-                        val isDone = stateHolder.serverJoinable && stateHolder.isJavaServerDone && !stateHolder.isStopping
-                        val displayProgress = if (isDone) 1f else animatedStartupProgress.coerceAtMost(0.99f)
+                        val isDone = (stateHolder.serverJoinable && stateHolder.isJavaServerDone && !stateHolder.isStopping) ||
+                            stateHolder.startupProgressPercent >= 100
+                        val displayProgress = if (isDone) 1f else animatedStartupProgress.coerceAtMost(0.98f)
                         // Derive the percent label from the same animated value as the bar
                         // (not the raw, jump-by-milestone stateHolder value) so the number
                         // and the bar always move in lockstep instead of the label popping
                         // ahead of the bar visually catching up.
-                        val displayPercent = if (isDone) 100 else (displayProgress * 100f).roundToInt().coerceAtMost(99)
+                        val displayPercent = if (isDone) 100 else (displayProgress * 100f).roundToInt().coerceIn(1, 99)
                         StartupProgressCard(
                             progress = displayProgress,
                             progressPercent = displayPercent,
@@ -1437,7 +1441,8 @@ private fun ServerIdentityCard(
                                     painter = painterResource(id = R.drawable.app_logo_light),
                                     contentDescription = "Server logo",
                                     modifier = Modifier.fillMaxSize().padding(5.dp),
-                                    contentScale = ContentScale.Fit
+                                    contentScale = ContentScale.Fit,
+                                    colorFilter = ColorFilter.tint(if (isDarkTheme) Color.White else Color.Black)
                                 )
                             }
                         }
@@ -1618,20 +1623,61 @@ private fun ServerIdentityCard(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
+                            val isServerRunningOrStarting = stateHolder.status == ServerStatus.ONLINE ||
+                                stateHolder.status == ServerStatus.STARTING ||
+                                stateHolder.status == ServerStatus.RESTARTING
+
+                            val statusRippleTransition = rememberInfiniteTransition(label = "status_ripple")
+                            val rippleScale by statusRippleTransition.animateFloat(
+                                initialValue = 1f,
+                                targetValue = 2.2f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(1500, easing = LinearEasing),
+                                    repeatMode = RepeatMode.Restart
+                                ),
+                                label = "status_ripple_scale"
+                            )
+                            val rippleAlpha by statusRippleTransition.animateFloat(
+                                initialValue = 0.6f,
+                                targetValue = 0f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(1500, easing = LinearEasing),
+                                    repeatMode = RepeatMode.Restart
+                                ),
+                                label = "status_ripple_alpha"
+                            )
+
                             Box(
-                                modifier = Modifier
-                                    .size(10.dp)
-                                    .clip(CircleShape)
-                                    .background(statusColor),
+                                modifier = Modifier.size(12.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                if (stateHolder.status == ServerStatus.ONLINE) {
+                                if (isServerRunningOrStarting) {
                                     Box(
                                         modifier = Modifier
-                                            .size(3.dp)
-                                            .clip(CircleShape)
-                                            .background(Color.White)
+                                            .size(9.dp)
+                                            .graphicsLayer {
+                                                scaleX = rippleScale
+                                                scaleY = rippleScale
+                                                alpha = rippleAlpha
+                                            }
+                                            .background(statusColor, CircleShape)
                                     )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(9.dp)
+                                        .clip(CircleShape)
+                                        .background(statusColor),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (stateHolder.status == ServerStatus.ONLINE) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(3.dp)
+                                                .clip(CircleShape)
+                                                .background(Color.White)
+                                        )
+                                    }
                                 }
                             }
 
@@ -2249,7 +2295,7 @@ private fun AddressValueRow(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).padding(end = 4.dp),
             verticalArrangement = Arrangement.spacedBy(1.dp)
         ) {
             Text(
@@ -2261,76 +2307,84 @@ private fun AddressValueRow(
             )
             Text(
                 text = address,
-                fontSize = 12.sp,
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
-                // Addresses stay on a single line; a long relay hostname ellipsises rather
-                // than wrapping and growing the card.
+                // Addresses stay on a single line; compact action buttons allow full address to fit
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Ellipsis,
                 fontFamily = FontFamily.Monospace,
-                letterSpacing = (-0.3).sp
+                letterSpacing = (-0.4).sp
             )
         }
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(0.dp)
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-                if (onRetryClick != null) {
-                    IconButton(
-                        onClick = onRetryClick,
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Retry Connection",
-                            tint = PocketColors.Starting,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+            if (onRetryClick != null) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onRetryClick),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Retry Connection",
+                        tint = PocketColors.Starting,
+                        modifier = Modifier.size(15.dp)
+                    )
                 }
-                if (onEditClick != null) {
-                    IconButton(
-                        onClick = onEditClick,
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit IP",
-                            tint = PocketColors.Online,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+            }
+            if (onEditClick != null) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onEditClick),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit IP",
+                        tint = PocketColors.Online,
+                        modifier = Modifier.size(15.dp)
+                    )
                 }
-                val canCopy = address.isNotBlank() &&
-                    address != "Wi-Fi address unavailable" &&
-                    address != "No relay address" &&
-                    address != "No internet" &&
-                    address != "Opening internet relay..." &&
-                    address != "Reconnecting to the servers..." &&
-                    address != "Connecting to the servers..." &&
-                    address != "Switching relay connection..." &&
-                    address != "Start the server to generate internet join addresses."
-                if (canCopy) {
-                    IconButton(
-                        onClick = {
+            }
+            val canCopy = address.isNotBlank() &&
+                address != "Wi-Fi address unavailable" &&
+                address != "No relay address" &&
+                address != "No internet" &&
+                address != "Opening internet relay..." &&
+                address != "Reconnecting to the servers..." &&
+                address != "Connecting to the servers..." &&
+                address != "Switching relay connection..." &&
+                address != "Start the server to generate internet join addresses."
+            if (canCopy) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .clickable {
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             val clip = ClipData.newPlainText("Address", address)
                             clipboard.setPrimaryClip(clip)
                             Toast.makeText(context, "Address copied to clipboard!", Toast.LENGTH_SHORT).show()
                         },
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Copy Address",
-                            tint = PocketColors.Primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "Copy Address",
+                        tint = PocketColors.Primary,
+                        modifier = Modifier.size(15.dp)
+                    )
                 }
             }
+        }
     }
 }
 
@@ -2422,6 +2476,18 @@ private fun PremiumHomeButton(
 
     val widthModifier = Modifier.fillMaxWidth()
 
+    val isStartServer = style == PremiumHomeButtonStyle.StartServer && enabled
+    val shimmerTransition = rememberInfiniteTransition(label = "btn_shimmer")
+    val shimmerOffset by shimmerTransition.animateFloat(
+        initialValue = -0.6f,
+        targetValue = 1.6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2600, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "btn_shimmer_offset"
+    )
+
     Box(
         modifier = modifier
             .padding(bottom = if (isDangerGhost) 2.dp else 4.dp) // space for bottom border overhang
@@ -2450,6 +2516,27 @@ private fun PremiumHomeButton(
                 ),
             contentAlignment = Alignment.Center
         ) {
+            if (isStartServer) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .drawWithContent {
+                            drawContent()
+                            val width = size.width
+                            val x = shimmerOffset * width
+                            val shimmerBrush = Brush.linearGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0f),
+                                    Color.White.copy(alpha = 0.16f),
+                                    Color.White.copy(alpha = 0f)
+                                ),
+                                start = Offset(x - 70f, 0f),
+                                end = Offset(x + 70f, size.height)
+                            )
+                            drawRect(brush = shimmerBrush)
+                        }
+                )
+            }
             Row(
                 modifier = Modifier.padding(horizontal = 18.dp),
                 verticalAlignment = Alignment.CenterVertically,

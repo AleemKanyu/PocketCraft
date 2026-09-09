@@ -1,29 +1,10 @@
 <en-US>
-Fixes:
-- Fixed ping issues
-- Resolved minor UI bugs
+🎉 Welcome to PocketHost!
+- Host Minecraft Java multiplayer servers right on your phone
+- Zero port forwarding needed with free global relay links
+- Bundled high-performance Java 25 runtime
+- Support for Paper, Purpur, Fabric & custom plugins
+- Crossplay support: Bedrock friends can join your server
+- Real-time console, player controls & tactile 3D interface
+- Battery-optimized background server hosting
 </en-US>
-
-<de-DE>
-Fehlerbehebungen:
-- Ping-Probleme behoben
-- Kleinere UI-Fehler behoben
-</de-DE>
-
-<es-ES>
-Correcciones:
-- Se corrigieron problemas de ping
-- Se corrigieron errores menores de la interfaz de usuario
-</es-ES>
-
-<ru-RU>
-Исправления:
-- Исправлены проблемы с пингом
-- Исправлены незначительные ошибки интерфейса
-</ru-RU>
-
-<zh-CN>
-修复：
-- 修复了延迟 (ping) 问题
-- 修复了轻微的 UI 问题
-</zh-CN>

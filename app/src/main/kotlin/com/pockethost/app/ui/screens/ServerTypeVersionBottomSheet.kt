@@ -165,7 +165,7 @@ fun ServerTypeVersionBottomSheet(
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ServerType.entries.chunked(3).forEach { rowTypes: List<ServerType> ->
+                    ServerType.entries.filter { it.isEnabled }.chunked(3).forEach { rowTypes: List<ServerType> ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)

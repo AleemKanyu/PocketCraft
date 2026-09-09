@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.LinearProgressIndicator
@@ -162,10 +163,46 @@ fun SplashScreen(
     val trackColor = PocketColors.InactiveBorder
     val logoRes = R.drawable.cube_logo_light
 
-    val pulseTransition = rememberInfiniteTransition(label = "logo_pulse")
-    val logoScale by pulseTransition.animateFloat(
-        initialValue = 0.975f,
-        targetValue = 1.025f,
+    val floatTransition = rememberInfiniteTransition(label = "logo_float")
+    val floatY by floatTransition.animateFloat(
+        initialValue = -6f,
+        targetValue = 6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "logo_float_y"
+    )
+    val floatRotate by floatTransition.animateFloat(
+        initialValue = -3f,
+        targetValue = 3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "logo_rotate"
+    )
+    val haloPulse by floatTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "halo_pulse"
+    )
+    val haloAlpha by floatTransition.animateFloat(
+        initialValue = 0.18f,
+        targetValue = 0.38f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "halo_alpha"
+    )
+    val logoScale by floatTransition.animateFloat(
+        initialValue = 0.97f,
+        targetValue = 1.03f,
         animationSpec = infiniteRepeatable(
             animation = tween(2400, easing = PocketMotion.SmoothEase),
             repeatMode = RepeatMode.Reverse
@@ -181,12 +218,15 @@ fun SplashScreen(
         label = "entrance_alpha"
     )
     val entranceScale by animateFloatAsState(
-        targetValue = if (startEntrance) 1f else 0.94f,
-        animationSpec = PocketMotion.softFloatTween(durationMillis = 760),
+        targetValue = if (startEntrance) 1f else 0.88f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+        ),
         label = "entrance_scale"
     )
     val entranceSlide by animateFloatAsState(
-        targetValue = if (startEntrance) 0f else 16f,
+        targetValue = if (startEntrance) 0f else 20f,
         animationSpec = PocketMotion.softFloatTween(durationMillis = 760),
         label = "entrance_slide"
     )
@@ -194,6 +234,8 @@ fun SplashScreen(
     LaunchedEffect(Unit) {
         startEntrance = true
     }
+
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
 
     Box(
         modifier = Modifier
@@ -216,18 +258,47 @@ fun SplashScreen(
                     translationY = entranceSlide
                 )
         ) {
-            Image(
-                painter = painterResource(id = logoRes),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(96.dp)
-                    .graphicsLayer {
-                        scaleX = logoScale
-                        scaleY = logoScale
-                    }
-            )
+            Box(
+                modifier = Modifier.size(88.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // Soft ambient glowing halo
+                Box(
+                    modifier = Modifier
+                        .size(68.dp)
+                        .graphicsLayer {
+                            scaleX = haloPulse
+                            scaleY = haloPulse
+                            alpha = haloAlpha
+                        }
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    PocketColors.Primary,
+                                    PocketColors.Primary.copy(alpha = 0.4f),
+                                    Color.Transparent
+                                )
+                            ),
+                            shape = CircleShape
+                        )
+                )
 
-            Spacer(modifier = Modifier.height(16.dp))
+                // 3D floating bobbing cube logo
+                Image(
+                    painter = painterResource(id = logoRes),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(72.dp)
+                        .graphicsLayer {
+                            translationY = floatY * density
+                            rotationZ = floatRotate
+                            scaleX = logoScale
+                            scaleY = logoScale
+                        }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,

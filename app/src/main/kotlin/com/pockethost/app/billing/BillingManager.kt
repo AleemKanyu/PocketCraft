@@ -60,7 +60,7 @@ class BillingManager private constructor(private val context: Context) {
 
     private val _entitlement = MutableStateFlow(
         PremiumEntitlement(
-            tier = PremiumTier.PREMIUM
+            tier = PremiumTier.NONE
         )
     )
     val entitlement: StateFlow<PremiumEntitlement> = _entitlement.asStateFlow()
@@ -270,7 +270,8 @@ class BillingManager private constructor(private val context: Context) {
         }
 
         val offer = _availableOffers.value.firstOrNull { it.productId == productId }
-        if (offer == null) {
+        val productDetails = offer?.productDetails
+        if (offer == null || productDetails == null) {
             queryAvailableProducts {
                 launchBillingFlow(activity, productId, onResult)
             }
@@ -278,7 +279,7 @@ class BillingManager private constructor(private val context: Context) {
         }
 
         val productParams = BillingFlowParams.ProductDetailsParams.newBuilder()
-            .setProductDetails(offer.productDetails)
+            .setProductDetails(productDetails)
             .setOfferToken(offer.offerToken)
             .build()
 
@@ -364,7 +365,7 @@ class BillingManager private constructor(private val context: Context) {
 
     private fun applyEntitlement(entitlement: PremiumEntitlement) {
         val eligibilityChanged = _entitlement.value.eligibleForFreeTrial != entitlement.eligibleForFreeTrial
-        _entitlement.value = entitlement.copy(tier = PremiumTier.PREMIUM)
+        _entitlement.value = entitlement
         preferences.isPremiumUser = true
         _isPremium.value = true
         if (eligibilityChanged) {
@@ -533,7 +534,7 @@ class BillingManager private constructor(private val context: Context) {
         val recurringPhase = recurringPricePhase(offer) ?: offer.pricingPhases.pricingPhaseList.lastOrNull() ?: return null
         val rawFreeTrialDays = freePhaseDurationDays(offer)
         val freeTrialDays = if (tier == PremiumTier.PREMIUM && rawFreeTrialDays > 0) 7 else rawFreeTrialDays
-        val title = if (tier == PremiumTier.PREMIUM) "Supporter (₹299/mo)" else "Champion (₹499/mo)"
+        val title = if (tier == PremiumTier.PREMIUM) "Supporter (₹299/mo)" else "Champion (₹899/mo)"
         val description = if (tier == PremiumTier.PREMIUM) {
             "Voluntary monthly contribution to support PocketHost relays and development."
         } else {
