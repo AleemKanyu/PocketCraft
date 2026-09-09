@@ -1,7 +1,7 @@
 import re
 import os
-
-app_strings_path = "/home/aleemkanyu/.gemini/antigravity/scratch/PocketCraft/app/src/main/kotlin/com/pocketcraft/server/util/AppStrings.kt"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+app_strings_path = os.path.normpath(os.path.join(SCRIPT_DIR, "../app/src/main/kotlin/com/pocketcraft/server/util/AppStrings.kt"))
 
 with open(app_strings_path, "r", encoding="utf-8") as f:
     content = f.read()

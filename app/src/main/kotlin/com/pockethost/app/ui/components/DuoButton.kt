@@ -165,7 +165,7 @@ fun DuoButton(
         label = "rotation"
     )
 
-    val shape = RoundedCornerShape(50.dp) // fully pill-shaped as per spec
+    val shape = RoundedCornerShape(50.dp) // pill shape
 
     Box(
         modifier = modifier

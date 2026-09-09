@@ -1,8 +1,7 @@
 # Third-Party Binaries Audit Report
 
 **Date:** 2026-06-26  
-**Auditor:** Cursor agent (automated pass)  
-**ARM-MC reference:** `/home/aleemkanyu/Downloads/arm-mc_1.4.2`  
+**Auditor:** Internal audit  
 **Scope:** `app/src/main/assets/`, `app/src/main/jniLibs/`, `app/src/main/lib/`, `app/libs/`
 
 ---
@@ -155,12 +154,5 @@ No git-added binary had an exact SHA-256 match to ARM-MC.
 | 1 | `connect-spigot.jar` | Confirm purpose. No Kotlin references found. If unused → **remove**; if needed → document Minekube Connect source/version in `THIRD_PARTY_LICENSES.txt` |
 | 2 | `app/src/main/assets/components/jre/` | Duplicate of `jre-runtime/`. If `JreExtractor` fallback no longer needed → **remove** duplicate tarballs to avoid confusion |
 | 3 | `app/src/main/lib/` | Stale extracted JRE `.so` tree not used by build → **remove** from repo working tree and add to `.gitignore` if recreated locally |
-| 4 | `memory.md` | Still mentions "JRE 25 / assets/java/jre25" — **update docs** to reflect Java 21 `jre-runtime` |
 
 **No immediate replace/remove required for confirmed ARM-MC copies** — none found in current tree.
-
----
-
-## Re-run instructions
-
-See `docs/agents/AGENT_AUDIT_THIRDPARTY_BINARIES.md` for the full repeatable procedure and shell script.

@@ -8,7 +8,8 @@ import time
 import html as html_lib
 
 # Target directories
-BASE_DIR = "/home/aleemkanyu/.gemini/antigravity/scratch/PocketCraft"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.normpath(os.path.join(SCRIPT_DIR, ".."))
 RES_DIR = os.path.join(BASE_DIR, "app/src/main/res")
 ASSETS_DIR = os.path.join(BASE_DIR, "app/src/main/assets/locales")
 

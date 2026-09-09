@@ -2626,7 +2626,7 @@ private fun ConsoleCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            // Dark-card shadow (agent spec: blur=14, offsetY=5, alpha=0.18)
+            // Card elevation and depth styling
             .card3d(
                 elevation = 6.dp,
                 cornerRadius = 16.dp,

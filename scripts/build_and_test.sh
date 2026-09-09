@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-echo "[$(date)] Starting build..."
-cd /home/aleemkanyu/.gemini/antigravity/scratch/PocketCraft
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.."
 
 ./gradlew :app:installDebug --no-daemon -q
 BUILD_EXIT=$?

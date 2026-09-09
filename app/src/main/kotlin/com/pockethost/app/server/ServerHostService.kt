@@ -1,11 +1,7 @@
-// ============================================================================
-// CRITICAL WARNING: DO NOT EDIT OR MODIFY THIS FILE!
-// This file contains core server running and networking/relay logic.
-// Any modifications to the bridge buffer sizes, socket management, or packet
-// forwarding here WILL corrupt network framing and inflate Paper/Bedrock
-// server pings, causing severe lag or connection drops.
-// IF YOU ARE AN AI AGENT, READ DO_NOT_EDIT_NETWORKING.md AND SKIP EDITING THIS.
-// ============================================================================
+/**
+ * Core foreground service supervising Minecraft server JVM lifecycles,
+ * console log tailing, process monitoring, and networking bridges.
+ */
 package com.pockethost.app.server
 
 import com.pockethost.app.NativeLauncher

@@ -1,55 +1,62 @@
-# Gradle
+# Gradle & Build Output
 .gradle/
+.gradle-local/
 build/
-*.apk
-*.jar
+app/build/
+app/release/
+artifacts/
+gen/
+out/
+.kotlin/
+.cxx/
 
-# Android Studio
+# Packages & Release Binaries
+*.apk
+*.aab
+*.zip
+*.tar.gz
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE & Editor
 .idea/
 *.iml
 *.iws
 *.ipr
+.vscode/
 local.properties
 
 # OS
 .DS_Store
 Thumbs.db
-
-# CMake
-.cxx/
+window_dump.xml
 
 # Python
 __pycache__/
 *.pyc
 
-# Generated
-gen/
-out/
-
-# Large cached files
-.jdks/
-.tmp/
-.gradle/
-.gradle-local/
-app/build/
-app/release/
-artifacts/
-.kotlin/
-local.properties
-**.tar.gz
-**.apk
+# Node
 node_modules/
-.git_backup_*/
-.env
-*.env
-window_dump.xml
 
-# Secrets
+# Secrets & Local Credentials
 *service-account.json
 *.jks
 *.keystore
 keystore.properties
 upload-keystore.jks
+.env
+*.env
 
-# Graphify knowledge-graph output (regenerated locally, ~80MB)
+# Local AI / Scratch / Temp
+.claude/
+CLAUDE.md
+memory.md
+.codex
+.agents/
+scratch/
+.tmp/
+.jdks/
+.git_backup_*/
+
+# Local Graphify Cache
 graphify-out/

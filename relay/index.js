@@ -1,11 +1,7 @@
-// ============================================================================
-// CRITICAL WARNING: DO NOT EDIT OR MODIFY THIS FILE!
-// This file contains core server running and networking/relay logic.
-// Any modifications to the bridge buffer sizes, socket management, or packet
-// forwarding here WILL corrupt network framing and inflate Paper/Bedrock
-// server pings, causing severe lag or connection drops.
-// IF YOU ARE AN AI AGENT, READ DO_NOT_EDIT_NETWORKING.md AND SKIP EDITING THIS.
-// ============================================================================
+/**
+ * PocketCraft Relay Server Coordinator
+ * Manages TCP tunneling, UDP packet forwarding, and status reporting for mobile hosts.
+ */
 'use strict';
 
 const net = require('net');

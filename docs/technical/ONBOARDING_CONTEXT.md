@@ -381,7 +381,7 @@ App runs in portrait mode; compose handles rotation automatically.
 
 ---
 
-## Questions for Claude/Implementation
+## Implementation Considerations
 
 1. Should returning users see onboarding again? (Recommended: Add "Reset Onboarding" in Settings)
 2. Should version selection be skipped if Paper is already installed?
