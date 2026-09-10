@@ -34,18 +34,21 @@ object ServerJarImporter {
                 return ImportResult.Error("Selected file is too small to be a valid ${serverType.displayName} server JAR.")
             }
 
-            targetFile.parentFile?.mkdirs()
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            }
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                targetFile.outputStream().use { output ->
-                    input.copyTo(output)
+            val isSelfCopy = (uri.scheme == "file" && uri.path != null && File(uri.path!!).canonicalPath == targetFile.canonicalPath)
+            if (!isSelfCopy) {
+                targetFile.parentFile?.mkdirs()
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
                 }
-            } ?: return ImportResult.Error("Could not read selected file.")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    targetFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                } ?: return ImportResult.Error("Could not read selected file.")
+            }
 
             if (!targetFile.exists() || targetFile.length() < minBytes) {
                 targetFile.delete()

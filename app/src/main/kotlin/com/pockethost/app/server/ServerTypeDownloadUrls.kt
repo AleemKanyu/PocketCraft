@@ -72,11 +72,11 @@ object ServerTypeDownloadUrls {
                             bestUrl = url
                         }
                     }
-                    bestUrl ?: "https://papermc.io/downloads/paper"
+                    bestUrl ?: throw IllegalStateException("No official Paper server JAR build found for version $version.")
                 }
                 ServerType.PURPUR  -> "https://api.purpurmc.org/v2/purpur/$version/latest/download"
                 ServerType.BEDROCK -> "https://github.com/PowerNukkitX/PowerNukkitX/releases/download/3.0.3/powernukkitx.jar"
-                ServerType.MODPACK -> "https://modrinth.com/modpacks"
+                ServerType.MODPACK -> throw UnsupportedOperationException("Modpacks must be installed via the modpack manager.")
 
                 ServerType.FABRIC -> {
                     val cleanVersion = CarpetModManager.cleanMcVersion(version)
@@ -119,13 +119,14 @@ object ServerTypeDownloadUrls {
             url
         } catch (e: Exception) {
             val cleanVersion = CarpetModManager.cleanMcVersion(version)
-            when (serverType) {
-                ServerType.VANILLA -> "https://www.minecraft.net/download/server"
-                ServerType.PAPER   -> "https://papermc.io/downloads/paper"
-                ServerType.PURPUR  -> "https://purpurmc.org/downloads"
-                ServerType.FABRIC  -> fabricServerJarUrl(cleanVersion, "0.16.10", "1.0.1")
-                ServerType.BEDROCK -> "https://github.com/PowerNukkitX/PowerNukkitX/releases/download/3.0.3/powernukkitx.jar"
-                ServerType.MODPACK -> "https://modrinth.com/modpacks"
+            if (serverType == ServerType.FABRIC) {
+                fabricServerJarUrl(cleanVersion, "0.16.10", "1.0.1")
+            } else if (serverType == ServerType.PURPUR) {
+                "https://api.purpurmc.org/v2/purpur/$version/latest/download"
+            } else if (serverType == ServerType.BEDROCK) {
+                "https://github.com/PowerNukkitX/PowerNukkitX/releases/download/3.0.3/powernukkitx.jar"
+            } else {
+                throw e
             }
         }
     }

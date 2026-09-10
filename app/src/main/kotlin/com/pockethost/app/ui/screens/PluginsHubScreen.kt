@@ -96,7 +96,6 @@ import com.pockethost.app.service.ServerFileManager
 import com.pockethost.app.service.ServerPropertiesHelper
 import com.pockethost.app.ui.components.DuoButton
 import com.pockethost.app.ui.components.DuoButtonVariant
-import com.pockethost.app.ui.components.PluginInstallBottomSheet
 import com.pockethost.app.ui.components.PocketModsIcon
 import com.pockethost.app.ui.components.duoTextFieldColors
 import com.pockethost.app.ui.components.duoTextFieldShape
@@ -179,23 +178,7 @@ fun PluginsHubScreen(
 
     fun currentTab(): ContentTab = availableTabs[selectedTab.coerceIn(0, availableTabs.lastIndex)]
 
-    LaunchedEffect(pendingRemoteInstall) {
-        val item = pendingRemoteInstall
-        if (item != null && currentTab().type == PluginManager.ContentType.MODS) {
-            isLoadingDependencies = true
-            dependenciesList = emptyList()
-            try {
-                dependenciesList = PluginManager.fetchModDependencies(context, item.projectId)
-            } catch (e: Exception) {
-                android.util.Log.e("PluginsHub", "Failed to load dependencies: ${e.message}")
-            } finally {
-                isLoadingDependencies = false
-            }
-        } else {
-            dependenciesList = emptyList()
-            isLoadingDependencies = false
-        }
-    }
+
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val selectedTabColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary
     val unselectedTabColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f) else MaterialTheme.colorScheme.onSurfaceVariant
@@ -789,74 +772,48 @@ fun PluginsHubScreen(
 
 
 
-    if (pendingRemoteInstall != null) {
-        val item = pendingRemoteInstall!!
+    // Auto-install: as soon as pendingRemoteInstall is set, download and install directly without showing a picker popup.
+    LaunchedEffect(pendingRemoteInstall) {
+        val item = pendingRemoteInstall ?: return@LaunchedEffect
         val itemType = currentTab().type
-        val itemSlug = item.slug.ifBlank { item.projectId }
-        val itemPageUrl = when (item.source.lowercase(Locale.US)) {
-            "hangar" -> "https://hangar.papermc.io/$itemSlug"
-            else -> when (itemType) {
-                PluginManager.ContentType.MODS -> "https://modrinth.com/mod/$itemSlug"
-                PluginManager.ContentType.RESOURCE_PACKS -> "https://modrinth.com/resourcepack/$itemSlug"
-                PluginManager.ContentType.PLUGINS -> "https://modrinth.com/plugin/$itemSlug"
+
+        // Load dependencies in parallel (needed for the UI to show them if we ever add a confirm dialog)
+        if (itemType == PluginManager.ContentType.MODS) {
+            isLoadingDependencies = true
+            dependenciesList = emptyList()
+            try {
+                dependenciesList = PluginManager.fetchModDependencies(context, item.projectId)
+            } catch (e: Exception) {
+                android.util.Log.e("PluginsHub", "Failed to load dependencies: ${e.message}")
+            } finally {
+                isLoadingDependencies = false
             }
-        }
-        val mimeTypes = when (itemType) {
-            PluginManager.ContentType.RESOURCE_PACKS -> arrayOf("application/zip", "application/octet-stream", "*/*")
-            else -> arrayOf("application/java-archive", "application/octet-stream", "*/*")
+        } else {
+            dependenciesList = emptyList()
+            isLoadingDependencies = false
         }
 
-        PluginInstallBottomSheet(
-            itemName = item.title,
-            itemPageUrl = itemPageUrl,
-            pickerMimeTypes = mimeTypes,
-            onDismiss = { pendingRemoteInstall = null },
-            onFileSelected = { uri ->
-                scope.launch {
-                    isUploading = true
-                    uploadProgress = 0
-                    val result = PluginManager.installFromUri(
-                        context = context,
-                        uri = uri,
-                        worldName = stateHolder.activeWorld,
-                        type = itemType,
-                        runtimeKey = runtimeKey,
-                        onProgress = { uploadProgress = it }
-                    )
-                    isUploading = false
-                    pendingRemoteInstall = null
-                    result.onSuccess {
-                        onMessage("Successfully installed ${item.title}!")
-                        refreshDownloadedItems()
-                    }.onFailure { err ->
-                        onMessage("Installation error: ${err.message}")
-                    }
-                }
-            },
-            dependencies = dependenciesList,
-            isLoadingDependencies = isLoadingDependencies,
-            contentTypeLabel = currentTab().label(s),
+        // Trigger the install
+        isDownloading = true
+        downloadingCatalogKey = item.catalogKey
+        downloadProgress = 0
+        val result = PluginManager.installRemoteItem(
+            context = context,
+            item = item,
             worldName = stateHolder.activeWorld,
-            onDependencyFileSelected = { dep, uri, onComplete ->
-                scope.launch {
-                    val result = PluginManager.installFromUri(
-                        context = context,
-                        uri = uri,
-                        worldName = stateHolder.activeWorld,
-                        type = itemType,
-                        runtimeKey = runtimeKey,
-                        onProgress = { uploadProgress = it }
-                    )
-                    result.onSuccess {
-                        onMessage("Installed dependency: ${dep.title}")
-                        refreshDownloadedItems()
-                        onComplete()
-                    }.onFailure { err ->
-                        onMessage("Failed to install ${dep.title}: ${err.message}")
-                    }
-                }
-            }
+            type = itemType,
+            runtimeKey = runtimeKey,
+            onProgress = { downloadProgress = it }
         )
+        isDownloading = false
+        downloadingCatalogKey = null
+        pendingRemoteInstall = null
+        result.onSuccess {
+            onMessage("Installed ${item.title} successfully!")
+            refreshDownloadedItems()
+        }.onFailure { err ->
+            onMessage("Install failed: ${err.message}")
+        }
     }
 
     detailCard?.let { activeDetail ->

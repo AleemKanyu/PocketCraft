@@ -237,7 +237,9 @@ fun PocketTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Support & Donate button with subtle heartbeat pulse and hollow colored outline
+                // Support & Donate button — shown randomly but frequently (~60% of sessions).
+                val showDonationButton = remember { (0..9).random() < 6 }
+                if (showDonationButton) {
                 val heartTransition = rememberInfiniteTransition(label = "topbar_heart_pulse")
                 val heartPulseScale by heartTransition.animateFloat(
                     initialValue = 1f,
@@ -283,6 +285,7 @@ fun PocketTopBar(
                         tint = Color(0xFFFF4B72)
                     )
                 }
+                } // end showDonationButton
 
                 // Discord button
                 Box(

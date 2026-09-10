@@ -36,6 +36,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -44,15 +47,22 @@ import androidx.compose.foundation.BorderStroke
 import com.pockethost.app.ui.theme.Monocraft
 import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.data.model.ServerType
+import com.pockethost.app.data.preferences.AppPreferences
 import com.pockethost.app.data.preferences.AppPreferencesStore
+import com.pockethost.app.network.InAppDownloader
 import com.pockethost.app.service.ModpackManager
 import com.pockethost.app.service.ServerFileManager
 import com.pockethost.app.server.ServerJarImporter
+import com.pockethost.app.server.ServerTypeDownloadUrls
 import com.pockethost.app.ui.components.DuoButton
 import com.pockethost.app.ui.components.DuoButtonVariant
-import com.pockethost.app.ui.components.ServerJarPickerBottomSheet
 import com.pockethost.app.ui.theme.raisedBorder
 import com.pockethost.app.viewmodel.ServerTypeVersionViewModel
+import java.io.File
+import java.util.Locale
+import java.util.zip.ZipFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,9 +88,14 @@ fun ServerTypeVersionBottomSheet(
     val isOffline by viewModel.isOffline.collectAsState()
     var selectedModpackId by remember { mutableStateOf<String?>(null) }
     var versionToDelete by remember { mutableStateOf<String?>(null) }
-    var versionToImport by remember { mutableStateOf<String?>(null) }
+    var downloadError by remember { mutableStateOf<String?>(null) }
     var downloadingVersion by remember { mutableStateOf<String?>(null) }
-    var downloadingProgressText by remember { mutableStateOf("") }
+    var downloadProgressFraction by remember { mutableFloatStateOf(0f) }
+    var downloadProgressPercent by remember { mutableIntStateOf(0) }
+    var downloadStatusStage by remember { mutableStateOf("") }
+    var downloadSizeInfo by remember { mutableStateOf("") }
+    var downloadSpeedInfo by remember { mutableStateOf("") }
+    var downloadJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var selectedModpackPageUrl by remember { mutableStateOf<String?>(null) }
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val accentTextColor = if (isDarkTheme) PocketColors.PrimaryLight else PocketColors.PrimaryDark
@@ -94,6 +109,144 @@ fun ServerTypeVersionBottomSheet(
             onConfirm(selectedType, selectedVersion, payloadPath)
         } else {
             onConfirm(selectedType, selectedVersion, null)
+        }
+    }
+
+    fun cancelDownload() {
+        downloadJob?.cancel()
+        downloadJob = null
+        downloadingVersion = null
+        downloadProgressFraction = 0f
+        downloadProgressPercent = 0
+        downloadStatusStage = ""
+        downloadSizeInfo = ""
+        downloadSpeedInfo = ""
+    }
+
+    // Professional inline download with speed, size, ZIP verification, and auto-confirm.
+    fun startInlineDownload(version: String) {
+        if (downloadingVersion != null) return // already downloading
+        downloadingVersion = version
+        downloadProgressFraction = 0f
+        downloadProgressPercent = 0
+        downloadStatusStage = "Connecting to repository…"
+        downloadSizeInfo = "Preparing…"
+        downloadSpeedInfo = ""
+        downloadError = null
+        viewModel.setSelectedVersion(version)
+        val appPrefs = AppPreferences(context)
+        val relayHost = appPrefs.relayHost
+        downloadJob = scope.launch {
+            try {
+                downloadStatusStage = "Resolving official server package…"
+                val downloadUrl = withContext(Dispatchers.IO) {
+                    ServerTypeDownloadUrls.resolveDownloadUrl(selectedType, version, relayHost)
+                }
+
+                val targetFile = withContext(Dispatchers.IO) {
+                    ServerFileManager.getServerJarFile(
+                        context = context.applicationContext,
+                        gameVersion = version,
+                        serverType = selectedType
+                    ).also { it.parentFile?.mkdirs() }
+                }
+                val tempFile = withContext(Dispatchers.IO) {
+                    File(targetFile.parentFile, "${targetFile.name}.part")
+                }
+
+                downloadStatusStage = "Downloading ${selectedType.displayName} $version…"
+
+                var lastTimeMs = System.currentTimeMillis()
+                var lastBytes = 0L
+
+                val downloadResult = InAppDownloader.downloadFile(
+                    url = downloadUrl,
+                    targetFile = tempFile,
+                    onProgress = { bytesDownloaded, totalBytes, _ ->
+                        val now = System.currentTimeMillis()
+                        val timeDelta = now - lastTimeMs
+                        if (timeDelta >= 150 || (totalBytes > 0 && bytesDownloaded >= totalBytes)) {
+                            val bytesDelta = bytesDownloaded - lastBytes
+                            val speedBytesPerSec = if (timeDelta > 0) (bytesDelta * 1000f) / timeDelta else 0f
+                            val speedMb = speedBytesPerSec / (1024f * 1024f)
+
+                            val curMb = bytesDownloaded / (1024f * 1024f)
+                            val totMb = if (totalBytes > 0) totalBytes / (1024f * 1024f) else -1f
+
+                            downloadSizeInfo = if (totMb > 0) {
+                                String.format(Locale.US, "%.1f MB / %.1f MB", curMb, totMb)
+                            } else {
+                                String.format(Locale.US, "%.1f MB", curMb)
+                            }
+
+                            if (speedMb >= 0.1f) {
+                                downloadSpeedInfo = String.format(Locale.US, "%.1f MB/s", speedMb)
+                            }
+
+                            if (totalBytes > 0) {
+                                val frac = (bytesDownloaded.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
+                                downloadProgressFraction = frac
+                                downloadProgressPercent = (frac * 100).toInt()
+                            }
+
+                            lastTimeMs = now
+                            lastBytes = bytesDownloaded
+                        }
+                    }
+                )
+
+                if (downloadResult.isFailure) {
+                    throw downloadResult.exceptionOrNull() ?: Exception("Download stream failed")
+                }
+
+                downloadStatusStage = "Verifying package integrity…"
+                downloadProgressFraction = 0.98f
+                downloadProgressPercent = 98
+
+                withContext(Dispatchers.IO) {
+                    if (!tempFile.exists() || tempFile.length() < 5_000L) {
+                        tempFile.delete()
+                        throw IllegalStateException("Downloaded server JAR is incomplete or empty.")
+                    }
+                    try {
+                        ZipFile(tempFile).use { zip ->
+                            if (zip.size() == 0) throw IllegalStateException("Empty archive")
+                        }
+                    } catch (e: Exception) {
+                        tempFile.delete()
+                        throw IllegalStateException("Downloaded file is not a valid server JAR: ${e.message}")
+                    }
+                    if (targetFile.exists()) {
+                        targetFile.delete()
+                    }
+                    val moved = tempFile.renameTo(targetFile)
+                    if (!moved) {
+                        tempFile.copyTo(targetFile, overwrite = true)
+                        tempFile.delete()
+                    }
+                }
+
+                downloadStatusStage = "Ready!"
+                downloadProgressFraction = 1f
+                downloadProgressPercent = 100
+                kotlinx.coroutines.delay(200)
+                downloadingVersion = null
+
+                viewModel.onServerJarImported(version)
+                viewModel.setSelectedVersion(version)
+                Toast.makeText(context, "${selectedType.displayName} $version ready!", Toast.LENGTH_SHORT).show()
+                confirmSelection()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                downloadingVersion = null
+                downloadError = null
+            } catch (e: Exception) {
+                downloadingVersion = null
+                val msg = e.localizedMessage ?: "Unknown download error"
+                downloadError = msg
+                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            } finally {
+                downloadJob = null
+            }
         }
     }
 
@@ -348,11 +501,8 @@ fun ServerTypeVersionBottomSheet(
                                                 borderWidth = 1.5.dp,
                                                 depthWidth = 3.dp
                                             )
-                                            .clickable {
+                                            .clickable(enabled = downloadingVersion == null) {
                                                 viewModel.setSelectedVersion(version)
-                                                if (!isDownloaded) {
-                                                    versionToImport = version
-                                                }
                                             }
                                     ) {
                                         Row(
@@ -389,7 +539,7 @@ fun ServerTypeVersionBottomSheet(
                                                 )
                                                 if (downloadingVersion == version) {
                                                     Text(
-                                                        text = "Downloading: $downloadingProgressText",
+                                                        text = "Downloading: $downloadProgressPercent%",
                                                         style = MaterialTheme.typography.bodySmall,
                                                         fontWeight = FontWeight.Bold,
                                                         color = PocketColors.Primary
@@ -485,12 +635,8 @@ fun ServerTypeVersionBottomSheet(
                                             borderWidth = 1.5.dp,
                                             depthWidth = 3.dp
                                         )
-                                        .clickable {
-                                            if (isDownloaded) {
-                                                viewModel.setSelectedVersion(version)
-                                            } else {
-                                                versionToImport = version
-                                            }
+                                        .clickable(enabled = downloadingVersion == null) {
+                                            viewModel.setSelectedVersion(version)
                                         }
                                 ) {
                                     Row(
@@ -704,6 +850,11 @@ fun ServerTypeVersionBottomSheet(
 
                 val isSelectedVersionDownloaded = selectedVersion != null && downloadedVersions.contains(selectedVersion)
                 val isDownloadingThisVersion = downloadingVersion != null
+                val animatedProgress by animateFloatAsState(
+                    targetValue = downloadProgressFraction,
+                    animationSpec = tween(durationMillis = 180, easing = LinearOutSlowInEasing),
+                    label = "download_progress"
+                )
 
                 AnimatedVisibility(
                     visible = isDownloadingThisVersion,
@@ -714,13 +865,13 @@ fun ServerTypeVersionBottomSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = 12.dp),
-                        color = PocketColors.Primary.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, PocketColors.Primary.copy(alpha = 0.4f))
+                        color = if (isDarkTheme) PocketColors.Primary.copy(alpha = 0.12f) else PocketColors.Primary.copy(alpha = 0.08f),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.5.dp, PocketColors.Primary.copy(alpha = 0.45f))
                     ) {
                         Column(
                             modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -729,42 +880,97 @@ fun ServerTypeVersionBottomSheet(
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.weight(1f)
                                 ) {
                                     CircularProgressIndicator(
-                                        modifier = Modifier.size(18.dp),
+                                        modifier = Modifier.size(20.dp),
                                         color = PocketColors.Primary,
                                         strokeWidth = 2.5.dp
                                     )
+                                    Column {
+                                        Text(
+                                            text = "Downloading ${selectedType.displayName} $downloadingVersion",
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 13.sp,
+                                            fontFamily = Monocraft,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = downloadStatusStage,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = PocketColors.Primary.copy(alpha = 0.2f),
+                                    modifier = Modifier.padding(start = 8.dp)
+                                ) {
                                     Text(
-                                        text = "Downloading ${selectedType.displayName} $downloadingVersion…",
-                                        fontWeight = FontWeight.ExtraBold,
+                                        text = "$downloadProgressPercent%",
                                         fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
                                         fontFamily = Monocraft,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        color = PocketColors.Primary,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                     )
                                 }
-                                Text(
-                                    text = downloadingProgressText,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = Monocraft,
-                                    color = PocketColors.Primary
-                                )
                             }
+
                             LinearProgressIndicator(
+                                progress = { animatedProgress },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(6.dp)
-                                    .clip(RoundedCornerShape(3.dp)),
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(4.dp)),
                                 color = PocketColors.Primary,
                                 trackColor = PocketColors.Primary.copy(alpha = 0.2f)
                             )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = downloadSizeInfo,
+                                    fontSize = 11.sp,
+                                    fontFamily = Monocraft,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                                )
+                                if (downloadSpeedInfo.isNotBlank()) {
+                                    Text(
+                                        text = downloadSpeedInfo,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = Monocraft,
+                                        color = PocketColors.Primary
+                                    )
+                                }
+                            }
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
+
+                if (!downloadError.isNullOrBlank()) {
+                    Text(
+                        text = downloadError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                }
 
                 val isConfirmEnabled = when {
                     isDownloadingThisVersion -> false
@@ -774,6 +980,7 @@ fun ServerTypeVersionBottomSheet(
 
                 val buttonText = when {
                     isDownloadingThisVersion -> "DOWNLOADING…"
+                    isConfirmEnabled && selectedVersionNeedsImport -> "Download"
                     isConfirmEnabled -> "CONFIRM"
                     else -> "SELECT A VERSION"
                 }
@@ -784,7 +991,13 @@ fun ServerTypeVersionBottomSheet(
                 ) {
                     DuoButton(
                         text = "CANCEL",
-                        onClick = onDismissRequest,
+                        onClick = {
+                            if (isDownloadingThisVersion) {
+                                cancelDownload()
+                            } else {
+                                onDismissRequest()
+                            }
+                        },
                         variant = DuoButtonVariant.Danger,
                         modifier = Modifier.weight(1f),
                     )
@@ -793,7 +1006,7 @@ fun ServerTypeVersionBottomSheet(
                         text = buttonText,
                         onClick = {
                             if (selectedVersionNeedsImport) {
-                                versionToImport = selectedVersion
+                                selectedVersion?.let { startInlineDownload(it) }
                             } else {
                                 confirmSelection()
                             }
@@ -806,41 +1019,6 @@ fun ServerTypeVersionBottomSheet(
         }
     }
 
-    if (versionToImport != null) {
-        ServerJarPickerBottomSheet(
-            serverType = selectedType,
-            version = versionToImport!!,
-            onDismiss = { versionToImport = null },
-            onJarSelected = { uri ->
-                val ver = versionToImport!!
-                versionToImport = null
-                scope.launch {
-                    val targetFile = ServerFileManager.getServerJarFile(
-                        context = context.applicationContext,
-                        gameVersion = ver,
-                        serverType = selectedType
-                    )
-                    val importResult = ServerJarImporter.importServerJar(
-                        context = context.applicationContext,
-                        uri = uri,
-                        targetFile = targetFile,
-                        serverType = selectedType
-                    )
-                    when (importResult) {
-                        is ServerJarImporter.ImportResult.Success -> {
-                            viewModel.onServerJarImported(ver)
-                            viewModel.setSelectedVersion(ver)
-                            Toast.makeText(context, "${selectedType.displayName} $ver imported successfully!", Toast.LENGTH_SHORT).show()
-                            confirmSelection()
-                        }
-                        is ServerJarImporter.ImportResult.Error -> {
-                            Toast.makeText(context, importResult.message, Toast.LENGTH_LONG).show()
-                        }
-                    }
-                }
-            }
-        )
-    }
 
     if (versionToDelete != null) {
         AlertDialog(

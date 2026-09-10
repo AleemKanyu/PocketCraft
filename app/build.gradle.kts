@@ -187,9 +187,11 @@ android {
     }
 
     applicationVariants.all {
+        val variant = this
         outputs.all {
             val outputImpl = this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
-            outputImpl?.outputFileName = "PocketHost.apk"
+            val suffix = if (variant.buildType.name == "release") "external" else "debug"
+            outputImpl?.outputFileName = "PocketHost-$suffix.apk"
         }
     }
 

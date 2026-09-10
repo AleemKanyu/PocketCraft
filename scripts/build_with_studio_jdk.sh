@@ -3,10 +3,12 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.." || exit 1
 
-STUDIO_JDK="/opt/android-studio/jbr"
-
-if [ ! -d "$STUDIO_JDK" ]; then
-    echo "Android Studio JDK not found at: $STUDIO_JDK"
+if [ -d "/home/aleemkanyu/.jdk21" ]; then
+    STUDIO_JDK="/home/aleemkanyu/.jdk21"
+elif [ -d "/opt/android-studio/jbr" ]; then
+    STUDIO_JDK="/opt/android-studio/jbr"
+else
+    echo "JDK not found at /home/aleemkanyu/.jdk21 or /opt/android-studio/jbr"
     exit 1
 fi
 
