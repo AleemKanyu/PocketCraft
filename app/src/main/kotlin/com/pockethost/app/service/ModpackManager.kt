@@ -1595,6 +1595,9 @@ object ModpackManager {
                 val body = response.body ?: throw Exception("Empty response body for $url")
                 val totalLength = body.contentLength()
                 var downloaded = 0L
+                // Report only on whole-percent changes; a modpack file is thousands of buffers and
+                // each callback hop reaches the UI.
+                var lastProgress = -1
 
                 body.byteStream().use { input ->
                     tempDest.outputStream().use { output ->
@@ -1604,8 +1607,11 @@ object ModpackManager {
                             output.write(buffer, 0, read)
                             downloaded += read
                             if (totalLength > 0) {
-                                val progress = ((downloaded * 100) / totalLength).toInt()
-                                onProgress(progress)
+                                val progress = ((downloaded * 100) / totalLength).toInt().coerceIn(0, 100)
+                                if (progress != lastProgress) {
+                                    lastProgress = progress
+                                    onProgress(progress)
+                                }
                             }
                             read = input.read(buffer)
                         }

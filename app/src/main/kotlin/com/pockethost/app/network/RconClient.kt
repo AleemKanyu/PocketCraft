@@ -18,6 +18,15 @@ object RconClient {
     private const val SERVERDATA_RESPONSE_VALUE = 0
     private const val SERVERDATA_AUTH_RESPONSE = 2
 
+    /**
+     * How many packets to tolerate before the auth response arrives. Valve-style RCON servers
+     * send an empty SERVERDATA_RESPONSE_VALUE first; vanilla/Paper send only the auth response.
+     */
+    private const val MAX_AUTH_PACKETS = 5
+
+    /** Guards against a bogus length header making us allocate an absurd buffer. */
+    private const val MAX_PAYLOAD_BYTES = 4 * 1024 * 1024
+
     fun sendCommand(
         command: String,
         port: Int = DEFAULT_PORT,
@@ -64,7 +73,7 @@ object RconClient {
 
                 fun readPacket(): Triple<Int, Int, String> {
                     val len = readIntLE()
-                    if (len < 10) return Triple(-1, -1, "")
+                    if (len < 10 || len > MAX_PAYLOAD_BYTES) return Triple(-1, -1, "")
                     val id = readIntLE()
                     val type = readIntLE()
                     val payloadSize = (len - 10).coerceAtLeast(0)
@@ -76,9 +85,14 @@ object RconClient {
                 // 1. Send Authentication packet (type 3)
                 sendPacket(1, SERVERDATA_AUTH, password)
                 
-                // Read until we get SERVERDATA_AUTH_RESPONSE (type 2) or failure (id == -1)
+                // Read until we get SERVERDATA_AUTH_RESPONSE (type 2) or failure (id == -1).
+                // Some server implementations emit an empty SERVERDATA_RESPONSE_VALUE before the
+                // auth response, so tolerate a few leading packets -- but stop reading the moment
+                // auth succeeds. Reading past it blocks until soTimeout and fails the whole call.
                 var authenticated = false
-                repeat(5) {
+                var authAttempts = 0
+                while (!authenticated && authAttempts < MAX_AUTH_PACKETS) {
+                    authAttempts++
                     val (authId, authType, _) = readPacket()
                     if (authId == -1) {
                         Log.w(TAG, "RCON authentication failed (invalid password).")
@@ -86,7 +100,6 @@ object RconClient {
                     }
                     if (authType == SERVERDATA_AUTH_RESPONSE && authId == 1) {
                         authenticated = true
-                        return@repeat
                     }
                 }
 
@@ -150,7 +163,8 @@ object RconClient {
                     out.write(bytes); out.write(0); out.write(0); out.flush()
                 }
                 fun readPacket(): Triple<Int, Int, String> {
-                    val len = readIntLE(); if (len < 10) return Triple(-1, -1, "")
+                    val len = readIntLE()
+                    if (len < 10 || len > MAX_PAYLOAD_BYTES) return Triple(-1, -1, "")
                     val id = readIntLE(); val type = readIntLE()
                     val payloadSize = (len - 10).coerceAtLeast(0)
                     val bytes = if (payloadSize > 0) ByteArray(payloadSize).also { inp.readFully(it) } else ByteArray(0)
@@ -161,7 +175,9 @@ object RconClient {
                 // Authenticate once
                 sendPacket(1, SERVERDATA_AUTH, password)
                 var authenticated = false
-                repeat(5) {
+                var authAttempts = 0
+                while (!authenticated && authAttempts < MAX_AUTH_PACKETS) {
+                    authAttempts++
                     val (authId, authType, _) = readPacket()
                     if (authId == -1) {
                         Log.w(TAG, "RCON batch auth failed")
@@ -169,7 +185,6 @@ object RconClient {
                     }
                     if (authType == SERVERDATA_AUTH_RESPONSE && authId == 1) {
                         authenticated = true
-                        return@repeat
                     }
                 }
                 if (!authenticated) {
@@ -177,9 +192,14 @@ object RconClient {
                     return@use commands.map { "" }
                 }
 
-                // Send all commands over the same authenticated connection
-                nonBlank.mapIndexed { index, cmd ->
-                    sendPacket(index + 2, SERVERDATA_EXECCOMMAND, cmd)
+                // Send all commands over the same authenticated connection.
+                // The result is positionally aligned with `commands` (not `nonBlank`) because
+                // callers read responses back by the index of the command they passed in.
+                var requestId = 2
+                commands.map { original ->
+                    val cmd = original.trim().removePrefix("/")
+                    if (cmd.isBlank()) return@map ""
+                    sendPacket(requestId++, SERVERDATA_EXECCOMMAND, cmd)
                     val (_, _, response) = readPacket()
                     if (response.isBlank()) "[OK]" else response
                 }

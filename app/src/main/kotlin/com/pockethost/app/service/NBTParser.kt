@@ -359,7 +359,7 @@ object NBTParser {
             }
             
             if (modified) {
-                GZIPOutputStream(FileOutputStream(datFile)).use { it.write(mutableBytes) }
+                writeGzippedAtomically(datFile, mutableBytes)
                 success = true
             }
         } catch (e: Exception) {
@@ -396,6 +396,39 @@ object NBTParser {
             (worldTime / 24000L).coerceAtLeast(0L)
         } catch (e: Exception) {
             null
+        }
+    }
+
+    /**
+     * Rewrites a gzipped NBT file through a sibling temp file and renames it into place.
+     *
+     * Writing level.dat or a playerdata .dat in place means a crash, a kill, or a full disk
+     * mid-write leaves a truncated file -- and a truncated level.dat makes the world unloadable.
+     * Minecraft itself stages level.dat through level.dat_new for the same reason.
+     */
+    private fun writeGzippedAtomically(target: File, bytes: ByteArray) {
+        val temp = File(target.parentFile, "${target.name}.pockethost_new")
+        try {
+            val raw = FileOutputStream(temp)
+            try {
+                GZIPOutputStream(raw).use { gzip ->
+                    gzip.write(bytes)
+                    // finish() flushes the gzip trailer without closing `raw`, so the fsync below
+                    // still has a live descriptor and covers the complete file.
+                    gzip.finish()
+                    raw.fd.sync()
+                }
+            } finally {
+                runCatching { raw.close() }
+            }
+            if (!temp.renameTo(target)) {
+                // renameTo will not overwrite on some filesystems; fall back to copy-then-delete.
+                temp.copyTo(target, overwrite = true)
+                temp.delete()
+            }
+        } catch (e: Exception) {
+            temp.delete()
+            throw e
         }
     }
 
@@ -616,7 +649,7 @@ object NBTParser {
                 
                 val newBytes = prefix + sizeBytes + middle + suffix
                 
-                GZIPOutputStream(FileOutputStream(levelFile)).use { it.write(newBytes) }
+                writeGzippedAtomically(levelFile, newBytes)
                 onOutput("[PocketHost] NBT check: Successfully removed 'paper' datapack from level.dat.")
                 return true
             } else {
@@ -655,7 +688,7 @@ object NBTParser {
                         }
                     }
                     
-                    GZIPOutputStream(FileOutputStream(levelFile)).use { it.write(mutableBytes) }
+                    writeGzippedAtomically(levelFile, mutableBytes)
                     android.util.Log.i("NBTParser", "Updated difficulty in level.dat to $difficultyByte")
                     return true
                 }

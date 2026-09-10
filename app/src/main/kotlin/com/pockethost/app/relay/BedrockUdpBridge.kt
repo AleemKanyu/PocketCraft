@@ -22,6 +22,8 @@ class BedrockUdpBridge(
         private const val GEYSER_LOCAL_PORT = 19132
         private const val MAX_UDP_SIZE = 65536
         private const val GEYSER_LOCAL_HOST = "127.0.0.1"
+        /** The frame header encodes payload length in 2 bytes. */
+        private const val MAX_FRAME_PAYLOAD = 65535
     }
 
     @Volatile
@@ -46,6 +48,13 @@ class BedrockUdpBridge(
 
     private fun forwardFrameToGeyser(frame: BedrockFrame) {
         val clientKey = "${frame.clientIp}:${frame.clientPort}"
+
+        // The reader thread is started *after* the socket is published to the map, never from
+        // inside computeIfAbsent's mapping function. A thread that dies immediately (Geyser not
+        // listening yet) runs its `finally` -> clientSockets.remove(key); if that ran before
+        // computeIfAbsent stored the value, the remove was a no-op and the map kept a closed
+        // socket for the rest of the session, permanently breaking that client.
+        var createdSocket: DatagramSocket? = null
         val socket = clientSockets.computeIfAbsent(clientKey) {
             val geyserHost = geyserHostProvider()
                 .trim()
@@ -60,12 +69,20 @@ class BedrockUdpBridge(
                     runCatching { datagramSocket.trafficClass = 0x10 } // IPTOS_LOWDELAY
                     datagramSocket.reuseAddress = true
                     datagramSocket.connect(InetAddress.getByName(geyserHost), GEYSER_LOCAL_PORT)
-                    startListening(datagramSocket, frame.clientIp, frame.clientPort)
+                    createdSocket = datagramSocket
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to create DatagramSocket for $clientKey: ${e.message}")
                 throw e
             }
+        }
+        createdSocket?.let { startListening(it, frame.clientIp, frame.clientPort) }
+
+        if (socket.isClosed) {
+            // Lost the race with a reader thread tearing this session down. Drop the frame and
+            // let the next one open a fresh socket rather than sending on a dead one forever.
+            clientSockets.remove(clientKey, socket)
+            return
         }
 
         try {
@@ -97,6 +114,12 @@ class BedrockUdpBridge(
                         socket.receive(packet)
 
                         val payloadLen = packet.length
+                        if (payloadLen > MAX_FRAME_PAYLOAD) {
+                            // The wire format carries the length in 2 bytes; anything larger
+                            // would be framed with a truncated length.
+                            Log.w(TAG, "Dropping oversized Geyser datagram ($payloadLen bytes)")
+                            continue
+                        }
 
                         val frameLen = 1 + 2 + 4 + 2 + payloadLen
                         val frame = ByteArray(frameLen)
@@ -123,7 +146,9 @@ class BedrockUdpBridge(
             } catch (e: Exception) {
                 // Ignore
             } finally {
-                clientSockets.remove("$clientIp:$clientPort")
+                // Remove only if this socket is still the registered one: a newer session for the
+                // same client must not be evicted by an older thread's teardown.
+                clientSockets.remove("$clientIp:$clientPort", socket)
                 runCatching { socket.close() }
             }
         }

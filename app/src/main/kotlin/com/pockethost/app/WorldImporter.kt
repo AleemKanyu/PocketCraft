@@ -97,8 +97,12 @@ object WorldImporter {
 
                         val entryFile = File(extractRoot, normalizedName)
 
-                        // Prevent zip slip attack
-                        if (!entryFile.canonicalPath.startsWith(extractRoot.canonicalPath)) {
+                        // Prevent zip slip attack. The separator is part of the comparison so a
+                        // crafted "../worldsomething/x" entry cannot land in a sibling server
+                        // directory whose name merely starts with the extraction root's name.
+                        val entryPath = entryFile.canonicalPath
+                        val rootPath = extractRoot.canonicalPath
+                        if (entryPath != rootPath && !entryPath.startsWith(rootPath + File.separator)) {
                             android.util.Log.e("WorldImporter", "Zip slip detected: ${entry.name}")
                             continue
                         }

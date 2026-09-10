@@ -99,9 +99,16 @@ class ServerHostService : Service() {
     private var launchJob: kotlinx.coroutines.Job? = null
     private var isNewWorld = false
     private var logcatThread: Thread? = null
+    // The `logcat` child process backing the bridge. interrupt() cannot unblock a read on a
+    // process stream, so stopping the bridge has to destroy the process: otherwise the thread
+    // stays parked on read() forever, the child keeps running, and the next start() spawns a
+    // second bridge whose output interleaves with the first one's.
+    // Fully qualified: this file imports android.os.Process, which shadows java.lang.Process.
+    @Volatile private var logcatProcess: java.lang.Process? = null
     private var logTailThread: Thread? = null
     private var portProbeThread: Thread? = null
     private val logcatRunning = AtomicBoolean(false)
+    private val logcatGeneration = java.util.concurrent.atomic.AtomicInteger(0)
     private val logTailRunning = AtomicBoolean(false)
     private val portProbeRunning = AtomicBoolean(false)
     private val tunnelStarted = AtomicBoolean(false)
@@ -1271,38 +1278,57 @@ class ServerHostService : Service() {
     private fun startLogcatBridge(versionId: String) {
         if (logcatRunning.getAndSet(true)) return
         val bridgeStartTime = SystemClock.elapsedRealtime()
+        val generation = logcatGeneration.incrementAndGet()
         logcatThread = Thread {
-            val process = ProcessBuilder(
-                "logcat",
-                "-T", "1",
-                "--pid=${Process.myPid()}",
-                "-v",
-                "brief",
-                "*:V"
-            ).redirectErrorStream(true).start()
+            val process = try {
+                ProcessBuilder(
+                    "logcat",
+                    "-T", "1",
+                    "--pid=${Process.myPid()}",
+                    "-v",
+                    "brief",
+                    "*:V"
+                ).redirectErrorStream(true).start()
+            } catch (e: Exception) {
+                android.util.Log.e("ServerHostService", "Failed to start logcat bridge: ${e.message}")
+                // Release the latch so a later start attempt is not permanently blocked.
+                logcatRunning.set(false)
+                return@Thread
+            }
+            logcatProcess = process
 
-            process.inputStream.bufferedReader().useLines { lines ->
-                lines.forEach { raw ->
-                    if (!logcatRunning.get()) return@forEach
-                    val line = raw.substringAfter(": ", raw).trim()
-                    if (line.isBlank()) return@forEach
-                    if (line.startsWith("JAR:") ||
-                        line.startsWith("JRE:") ||
-                        line.startsWith("Dir:") ||
-                        line.startsWith("Tmp:") ||
-                        line.contains("type=1400 audit(") ||
-                        line.contains(" avc: ") ||
-                        line.contains("GraphicsEnvironment") ||
-                        line.contains("ziparchive") ||
-                        line.contains("ProfileInstaller") ||
-                        line.contains("AdrenoGLES") ||
-                        line.contains("OpenGLRenderer") ||
-                        line.contains("Compat change id reported")
-                    ) {
-                        return@forEach
+            try {
+                process.inputStream.bufferedReader().useLines { lines ->
+                    for (raw in lines) {
+                        // A retired generation must stop forwarding even if its stream is still open.
+                        if (!logcatRunning.get() || logcatGeneration.get() != generation) break
+                        val line = raw.substringAfter(": ", raw).trim()
+                        if (line.isBlank()) continue
+                        if (line.startsWith("JAR:") ||
+                            line.startsWith("JRE:") ||
+                            line.startsWith("Dir:") ||
+                            line.startsWith("Tmp:") ||
+                            line.contains("type=1400 audit(") ||
+                            line.contains(" avc: ") ||
+                            line.contains("GraphicsEnvironment") ||
+                            line.contains("ziparchive") ||
+                            line.contains("ProfileInstaller") ||
+                            line.contains("AdrenoGLES") ||
+                            line.contains("OpenGLRenderer") ||
+                            line.contains("Compat change id reported")
+                        ) {
+                            continue
+                        }
+                        val isBacklog = (SystemClock.elapsedRealtime() - bridgeStartTime) < 3000L
+                        handleObservedOutputLine(versionId, line, isBacklog)
                     }
-                    val isBacklog = (SystemClock.elapsedRealtime() - bridgeStartTime) < 3000L
-                    handleObservedOutputLine(versionId, line, isBacklog)
+                }
+            } catch (e: Exception) {
+                android.util.Log.d("ServerHostService", "Logcat bridge ended: ${e.message}")
+            } finally {
+                runCatching { process.destroy() }
+                if (logcatGeneration.get() == generation) {
+                    logcatProcess = null
                 }
             }
         }.apply {
@@ -2436,6 +2462,10 @@ class ServerHostService : Service() {
 
     private fun stopLogcatBridge() {
         logcatRunning.set(false)
+        // Destroying the child closes its stdout, which is the only thing that unblocks the
+        // bridge thread's read() and lets it exit.
+        runCatching { logcatProcess?.destroy() }
+        logcatProcess = null
         logcatThread?.interrupt()
         logcatThread = null
     }

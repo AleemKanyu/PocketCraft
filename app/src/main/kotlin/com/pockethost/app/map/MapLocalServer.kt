@@ -148,7 +148,14 @@ class MapLocalServer(
     }
 
     private fun handleStaticFiles(output: BufferedOutputStream, requestedPath: String, headOnly: Boolean) {
-        var path = requestedPath
+        // BlueMap tile and asset names are percent-encoded on the wire; without decoding, any
+        // path containing a space or other escaped character resolves to a non-existent file
+        // and is served as a 404.
+        var path = runCatching {
+            // URLDecoder also maps '+' to a space, which is form encoding, not path encoding --
+            // escape it first so a literal '+' in a filename survives.
+            java.net.URLDecoder.decode(requestedPath.replace("+", "%2B"), "UTF-8")
+        }.getOrDefault(requestedPath)
         if (path == "/" || path.isBlank()) path = "/index.html"
 
         val mapDir = MapCacheManager.getMapDir(context, activeWorldName)
@@ -156,7 +163,7 @@ class MapLocalServer(
         val requestedFile = File(webRoot, path.removePrefix("/")).canonicalFile
 
         // Security check: path traversal prevention
-        if (!requestedFile.canonicalPath.startsWith(webRoot.canonicalPath)) {
+        if (!isInside(requestedFile, webRoot)) {
             sendResponse(output, 403, "Forbidden", "text/plain", "Forbidden".toByteArray(), headOnly)
             return
         }
@@ -165,7 +172,8 @@ class MapLocalServer(
             val isGzipped = requestedFile.name.endsWith(".gz", ignoreCase = true)
             // For "foo.json.gz" the media type is that of the *inner* file.
             val effectiveExtension = if (isGzipped) {
-                requestedFile.name.removeSuffix(".gz").removeSuffix(".GZ").substringAfterLast('.', "")
+                // isGzipped was matched case-insensitively, so drop the extension by length.
+                requestedFile.name.dropLast(3).substringAfterLast('.', "")
             } else {
                 requestedFile.extension
             }
@@ -189,6 +197,19 @@ class MapLocalServer(
                 sendResponse(output, 404, "Not Found", "text/plain", "File Not Found".toByteArray(), headOnly)
             }
         }
+    }
+
+    /**
+     * True when [candidate] is [root] itself or sits underneath it.
+     *
+     * A bare `startsWith` on the canonical paths also accepts siblings whose names merely begin
+     * with the root's name (`.../webassets` passes a check against `.../web`), so the separator
+     * has to be part of the comparison.
+     */
+    private fun isInside(candidate: File, root: File): Boolean {
+        val rootPath = root.canonicalPath
+        val candidatePath = candidate.canonicalPath
+        return candidatePath == rootPath || candidatePath.startsWith(rootPath + File.separator)
     }
 
     private fun sendResponse(

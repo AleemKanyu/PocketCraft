@@ -77,12 +77,18 @@ object DriveBackupManager {
                 BufferedInputStream(localFile.inputStream()).use { input ->
                     val buffer = ByteArray(16 * 1024)
                     var copied = 0L
+                    // Only report when the whole-percent value actually moves. Emitting on every
+                    // 16 KB buffer meant tens of thousands of UI updates for a large backup.
+                    var lastProgress = -1
                     var bytesRead = input.read(buffer)
                     while (bytesRead != -1) {
                         output.write(buffer, 0, bytesRead)
                         copied += bytesRead
                         val progress = 12 + ((copied * 78L) / totalBytes).toInt().coerceIn(0, 78)
-                        onProgress(progress, "Uploading backup to Google Drive...")
+                        if (progress != lastProgress) {
+                            lastProgress = progress
+                            onProgress(progress, "Uploading backup to Google Drive...")
+                        }
                         bytesRead = input.read(buffer)
                     }
                 }
@@ -139,12 +145,17 @@ object DriveBackupManager {
             BufferedInputStream(file.inputStream()).use { input ->
                 val buffer = ByteArray(16 * 1024)
                 var copied = 0L
+                // See uploadBackup: report only on whole-percent changes, not per buffer.
+                var lastProgress = -1
                 var bytesRead = input.read(buffer)
                 while (bytesRead != -1) {
                     output.write(buffer, 0, bytesRead)
                     copied += bytesRead
                     val progress = 12 + ((copied * 78L) / totalBytes).toInt().coerceIn(0, 78)
-                    onProgress(progress, "Uploading to Google Drive...")
+                    if (progress != lastProgress) {
+                        lastProgress = progress
+                        onProgress(progress, "Uploading to Google Drive...")
+                    }
                     bytesRead = input.read(buffer)
                 }
             }
