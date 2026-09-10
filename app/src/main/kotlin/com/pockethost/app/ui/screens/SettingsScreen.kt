@@ -1766,25 +1766,6 @@ fun SettingsScreen(
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     DuoButton(
-                                        text = "Supporter Donation — ₹399 / month",
-                                        onClick = {
-                                            val activity = context.findActivity()
-                                            if (activity != null && firebaseUser != null) {
-                                                billingManager.launchBillingFlow(activity, BillingManager.PRODUCT_PREMIUM) { error ->
-                                                    if (error != null) {
-                                                        showPremiumBottomSheet = true
-                                                    }
-                                                }
-                                            } else {
-                                                showPremiumBottomSheet = true
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        minHeight = 42.dp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-
-                                    DuoButton(
                                         text = "Donate on Ko-fi",
                                         onClick = {
                                             try {
@@ -1803,7 +1784,7 @@ fun SettingsScreen(
                                 }
 
                                 Text(
-                                    "Billed monthly via Google Play · External link for Ko-fi",
+                                    "Voluntary contribution via Ko-fi · Safe and secure payment",
                                     fontSize = 10.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     textAlign = TextAlign.Center,

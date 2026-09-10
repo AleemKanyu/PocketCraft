@@ -238,63 +238,7 @@ fun PremiumUpgradeBottomSheet(
                 }
             }
 
-            // Option 1: Monthly Donation (₹399/mo)
-            val supporterOffer = offers.firstOrNull { it.productId == BillingManager.PRODUCT_PREMIUM }
-                ?: remember {
-                    SubscriptionOffer(
-                        productId = BillingManager.PRODUCT_PREMIUM,
-                        title = "Monthly Donation",
-                        price = "₹399",
-                        recurringPrice = "₹399",
-                        tier = PremiumTier.PREMIUM,
-                        description = "Voluntary monthly contribution to support PocketHost relays and development.",
-                        freeTrialDays = 0,
-                        offerToken = ""
-                    )
-                }
-
-            val cleanRecurringPrice = remember(supporterOffer.recurringPrice) {
-                supporterOffer.recurringPrice.trim().replace(Regex("""([.,]00)(?=\s*($|[^0-9]))"""), "")
-            }
-            val isCurrentTier = entitlement.tier == PremiumTier.PREMIUM || entitlement.tier == PremiumTier.SUPPORTIVE
-            val buttonLabel = when {
-                purchasingProductId == supporterOffer.productId -> "CONNECTING..."
-                isCurrentTier -> "ACTIVE DONOR"
-                else -> "DONATE $cleanRecurringPrice/MO"
-            }
-            val enabled = !isCurrentTier && purchasingProductId == null
-
-            MonthlyDonationCard(
-                price = cleanRecurringPrice,
-                buttonLabel = buttonLabel,
-                enabled = enabled,
-                onClick = {
-                    if (currentUser == null) {
-                        Toast.makeText(context, "Please sign up or sign in to continue.", Toast.LENGTH_LONG).show()
-                        onNavigateToSignUp()
-                        return@MonthlyDonationCard
-                    }
-                    val activity = context.findActivity()
-                    if (activity == null) {
-                        Toast.makeText(context, "Could not launch purchase: invalid activity.", Toast.LENGTH_LONG).show()
-                        return@MonthlyDonationCard
-                    }
-                    purchasingProductId = supporterOffer.productId
-                    billingManager.launchBillingFlow(activity, supporterOffer.productId) { error ->
-                        purchasingProductId = null
-                        if (error != null) {
-                            Toast.makeText(context, error, Toast.LENGTH_LONG).show()
-                        } else {
-                            scope.launch {
-                                sheetState.hide()
-                                onDismissRequest()
-                            }
-                        }
-                    }
-                }
-            )
-
-            // Option 2: Ko-fi Donation
+            // Ko-fi Voluntary Donation
             KofiDonationCard(
                 onClick = {
                     try {
@@ -306,23 +250,8 @@ fun PremiumUpgradeBottomSheet(
                 }
             )
 
-            // ── Footer ──
-            DuoButton(
-                text = "RESTORE PURCHASES",
-                onClick = {
-                    billingManager.restorePurchases { result ->
-                        Toast.makeText(context, result, Toast.LENGTH_LONG).show()
-                    }
-                },
-                variant = DuoButtonVariant.Secondary,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 2.dp),
-                minHeight = 36.dp
-            )
-
             Text(
-                text = "Voluntary contribution · Cancel monthly donation anytime in Google Play · External link for Ko-fi",
+                text = "Voluntary contribution via Ko-fi · Safe and secure payment via Card, PayPal, or UPI",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center,
