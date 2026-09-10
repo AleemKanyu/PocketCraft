@@ -285,8 +285,10 @@ object DriveBackupManager {
         val candidates = listOf(
             File(downloads, "$LEGACY_BACKUP_FOLDER/$worldName"),
             File(downloads, "$EXPORTED_BACKUP_FOLDER/$worldName"),
+            File(downloads, "PocketCraftWorldBackups/$worldName"),
             File(downloads, "$LEGACY_BACKUP_FOLDER/${sanitizeWorldName(worldName)}"),
-            File(downloads, "$EXPORTED_BACKUP_FOLDER/${sanitizeWorldName(worldName)}")
+            File(downloads, "$EXPORTED_BACKUP_FOLDER/${sanitizeWorldName(worldName)}"),
+            File(downloads, "PocketCraftWorldBackups/${sanitizeWorldName(worldName)}")
         )
         return candidates
             .flatMap { dir ->
@@ -319,16 +321,14 @@ object DriveBackupManager {
         return latestBackupFile(worldName)?.takeIf { it.exists() && it.canRead() }
     }
 
-    private fun latestBackupUri(context: Context, worldName: String): android.net.Uri? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
-        val safeWorldName = sanitizeWorldName(worldName)
+    private fun queryBackupUriForPath(context: Context, relativePathPattern: String): android.net.Uri? {
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DATE_MODIFIED
         )
         val selection = "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? AND ${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?"
         val selectionArgs = arrayOf(
-            "Download/$EXPORTED_BACKUP_FOLDER/$safeWorldName%",
+            relativePathPattern,
             "%.zip"
         )
         val sortOrder = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
@@ -345,10 +345,14 @@ object DriveBackupManager {
                 val id = cursor.getLong(idIndex)
                 ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
             }
-        }.getOrElse {
-            android.util.Log.e("DriveBackupManager", "Failed to query MediaStore backup for upload", it)
-            null
-        }
+        }.getOrNull()
+    }
+
+    private fun latestBackupUri(context: Context, worldName: String): android.net.Uri? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        val safeWorldName = sanitizeWorldName(worldName)
+        return queryBackupUriForPath(context, "Download/$EXPORTED_BACKUP_FOLDER/$safeWorldName%")
+            ?: queryBackupUriForPath(context, "Download/PocketCraftWorldBackups/$safeWorldName%")
     }
 
     private fun latestBackupDisplayName(context: Context, uri: android.net.Uri): String {
@@ -466,7 +470,7 @@ object DriveBackupManager {
 
     private fun escapeDriveQuery(value: String): String = value.replace("'", "\\'")
 
-    suspend fun uploadAppSettings(context: Context, account: GoogleSignInAccount) {
+    suspend fun uploadAppSettings(context: Context, account: GoogleSignInAccount): Unit = withContext(Dispatchers.IO) {
         val prefs = AppPreferences(context)
         val soundEnabled = AppPreferencesStore.isSoundEnabledFlow(context).first()
         val notificationsEnabled = AppPreferencesStore.isNotificationsEnabledFlow(context).first()
@@ -512,7 +516,7 @@ object DriveBackupManager {
         tempFile.delete()
     }
 
-    suspend fun restoreAppSettings(context: Context, account: GoogleSignInAccount): Boolean {
+    suspend fun restoreAppSettings(context: Context, account: GoogleSignInAccount): Boolean = withContext(Dispatchers.IO) {
         val drive = driveService(context, account)
         val existingFiles = drive.files().list()
             .setSpaces("appDataFolder")
@@ -522,7 +526,7 @@ object DriveBackupManager {
             .files
 
         if (existingFiles.isNullOrEmpty()) {
-            return false
+            return@withContext false
         }
 
         val fileId = existingFiles[0].id
@@ -558,7 +562,7 @@ object DriveBackupManager {
             if (json.has("isFloatingChatEnabled")) {
                 AppPreferencesStore.setFloatingChatEnabled(context, json.getBoolean("isFloatingChatEnabled"))
             }
-            return true
+            true
         } finally {
             tempFile.delete()
         }

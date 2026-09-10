@@ -34,12 +34,6 @@ data class PlayerLocation(
         "minecraft:the_end" -> "The End"
         else -> "Overworld"
     }
-
-    fun dimensionIcon(): String = when (dimension) {
-        "minecraft:the_nether" -> "🔥"
-        "minecraft:the_end" -> "🌑"
-        else -> "🌍"
-    }
 }
 
 object NBTParser {

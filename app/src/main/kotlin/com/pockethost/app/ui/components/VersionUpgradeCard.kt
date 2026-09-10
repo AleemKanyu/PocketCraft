@@ -43,7 +43,6 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.pockethost.app.ui.components.FlatEmojiIcon
 import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.ui.theme.pill3d
 

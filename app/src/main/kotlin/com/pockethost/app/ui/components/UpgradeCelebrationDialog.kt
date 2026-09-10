@@ -28,6 +28,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -79,12 +81,12 @@ private data class CelebConfetti(
 )
 
 private val premiumPerks = listOf(
-    "Custom IP for easy server joining" to "🌐",
-    "Unlimited AFK Bots" to "🤖",
-    "Support for up to 50 players" to "👥",
-    "More world slots to design & test" to "🗺️",
-    "Full live operator chat access" to "💬",
-    "Custom server theme" to "🎨"
+    "Custom IP for easy server joining",
+    "Unlimited AFK Bots",
+    "Support for up to 50 players",
+    "More world slots to design & test",
+    "Full live operator chat access",
+    "Custom server theme"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -249,7 +251,12 @@ fun UpgradeCelebrationDialog(
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("👑", fontSize = 34.sp)
+                            Icon(
+                                imageVector = Icons.Default.WorkspacePremium,
+                                contentDescription = null,
+                                tint = Color(0xFFFFD54F),
+                                modifier = Modifier.size(36.dp)
+                            )
                         }
                         Text(
                             text = headline,
@@ -301,13 +308,13 @@ fun UpgradeCelebrationDialog(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "🚀 Pro Features Unlocked",
+                        text = "Pro Features Unlocked",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = Monocraft,
                         color = Color(0xFFAB47BC)
                     )
-                    premiumPerks.forEach { (perk, emoji) ->
+                    premiumPerks.forEach { perk ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -330,7 +337,6 @@ fun UpgradeCelebrationDialog(
                                     modifier = Modifier.size(13.dp)
                                 )
                             }
-                            Text(emoji, fontSize = 14.sp)
                             Text(
                                 text = perk,
                                 fontSize = 12.5.sp,
@@ -364,7 +370,12 @@ fun UpgradeCelebrationDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("🌟", fontSize = 16.sp)
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = null,
+                            tint = Color(0xFFFFB300),
+                            modifier = Modifier.size(16.dp)
+                        )
                         Text(
                             text = "Claim Discord Supporter Role",
                             fontSize = 12.sp,
@@ -391,7 +402,7 @@ fun UpgradeCelebrationDialog(
                     )
                     if (discordUsername.isNotBlank() && !discordSaved) {
                         DuoButton(
-                            text = "Save & Join Discord 💬",
+                            text = "Save & Join Discord",
                             onClick = {
                                 AppPreferences(context).supporterDiscordId = discordUsername.trim()
                                 scope.launch {
@@ -409,7 +420,7 @@ fun UpgradeCelebrationDialog(
                         )
                     } else if (discordSaved) {
                         Text(
-                            text = "✓ Discord ID linked! Join our server to claim your role.",
+                            text = "Discord ID linked! Join our server to claim your role.",
                             fontSize = 11.sp,
                             color = Color(0xFF4CAF50),
                             fontWeight = FontWeight.Bold
@@ -421,7 +432,7 @@ fun UpgradeCelebrationDialog(
 
                 // ── CTA button ──
                 DuoButton(
-                    text = "LET'S GO! 🚀",
+                    text = "LET'S GO!",
                     onClick = onDismissRequest,
                     variant = DuoButtonVariant.Primary,
                     modifier = Modifier

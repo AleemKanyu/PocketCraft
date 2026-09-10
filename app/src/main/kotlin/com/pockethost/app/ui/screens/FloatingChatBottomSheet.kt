@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -401,9 +402,9 @@ fun FloatingChatBottomSheet(
                             val isSelected = activeFilter == filter
                             val label = when (filter) {
                                 ChatFilter.ALL -> "All"
-                                ChatFilter.PLAYER -> "💬 Player"
-                                ChatFilter.PRIVATE -> "🔒 Whispers"
-                                ChatFilter.SYSTEM -> "📢 System"
+                                ChatFilter.PLAYER -> "Player"
+                                ChatFilter.PRIVATE -> "Whispers"
+                                ChatFilter.SYSTEM -> "System"
                             }
                             val chipColor = if (isSelected) {
                                 if (filter == ChatFilter.PRIVATE) Color(0xFF8E24AA).copy(alpha = 0.2f)
@@ -459,7 +460,7 @@ fun FloatingChatBottomSheet(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "🔒 Whisper history with $selectedSilentPlayer",
+                                    text = "Whisper history with $selectedSilentPlayer",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFFAB47BC)
@@ -495,7 +496,12 @@ fun FloatingChatBottomSheet(
                                 verticalAlignment = Alignment.Top,
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Text("💡", fontSize = 16.sp)
+                                Icon(
+                                    imageVector = Icons.Default.Lightbulb,
+                                    contentDescription = null,
+                                    tint = PocketColors.Primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         "Quick Chat Guide",
@@ -506,7 +512,7 @@ fun FloatingChatBottomSheet(
                                     Spacer(Modifier.height(4.dp))
                                     Text(
                                         "• Tap player names in the online list to mention them (@name).\n" +
-                                        "• Click the 🔒 Private Msg badge next to a name to start Whispering (messages will only be visible to that player).\n" +
+                                        "• Click the Private Msg badge next to a name to start Whispering (messages will only be visible to that player).\n" +
                                         "• When Whispering is active, the send button highlights in purple.",
                                         fontSize = 11.5.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -667,7 +673,7 @@ fun FloatingChatBottomSheet(
                                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                                         ) {
                                             Text(
-                                                text = if (selectedSilentPlayer == player.name) "🔒 Whispering" else "🔒 Private Msg",
+                                                text = if (selectedSilentPlayer == player.name) "Whispering" else "Private Msg",
                                                 fontSize = 9.5.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = if (selectedSilentPlayer == player.name) Color.White else MaterialTheme.colorScheme.onSurface
@@ -861,7 +867,7 @@ fun FloatingChatBottomSheet(
                         Spacer(modifier = Modifier.height(2.dp))
 
                         DuoButton(
-                            text = "UPGRADE TO PRO 🚀",
+                            text = "UPGRADE TO PRO",
                             onClick = {
                                 triggerHaptic()
                                 showPremiumUpgradeSheet = true
@@ -947,9 +953,9 @@ private fun FloatingChatBubble(entry: ChatEntry) {
         ) {
             Text(
                 text = when {
-                    entry.isPrivate && isOperator -> "🔒 ${entry.sender}"
-                    entry.isPrivate -> "🔒 ${entry.sender}"
-                    isOperator -> "📢 Operator"
+                    entry.isPrivate && isOperator -> entry.sender
+                    entry.isPrivate -> entry.sender
+                    isOperator -> "Operator"
                     else -> entry.sender
                 },
                 fontSize = 11.sp,

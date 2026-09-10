@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,7 +21,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pockethost.app.ui.components.FlatEmojiIcon
 import com.pockethost.app.ui.components.DuoButton
 import com.pockethost.app.ui.components.DuoButtonVariant
 import com.pockethost.app.ui.components.GameCard
@@ -52,7 +54,7 @@ fun ErrorScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                FlatEmojiIcon("⚠️", modifier = Modifier.size(52.dp), tint = PocketColors.Offline)
+                Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(52.dp), tint = PocketColors.Offline)
                 Text(
                     text = "Something Went Wrong",
                     style = MaterialTheme.typography.headlineLarge,

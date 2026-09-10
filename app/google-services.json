@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:52965868712:android:79418154f90541285e6e9d",
         "android_client_info": {
-          "package_name": "com.pockethost.app"
+          "package_name": "com.pocketcraft.server"
         }
       },
       "oauth_client": [
@@ -17,7 +17,7 @@
           "client_id": "52965868712-0ktqrqredo465t0t9nhq8u0h1fu8big7.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.pockethost.app",
+            "package_name": "com.pocketcraft.server",
             "certificate_hash": "ce271228a012376475eb45b5ac571170ad4edd06"
           }
         },
@@ -25,8 +25,77 @@
           "client_id": "52965868712-ahrli2q26ndkb5lbfd0dr29510j6cqa5.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.pockethost.app",
+            "package_name": "com.pocketcraft.server",
             "certificate_hash": "c1f36afdf7184b0606f408bc24bb87d2d8b3e2aa"
+          }
+        },
+        {
+          "client_id": "52965868712-e5isaa9mu1qv4eqgld4fgg4o59o4njkm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pocketcraft.server",
+            "certificate_hash": "33925d50f644736de44f344e216e1623105b73cb"
+          }
+        },
+        {
+          "client_id": "52965868712-inmbivc5kji28fpkeon457gg111f2qi2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAmJgiyi9Ri3LiFuCIhFt82pPOB1A3q044"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "52965868712-inmbivc5kji28fpkeon457gg111f2qi2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:52965868712:android:b6180e40483cd7355e6e9d",
+        "android_client_info": {
+          "package_name": "com.pockethost.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "52965868712-7vtqs5u30s9ndpkoiinraeo9nc90g2u2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pockethost.app",
+            "certificate_hash": "33925d50f644736de44f344e216e1623105b73cb"
+          }
+        },
+        {
+          "client_id": "52965868712-m6qio6p7869krhlmhidh83q58apc7gor.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pockethost.app",
+            "certificate_hash": "d10b607ec29785c99a818ae53247de2f4eb4bc05"
+          }
+        },
+        {
+          "client_id": "52965868712-s71km89c082jmm0fi59q5ai6n8m4pjsq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pockethost.app",
+            "certificate_hash": "ca06a22e18b19064478e5ae66cfee99a6e564126"
+          }
+        },
+        {
+          "client_id": "52965868712-siqvnonq82ne5d3e3hejk6h2a6k24540.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pockethost.app",
+            "certificate_hash": "2d0da7afafeb3271bea0bd3c8d511bbf4b3f8cf4"
           }
         },
         {

@@ -30,8 +30,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Lightbulb
 import com.pockethost.app.data.model.Plugin
-import com.pockethost.app.ui.components.FlatEmojiIcon
 import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.util.LocalAppStrings
 
@@ -82,7 +83,7 @@ fun PluginsSection(
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                FlatEmojiIcon("💡", modifier = Modifier.size(16.dp), tint = PocketColors.PrimaryDark)
+                Icon(Icons.Default.Lightbulb, contentDescription = null, modifier = Modifier.size(16.dp), tint = PocketColors.PrimaryDark)
                 Text(
                     s.pluginsTip,
                     fontSize = 12.sp,
@@ -99,7 +100,7 @@ fun PluginsSection(
                 contentAlignment = androidx.compose.ui.Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    FlatEmojiIcon("🧩", modifier = Modifier.size(40.dp), tint = PocketColors.PrimaryDark)
+                    Icon(Icons.Default.Extension, contentDescription = null, modifier = Modifier.size(40.dp), tint = PocketColors.PrimaryDark)
                     Spacer(Modifier.height(8.dp))
                     Text(
                         s.noPluginsInstalled,
@@ -122,7 +123,7 @@ fun PluginsSection(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            FlatEmojiIcon("🧩", modifier = Modifier.size(28.dp), tint = PocketColors.PrimaryDark)
+                            Icon(Icons.Default.Extension, contentDescription = null, modifier = Modifier.size(28.dp), tint = PocketColors.PrimaryDark)
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(plugin.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Text(

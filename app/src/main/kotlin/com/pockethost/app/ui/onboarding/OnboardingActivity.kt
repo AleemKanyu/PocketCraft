@@ -71,6 +71,7 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Forest
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -1193,7 +1194,7 @@ private fun TopHeader(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
-                            text = "Skip All ⏭",
+                            text = "Skip All",
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
@@ -1217,7 +1218,12 @@ private fun TopHeader(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text("🎨", fontSize = 14.sp)
+                            Icon(
+                                imageVector = Icons.Default.Palette,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = onboardingAccentGreen()
+                            )
                             Text(
                                 text = currentMobTheme.themeName,
                                 fontSize = 12.sp,

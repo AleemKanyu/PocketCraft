@@ -44,7 +44,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pockethost.app.ui.components.FlatEmojiIcon
+import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.Save
 import com.pockethost.app.ui.components.DuoButton
 import com.pockethost.app.ui.components.DuoButtonVariant
 import com.pockethost.app.ui.components.GameCard
@@ -275,7 +276,7 @@ fun BackupsScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     GameCard(modifier = Modifier.fillMaxWidth()) {
-                        FlatEmojiIcon("☁️", modifier = Modifier.size(48.dp), tint = PocketColors.PrimaryDark)
+                        Icon(Icons.Default.CloudQueue, contentDescription = null, modifier = Modifier.size(48.dp), tint = PocketColors.PrimaryDark)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "No backups yet",
@@ -300,7 +301,7 @@ fun BackupsScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            FlatEmojiIcon("💾", modifier = Modifier.size(28.dp), tint = PocketColors.PrimaryDark)
+                            Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(28.dp), tint = PocketColors.PrimaryDark)
                             androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = backup.name,

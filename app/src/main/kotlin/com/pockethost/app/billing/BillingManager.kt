@@ -534,7 +534,7 @@ class BillingManager private constructor(private val context: Context) {
         val recurringPhase = recurringPricePhase(offer) ?: offer.pricingPhases.pricingPhaseList.lastOrNull() ?: return null
         val rawFreeTrialDays = freePhaseDurationDays(offer)
         val freeTrialDays = if (tier == PremiumTier.PREMIUM && rawFreeTrialDays > 0) 7 else rawFreeTrialDays
-        val title = if (tier == PremiumTier.PREMIUM) "Supporter (₹299/mo)" else "Champion (₹899/mo)"
+        val title = if (tier == PremiumTier.PREMIUM) "Supporter (₹399/mo)" else "Champion (₹899/mo)"
         val description = if (tier == PremiumTier.PREMIUM) {
             "Voluntary monthly contribution to support PocketHost relays and development."
         } else {

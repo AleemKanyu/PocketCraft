@@ -9,7 +9,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -24,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pockethost.app.ui.theme.Monocraft
+import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.update.UpdateConfig
 import kotlinx.coroutines.launch
 
@@ -74,9 +78,11 @@ fun UpdatePopup(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        FlatEmojiIcon(
-                            symbol = "🎮",
-                            modifier = Modifier.size(64.dp)
+                        Icon(
+                            imageVector = Icons.Default.SystemUpdate,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = PocketColors.PrimaryDark
                         )
 
                         Text(
@@ -140,9 +146,11 @@ fun UpdatePopup(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                FlatEmojiIcon(
-                    symbol = "🎮",
-                    modifier = Modifier.size(64.dp)
+                Icon(
+                    imageVector = Icons.Default.SystemUpdate,
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp),
+                    tint = PocketColors.PrimaryDark
                 )
 
                 Text(

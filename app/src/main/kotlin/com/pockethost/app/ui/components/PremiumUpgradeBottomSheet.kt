@@ -14,6 +14,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,11 +31,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.OpenInNew
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -55,13 +53,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.res.painterResource
-import com.pockethost.app.R
 import com.google.firebase.auth.FirebaseAuth
+import com.pockethost.app.R
 import com.pockethost.app.billing.BillingManager
 import com.pockethost.app.billing.PremiumTier
 import com.pockethost.app.billing.SubscriptionOffer
@@ -192,7 +191,7 @@ fun PremiumUpgradeBottomSheet(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "100% free & open source. Help us fund high-speed multiplayer relays & continuous development.",
+                    text = "100% free & open source. All server features are unlocked for everyone. Voluntary donations help fund server hosting and continuous updates.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -212,6 +211,7 @@ fun PremiumUpgradeBottomSheet(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                             shape = RoundedCornerShape(12.dp)
                         )
+                        .clickable { onNavigateToSignUp() }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -223,22 +223,29 @@ fun PremiumUpgradeBottomSheet(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = "Sign in first so your supporter badge links to your account.",
+                        text = "Sign in first so your donation is linked to your account.",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 15.sp
+                        lineHeight = 15.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "SIGN IN",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PocketColors.Primary
                     )
                 }
             }
 
-            // Option 1: Monthly Membership (₹299/mo)
+            // Option 1: Monthly Donation (₹399/mo)
             val supporterOffer = offers.firstOrNull { it.productId == BillingManager.PRODUCT_PREMIUM }
                 ?: remember {
                     SubscriptionOffer(
                         productId = BillingManager.PRODUCT_PREMIUM,
-                        title = "Supporter Membership",
-                        price = "₹299",
-                        recurringPrice = "₹299",
+                        title = "Monthly Donation",
+                        price = "₹399",
+                        recurringPrice = "₹399",
                         tier = PremiumTier.PREMIUM,
                         description = "Voluntary monthly contribution to support PocketHost relays and development.",
                         freeTrialDays = 0,
@@ -246,28 +253,31 @@ fun PremiumUpgradeBottomSheet(
                     )
                 }
 
+            val cleanRecurringPrice = remember(supporterOffer.recurringPrice) {
+                supporterOffer.recurringPrice.trim().replace(Regex("""([.,]00)(?=\s*($|[^0-9]))"""), "")
+            }
             val isCurrentTier = entitlement.tier == PremiumTier.PREMIUM || entitlement.tier == PremiumTier.SUPPORTIVE
             val buttonLabel = when {
                 purchasingProductId == supporterOffer.productId -> "CONNECTING..."
-                isCurrentTier -> "ACTIVE CONTRIBUTOR"
-                else -> "DONATE ${supporterOffer.recurringPrice}/MO"
+                isCurrentTier -> "ACTIVE DONOR"
+                else -> "DONATE $cleanRecurringPrice/MO"
             }
             val enabled = !isCurrentTier && purchasingProductId == null
 
-            SupporterMembershipCard(
-                price = supporterOffer.recurringPrice,
+            MonthlyDonationCard(
+                price = cleanRecurringPrice,
                 buttonLabel = buttonLabel,
                 enabled = enabled,
                 onClick = {
                     if (currentUser == null) {
                         Toast.makeText(context, "Please sign up or sign in to continue.", Toast.LENGTH_LONG).show()
                         onNavigateToSignUp()
-                        return@SupporterMembershipCard
+                        return@MonthlyDonationCard
                     }
                     val activity = context.findActivity()
                     if (activity == null) {
                         Toast.makeText(context, "Could not launch purchase: invalid activity.", Toast.LENGTH_LONG).show()
-                        return@SupporterMembershipCard
+                        return@MonthlyDonationCard
                     }
                     purchasingProductId = supporterOffer.productId
                     billingManager.launchBillingFlow(activity, supporterOffer.productId) { error ->
@@ -284,8 +294,8 @@ fun PremiumUpgradeBottomSheet(
                 }
             )
 
-            // Option 2: Ko-fi Support
-            KofiSupportCard(
+            // Option 2: Ko-fi Donation
+            KofiDonationCard(
                 onClick = {
                     try {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(KOFI_URL))
@@ -312,7 +322,7 @@ fun PremiumUpgradeBottomSheet(
             )
 
             Text(
-                text = "Voluntary contribution · Cancel membership anytime in Google Play · External link for Ko-fi",
+                text = "Voluntary contribution · Cancel monthly donation anytime in Google Play · External link for Ko-fi",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center,
@@ -329,18 +339,16 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 }
 
 @Composable
-private fun SupporterMembershipCard(
+private fun MonthlyDonationCard(
     price: String,
     buttonLabel: String,
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     val accentColor = PocketColors.Primary
-    val perks = listOf(
-        "High-speed server relays",
-        "Supporter badge on profile",
-        "Continuous open-source updates"
-    )
+    val cleanPrice = remember(price) {
+        price.trim().replace(Regex("""([.,]00)(?=\s*($|[^0-9]))"""), "")
+    }
 
     GameCard(modifier = Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -352,7 +360,8 @@ private fun SupporterMembershipCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
                     Box(
                         modifier = Modifier
@@ -369,87 +378,71 @@ private fun SupporterMembershipCard(
                         )
                     }
 
-                    Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Monthly Donation",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 13.5.sp,
+                            fontFamily = Monocraft,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(Color(0xFF8C4DFF), Color(0xFF5E17EB))
+                                    )
+                                )
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = "Supporter",
+                                text = "MONTHLY",
+                                color = Color.White,
+                                fontSize = 8.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 15.sp,
-                                fontFamily = Monocraft,
-                                color = MaterialTheme.colorScheme.onSurface
+                                maxLines = 1
                             )
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            listOf(Color(0xFF8C4DFF), Color(0xFF5E17EB))
-                                        )
-                                    )
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "MONTHLY",
-                                    color = Color.White,
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                            }
                         }
                     }
                 }
 
                 Row(
-                    verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.padding(start = 6.dp)
                 ) {
                     Text(
-                        text = price,
+                        text = cleanPrice,
                         fontWeight = FontWeight.ExtraBold,
                         color = accentColor,
-                        fontSize = 18.sp,
-                        fontFamily = Monocraft
+                        fontSize = 15.sp,
+                        fontFamily = Monocraft,
+                        maxLines = 1,
+                        softWrap = false
                     )
                     Text(
                         text = "/mo",
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         fontSize = 11.sp,
-                        modifier = Modifier.padding(bottom = 2.dp)
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
 
-            // Clean 3-bullet Perks List
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                perks.forEach { perk ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = accentColor,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = perk,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f)
-                        )
-                    }
-                }
-            }
+            Text(
+                text = "Voluntary monthly contribution to help fund server relays, infrastructure, and open-source updates.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f),
+                lineHeight = 17.sp
+            )
 
             // Action Button
             DuoButton(
@@ -473,15 +466,10 @@ private fun SupporterMembershipCard(
 }
 
 @Composable
-private fun KofiSupportCard(
+private fun KofiDonationCard(
     onClick: () -> Unit
 ) {
     val kofiColor = Color(0xFFFF5E5B)
-    val perks = listOf(
-        "Direct support via Ko-fi",
-        "One-time custom amount",
-        "Card, PayPal, or UPI support"
-    )
 
     GameCard(modifier = Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -493,7 +481,8 @@ private fun KofiSupportCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
                     Box(
                         modifier = Modifier
@@ -503,42 +492,43 @@ private fun KofiSupportCard(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.OpenInNew,
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                             contentDescription = null,
                             tint = kofiColor,
                             modifier = Modifier.size(17.dp)
                         )
                     }
 
-                    Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Ko-fi Donation",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 13.5.sp,
+                            fontFamily = Monocraft,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(Color(0xFFFF5E5B), Color(0xFFFF416C))
+                                    )
+                                )
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = "Ko-fi Support",
+                                text = "ONE-TIME",
+                                color = Color.White,
+                                fontSize = 8.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 15.sp,
-                                fontFamily = Monocraft,
-                                color = MaterialTheme.colorScheme.onSurface
+                                maxLines = 1
                             )
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            listOf(Color(0xFFFF5E5B), Color(0xFFFF416C))
-                                        )
-                                    )
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "ONE-TIME",
-                                    color = Color.White,
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                            }
                         }
                     }
                 }
@@ -548,41 +538,23 @@ private fun KofiSupportCard(
                     fontWeight = FontWeight.ExtraBold,
                     color = kofiColor,
                     fontSize = 15.sp,
-                    fontFamily = Monocraft
+                    fontFamily = Monocraft,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.padding(start = 6.dp)
                 )
             }
 
-            // Clean 3-bullet Perks List
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                perks.forEach { perk ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = kofiColor,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = perk,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f)
-                        )
-                    }
-                }
-            }
+            Text(
+                text = "Direct one-time voluntary donation of any custom amount via card, PayPal, or UPI on Ko-fi.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f),
+                lineHeight = 17.sp
+            )
 
             // Action Button
             DuoButton(
-                text = "SUPPORT ON KO-FI",
+                text = "DONATE ON KO-FI",
                 onClick = onClick,
                 variant = DuoButtonVariant.Warning,
                 enabled = true,

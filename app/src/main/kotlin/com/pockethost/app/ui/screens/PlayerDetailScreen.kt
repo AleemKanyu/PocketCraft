@@ -23,6 +23,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -75,7 +77,13 @@ import com.pockethost.app.service.PlayerLiveSnapshot
 import com.pockethost.app.service.InventoryItem
 import com.pockethost.app.ui.components.DuoToggle
 import com.pockethost.app.ui.components.HealthBar
-import com.pockethost.app.ui.components.FlatEmojiIcon
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Hotel
+import androidx.compose.material.icons.filled.Dangerous
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Brightness2
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.pockethost.app.ui.components.InventoryPreview
 import com.pockethost.app.ui.components.resolvePlayerAvatarUrl
 import com.pockethost.app.ui.theme.PocketColors
@@ -388,14 +396,14 @@ fun PlayerDetailScreen(
                     Text("Health and Hunger", fontWeight = FontWeight.Bold)
                     HealthBar(
                         label = "Health",
-                        icon = "❤",
+                        vectorIcon = Icons.Default.Favorite,
                         value = healthPercent,
                         valueLabel = if (health != null) "${"%.1f".format(health)}/20" else "—",
                         barColor = PocketColors.Danger
                     )
                     HealthBar(
                         label = "Hunger",
-                        icon = "🍖",
+                        vectorIcon = Icons.Default.Restaurant,
                         value = hungerPercent,
                         valueLabel = if (hunger != null) "$hunger/20" else "—",
                         barColor = Color(0xFFE09F3E)
@@ -884,15 +892,21 @@ private fun PlayerInformationSection(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Information", fontWeight = FontWeight.Bold)
-        LocationSectionCard("📍", "Current position", currentPos, onTeleport)
-        LocationSectionCard("🛏", "Respawn location", respawnPos, onTeleport)
-        LocationSectionCard("💀", "Last death location", lastDeathPos, onTeleport)
+        LocationSectionCard(Icons.Default.Place, "Current position", currentPos, onTeleport)
+        LocationSectionCard(Icons.Default.Hotel, "Respawn location", respawnPos, onTeleport)
+        LocationSectionCard(Icons.Default.Dangerous, "Last death location", lastDeathPos, onTeleport)
     }
+}
+
+private fun dimensionVector(dim: String): ImageVector = when (dim) {
+    "minecraft:the_nether" -> Icons.Default.LocalFireDepartment
+    "minecraft:the_end" -> Icons.Default.Brightness2
+    else -> Icons.Default.Public
 }
 
 @Composable
 private fun LocationSectionCard(
-    icon: String,
+    icon: ImageVector,
     title: String,
     location: PlayerLocation?,
     onTeleport: (PlayerLocation, String) -> Unit
@@ -911,7 +925,7 @@ private fun LocationSectionCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    FlatEmojiIcon(icon, modifier = Modifier.size(18.dp), tint = PocketColors.PrimaryDark)
+                    Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = PocketColors.PrimaryDark)
                     Text(title, fontWeight = FontWeight.SemiBold)
                 }
             }
@@ -921,7 +935,7 @@ private fun LocationSectionCard(
                 if (location != null) {
                     Text(location.formatted(), fontSize = 13.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        FlatEmojiIcon(location.dimensionIcon(), modifier = Modifier.size(14.dp), tint = PocketColors.PrimaryDark)
+                        Icon(dimensionVector(location.dimension), contentDescription = null, modifier = Modifier.size(14.dp), tint = PocketColors.PrimaryDark)
                         Text(location.dimensionDisplay(), fontSize = 12.sp)
                     }
                     Spacer(Modifier.height(10.dp))

@@ -54,6 +54,9 @@ import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Gavel
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -569,7 +572,7 @@ fun ServerScreen(
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = PocketColors.Primary)
                             ) {
-                                Text("Open Chat 💬", color = Color.Black, fontWeight = FontWeight.ExtraBold)
+                                Text("Open Chat", color = Color.Black, fontWeight = FontWeight.ExtraBold)
                             }
                         }
                     )
@@ -962,7 +965,12 @@ fun EulaDialog(onAccept: () -> Unit, onDismiss: () -> Unit) {
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("⚖️", fontSize = 32.sp)
+                    Icon(
+                        imageVector = Icons.Default.Gavel,
+                        contentDescription = null,
+                        tint = PocketColors.Primary,
+                        modifier = Modifier.size(32.dp)
+                    )
                 }
                 Text(
                     text = "Game EULA",
@@ -991,8 +999,16 @@ fun EulaDialog(onAccept: () -> Unit, onDismiss: () -> Unit) {
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("📜", fontSize = 18.sp)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Description,
+                            contentDescription = null,
+                            tint = PocketColors.Primary,
+                            modifier = Modifier.size(20.dp)
+                        )
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
                                 text = "By tapping Accept, you agree to:",
@@ -1030,7 +1046,7 @@ fun EulaDialog(onAccept: () -> Unit, onDismiss: () -> Unit) {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "✓  Accept & Continue",
+                    text = "Accept & Continue",
                     color = Color.White,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 15.sp
@@ -1644,7 +1660,12 @@ fun BatteryOptimizationDialog(onAccept: () -> Unit, onDismiss: () -> Unit) {
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("🔋", fontSize = 32.sp)
+                    Icon(
+                        imageVector = Icons.Default.BatteryChargingFull,
+                        contentDescription = null,
+                        tint = PocketColors.Primary,
+                        modifier = Modifier.size(32.dp)
+                    )
                 }
                 Text(
                     text = "Background Server Hosting",
@@ -1677,7 +1698,7 @@ fun BatteryOptimizationDialog(onAccept: () -> Unit, onDismiss: () -> Unit) {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "✓  Allow Background Access",
+                    text = "Allow Background Access",
                     color = Color.White,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 15.sp

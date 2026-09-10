@@ -15,6 +15,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -26,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -94,9 +100,11 @@ object NewFeaturesPopup {
                         .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "🚀",
-                        fontSize = 32.sp
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = PocketColors.Primary,
+                        modifier = Modifier.size(32.dp)
                     )
                 }
 
@@ -127,14 +135,14 @@ object NewFeaturesPopup {
 
                     // Feature 2: AFK Helper Bots
                     FeatureItem(
-                        icon = "🤖",
+                        vectorIcon = Icons.Default.SmartToy,
                         title = "AFK Helper Bots",
                         description = "Keep chunks loaded and your automatic farms working 24/7. Spawn custom dummy players at coordinates even when you are offline."
                     )
 
                     // Feature 3: Relay Regions
                     FeatureItem(
-                        icon = "🌍",
+                        vectorIcon = Icons.Default.Public,
                         title = "More Relay Regions",
                         description = "Choose the relay region that is closest to your players for better connection quality."
                     )
@@ -156,7 +164,8 @@ object NewFeaturesPopup {
 
     @Composable
     private fun FeatureItem(
-        icon: String,
+        icon: String = "",
+        vectorIcon: ImageVector? = null,
         title: String,
         description: String
     ) {
@@ -178,10 +187,19 @@ object NewFeaturesPopup {
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = icon,
-                        fontSize = 24.sp
-                    )
+                    if (vectorIcon != null) {
+                        Icon(
+                            imageVector = vectorIcon,
+                            contentDescription = null,
+                            tint = PocketColors.Primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    } else if (icon.isNotBlank()) {
+                        Text(
+                            text = icon,
+                            fontSize = 24.sp
+                        )
+                    }
                 }
 
                 // Title and Description

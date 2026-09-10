@@ -33,6 +33,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -45,7 +46,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pockethost.app.ui.components.FlatEmojiIcon
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.pockethost.app.integrations.AccountManager
+import com.pockethost.app.integrations.DriveBackupManager
+import com.pockethost.app.ui.components.GoogleGLogo
 import com.pockethost.app.ui.components.DuoButton
 import com.pockethost.app.ui.components.DuoButtonVariant
 import com.pockethost.app.ui.components.GameCard
@@ -54,6 +68,7 @@ import com.pockethost.app.ui.components.duoTextFieldShape
 import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.ui.theme.Monocraft
 import com.pockethost.app.util.LocalAppStrings
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -70,6 +85,62 @@ fun FilesScreen(
     var showDeleteWorldDialog by remember { mutableStateOf(false) }
     var seedDraft by remember(stateHolder.config.worldSeed) { mutableStateOf(stateHolder.config.worldSeed) }
 
+    var cloudAccount by remember { mutableStateOf<GoogleSignInAccount?>(AccountManager.currentDriveAccount(context)) }
+    var isCloudBackupBusy by remember { mutableStateOf(false) }
+    var cloudBackupProgress by remember { mutableIntStateOf(0) }
+    var cloudBackupStatus by remember { mutableStateOf("") }
+
+    fun startCloudBackup(account: GoogleSignInAccount) {
+        scope.launch {
+            isCloudBackupBusy = true
+            cloudBackupProgress = 0
+            cloudBackupStatus = "Preparing Google Cloud backup..."
+            try {
+                val existingBackup = DriveBackupManager.latestBackupFile(stateHolder.activeWorld)
+                if (existingBackup == null || !existingBackup.exists()) {
+                    cloudBackupStatus = "Creating fresh world backup..."
+                    stateHolder.startCreateBackup { statusMsg ->
+                        cloudBackupStatus = statusMsg
+                    }
+                    delay(1200)
+                }
+                cloudBackupStatus = "Uploading to Google Drive..."
+                val resultMsg = DriveBackupManager.uploadLatestWorldBackup(
+                    context = context,
+                    account = account,
+                    worldName = stateHolder.activeWorld,
+                    onProgress = { progress, msg ->
+                        cloudBackupProgress = progress
+                        cloudBackupStatus = msg
+                    }
+                )
+                cloudBackupStatus = resultMsg
+                Toast.makeText(context, resultMsg, Toast.LENGTH_LONG).show()
+                onMessage(resultMsg)
+            } catch (e: Exception) {
+                cloudBackupStatus = "Cloud backup failed: ${e.message}"
+                Toast.makeText(context, cloudBackupStatus, Toast.LENGTH_LONG).show()
+            } finally {
+                isCloudBackupBusy = false
+            }
+        }
+    }
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        AccountManager.completeGoogleSignIn(context, result.data) { account, _, errorMessage ->
+            val activeAcc = account ?: AccountManager.currentDriveAccount(context)
+            cloudAccount = activeAcc
+            if (activeAcc != null) {
+                startCloudBackup(activeAcc)
+            } else if (errorMessage != null) {
+                cloudBackupStatus = errorMessage
+                Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -85,7 +156,12 @@ fun FilesScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(text = "\uD83C\uDF0D", fontSize = 36.sp)
+                    Icon(
+                        imageVector = Icons.Default.Public,
+                        contentDescription = null,
+                        modifier = Modifier.size(36.dp),
+                        tint = PocketColors.PrimaryDark
+                    )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = stateHolder.activeWorld,
@@ -165,7 +241,12 @@ fun FilesScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(text = "\uD83C\uDFAE", fontSize = 28.sp)
+                        Icon(
+                            imageVector = Icons.Default.Dns,
+                            contentDescription = null,
+                            modifier = Modifier.size(28.dp),
+                            tint = PocketColors.PrimaryDark
+                        )
                         Column {
                             Text(
                                 text = String.format(s.filesMinecraftJava, stateHolder.runtimeVersionLabel),
@@ -198,11 +279,138 @@ fun FilesScreen(
         item {
             SectionLabel(s.filesSectionBackup)
             Spacer(Modifier.height(4.dp))
+            GameCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            GoogleGLogo(modifier = Modifier.size(22.dp))
+                            Column {
+                                Text(
+                                    text = s.filesGoogleCloudBackup,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = if (cloudAccount != null) {
+                                        cloudAccount?.email ?: "Connected"
+                                    } else {
+                                        s.filesConnectGooglePrompt
+                                    },
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        if (cloudAccount != null) {
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = PocketColors.Online.copy(alpha = 0.15f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = PocketColors.Online,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Text(
+                                        text = "LINKED",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = PocketColors.Online
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = s.filesGoogleCloudBackupDesc,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (isCloudBackupBusy) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = cloudBackupStatus.ifBlank { "Backing up to Google Cloud..." },
+                                    fontSize = 11.sp,
+                                    color = PocketColors.PrimaryDark,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = "$cloudBackupProgress%",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PocketColors.PrimaryDark
+                                )
+                            }
+                            LinearProgressIndicator(
+                                progress = { cloudBackupProgress.toFloat() / 100f },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .height(6.dp),
+                                color = PocketColors.PrimaryDark,
+                                trackColor = PocketColors.PrimaryMuted
+                            )
+                        }
+                    } else {
+                        DuoButton(
+                            text = s.filesUploadToGoogleCloud,
+                            onClick = {
+                                val acc = cloudAccount ?: AccountManager.currentDriveAccount(context)
+                                if (acc != null) {
+                                    cloudAccount = acc
+                                    startCloudBackup(acc)
+                                } else {
+                                    googleSignInLauncher.launch(AccountManager.googleSignInIntent(context))
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            variant = DuoButtonVariant.Primary
+                        )
+                    }
+
+                    if (cloudBackupStatus.isNotBlank() && !isCloudBackupBusy) {
+                        Text(
+                            text = cloudBackupStatus,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionTile(
                     modifier = Modifier.weight(1f),
                     label = s.filesQuickBackup,
-                    emoji = "💾",
+                    icon = Icons.Default.Save,
                     onClick = {
                         stateHolder.startCreateBackup { onMessage(it) }
                     }
@@ -210,7 +418,7 @@ fun FilesScreen(
                 ActionTile(
                     modifier = Modifier.weight(1f),
                     label = s.filesAdvanced,
-                    emoji = "📂",
+                    icon = Icons.Default.FolderOpen,
                     onClick = { /* Could navigate to Worlds page if we passed navigation function */ }
                 )
             }
@@ -330,7 +538,7 @@ fun FilesScreen(
 @Composable
 private fun ActionTile(
     label: String,
-    emoji: String,
+    icon: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -343,7 +551,12 @@ private fun ActionTile(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-                FlatEmojiIcon(emoji, modifier = Modifier.size(28.dp), tint = PocketColors.PrimaryDark)
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(28.dp),
+                tint = PocketColors.PrimaryDark
+            )
             Text(
                 text = label,
                 fontWeight = FontWeight.Bold,

@@ -9,7 +9,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -47,10 +52,15 @@ fun BroadcastPopup(
         }
     }
 
-    val emoji = when (broadcast.type) {
-        "critical" -> "🚨"
-        "warning" -> "⚠️"
-        else -> "📢"
+    val iconVector = when (broadcast.type) {
+        "critical" -> Icons.Default.Error
+        "warning" -> Icons.Default.Warning
+        else -> Icons.Default.Campaign
+    }
+    val iconTint = when (broadcast.type) {
+        "critical" -> PocketColors.ConsoleError
+        "warning" -> PocketColors.ConsoleWarn
+        else -> PocketColors.PrimaryDark
     }
 
     val borderStroke = when (broadcast.type) {
@@ -80,9 +90,11 @@ fun BroadcastPopup(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            FlatEmojiIcon(
-                symbol = emoji,
-                modifier = Modifier.size(64.dp)
+            Icon(
+                imageVector = iconVector,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = iconTint
             )
 
             Text(

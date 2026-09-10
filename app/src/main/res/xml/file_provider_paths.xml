@@ -9,4 +9,13 @@
     <files-path
         name="shared_jars"
         path="jars/" />
+    <files-path
+        name="all_files"
+        path="." />
+    <external-files-path
+        name="external_files"
+        path="." />
+    <cache-path
+        name="all_cache"
+        path="." />
 </paths>

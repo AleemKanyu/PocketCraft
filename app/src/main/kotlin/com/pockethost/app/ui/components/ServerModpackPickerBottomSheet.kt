@@ -153,7 +153,7 @@ fun ServerModpackPickerBottomSheet(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = if (hasTriggeredDownload) "🌐  Download Again" else "🌐  Download Modpack in Browser",
+                        text = if (hasTriggeredDownload) "Download Again" else "Download Modpack in Browser",
                         color = if (hasTriggeredDownload) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 15.sp
@@ -195,7 +195,7 @@ fun ServerModpackPickerBottomSheet(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = if (hasTriggeredDownload) "📂  Select Modpack File From Device ➜" else "📂  Select Modpack File From Device",
+                        text = if (hasTriggeredDownload) "Select Modpack File From Device" else "Select Modpack File From Device",
                         color = if (hasTriggeredDownload) Color.White else PocketColors.PrimaryDark,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 15.sp

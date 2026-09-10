@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Public
@@ -94,7 +95,6 @@ import coil.compose.AsyncImage
 import com.pockethost.app.WorldImporter
 import com.pockethost.app.data.preferences.AppPreferences
 import com.pockethost.app.data.preferences.AppPreferencesStore
-import com.pockethost.app.ui.components.FlatEmojiIcon
 import com.pockethost.app.ui.components.GameCard
 import com.pockethost.app.ui.components.IosDragHandle
 import com.pockethost.app.ui.components.PocketWorldIcon
@@ -104,6 +104,10 @@ import com.pockethost.app.util.LocalAppStrings
 import kotlinx.coroutines.launch
 import com.pockethost.app.ui.components.DuoButton
 import com.pockethost.app.ui.components.DuoButtonVariant
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.pockethost.app.integrations.AccountManager
+import com.pockethost.app.integrations.DriveBackupManager
+import kotlinx.coroutines.delay
 import androidx.compose.material.icons.filled.FolderZip
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -892,6 +896,12 @@ private fun BackupsManagementCard(
     var removingBackupKeys by remember { mutableStateOf(setOf<String>()) }
     var pendingRestoreBackup by remember { mutableStateOf<BackupEntry?>(null) }
 
+    var cloudAccount by remember { mutableStateOf<GoogleSignInAccount?>(AccountManager.currentDriveAccount(context)) }
+    var isCloudBackupBusy by remember { mutableStateOf(false) }
+    var cloudBackupProgress by remember { mutableIntStateOf(0) }
+    var cloudBackupStatus by remember { mutableStateOf("") }
+    var pendingUploadFile by remember { mutableStateOf<File?>(null) }
+
     val prefs = remember { AppPreferences(context) }
     val alwaysAliveBackground by AppPreferencesStore.isAlwaysAliveBackgroundFlow(context)
         .collectAsState(initial = prefs.alwaysAliveBackground)
@@ -900,6 +910,110 @@ private fun BackupsManagementCard(
     var autoBackupTimeHour by remember { mutableIntStateOf(prefs.autoBackupTimeHour) }
     var autoBackupTimeMinute by remember { mutableIntStateOf(prefs.autoBackupTimeMinute) }
     var showTimePickerDialog by remember { mutableStateOf(false) }
+
+    fun startCloudUploadForFile(file: File) {
+        scope.launch {
+            isCloudBackupBusy = true
+            cloudBackupProgress = 0
+            cloudBackupStatus = "Uploading ${file.name} to Google Drive..."
+            try {
+                val acc = cloudAccount ?: AccountManager.currentDriveAccount(context)
+                if (acc == null) {
+                    cloudBackupStatus = "Please sign in with Google first."
+                    return@launch
+                }
+                val resultMsg = DriveBackupManager.uploadSpecificBackupFile(
+                    context = context,
+                    account = acc,
+                    file = file,
+                    onProgress = { progress, msg ->
+                        cloudBackupProgress = progress
+                        cloudBackupStatus = msg
+                    }
+                )
+                cloudBackupStatus = resultMsg
+                Toast.makeText(context, resultMsg, Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                val errorMsg = e.message ?: "Upload failed"
+                cloudBackupStatus = "Cloud backup failed: $errorMsg"
+                Toast.makeText(context, "Cloud backup failed: $errorMsg", Toast.LENGTH_LONG).show()
+            } finally {
+                isCloudBackupBusy = false
+            }
+        }
+    }
+
+    fun startCloudBackup(account: GoogleSignInAccount) {
+        scope.launch {
+            isCloudBackupBusy = true
+            cloudBackupProgress = 0
+            cloudBackupStatus = "Preparing Google Cloud backup..."
+            try {
+                var targetFile = stateHolder.backups.firstOrNull()?.file
+                    ?: DriveBackupManager.latestBackupFile(stateHolder.activeWorld)
+
+                if (targetFile == null || !targetFile.exists()) {
+                    if (stateHolder.status == ServerStatus.OFFLINE) {
+                        cloudBackupStatus = "Creating local backup before upload..."
+                        stateHolder.createBackup()
+                        targetFile = stateHolder.backups.firstOrNull()?.file
+                            ?: DriveBackupManager.latestBackupFile(stateHolder.activeWorld)
+                    } else {
+                        val msg = "No local backup found. Stop the server to create a backup."
+                        cloudBackupStatus = msg
+                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                        return@launch
+                    }
+                }
+
+                if (targetFile != null && targetFile.exists()) {
+                    cloudBackupStatus = "Uploading to Google Drive..."
+                    val resultMsg = DriveBackupManager.uploadSpecificBackupFile(
+                        context = context,
+                        account = account,
+                        file = targetFile,
+                        onProgress = { progress, msg ->
+                            cloudBackupProgress = progress
+                            cloudBackupStatus = msg
+                        }
+                    )
+                    cloudBackupStatus = resultMsg
+                    Toast.makeText(context, resultMsg, Toast.LENGTH_LONG).show()
+                } else {
+                    val msg = "Could not locate a backup file to upload."
+                    cloudBackupStatus = msg
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                val errorMsg = e.message ?: "Upload failed"
+                cloudBackupStatus = "Cloud backup failed: $errorMsg"
+                Toast.makeText(context, "Cloud backup failed: $errorMsg", Toast.LENGTH_LONG).show()
+            } finally {
+                isCloudBackupBusy = false
+            }
+        }
+    }
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        AccountManager.completeGoogleSignIn(context, result.data) { account, _, errorMessage ->
+            val activeAcc = account ?: AccountManager.currentDriveAccount(context)
+            cloudAccount = activeAcc
+            val target = pendingUploadFile
+            pendingUploadFile = null
+            if (activeAcc != null) {
+                if (target != null) {
+                    startCloudUploadForFile(target)
+                } else {
+                    startCloudBackup(activeAcc)
+                }
+            } else if (errorMessage != null) {
+                cloudBackupStatus = errorMessage
+                Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     fun performRestore(backup: BackupEntry, restoreMode: RestoreMode) {
         ServerStateHolder.applicationScope.launch(Dispatchers.Main) {
@@ -933,7 +1047,7 @@ private fun BackupsManagementCard(
             // Backup Options
             DuoButton(
                 text = if (localActionBusy) "BACKING UP..." else "CREATE BACKUP",
-                enabled = !localActionBusy && stateHolder.status == ServerStatus.OFFLINE,
+                enabled = !localActionBusy && !isCloudBackupBusy && stateHolder.status == ServerStatus.OFFLINE,
                 onClick = {
                     ServerStateHolder.manualBackupJob = ServerStateHolder.applicationScope.launch(Dispatchers.Main) {
                         localActionBusy = true
@@ -948,10 +1062,67 @@ private fun BackupsManagementCard(
                 variant = DuoButtonVariant.Primary,
                 minHeight = 40.dp
             )
+
+            DuoButton(
+                text = if (isCloudBackupBusy) "UPLOADING TO CLOUD..." else "BACKUP TO CLOUD",
+                enabled = !localActionBusy && !isCloudBackupBusy,
+                onClick = {
+                    val acc = cloudAccount ?: AccountManager.currentDriveAccount(context)
+                    if (acc != null) {
+                        cloudAccount = acc
+                        startCloudBackup(acc)
+                    } else {
+                        googleSignInLauncher.launch(AccountManager.googleSignInIntent(context))
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                variant = DuoButtonVariant.Secondary,
+                minHeight = 40.dp
+            )
+
+            if (isCloudBackupBusy) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = cloudBackupStatus.ifBlank { "Backing up to Google Drive..." },
+                            fontSize = 11.sp,
+                            color = PocketColors.PrimaryDark,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "$cloudBackupProgress%",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PocketColors.PrimaryDark
+                        )
+                    }
+                    LinearProgressIndicator(
+                        progress = { cloudBackupProgress.toFloat() / 100f },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(999.dp))
+                            .height(6.dp),
+                        color = PocketColors.PrimaryDark,
+                        trackColor = PocketColors.PrimaryMuted
+                    )
+                }
+            }
             
             if (stateHolder.status != ServerStatus.OFFLINE) {
                 Text(
-                    text = "Stop the server to enable backups & restoring.",
+                    text = "Stop the server to enable creating new local backups & restoring.",
                     fontSize = 11.sp,
                     color = PocketColors.Offline
                 )
@@ -960,6 +1131,14 @@ private fun BackupsManagementCard(
             if (actionStatusMessage.isNotBlank()) {
                 Text(
                     text = actionStatusMessage,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (cloudBackupStatus.isNotBlank() && !isCloudBackupBusy) {
+                Text(
+                    text = cloudBackupStatus,
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1049,12 +1228,35 @@ private fun BackupsManagementCard(
                                 }
                             }
 
-                            val actionsEnabled = stateHolder.status == ServerStatus.OFFLINE && !localActionBusy
+                            val actionsEnabled = stateHolder.status == ServerStatus.OFFLINE && !localActionBusy && !isCloudBackupBusy
 
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                // Cloud Upload Action
+                                IconButton(
+                                    onClick = {
+                                        val acc = cloudAccount ?: AccountManager.currentDriveAccount(context)
+                                        if (acc != null) {
+                                            cloudAccount = acc
+                                            startCloudUploadForFile(backup.file)
+                                        } else {
+                                            pendingUploadFile = backup.file
+                                            googleSignInLauncher.launch(AccountManager.googleSignInIntent(context))
+                                        }
+                                    },
+                                    enabled = !localActionBusy && !isCloudBackupBusy,
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudUpload,
+                                        contentDescription = "Backup to Cloud",
+                                        modifier = Modifier.size(20.dp),
+                                        tint = if (!localActionBusy && !isCloudBackupBusy) PocketColors.Primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                    )
+                                }
+
                                 // 1. Restore Action
                                 IconButton(
                                     onClick = {
@@ -1072,7 +1274,7 @@ private fun BackupsManagementCard(
                                 }
 
                                 // 2. Delete Action
-                                val deleteEnabled = !localActionBusy
+                                val deleteEnabled = !localActionBusy && !isCloudBackupBusy
                                 IconButton(
                                     onClick = {
                                         pendingDeleteBackup = backup

@@ -1,5 +1,8 @@
 package com.pockethost.app.ui.screens
 
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -32,7 +35,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,6 +47,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -85,6 +93,29 @@ private val ICON_COLORS = mapOf(
     "conf" to PocketColors.Starting,
     "cfg" to PocketColors.Starting
 )
+
+fun shareServerFile(context: Context, file: File) {
+    try {
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+        val mime = context.contentResolver.getType(uri) ?: "*/*"
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = mime
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, file.name)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(shareIntent, "Share ${file.name}").apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(chooser)
+    } catch (e: Exception) {
+        Toast.makeText(context, "Cannot share file: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}
 
 @Composable
 fun FileEditorScreen(
@@ -270,7 +301,12 @@ private fun FileBrowserContent(
             } else if (entries.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("📂", fontSize = 40.sp)
+                        Icon(
+                            imageVector = Icons.Default.FolderOpen,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.size(40.dp)
+                        )
                         Text("Empty folder", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -370,6 +406,21 @@ private fun FileEntryRow(file: File, onClick: () -> Unit) {
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = PocketColors.PrimaryDark
+                    )
+                }
+            }
+
+            if (!file.isDirectory) {
+                val context = LocalContext.current
+                IconButton(
+                    onClick = { shareServerFile(context, file) },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "Share",
+                        tint = PocketColors.PrimaryDark,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
@@ -482,6 +533,14 @@ private fun TextFileEditor(
                             }
                         }
                     }
+                    val context = LocalContext.current
+                    IconButton(onClick = { shareServerFile(context, file) }) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                            tint = PocketColors.Primary
+                        )
+                    }
                 }
             }
 
@@ -494,7 +553,9 @@ private fun TextFileEditor(
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("⚠️ $error", color = PocketColors.Offline, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = PocketColors.Offline, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(error, color = PocketColors.Offline, fontSize = 12.sp, modifier = Modifier.weight(1f))
                         IconButton(onClick = { saveError = null }, modifier = Modifier.size(24.dp)) {
                             Icon(Icons.Default.Close, null, tint = PocketColors.Offline, modifier = Modifier.size(16.dp))
                         }
@@ -513,7 +574,7 @@ private fun TextFileEditor(
                     loadError != null -> {
                         Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("❌", fontSize = 36.sp)
+                                Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(36.dp))
                                 Text("Failed to load file", fontWeight = FontWeight.Bold)
                                 Text(loadError.orEmpty(), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }

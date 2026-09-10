@@ -832,7 +832,7 @@ fun PocketHostApp(
                     val title = promoDoc.getString("title").orEmpty()
                     val body = promoDoc.getString("body").orEmpty()
                     val ctaText = promoDoc.getString("ctaText").orEmpty().ifBlank { "Upgrade Now" }
-                    val iconEmoji = promoDoc.getString("iconEmoji").orEmpty().ifBlank { "🚀" }
+                    val iconEmoji = promoDoc.getString("iconEmoji").orEmpty()
                     activePromotion = PromotionData(
                         id = id,
                         title = title,

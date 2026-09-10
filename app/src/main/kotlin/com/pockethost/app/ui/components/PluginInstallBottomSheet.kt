@@ -172,7 +172,7 @@ fun PluginInstallBottomSheet(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (hasTriggeredDownload) "🌐  Download Again" else "🌐  Download in Browser",
+                                text = if (hasTriggeredDownload) "Download Again" else "Download in Browser",
                                 color = if (hasTriggeredDownload) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 15.sp
@@ -217,7 +217,7 @@ fun PluginInstallBottomSheet(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (hasTriggeredDownload) "📂  Select Downloaded File ➜" else "📂  Select Downloaded File",
+                                text = if (hasTriggeredDownload) "Select Downloaded File" else "Select Downloaded File",
                                 color = if (hasTriggeredDownload) Color.White else PocketColors.PrimaryDark,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 15.sp
@@ -300,7 +300,7 @@ fun PluginInstallBottomSheet(
                                         .padding(horizontal = 10.dp, vertical = 5.dp)
                                 ) {
                                     Text(
-                                        text = "✓ Installed",
+                                        text = "Installed",
                                         color = Color(0xFF2E7D32),
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold
@@ -322,7 +322,7 @@ fun PluginInstallBottomSheet(
                                         ),
                                         modifier = Modifier.height(32.dp)
                                     ) {
-                                        Text("⬇ Download", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Text("Download", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
 
                                     OutlinedButton(
@@ -338,7 +338,7 @@ fun PluginInstallBottomSheet(
                                         ),
                                         modifier = Modifier.height(32.dp)
                                     ) {
-                                        Text("📂 Select", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Text("Select", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }

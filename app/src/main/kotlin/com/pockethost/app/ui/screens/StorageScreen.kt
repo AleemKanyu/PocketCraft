@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -231,32 +232,6 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Backup location info
-            if (currentDir == root) {
-                androidx.compose.foundation.layout.Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Folder,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text(
-                        "Server backups are saved to Downloads/PocketCraftWorldBackups/<world>",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-            }
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -299,12 +274,23 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = "📤 Uploading File",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.UploadFile,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "Uploading File",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         Text(
                             text = if (uploadIndeterminate) LocalAppStrings.current.uploading else "$uploadProgress%",
                             fontWeight = FontWeight.ExtraBold,
@@ -397,16 +383,29 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                             )
                         }
                         if (!file.isDirectory) {
-                            IconButton(
-                                onClick = { deleteConfirmFile = file },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Delete",
-                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(18.dp)
-                                )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = { shareServerFile(context, file) },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Share,
+                                        contentDescription = "Share",
+                                        tint = PocketColors.PrimaryDark,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { deleteConfirmFile = file },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Delete",
+                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                     }

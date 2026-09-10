@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -453,7 +454,12 @@ fun ProDiscordCard(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("🎮", fontSize = 16.sp)
+                    Icon(
+                        imageVector = Icons.Default.SportsEsports,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
                 Column {
                     Text(
@@ -579,7 +585,7 @@ fun SupportiveToolsCard(
 
             // --- Discord ID ---
             Text(
-                "🎮 Member Discord Badge",
+                "Member Discord Badge",
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp,
                 color = Color(0xFFAB47BC)

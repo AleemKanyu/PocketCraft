@@ -78,6 +78,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Public
 import com.pockethost.app.ui.components.IpBottomSheet
 import androidx.compose.ui.text.style.TextAlign
 import android.content.ClipboardManager
@@ -137,7 +139,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pockethost.app.ui.components.FlatEmojiIcon
 import com.pockethost.app.ui.components.AnimatedEntranceContainer
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
@@ -1039,7 +1040,13 @@ fun ConsoleScreen(
 
                     if (hasPublicAddress) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("🌐 Internet Connection Details", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PocketColors.Primary)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(Icons.Default.Language, contentDescription = null, tint = PocketColors.Primary, modifier = Modifier.size(16.dp))
+                                Text("Internet Connection Details", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PocketColors.Primary)
+                            }
                             
                             // Host Box
                             Surface(
@@ -1107,14 +1114,20 @@ fun ConsoleScreen(
                                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.2f)),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(
-                                    text = "⚠️ Bedrock players: Enter the Port in your game client options!",
+                                Row(
                                     modifier = Modifier.padding(10.dp),
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.error,
-                                    fontWeight = FontWeight.SemiBold,
-                                    lineHeight = 14.sp
-                                )
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                    Text(
+                                        text = "Bedrock players: Enter the Port in your game client options!",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.error,
+                                        fontWeight = FontWeight.SemiBold,
+                                        lineHeight = 14.sp
+                                    )
+                                }
                             }
                         }
                     } else {
@@ -1148,7 +1161,7 @@ fun ConsoleScreen(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("✅", fontSize = 14.sp)
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF2E7D32), modifier = Modifier.size(16.dp))
                                 Text(
                                     text = "Bedrock compatibility is bundled for this server type (${serverType.displayName}).",
                                     fontSize = 11.sp,
@@ -1170,7 +1183,7 @@ fun ConsoleScreen(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("⚠️", fontSize = 14.sp)
+                                Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
                                 Text(
                                     text = "The bundled Bedrock bridge only works with Paper or Purpur. ${serverType.displayName} worlds should be switched to Paper if Bedrock players need to join.",
                                     fontSize = 11.sp,
@@ -1183,7 +1196,7 @@ fun ConsoleScreen(
                     }
 
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("🎮 How to Connect", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("How to Connect", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         
                         JoinStepCard(
                             step = "Java",
@@ -3171,7 +3184,7 @@ private fun WorldMapBannerCard(
                             .border(1.dp, PocketColors.Primary.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("🌍", fontSize = 22.sp)
+                        Icon(Icons.Default.Public, contentDescription = null, tint = PocketColors.Primary, modifier = Modifier.size(24.dp))
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
