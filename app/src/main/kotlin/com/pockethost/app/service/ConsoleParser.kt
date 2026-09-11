@@ -171,10 +171,17 @@ object ConsoleParser {
         return null
     }
 
-    /** Returns player name if a player left. */
+    /**
+     * Returns player name if a player left.
+     *
+     * PowerNukkitX's line is checked first: it ends in a disconnect reason such as
+     * "logged out due to Session disconnected", whose trailing "disconnected" the generic Java
+     * pattern would otherwise match, reporting the player as "Session" and leaving the real
+     * player stuck in the online list forever.
+     */
     fun parseLeave(line: String): String? =
-        LEAVE_REGEX.find(line)?.groupValues?.get(1)
-            ?: NUKKIT_LOGOUT_REGEX.find(line)?.groupValues?.get(1)
+        NUKKIT_LOGOUT_REGEX.find(line)?.groupValues?.get(1)
+            ?: LEAVE_REGEX.find(line)?.groupValues?.get(1)
 
     /** Returns (player, command) if a player issued a command. */
     fun parseCommand(line: String): Pair<String, String>? {

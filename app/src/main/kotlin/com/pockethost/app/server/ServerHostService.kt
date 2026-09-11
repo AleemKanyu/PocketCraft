@@ -277,6 +277,14 @@ class ServerHostService : Service() {
             return START_NOT_STICKY
         }
 
+        if (intent?.action == ACTION_CONSOLE_COMMAND) {
+            val command = intent.getStringExtra(EXTRA_CONSOLE_COMMAND).orEmpty().trim()
+            if (command.isNotBlank()) {
+                ServerLauncher.sendCommand(command)
+            }
+            return START_STICKY
+        }
+
         if (intent?.action == ACTION_RECONNECT_RELAY) {
             val skipUnregister = intent.getBooleanExtra(EXTRA_SKIP_RELAY_UNREGISTER, false)
             val requestedRelayHost = intent.getStringExtra(EXTRA_RELAY_HOST).orEmpty().trim()
@@ -418,8 +426,10 @@ class ServerHostService : Service() {
 
 
 
-        startServerLogTail(versionId)
+        // Must precede any isBedrockWorld() caller: switching this world's type leaves a stale
+        // cached answer that would send the log tail to the wrong file.
         bedrockWorldCache.clear()
+        startServerLogTail(versionId)
         val serverPort = resolveServerPort(worldName)
         currentServerPort = serverPort
         startPortProbe(versionId, serverPort)
@@ -2913,6 +2923,8 @@ class ServerHostService : Service() {
         const val ACTION_STOP = "com.pockethost.app.action.STOP"
         const val ACTION_RESTART = "com.pockethost.app.action.RESTART"
         const val ACTION_RECONNECT_RELAY = "com.pockethost.app.action.RECONNECT_RELAY"
+        const val ACTION_CONSOLE_COMMAND = "com.pockethost.app.action.CONSOLE_COMMAND"
+        const val EXTRA_CONSOLE_COMMAND = "console_command"
         const val EXTRA_SKIP_RELAY_UNREGISTER = "skip_relay_unregister"
         const val EXTRA_RELAY_HOST = "relay_host"
         const val ACTION_SERVER_EVENT = "com.pockethost.app.action.SERVER_EVENT"
@@ -3019,6 +3031,28 @@ class ServerHostService : Service() {
                     android.util.Log.e("ServerHostService", "Failed to restart service: ${e2.message}")
                     false
                 }
+            }
+        }
+
+        /**
+         * Writes a command to the running server's stdin.
+         *
+         * The server JVM is a child of the `:server` process, so `ServerLauncher.sendCommand`
+         * only reaches it from inside that process — calling it from the UI process is a silent
+         * no-op. Java servers do not need this because their console is reachable over RCON, but
+         * PowerNukkitX implements no RCON at all, making stdin the only route to it.
+         */
+        fun sendConsoleCommand(context: Context, command: String) {
+            val clean = command.trim()
+            if (clean.isBlank()) return
+            val intent = Intent(context, ServerHostService::class.java).apply {
+                action = ACTION_CONSOLE_COMMAND
+                putExtra(EXTRA_CONSOLE_COMMAND, clean)
+            }
+            try {
+                ContextCompat.startForegroundService(context, intent)
+            } catch (e: Exception) {
+                android.util.Log.e("ServerHostService", "Failed to deliver console command: ${e.message}")
             }
         }
 

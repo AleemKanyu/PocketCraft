@@ -17,9 +17,6 @@ object NukkitVersions {
 
     const val DEFAULT_BEDROCK_PORT = 19132
 
-    /** PowerNukkitX 3.x is compiled for Java 21 (class file major 65). */
-    const val REQUIRED_JAVA_RUNTIME_ID = "java21"
-
     const val PNX_JAR_URL =
         "https://github.com/PowerNukkitX/PowerNukkitX/releases/download/$PNX_RELEASE/powernukkitx.jar"
 
@@ -66,7 +63,7 @@ object NukkitVersions {
         appendLine("  ip: 0.0.0.0")
         appendLine("  port: $port")
         appendLine("  maxPlayers: $maxPlayers")
-        appendLine("  defaultLevelName: $levelName")
+        appendLine("  defaultLevelName: ${PnxYaml.quote(levelName)}")
         appendLine("  motd: ${PnxYaml.quote(motd)}")
         appendLine("  sub-motd: ${PnxYaml.quote("PocketHost")}")
         appendLine("  language: eng")

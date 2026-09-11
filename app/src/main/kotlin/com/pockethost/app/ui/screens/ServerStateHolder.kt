@@ -1728,6 +1728,13 @@ class ServerStateHolder(
         }
         appendLog("> $clean")
         com.pockethost.app.server.ServerLauncher.sendCommand(clean)
+        if (config.serverType.isBedrock) {
+            // PowerNukkitX has no RCON, and ServerLauncher.sendCommand is a no-op here because
+            // the server JVM is a child of the :server process. Hand the command to that process
+            // instead; its output comes back on the normal console log stream.
+            com.pockethost.app.server.ServerHostService.sendConsoleCommand(context, clean)
+            return
+        }
         scope.launch(Dispatchers.IO) {
             runCatching {
                 val response = RconClient.sendCommand(clean, port = config.rconPort)
@@ -1741,6 +1748,10 @@ class ServerStateHolder(
     // Source RCON client (RFC-compliant packet framing over TCP socket 25575)
     fun sendRconCommand(command: String): String {
         val clean = command.trim().removePrefix("/")
+        if (config.serverType.isBedrock) {
+            com.pockethost.app.server.ServerHostService.sendConsoleCommand(context, clean)
+            return "[OK]"
+        }
         val rconResponse = RconClient.sendCommand(clean, port = config.rconPort)
         if (rconResponse.isNotBlank()) {
             return rconResponse
@@ -1751,6 +1762,10 @@ class ServerStateHolder(
 
     fun sendRconCommands(commands: List<String>): List<String> {
         if (commands.isEmpty()) return emptyList()
+        if (config.serverType.isBedrock) {
+            commands.forEach { com.pockethost.app.server.ServerHostService.sendConsoleCommand(context, it) }
+            return commands.map { "[OK]" }
+        }
         return RconClient.sendCommands(commands, port = config.rconPort)
     }
 

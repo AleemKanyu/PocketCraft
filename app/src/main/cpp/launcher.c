@@ -706,8 +706,8 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
     argv[a++] = "--accept-license";
     argv[a++] = "--disable-ansi";
     argv[a++] = "--disable-auto-bug-report";
-    argv[a++] = "--port";
-    argv[a++] = port_str;
+    // No --port: PowerNukkitX ignores it and binds whatever pnx.yml says, which the app has
+    // already written from the world's settings.
   } else {
     argv[a++] = "nogui";
 

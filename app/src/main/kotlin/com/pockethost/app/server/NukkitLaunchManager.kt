@@ -33,8 +33,7 @@ object NukkitLaunchManager {
 
     fun resolveMotd(serverDir: File): String {
         val fromYaml = PnxYaml.readString(configFile(serverDir), "settings.motd")
-            ?.trim()
-            ?.trim('"', '\'')
+            ?.let(PnxYaml::unquote)
         if (!fromYaml.isNullOrBlank()) return fromYaml
         return ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
             .getProperty("motd", "A PocketHost Bedrock Server")
@@ -106,7 +105,7 @@ object NukkitLaunchManager {
                     "settings.port" to resolvedPort.toString(),
                     "settings.maxPlayers" to resolvedMaxPlayers.toString(),
                     "settings.motd" to PnxYaml.quote(resolvedMotd),
-                    "settings.defaultLevelName" to levelName,
+                    "settings.defaultLevelName" to PnxYaml.quote(levelName),
                     "settings.allowList" to (props.getProperty("white-list", "false") == "true").toString(),
                     "gameplay-settings.gamemode" to resolvedGamemode.toString(),
                     "gameplay-settings.difficulty" to resolvedDifficulty.toString(),

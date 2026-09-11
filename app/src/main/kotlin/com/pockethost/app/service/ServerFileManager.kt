@@ -141,10 +141,19 @@ object ServerFileManager {
     fun prepareServerProperties(context: Context, worldName: String) {
         val serverDir = getServerDir(context, worldName)
         val props = ServerPropertiesHelper.readProperties(serverDir)
-        val resolvedWorldName = resolveStableWorldName(serverDir, props)
+        val isBedrock = ServerType.fromString(props.getProperty("pocketcraft-server-type")).isBedrock
+        // resolveStableWorldName only understands the Java layout: it looks for level.dat or a
+        // region/ folder next to the server directory. A Bedrock level is a LevelDB database
+        // under worlds/<name>, so that search always comes up empty and its discovery fallback
+        // would rewrite level-name to "world" — pointing PowerNukkitX at a brand new empty level
+        // and orphaning the player's actual world.
+        val resolvedWorldName = if (isBedrock) {
+            props.getProperty("level-name")?.trim()?.takeIf { it.isNotEmpty() } ?: "world"
+        } else {
+            resolveStableWorldName(serverDir, props)
+        }
 
         // Forced configuration for runtime compatibility.
-        val isBedrock = ServerType.fromString(props.getProperty("pocketcraft-server-type")).isBedrock
         props.setProperty(
             "server-port",
             if (isBedrock) com.pockethost.app.server.NukkitVersions.DEFAULT_BEDROCK_PORT.toString() else "25565"

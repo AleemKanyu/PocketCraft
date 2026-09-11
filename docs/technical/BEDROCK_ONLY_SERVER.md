@@ -73,11 +73,21 @@ Program arguments:
 
 ```
 -jar powernukkitx.jar --language eng --skip-setup --accept-license \
-  --disable-ansi --disable-auto-bug-report --port <port>
+  --disable-ansi --disable-auto-bug-report
 ```
 
-`nogui` is **not** passed — that is a Java-server argument. The same branch exists in
-`app/src/main/cpp/launcher.c` for the in-process path.
+`nogui` is **not** passed — that is a Java-server argument. `--port` is not passed either:
+PowerNukkitX accepts the flag but ignores it, binding whatever `pnx.yml` says, so the port is set
+there and nowhere else. The same branch exists in `app/src/main/cpp/launcher.c` for the
+in-process path.
+
+### Console commands
+
+The server JVM is a child of the `:server` process, so `ServerLauncher.sendCommand` reaches it
+only from inside that process — calling it from the UI process is a silent no-op. Java servers do
+not notice, because the app's console talks to them over RCON. PowerNukkitX has no RCON, so the
+UI sends Bedrock commands to `ServerHostService` as an `ACTION_CONSOLE_COMMAND` intent and the
+service writes them to the server's stdin. Output comes back on the normal console log stream.
 
 ---
 
@@ -149,5 +159,8 @@ not start.
   existing world's type leaves the old Java level files in place, unused.
 - World import/export and the world map render Java region files, so they do not apply to a
   Bedrock world's LevelDB level.
-- On a `noexec` `filesDir` device the server runs in-process and console commands cannot be
-  delivered.
+- On a `noexec` `filesDir` device the server runs in-process, where it has no stdin pipe, so
+  console commands cannot be delivered.
+- `resolveStableWorldName`'s Java world discovery is skipped for Bedrock worlds; their
+  `level-name` is taken at face value, since a LevelDB level under `worlds/` is invisible to a
+  search for `level.dat` or `region/`.

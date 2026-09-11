@@ -981,8 +981,8 @@ class ServerLauncher(private val context: Context) {
                         add("--accept-license")
                         add("--disable-ansi")
                         add("--disable-auto-bug-report")
-                        add("--port")
-                        add(resolveServerPort(worldName).toString())
+                        // No --port: PowerNukkitX ignores it and binds what pnx.yml says, which
+                        // NukkitLaunchManager has already written from the world's settings.
                     } else {
                         add("nogui")
                         if (serverType != com.pockethost.app.data.model.ServerType.FABRIC) {

@@ -79,17 +79,23 @@ object PnxYaml {
                 return@forEach
             }
 
-            val sectionEnd = sectionEndIndex(lines, sectionStart)
+            // The section's extent is recomputed per key: inserting one shifts every later
+            // line, and a stale end index would make the next key's lookup miss an entry that
+            // sits at the end of the section and insert a duplicate of it instead.
+            var insertAt = sectionStart + 1
             entries.forEach { (key, value) ->
+                val sectionEnd = sectionEndIndex(lines, sectionStart)
                 val keyIndex = (sectionStart + 1 until sectionEnd).firstOrNull { index ->
                     ENTRY_REGEX.find(lines[index])?.groupValues?.get(2) == key
                 }
                 if (keyIndex != null) {
                     lines[keyIndex] = "  $key: $value"
                 } else {
-                    // Insert directly under the section header so the key lands inside the block
-                    // rather than after a trailing comment that belongs to the next section.
-                    lines.add(sectionStart + 1, "  $key: $value")
+                    // Insert at the top of the block so the key lands inside the section rather
+                    // than after a trailing comment that belongs to the next one, advancing the
+                    // cursor so multiple new keys keep their declared order.
+                    lines.add(insertAt, "  $key: $value")
+                    insertAt++
                 }
             }
         }
@@ -110,9 +116,37 @@ object PnxYaml {
         return lines.size
     }
 
-    /** Quotes a value that YAML would otherwise read as something other than a plain string. */
+    /**
+     * Inverse of [quote]: strips surrounding quotes and undoes the backslash escaping, so a value
+     * read back out of `pnx.yml` matches what the user typed.
+     */
+    fun unquote(raw: String): String {
+        val trimmed = raw.trim()
+        val body = if (trimmed.length >= 2 &&
+            ((trimmed.startsWith("\"") && trimmed.endsWith("\"")) ||
+                (trimmed.startsWith("'") && trimmed.endsWith("'")))
+        ) {
+            trimmed.substring(1, trimmed.length - 1)
+        } else {
+            trimmed
+        }
+        return body.replace("\\\\", "\\")
+    }
+
+    /**
+     * Quotes a value that YAML would otherwise read as something other than a plain string.
+     *
+     * Backslashes must be escaped: inside a double-quoted scalar YAML reads them as the start of
+     * an escape sequence, so a MOTD like "C:\path" would make PowerNukkitX fail to parse its own
+     * config and refuse to boot.
+     */
     fun quote(value: String): String {
-        val sanitized = value.replace("\n", " ").replace("\r", " ").replace("\"", "'").trim()
+        val sanitized = value
+            .replace("\\", "\\\\")
+            .replace("\n", " ")
+            .replace("\r", " ")
+            .replace("\"", "'")
+            .trim()
         return "\"$sanitized\""
     }
 }
