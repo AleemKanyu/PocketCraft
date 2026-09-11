@@ -422,15 +422,12 @@ class ServerLauncher(private val context: Context) {
         
         Thread {
             var result = -1
-            var targetToLaunch = normalizedJarPath
-            if (serverType == com.pockethost.app.data.model.ServerType.MODPACK) {
-                val modpackArgs = File(serverDir).walkTopDown().firstOrNull { it.name == "unix_args.txt" || it.name == "args.txt" }
-                if (modpackArgs != null && modpackArgs.exists()) {
-                    targetToLaunch = "@" + modpackArgs.relativeTo(File(serverDir)).path
-                }
-            }
-
-            val effectiveLaunchTarget = targetToLaunch
+            // The launch target is whatever ModpackManager scored and persisted for this world;
+            // it arrives here already resolved, together with the launch mode that goes with it.
+            // Re-deriving it by scanning for the first file named unix_args.txt/args.txt picked a
+            // different (unscored) file on packs that ship more than one, and produced a path
+            // already prefixed with "@" that the ARG_FILE branch below then prefixed again.
+            val effectiveLaunchTarget = normalizedJarPath
 
             try {
                 val shouldLaunchExternal = forceExternal && !isFilesdirNoexec(resolvedRuntime)
@@ -992,7 +989,10 @@ class ServerLauncher(private val context: Context) {
                     }
                 }
                 ServerFileManager.LaunchMode.ARG_FILE -> {
-                    add("@$launchTargetPath")
+                    // "@@file" is Java's escape for a literal "@file" argument, not an argument
+                    // file, so double-prefixing silently turns the launch into a missing-main-class
+                    // crash. Accept a path that already carries the marker.
+                    add(if (launchTargetPath.startsWith("@")) launchTargetPath else "@$launchTargetPath")
                     add("nogui")
                 }
             }

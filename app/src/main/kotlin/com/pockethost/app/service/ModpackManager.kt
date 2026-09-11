@@ -734,7 +734,9 @@ object ModpackManager {
     private fun findForgeArgFile(serverDir: File): File? {
         return serverDir.walkTopDown()
             .maxDepth(8)
-            .filter { it.isFile && it.name.equals("unix_args.txt", ignoreCase = true) && it.length() > 0L }
+            // Forge and NeoForge generate unix_args.txt; a few builds name it plainly args.txt.
+            // win_args.txt is deliberately excluded — it carries Windows-style paths.
+            .filter { it.isFile && ARG_FILE_NAMES.any { name -> it.name.equals(name, ignoreCase = true) } && it.length() > 0L }
             .map { it to forgeArgFileScore(serverDir, it) }
             .filter { it.second > 0 }
             .sortedWith(
@@ -745,6 +747,8 @@ object ModpackManager {
             .firstOrNull()
             ?.first
     }
+
+    private val ARG_FILE_NAMES = listOf("unix_args.txt", "args.txt")
 
     private fun forgeArgFileScore(serverDir: File, file: File): Int {
         val relative = file.relativeTo(serverDir).path.replace('\\', '/').lowercase()
@@ -759,13 +763,15 @@ object ModpackManager {
             text.contains("net.neoforged") ||
             text.contains("neoforge")
 
-        return when {
+        val base = when {
             pathLooksForge && textLooksForge -> 100
             pathLooksForge -> 90
             relative.startsWith("libraries/") && textLooksForge -> 80
             textLooksForge -> 60
             else -> 0
         }
+        // Prefer the canonical unix_args.txt when a pack ships both spellings.
+        return if (base > 0 && file.name.equals("unix_args.txt", ignoreCase = true)) base + 5 else base
     }
 
     private fun findLaunchJar(serverDir: File): File? {

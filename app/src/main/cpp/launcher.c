@@ -610,9 +610,14 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
     if (jar_path[0] == '@') {
       is_arg_file = 1;
       snprintf(arg_file_opt, sizeof(arg_file_opt), "%s", jar_path);
-    } else if (strstr(jar_path, ".txt") != NULL) {
-      is_arg_file = 1;
-      snprintf(arg_file_opt, sizeof(arg_file_opt), "@%s", jar_path);
+    } else {
+      // Suffix, not substring: a world directory containing ".txt" in its name must not turn a
+      // perfectly good server JAR into a bogus argument-file reference.
+      size_t len = strlen(jar_path);
+      if (len >= 4 && strcmp(jar_path + len - 4, ".txt") == 0) {
+        is_arg_file = 1;
+        snprintf(arg_file_opt, sizeof(arg_file_opt), "@%s", jar_path);
+      }
     }
   }
 

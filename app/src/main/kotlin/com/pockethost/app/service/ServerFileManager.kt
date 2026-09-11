@@ -262,11 +262,25 @@ object ServerFileManager {
     private fun migrateFlatLayoutToNested(serverDir: File, nestedDir: File) {
         val skip = setOf("server.properties", "eula.txt", "usercache.json",
             "ops.json", "whitelist.json", "banned-players.json", "banned-ips.json")
+        // Anything not listed here is treated as stray world data and moved into the nested world
+        // directory. A modpack's mod loader files live beside the world, so they have to be named
+        // explicitly — moving mods/ or the persisted launch jar into world/ leaves the pack unable
+        // to start, with no obvious way back.
         val systemDirs = setOf("plugins", "logs", "cache", "jre", "jre-21", "jre-runtime", "jre17", "jre21", "jre25",
-            "config", "libraries", "binaries", "backups", "crash-reports", "bundler", "versions")
+            "config", "libraries", "binaries", "backups", "crash-reports", "bundler", "versions",
+            "mods", "defaultconfigs", "kubejs", "scripts", "packmenu", "patchouli_books", "schematics",
+            "shaderpacks", "resourcepacks", "world_backups", ".fabric", ".mixin.out", "run")
+        // The modpack launch target may sit at the server root (fabric-server-launch.jar and
+        // friends); moving it would break readLaunchTarget on the next start.
+        val launchTargetName = readLaunchTarget(serverDir)?.file?.relativeTo(serverDir)?.path
+            ?.substringBefore('/')
+            ?.takeIf { it.isNotBlank() }
+
         serverDir.listFiles()?.forEach { file ->
             val name = file.name
-            if (name.startsWith("pocketcraft-") || name in skip || name in systemDirs || name == nestedDir.name) return@forEach
+            if (name.startsWith("pocketcraft-") || name in skip || name in systemDirs ||
+                name == nestedDir.name || name == launchTargetName
+            ) return@forEach
             val target = File(nestedDir, name)
             if (file.isDirectory) {
                 file.copyRecursively(target, overwrite = true)
