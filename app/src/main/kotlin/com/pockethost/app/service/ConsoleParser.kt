@@ -55,6 +55,18 @@ object ConsoleParser {
     // e.g. "[17:30:06 INFO]: Steve joined the game"
     private val JOINED_GAME_REGEX = Regex("""(\S+) joined the game""", RegexOption.IGNORE_CASE)
 
+    // PowerNukkitX logs its own connection lines in Nukkit's format rather than Minecraft's:
+    // "Steve[/203.0.113.7:51234] logged in with entity id 12 at (world, 0, 64, 0)" and
+    // "Steve[/203.0.113.7:51234] logged out due to Session disconnected".
+    private val NUKKIT_LOGIN_REGEX = Regex(
+        """([^\s\[]+)\[/[^\]]*\] logged in with entity id""",
+        RegexOption.IGNORE_CASE
+    )
+    private val NUKKIT_LOGOUT_REGEX = Regex(
+        """([^\s\[]+)\[/[^\]]*\] logged out""",
+        RegexOption.IGNORE_CASE
+    )
+
     // e.g. "Steve lost connection", "Steve left the game", "Steve was kicked", "Steve disconnected"
     private val LEAVE_REGEX = Regex(
         """(\S+) (lost connection|left the game|was kicked|disconnected)""",
@@ -153,12 +165,16 @@ object ConsoleParser {
         JOINED_GAME_REGEX.find(line)?.let { match ->
             return match.groupValues[1] to ""
         }
+        NUKKIT_LOGIN_REGEX.find(line)?.let { match ->
+            return match.groupValues[1] to ""
+        }
         return null
     }
 
     /** Returns player name if a player left. */
     fun parseLeave(line: String): String? =
         LEAVE_REGEX.find(line)?.groupValues?.get(1)
+            ?: NUKKIT_LOGOUT_REGEX.find(line)?.groupValues?.get(1)
 
     /** Returns (player, command) if a player issued a command. */
     fun parseCommand(line: String): Pair<String, String>? {

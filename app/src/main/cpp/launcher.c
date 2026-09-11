@@ -696,11 +696,25 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
     argv[a++] = (char *)jar_path;
   }
 
-  argv[a++] = "nogui";
-
-  if (server_type && (strcmp(server_type, "PAPER") == 0 || strcmp(server_type, "PURPUR") == 0)) {
+  if (server_type && strcmp(server_type, "BEDROCK") == 0) {
+    // PowerNukkitX does not understand "nogui". It also runs an interactive first-run setup
+    // wizard that reads stdin, which would hang a server launched in-process, so the wizard and
+    // the license prompt are answered on the command line instead.
+    argv[a++] = "--language";
+    argv[a++] = "eng";
+    argv[a++] = "--skip-setup";
+    argv[a++] = "--accept-license";
+    argv[a++] = "--disable-ansi";
+    argv[a++] = "--disable-auto-bug-report";
     argv[a++] = "--port";
     argv[a++] = port_str;
+  } else {
+    argv[a++] = "nogui";
+
+    if (server_type && (strcmp(server_type, "PAPER") == 0 || strcmp(server_type, "PURPUR") == 0)) {
+      argv[a++] = "--port";
+      argv[a++] = port_str;
+    }
   }
 
   int argc = a;

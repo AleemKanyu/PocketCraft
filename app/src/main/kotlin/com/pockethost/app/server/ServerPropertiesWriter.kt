@@ -71,7 +71,13 @@ object ServerPropertiesWriter {
         val maxLimit = 50
         props["max-players"] = prefs.maxPlayers.coerceIn(1, maxLimit).toString()
 
-        props["server-port"] = "25565"
+        // A Bedrock server speaks RakNet on UDP 19132; only the Java editions use 25565.
+        val isBedrock = prefs.serverType.equals("BEDROCK", ignoreCase = true)
+        props["server-port"] = if (isBedrock) {
+            com.pockethost.app.server.NukkitVersions.DEFAULT_BEDROCK_PORT.toString()
+        } else {
+            "25565"
+        }
         props["difficulty"] = prefs.difficulty.lowercase()
         props["gamemode"] = prefs.gameMode.lowercase()
         props["online-mode"] = prefs.onlineMode.toString()

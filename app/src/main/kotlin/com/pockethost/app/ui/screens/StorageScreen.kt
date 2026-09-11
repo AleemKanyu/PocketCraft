@@ -86,8 +86,7 @@ fun StorageScreen(
     onOpenWorldSetup: (Boolean) -> Unit = {},
     onChangeVersion: () -> Unit = {},
     onMessage: (String) -> Unit = {},
-    onNavigateToSettings: (Int?) -> Unit = {},
-    onOpenBedrockCreation: () -> Unit = {}
+    onNavigateToSettings: (Int?) -> Unit = {}
 ) {
     val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -139,8 +138,7 @@ fun StorageScreen(
                         onOpenWorldSetup = onOpenWorldSetup,
                         onChangeVersion = onChangeVersion,
                         onMessage = onMessage,
-                        onNavigateToSettings = onNavigateToSettings,
-                        onOpenBedrockCreation = onOpenBedrockCreation
+                        onNavigateToSettings = onNavigateToSettings
                     )
                     else -> ServerFilesBrowser(stateHolder = stateHolder)
                 }

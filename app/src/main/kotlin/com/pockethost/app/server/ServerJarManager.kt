@@ -230,7 +230,9 @@ object ServerJarManager {
         )
     }.flowOn(Dispatchers.IO)
 
-    private fun fetchBedrockVersions(): List<String> {
-        return listOf("1.21.60", "1.21.50", "1.21.40", "1.21.30", "1.21.20", "1.21.2", "1.21.0", "1.20.80")
-    }
+    /**
+     * Bedrock client versions a PocketHost Bedrock server can advertise. The JAR is the same
+     * PowerNukkitX build regardless of the choice, so this is the set that build supports.
+     */
+    private fun fetchBedrockVersions(): List<String> = NukkitVersions.SUPPORTED_BEDROCK_VERSIONS
 }

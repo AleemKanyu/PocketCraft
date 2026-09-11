@@ -586,8 +586,12 @@ fun SettingsScreen(
             ) {
             // --- TAB 0: SERVER ---
             if (activeTab == 0) {
+                // Geyser and Floodgate exist to translate Bedrock clients onto a Java server. A
+                // native Bedrock server already serves those clients directly, so the toggle is
+                // meaningless there.
                 if (stateHolder.config.serverType != com.pockethost.app.data.model.ServerType.VANILLA &&
-                    stateHolder.config.serverType != com.pockethost.app.data.model.ServerType.MODPACK) {
+                    stateHolder.config.serverType != com.pockethost.app.data.model.ServerType.MODPACK &&
+                    !stateHolder.config.serverType.isBedrock) {
                     item {
                         AnimatedEntranceContainer(index = 0) {
                             SettingsToggleRow(

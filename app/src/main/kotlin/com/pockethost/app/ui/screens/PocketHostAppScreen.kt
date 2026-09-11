@@ -179,7 +179,6 @@ fun PocketHostApp(
     var selectedServerType by remember { mutableStateOf(ServerType.PAPER) }
     var downloadedVersions by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showVersionPickerDialog by remember { mutableStateOf(false) }
-    var showBedrockCreationDialog by remember { mutableStateOf(false) }
     var showVersionRiskDialog by remember { mutableStateOf(false) }
     var pendingVersionChange by remember { mutableStateOf<PendingVersionChange?>(null) }
     var pendingVersionRollbackConfig by remember { mutableStateOf<Triple<ServerType, String, String?>?>(null) }
@@ -1148,7 +1147,6 @@ fun PocketHostApp(
                     onDarkThemeChange = onDarkThemeChange,
                     currentMobTheme = currentMobTheme,
                     onMobThemeChange = onMobThemeChange,
-                    onOpenBedrockCreation = {},
                     homeTopContent = {
                         if (modpackImportInProgress || modpackImportError != null) {
                             ModpackImportProgressCard(
@@ -1349,29 +1347,6 @@ fun PocketHostApp(
         }
     }
 
-    if (false && showBedrockCreationDialog) {
-        com.pockethost.app.ui.components.BedrockServerCreationBottomSheet(
-            onDismiss = { showBedrockCreationDialog = false },
-            onCreateBedrockServer = { name, port, gamemode, difficulty, maxPlayers ->
-                scope.launch {
-                    val createdWorldName = "bedrock_${System.currentTimeMillis() / 1000}"
-                    com.pockethost.app.server.NukkitLaunchManager.prepareNukkitServer(
-                        context = context,
-                        worldName = createdWorldName,
-                        serverName = name,
-                        port = port,
-                        gamemode = gamemode,
-                        difficulty = difficulty,
-                        maxPlayers = maxPlayers
-                    )
-                    stateHolder.createWorld(createdWorldName)
-                    stateHolder.setActiveWorld(createdWorldName, syncPluginProfiles = false)
-                    requestVersionChange(ServerType.BEDROCK, "1.21.60")
-                    Toast.makeText(context, "Bedrock server '$name' created!", Toast.LENGTH_SHORT).show()
-                }
-            }
-        )
-    }
 
     if (showVersionRiskDialog && pendingVersionChange != null) {
         val riskSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)

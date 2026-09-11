@@ -1,83 +1,113 @@
 package com.pockethost.app.server
 
-import java.io.File
-
+/**
+ * Constants describing the PowerNukkitX build PocketHost hosts for Bedrock-only servers.
+ *
+ * PowerNukkitX ships one self-contained fat JAR per release (`powernukkitx.jar`), so unlike the
+ * Java server types there is no per-Minecraft-version download: a single build serves whatever
+ * Bedrock client version that release supports. The version the user picks therefore selects the
+ * *client* version the server advertises, while the JAR itself is always the pinned release.
+ */
 object NukkitVersions {
-    const val DEFAULT_NUKKIT_VERSION = "NukkitX 2.0 (Bedrock)"
+    /** PowerNukkitX release that PocketHost downloads and launches. */
+    const val PNX_RELEASE = "3.0.4"
+
+    /** Bedrock client version [PNX_RELEASE] implements. Surfaced in the relay MOTD. */
+    const val DEFAULT_BEDROCK_VERSION = "1.26.45"
+
     const val DEFAULT_BEDROCK_PORT = 19132
-    const val NUKKIT_JAR_NAME = "nukkit.jar"
 
-    fun generateDefaultNukkitYml(serverName: String, port: Int = DEFAULT_BEDROCK_PORT): String {
-        return """
-            # PowerNukkitX Configuration (v300)
-            config-version: 300
-            settings:
-              language: "eng"
-              force-language: false
-              shutdown-message: "Server closed"
-              query-plugins: true
-              deprecated-verbose: true
-              async-workers: auto
-            network:
-              batch-threshold: 256
-              compression-level: 7
-              async-compression: true
-              upnp-forwarding: false
-            player:
-              save-player-data: true
-              skin-change-cooldown: 30
-              check-skin: false
-              strict-skin-check: false
-              allow-custom-skin: true
-              force-skin-trusted: true
-              check-skin-trusted: false
-            world:
-              default-format: "leveldb"
-              auto-save: 6000
-            server:
-              server-ip: "0.0.0.0"
-              server-port: $port
-              bedrock-port: $port
-              port: $port
-            debug: 1
-        """.trimIndent()
-    }
+    /** PowerNukkitX 3.x is compiled for Java 21 (class file major 65). */
+    const val REQUIRED_JAVA_RUNTIME_ID = "java21"
 
-    fun generateDefaultServerProperties(
-        serverName: String,
+    const val PNX_JAR_URL =
+        "https://github.com/PowerNukkitX/PowerNukkitX/releases/download/$PNX_RELEASE/powernukkitx.jar"
+
+    const val PNX_RELEASES_API =
+        "https://api.github.com/repos/PowerNukkitX/PowerNukkitX/releases/latest"
+
+    const val PNX_DOWNLOAD_PAGE = "https://github.com/PowerNukkitX/PowerNukkitX/releases/latest"
+
+    /** Bedrock client versions a PocketHost Bedrock server can be advertised as. */
+    val SUPPORTED_BEDROCK_VERSIONS = listOf(
+        DEFAULT_BEDROCK_VERSION,
+        "1.21.100",
+        "1.21.90",
+        "1.21.80",
+        "1.21.70",
+        "1.21.60"
+    )
+
+    /** Name of PowerNukkitX's only configuration file. */
+    const val CONFIG_FILE = "pnx.yml"
+
+    /** Directory PowerNukkitX stores its LevelDB levels in, relative to the server directory. */
+    const val LEVELS_DIR = "worlds"
+
+    /**
+     * A minimal but complete-enough `pnx.yml`.
+     *
+     * PowerNukkitX backfills every key it does not find (keeping the values written here) and
+     * writes the full commented document back on first boot. Crucially, the presence of this file
+     * also suppresses PowerNukkitX's interactive first-run setup wizard, which would otherwise
+     * block forever on a server whose stdin is a pipe.
+     */
+    fun generateDefaultConfig(
+        motd: String,
         port: Int = DEFAULT_BEDROCK_PORT,
+        levelName: String = "world",
+        maxPlayers: Int = 10,
         gamemode: Int = 0,
         difficulty: Int = 1,
-        maxPlayers: Int = 10
-    ): String {
-        return """
-            # Minecraft Bedrock Server Properties (NukkitX)
-            motd=$serverName
-            server-port=$port
-            bedrock-port=$port
-            server-ip=0.0.0.0
-            gamemode=$gamemode
-            difficulty=$difficulty
-            max-players=$maxPlayers
-            online-mode=false
-            white-list=false
-            view-distance=8
-            spawn-protection=16
-            allow-flight=true
-            announce-player-achievements=true
-            generator-settings=
-            level-name=world
-            level-type=DEFAULT
-            level-seed=
-            enable-query=true
-            enable-rcon=false
-            auto-save=true
-            check-skin=false
-            allow-custom-skin=true
-            trust-skin=true
-            force-skin-trusted=true
-            pocketcraft-server-type=BEDROCK
-            pocketcraft-game-version=1.21.60
-        """.trimIndent()
+        viewDistance: Int = 8
+    ): String = buildString {
+        appendLine("# Generated by PocketHost. Edit in the app or change values here directly.")
+        appendLine("settings:")
+        appendLine("  ip: 0.0.0.0")
+        appendLine("  port: $port")
+        appendLine("  maxPlayers: $maxPlayers")
+        appendLine("  defaultLevelName: $levelName")
+        appendLine("  motd: ${PnxYaml.quote(motd)}")
+        appendLine("  sub-motd: ${PnxYaml.quote("PocketHost")}")
+        appendLine("  language: eng")
+        appendLine("  allowList: false")
+        appendLine("  xboxAuth: true")
+        appendLine("  autoSave: true")
+        appendLine("player-settings:")
+        appendLine("  savePlayerData: true")
+        appendLine("gameplay-settings:")
+        appendLine("  gamemode: $gamemode")
+        appendLine("  difficulty: $difficulty")
+        appendLine("  viewDistance: $viewDistance")
+        appendLine("  pvp: true")
+        appendLine("  spawnProtection: 16")
+        appendLine("  hardcore: false")
+        appendLine("misc-settings:")
+        // PocketHost declares no third-party analytics, so the bundled server must not phone home.
+        appendLine("  enableMetrics: false")
+        appendLine("network-settings:")
+        // zlibProvider 3 is hardware-accelerated libdeflate, whose JNI library ships only for
+        // linux/amd64 — on an Android ARM device it has no native to bind to. 1 is the
+        // single-threaded, low-memory Java provider, which is also the right trade on a phone.
+        appendLine("  zlibProvider: 1")
+        appendLine("  compressionLevel: 4")
+        appendLine("performance-settings:")
+        appendLine("  asyncWorkers: auto")
+        appendLine("config:")
+        appendLine("  version: 3.0.0")
+    }
+
+    fun gamemodeToInt(value: String?): Int = when (value?.trim()?.lowercase()) {
+        "creative", "1" -> 1
+        "adventure", "2" -> 2
+        "spectator", "3" -> 3
+        else -> 0
+    }
+
+    fun difficultyToInt(value: String?): Int = when (value?.trim()?.lowercase()) {
+        "peaceful", "0" -> 0
+        "normal", "2" -> 2
+        "hard", "3" -> 3
+        else -> 1
     }
 }

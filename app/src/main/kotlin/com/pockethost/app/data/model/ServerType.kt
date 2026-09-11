@@ -9,14 +9,18 @@ enum class ServerType(
     PAPER("Paper", true),
     PURPUR("Purpur", true),
     FABRIC("Fabric", true),
-    BEDROCK("Bedrock Edition", true, isEnabled = false),
+    BEDROCK("Bedrock Edition", true),
     MODPACK("Modpack", false);
+
+    /**
+     * True for server types that speak the Bedrock (RakNet over UDP) protocol rather than the
+     * Java edition's TCP protocol. Readiness probing, port handling and world layout all differ.
+     */
+    val isBedrock: Boolean get() = this == BEDROCK
 
     companion object {
         fun fromString(value: String?): ServerType {
-            if (value.isNullOrBlank() || value.equals("BEDROCK", ignoreCase = true) || value.contains("Bedrock", ignoreCase = true)) {
-                return PAPER
-            }
+            if (value.isNullOrBlank()) return PAPER
             for (type in entries) {
                 if (type.isEnabled && (type.name.equals(value, ignoreCase = true) || type.displayName.equals(value, ignoreCase = true))) {
                     return type

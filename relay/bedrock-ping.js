@@ -8,8 +8,8 @@ const RAKNET_MAGIC = Buffer.from([
 ]);
 
 const SERVER_GUID = 0xDEADBEEFCAFE1234n;
-const DEFAULT_PROTOCOL = '800';
-const DEFAULT_VERSION = '1.22.0';
+const DEFAULT_PROTOCOL = '2169';
+const DEFAULT_VERSION = '1.26.45';
 const statusMap = new Map();
 const DEBUG_NETWORK = process.env.POCKETCRAFT_DEBUG_NETWORK === '1';
 let pingLogCount = 0;
@@ -35,7 +35,15 @@ function getProtocolForVersion(version) {
   if (v.startsWith('1.21.4')) return '748';
   if (v.startsWith('1.21.5')) return '766';
   if (v.startsWith('1.21.0') || v === '1.21') return '685';
+  if (v.startsWith('1.21.6')) return '776';
+  if (v.startsWith('1.21.7')) return '786';
+  if (v.startsWith('1.21.8')) return '800';
+  if (v.startsWith('1.21.9')) return '818';
+  if (v.startsWith('1.21.100')) return '827';
   if (v.startsWith('1.22.0')) return '800';
+  // PowerNukkitX 3.0.4 advertises protocol 2169 for Bedrock 1.26.45, the build PocketHost
+  // hosts for native Bedrock servers.
+  if (v.startsWith('1.26.')) return '2169';
   return DEFAULT_PROTOCOL;
 }
 
