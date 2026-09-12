@@ -650,16 +650,43 @@ async function listBroadcastResults() {
 }
 
 async function listBetaFeedbacks() {
-  let snapshot;
-  try {
-    snapshot = await db.collection("beta_feedback").orderBy("emailCheckedAt", "desc").limit(50).get();
-  } catch (error) {
+  // Order by createdAt: that is the only timestamp the app itself writes, so every report has
+  // one. The previous ordering key, emailCheckedAt, is written by the mail function and only on
+  // its "skipped" and "failed" branches — a successfully emailed report gets emailSentAt instead,
+  // and a report the function has not reached yet has neither. Firestore drops documents that
+  // lack the ordering field, so ordering by emailCheckedAt silently hid every delivered report
+  // and every brand new one: exactly the submissions worth reading.
+  // Documents written by different app versions carry different timestamps, and no single
+  // orderBy can see all of them, so each ordering is queried and the results merged. Bounded at
+  // two queries of 50, which is plenty for a feedback inbox.
+  const orderCandidates = ["createdAt", "emailCheckedAt"];
+  const collected = new Map();
+  for (const field of orderCandidates) {
     try {
-      snapshot = await db.collection("beta_feedback").limit(50).get();
-    } catch (e) {
-      snapshot = { docs: [] };
+      const attempt = await db.collection("beta_feedback").orderBy(field, "desc").limit(50).get();
+      attempt.docs.forEach((doc) => collected.set(doc.id, doc));
+    } catch (error) {
+      // Missing composite index or a field never written — fall through to the next ordering.
     }
   }
+  if (collected.size === 0) {
+    try {
+      const attempt = await db.collection("beta_feedback").limit(50).get();
+      attempt.docs.forEach((doc) => collected.set(doc.id, doc));
+    } catch (e) {
+      // Leave the list empty; the UI reports "no submissions found".
+    }
+  }
+
+  const sortKey = (doc) => {
+    const data = doc.data() || {};
+    const iso = toIso(data.createdAt) || toIso(data.emailSentAt) || toIso(data.emailCheckedAt) || toIso(data.updatedAt);
+    return iso ? Date.parse(iso) : 0;
+  };
+  const snapshot = {
+    docs: Array.from(collected.values()).sort((a, b) => sortKey(b) - sortKey(a)).slice(0, 50)
+  };
+
   return snapshot.docs.map((doc) => {
     const data = doc.data() || {};
     return {
@@ -672,12 +699,20 @@ async function listBetaFeedbacks() {
       deviceManufacturer: ensureString(data.deviceManufacturer),
       deviceModel: ensureString(data.deviceModel),
       androidSdk: data.androidSdk == null ? "" : ensureNumber(data.androidSdk),
+      source: ensureString(data.source),
+      androidRelease: ensureString(data.androidRelease),
+      // What the app actually attaches. The three log fields below were never written by any
+      // shipped version of the app, so the dashboard's log panels and crash diagnosis had
+      // nothing to read and always reported a clean run.
+      appLogExcerpt: ensureString(data.appLogExcerpt),
+      logFileName: ensureString(data.logFileName),
       currentConsoleLog: ensureString(data.currentConsoleLog),
       serverLatestLog: ensureString(data.serverLatestLog),
       crashArtifacts: ensureString(data.crashArtifacts),
       runtimeState: ensureString(data.runtimeState),
       emailStatus: ensureString(data.emailStatus),
       emailError: ensureString(data.emailError),
+      createdAt: toIso(data.createdAt),
       emailSentAt: toIso(data.emailSentAt || data.emailCheckedAt || data.updatedAt)
     };
   });

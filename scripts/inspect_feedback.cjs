@@ -91,6 +91,8 @@ async function inspect() {
   console.log(`Server Version:  ${data.serverVersion || "unknown"}`);
   console.log(`Device:          ${data.deviceManufacturer || "unknown"} ${data.deviceModel || "unknown"}`);
   console.log(`Android SDK:     ${data.androidSdk ?? "unknown"}`);
+  console.log(`Submitted:       ${data.createdAt?.toDate?.().toISOString() || "unknown"}`);
+  console.log(`Source:          ${data.source || "unknown"}`);
   console.log(`Email Status:    ${data.emailStatus || "pending"}`);
   if (data.emailError) {
     console.log(`Email Error:     ${data.emailError}`);
@@ -100,6 +102,9 @@ async function inspect() {
   console.log(`"${message}"`);
   console.log("==================================================");
   
+  // appLogExcerpt is what FeedbackService actually attaches. The other three are read for
+  // documents written by older tooling; on their own they made every report look crash-free.
+  const appLog = data.appLogExcerpt || "";
   const consoleLog = data.currentConsoleLog || "";
   const serverLog = data.serverLatestLog || "";
   const crashArt = data.crashArtifacts || "";
@@ -107,9 +112,9 @@ async function inspect() {
   console.log("             CRASH LOG DIAGNOSIS                 ");
   console.log("==================================================");
   
-  const analyzeLogs = (consoleLog, latestLog, crashArt) => {
+  const analyzeLogs = (...logSources) => {
     const errors = [];
-    const logs = [consoleLog, latestLog, crashArt].join("\n");
+    const logs = logSources.filter(Boolean).join("\n");
     const lines = logs.split("\n");
     
     if (logs.includes("java.lang.OutOfMemoryError")) {
@@ -143,7 +148,7 @@ async function inspect() {
     return { errors, exceptionLines };
   };
   
-  const diagnosis = analyzeLogs(consoleLog, serverLog, crashArt);
+  const diagnosis = analyzeLogs(appLog, consoleLog, serverLog, crashArt);
   
   if (diagnosis.errors.length === 0 && diagnosis.exceptionLines.length === 0) {
     console.log("🟢 No critical system crashes or exceptions detected in the logs.");

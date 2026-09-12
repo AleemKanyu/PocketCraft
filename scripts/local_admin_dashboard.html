@@ -806,12 +806,19 @@
         return;
       }
       list.innerHTML = state.feedbacks.map((f) => {
+        // createdAt is when the user actually sent the report; emailSentAt is when the mail
+        // function got round to it, which can be much later or never.
+        const submittedAt = f.createdAt
+          ? new Date(f.createdAt).toLocaleString()
+          : f.emailSentAt
+            ? new Date(f.emailSentAt).toLocaleString() + " (email time)"
+            : "Unknown";
         const emailSentAt = f.emailSentAt ? new Date(f.emailSentAt).toLocaleString() : "Pending";
         const emailStatusClass = f.emailStatus === "sent" ? "live" : f.emailStatus === "failed" ? "off" : "";
         
-        const analyzeLogs = (consoleLog, latestLog, crashArt) => {
+        const analyzeLogs = (...logSources) => {
           const errors = [];
-          const logs = [consoleLog, latestLog, crashArt].join("\n");
+          const logs = logSources.filter(Boolean).join("\n");
           
           if (logs.includes("java.lang.OutOfMemoryError")) {
             errors.push("🚨 <strong>OutOfMemoryError</strong>: The server ran out of allocated RAM. Suggest allocating more memory in settings.");
@@ -846,14 +853,21 @@
           return errors.length ? errors.join("<br/>") : "🟢 <strong>No critical system crashes detected in logs.</strong>";
         };
 
-        const diagnosisHtml = analyzeLogs(f.currentConsoleLog, f.serverLatestLog, f.crashArtifacts);
+        // appLogExcerpt is the field the app attaches today; the other three only exist on
+        // documents from older tooling, so all four are fed in.
+        const diagnosisHtml = analyzeLogs(
+          f.appLogExcerpt,
+          f.currentConsoleLog,
+          f.serverLatestLog,
+          f.crashArtifacts
+        );
 
         return `
         <article class="card" style="border-left: 5px solid var(--accent);">
           <div class="card-header">
             <div>
               <div class="card-title">Feedback from User: <code>${escapeHtml(f.userId || "Anonymous")}</code></div>
-              <small>ID: ${escapeHtml(f.id)} | Submitted: ${escapeHtml(emailSentAt)}</small>
+              <small>ID: ${escapeHtml(f.id)} | Submitted: ${escapeHtml(submittedAt)}</small>
             </div>
             <div class="chips">
               <span class="chip">App: ${escapeHtml(f.appVersion)} (${escapeHtml(f.appVersionCode)})</span>
@@ -873,11 +887,18 @@
           </div>
 
           <div class="card-actions" style="margin-top: 14px;">
+            ${f.appLogExcerpt ? `<button class="secondary" onclick="toggleDetails('${f.id}-applog')">App Log Excerpt</button>` : ""}
             ${f.runtimeState ? `<button class="secondary" onclick="toggleDetails('${f.id}-runtime')">Runtime State</button>` : ""}
             ${f.currentConsoleLog ? `<button class="secondary" onclick="toggleDetails('${f.id}-console')">App Console Log</button>` : ""}
             ${f.serverLatestLog ? `<button class="secondary" onclick="toggleDetails('${f.id}-latest')">Server latest.log</button>` : ""}
             ${f.crashArtifacts ? `<button class="secondary" onclick="toggleDetails('${f.id}-crash')">Crash Artifacts</button>` : ""}
           </div>
+
+          ${f.appLogExcerpt ? `
+          <div id="${f.id}-applog" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
+            <strong>App Log Excerpt${f.logFileName ? " (" + escapeHtml(f.logFileName) + ")" : ""}:</strong>
+            <pre class="long-cell">${escapeHtml(f.appLogExcerpt)}</pre>
+          </div>` : ""}
 
           ${f.runtimeState ? `
           <div id="${f.id}-runtime" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
