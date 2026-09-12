@@ -526,6 +526,161 @@ object PluginManager {
         }.getOrNull()
     }
 
+    /**
+     * Ensures a Fabric API build matching [mcVersion] is present in the world's `mods/` folder.
+     *
+     * Almost every Fabric mod hard-depends on Fabric API, and Fabric Loader aborts startup when it
+     * is missing rather than skipping the mod:
+     *
+     *     Mod 'GeckoLib 5' (geckolib) 5.5.5 requires version 0.152.1+26.2 or later of
+     *     fabric-api, which is missing!
+     *
+     * The build is resolved from Modrinth filtered by both loader and game version, so the jar can
+     * never be the mismatched one that made blanket auto-installation unsafe before.
+     *
+     * @return the installed jar, or null when nothing suitable could be resolved.
+     */
+    fun ensureFabricApiInstalled(
+        context: Context,
+        worldName: String,
+        mcVersion: String,
+        onOutput: ((String) -> Unit)? = null
+    ): File? {
+        val cleanVersion = com.pockethost.app.server.CarpetModManager.cleanMcVersion(mcVersion)
+        if (cleanVersion.isBlank()) return null
+
+        val modsDir = getModsDir(context, worldName)
+        // Only mods the player installed matter here; a world with no mods needs no API.
+        val hasOtherMods = modsDir.listFiles()?.any { file ->
+            file.isFile &&
+                file.extension.equals("jar", ignoreCase = true) &&
+                !file.name.contains("fabric-api", ignoreCase = true)
+        } == true
+        if (!hasOtherMods) return null
+
+        existingFabricApiJar(modsDir, cleanVersion)?.let { existing ->
+            onOutput?.invoke("[PocketHost] Fabric API (MC $cleanVersion) is installed.")
+            return existing
+        }
+
+        val resolved = resolveFabricApiDownload(context, cleanVersion)
+        if (resolved == null) {
+            onOutput?.invoke("[PocketHost] Could not find a Fabric API build for MC $cleanVersion. Mods that require it will not load.")
+            return null
+        }
+
+        onOutput?.invoke("[PocketHost] Installing Fabric API ${resolved.versionNumber} for MC $cleanVersion...")
+        val target = File(modsDir, resolved.fileName)
+        val temp = File(modsDir, resolved.fileName + ".downloading")
+        val ok = runCatching {
+            val request = Request.Builder().url(resolved.url).header("User-Agent", userAgent()).build()
+            getHttpClient(context).newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@runCatching false
+                val body = response.body ?: return@runCatching false
+                body.byteStream().use { input -> temp.outputStream().use { output -> input.copyTo(output) } }
+            }
+            // A truncated download is worse than none: Fabric Loader fails on a corrupt jar with a
+            // far less obvious message than "which is missing".
+            if (temp.length() < 100_000L) {
+                temp.delete()
+                false
+            } else if (temp.renameTo(target)) {
+                true
+            } else {
+                temp.copyTo(target, overwrite = true)
+                temp.delete()
+                true
+            }
+        }.getOrElse { error ->
+            Log.w("PluginManager", "Fabric API download failed: ${error.message}")
+            temp.delete()
+            false
+        }
+
+        if (!ok) {
+            onOutput?.invoke("[PocketHost] Fabric API download failed. Install it manually from the Mods tab if your mods need it.")
+            return null
+        }
+
+        // Drop builds for other game versions only now that a correct one is in place.
+        removeMismatchedFabricApiJars(modsDir, cleanVersion, target, onOutput)
+        onOutput?.invoke("[PocketHost] Fabric API ${resolved.versionNumber} installed.")
+        return target
+    }
+
+    private data class FabricApiRelease(val versionNumber: String, val fileName: String, val url: String)
+
+    private fun existingFabricApiJar(modsDir: File, cleanVersion: String): File? =
+        modsDir.listFiles()?.firstOrNull { file ->
+            file.isFile &&
+                file.extension.equals("jar", ignoreCase = true) &&
+                file.name.contains("fabric-api", ignoreCase = true) &&
+                fabricApiJarMatchesVersion(file.name, cleanVersion) &&
+                file.length() > 100_000L
+        }
+
+    /**
+     * Fabric API jars are named "fabric-api-<apiVersion>+<gameVersion>.jar", so the game version is
+     * compared against the token after the last "+". A plain substring test would accept
+     * fabric-api-0.102.0+1.21.1.jar as a build for 1.21.
+     */
+    private fun fabricApiJarMatchesVersion(fileName: String, cleanVersion: String): Boolean {
+        val base = fileName.removeSuffix(".jar").removeSuffix(".disabled")
+        val plusIndex = base.lastIndexOf('+')
+        if (plusIndex >= 0) {
+            return base.substring(plusIndex + 1).equals(cleanVersion, ignoreCase = true)
+        }
+        return base.contains(cleanVersion)
+    }
+
+    private fun removeMismatchedFabricApiJars(
+        modsDir: File,
+        cleanVersion: String,
+        keep: File,
+        onOutput: ((String) -> Unit)?
+    ) {
+        modsDir.listFiles()?.forEach { file ->
+            if (!file.isFile) return@forEach
+            if (file.absolutePath == keep.absolutePath) return@forEach
+            if (!file.name.contains("fabric-api", ignoreCase = true)) return@forEach
+            if (fabricApiJarMatchesVersion(file.name, cleanVersion)) return@forEach
+            onOutput?.invoke("[PocketHost] Removing Fabric API build for a different game version: ${file.name}")
+            file.delete()
+        }
+    }
+
+    private fun resolveFabricApiDownload(context: Context, cleanVersion: String): FabricApiRelease? {
+        return runCatching {
+            val url = "$MODRINTH_BASE_URL/project/fabric-api/version" +
+                "?loaders=%5B%22fabric%22%5D&game_versions=%5B%22$cleanVersion%22%5D"
+            val request = Request.Builder().url(url).header("User-Agent", userAgent()).build()
+            getHttpClient(context).newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@runCatching null
+                val payload = response.body?.string().orEmpty()
+                if (payload.isBlank()) return@runCatching null
+                val versions = JSONArray(payload)
+                // Modrinth returns newest first; take the first entry that has a primary jar.
+                for (index in 0 until versions.length()) {
+                    val version = versions.optJSONObject(index) ?: continue
+                    val files = version.optJSONArray("files") ?: continue
+                    for (fileIndex in 0 until files.length()) {
+                        val file = files.optJSONObject(fileIndex) ?: continue
+                        val name = file.optString("filename")
+                        val downloadUrl = file.optString("url")
+                        if (name.endsWith(".jar", ignoreCase = true) && downloadUrl.isNotBlank()) {
+                            return@runCatching FabricApiRelease(
+                                versionNumber = version.optString("version_number").ifBlank { "latest" },
+                                fileName = name,
+                                url = downloadUrl
+                            )
+                        }
+                    }
+                }
+                null
+            }
+        }.getOrNull()
+    }
+
     fun ensureCrossVersionPlugins(context: Context, worldName: String) {
         val pluginsDir = getPluginsDir(context, worldName)
         val viaVersionFile = File(pluginsDir, "ViaVersion.jar")

@@ -6006,7 +6006,14 @@ class ServerStateHolder(
                     val target = File(worldDir, file.name)
                     if (target.exists()) target.deleteRecursively()
                     if (!file.renameTo(target)) {
-                        file.copyTo(target, overwrite = true)
+                        // copyTo on a directory creates an empty one and copies nothing, so the
+                        // deleteRecursively below would have thrown away playerdata/, stats/ and
+                        // advancements/ whenever the rename failed.
+                        if (file.isDirectory) {
+                            file.copyRecursively(target, overwrite = true)
+                        } else {
+                            file.copyTo(target, overwrite = true)
+                        }
                         file.deleteRecursively()
                     }
                 }

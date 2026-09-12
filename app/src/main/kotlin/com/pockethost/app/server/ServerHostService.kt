@@ -2278,6 +2278,8 @@ class ServerHostService : Service() {
         if (line.contains("MixinApplyError", ignoreCase = true) && line.contains("carpet", ignoreCase = true)) {
             val serverDir = com.pockethost.app.service.ServerFileManager.getServerDir(applicationContext, activeWorldNameOrDefault())
             val modsDir = File(serverDir, "mods")
+            // A Carpet mixin crash means the installed Carpet build is wrong for this server, so
+            // here the blanket purge is the right response — no version is known to be good.
             CarpetModManager.purgeAllCarpetJars(modsDir) { msg ->
                 sendEvent(versionId, EVENT_OUTPUT, msg)
             }

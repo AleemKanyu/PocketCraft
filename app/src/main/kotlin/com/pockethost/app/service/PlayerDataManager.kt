@@ -283,6 +283,24 @@ object PlayerDataManager {
             }
         }
 
+        // Renaming player files to name-derived offline UUIDs is only correct on an offline-mode
+        // server. With online-mode=true the server looks players up by their Mojang UUID, so
+        // rewriting <mojangUuid>.dat to <offlineUuid>.dat orphans the data: the player joins and
+        // the server, finding no file for their real UUID, hands them a brand new empty
+        // inventory. That is what "my player data did not import" looks like after a restore.
+        if (isOnlineMode(serverDir)) {
+            android.util.Log.i(
+                "PlayerDataManager",
+                "Skipping offline-UUID migration: server runs in online mode, player UUIDs are Mojang-assigned."
+            )
+            runCatching {
+                val arr = JSONArray()
+                updatedUserCache.forEach { arr.put(it) }
+                userCacheFile.writeText(arr.toString(2))
+            }
+            return@withContext
+        }
+
         uuidToName.forEach { (oldUuid, name) ->
             val offlineUuid = getOfflineUuid(name)
             if (oldUuid.equals(offlineUuid, ignoreCase = true)) return@forEach
@@ -351,6 +369,20 @@ object PlayerDataManager {
             }
         }
         return null
+    }
+
+    /**
+     * Whether the server authenticates players against Mojang. Defaults to false, matching both
+     * PocketHost's own default and Minecraft's behaviour when the key is absent.
+     */
+    private fun isOnlineMode(serverDir: File): Boolean {
+        val propsFile = File(serverDir, "server.properties")
+        if (!propsFile.isFile) return false
+        return runCatching {
+            propsFile.inputStream().use { input ->
+                java.util.Properties().apply { load(input) }
+            }.getProperty("online-mode")?.trim().equals("true", ignoreCase = true)
+        }.getOrDefault(false)
     }
 
     private fun resolveWorldDirFromServerDir(serverDir: File, slotName: String): File {

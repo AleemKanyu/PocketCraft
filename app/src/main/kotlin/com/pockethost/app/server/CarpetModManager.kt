@@ -51,14 +51,27 @@ object CarpetModManager {
     }
 
     /**
-     * Removes Carpet and auto-installed Fabric API mod jars from modsDir.
+     * Removes Carpet and Fabric API jars that do not match [mcVersion].
+     *
+     * This used to delete every jar whose name contained "carpet" or "fabric-api" regardless of
+     * version, which made the problem it was meant to solve unfixable: a player whose mods needed
+     * Fabric API could install the correct build and have it silently deleted on the next launch,
+     * leaving Fabric Loader to abort with "requires ... fabric-api, which is missing". Only
+     * mismatched builds — the ones that actually cause the version-mismatch crashes — are removed.
+     *
+     * Passing a blank [mcVersion] keeps the old behaviour of removing everything, for callers
+     * reacting to a crash where no version is known to be good.
      */
-    fun purgeAllCarpetJars(modsDir: File, onOutput: ((String) -> Unit)? = null) {
+    fun purgeAllCarpetJars(modsDir: File, mcVersion: String = "", onOutput: ((String) -> Unit)? = null) {
+        val cleanVer = if (mcVersion.isNotBlank()) cleanMcVersion(mcVersion) else ""
         modsDir.listFiles()?.filter { file ->
-            (file.name.contains("carpet", ignoreCase = true) || file.name.contains("fabric-api", ignoreCase = true)) && 
+            (file.name.contains("carpet", ignoreCase = true) || file.name.contains("fabric-api", ignoreCase = true)) &&
                 (file.extension == "jar" || file.extension == "disabled")
         }?.forEach { file ->
-            onOutput?.invoke("[PocketHost] Purging auto-installed mod jar: ${file.name}")
+            if (cleanVer.isNotBlank() && file.name.contains(cleanVer)) {
+                return@forEach
+            }
+            onOutput?.invoke("[PocketHost] Purging mod jar built for a different game version: ${file.name}")
             file.delete()
         }
     }

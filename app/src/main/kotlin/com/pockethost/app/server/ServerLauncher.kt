@@ -1764,12 +1764,25 @@ class ServerLauncher(private val context: Context) {
             }
         }
 
-        // --- Mod Auto-Installation Disabled ------------------------------------
-        // Automatic installation of Carpet mod & Fabric API is disabled.
-        // Purge any previously auto-downloaded Carpet or Fabric API jars to prevent version mismatch crashes.
+        // --- Fabric API -------------------------------------------------------
+        // Nearly every Fabric mod hard-depends on Fabric API, and Fabric Loader aborts startup
+        // when it is absent instead of skipping the mod. Jars for the wrong game version are
+        // dropped first (those were the version-mismatch crashes that made this whole step
+        // untrusted), then a build matching this server's version is fetched if any mods are
+        // installed at all.
         val modsDir = File(serverDir, "mods")
         if (modsDir.exists()) {
-            CarpetModManager.purgeAllCarpetJars(modsDir, onOutput)
+            CarpetModManager.purgeAllCarpetJars(modsDir, versionId, onOutput)
+            runCatching {
+                PluginManager.ensureFabricApiInstalled(
+                    context = context,
+                    worldName = serverDir.name,
+                    mcVersion = versionId,
+                    onOutput = onOutput
+                )
+            }.onFailure { error ->
+                onOutput("[PocketHost] Fabric API check skipped: ${error.message}")
+            }
         }
     }
 
