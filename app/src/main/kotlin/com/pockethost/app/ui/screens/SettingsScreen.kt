@@ -90,7 +90,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import com.pockethost.app.feedback.FeedbackService
 import com.pockethost.app.update.UpdateConfig
 import com.pockethost.app.update.UpdateManager
+import com.pockethost.app.update.GitHubUpdateChecker
+import com.pockethost.app.update.GitHubRelease
 import com.pockethost.app.ui.components.UpdatePopup
+import com.pockethost.app.ui.components.GitHubUpdatePopup
 
 data class LevelTypeOption(val displayName: String, val propertyValue: String)
 
@@ -297,6 +300,7 @@ fun SettingsScreen(
     var showPremiumBottomSheet by remember { mutableStateOf(false) }
     var checkingForUpdate by remember { mutableStateOf(false) }
     var manualUpdateConfig by remember { mutableStateOf<UpdateConfig?>(null) }
+    var gitHubRelease by remember { mutableStateOf<GitHubRelease?>(null) }
 
     val hasUnsavedChanges by remember(currentState, savedState) {
         derivedStateOf {
@@ -1960,10 +1964,10 @@ fun SettingsScreen(
                                         playHaptic()
                                         scope.launch {
                                             checkingForUpdate = true
-                                            val config = UpdateManager.fetchUpdateConfig(context)
+                                            val release = GitHubUpdateChecker.checkForUpdate()
                                             checkingForUpdate = false
-                                            if (config?.showUpdatePopup == true) {
-                                                manualUpdateConfig = config
+                                            if (release != null) {
+                                                gitHubRelease = release
                                             } else {
                                                 onMessage("Your app is up to date!")
                                             }
@@ -1994,6 +1998,18 @@ fun SettingsScreen(
                 },
                 onDismiss = {
                     manualUpdateConfig = null
+                }
+            )
+        }
+
+        gitHubRelease?.let { release ->
+            GitHubUpdatePopup(
+                release = release,
+                onDismiss = {
+                    gitHubRelease = null
+                },
+                onInstallStarted = {
+                    gitHubRelease = null
                 }
             )
         }

@@ -51,7 +51,10 @@ import android.util.Log
 import android.content.Intent
 import com.pockethost.app.update.UpdateConfig
 import com.pockethost.app.update.UpdateManager
+import com.pockethost.app.update.GitHubUpdateChecker
+import com.pockethost.app.update.GitHubRelease
 import com.pockethost.app.ui.components.UpdatePopup
+import com.pockethost.app.ui.components.GitHubUpdatePopup
 import androidx.compose.runtime.CompositionLocalProvider
 import com.pockethost.app.util.LocalAppStrings
 import com.pockethost.app.util.appStringsFor
@@ -208,6 +211,7 @@ class MainActivity : ComponentActivity() {
             var playStoreRatingPromptEnabled by remember { mutableStateOf(true) }
             var dismissedUpdateKey by remember { mutableStateOf<String?>(null) }
             var dismissedUpdateShowFlag by remember { mutableStateOf(false) }
+            var gitHubReleaseForUpdate by remember { mutableStateOf<GitHubRelease?>(null) }
 
             // Remote Config update nudges
             var remoteConfigInitialized by remember { mutableStateOf(false) }
@@ -386,26 +390,64 @@ class MainActivity : ComponentActivity() {
                 }
 
                 finalUpdateConfig?.let { config ->
-                    UpdatePopup(
-                        config = config,
-                        onUpdateNow = {
-                            runCatching {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(config.playStoreUrl))
-                                startActivity(intent)
-                            }
-                        },
-                        onDismiss = {
-                            Log.d("MainActivity", "Update popup dismissed by user.")
-                            if (config == rcUpdateConfig) {
-                                dismissedRcUpdateKey = config.dismissKey
-                                rcUpdateConfig = null
-                            } else {
-                                dismissedUpdateShowFlag = true
-                                dismissedUpdateKey = config.dismissKey
-                                updateConfig = null
+                    // Auto-fetch GitHub release when Firestore says update is available
+                    LaunchedEffect(config) {
+                        if (gitHubReleaseForUpdate == null) {
+                            val release = GitHubUpdateChecker.fetchLatestRelease()
+                            if (release != null) {
+                                gitHubReleaseForUpdate = release
                             }
                         }
-                    )
+                    }
+
+                    if (gitHubReleaseForUpdate != null) {
+                        // Show GitHub download popup for direct APK install
+                        GitHubUpdatePopup(
+                            release = gitHubReleaseForUpdate!!,
+                            onDismiss = {
+                                Log.d("MainActivity", "GitHub update popup dismissed by user.")
+                                gitHubReleaseForUpdate = null
+                                if (config == rcUpdateConfig) {
+                                    dismissedRcUpdateKey = config.dismissKey
+                                    rcUpdateConfig = null
+                                } else {
+                                    dismissedUpdateShowFlag = true
+                                    dismissedUpdateKey = config.dismissKey
+                                    updateConfig = null
+                                }
+                            },
+                            onInstallStarted = {
+                                Log.d("MainActivity", "APK install started from GitHub update popup.")
+                                gitHubReleaseForUpdate = null
+                            }
+                        )
+                    } else {
+                        // Fallback: show original popup while GitHub release loads or if fetch fails
+                        UpdatePopup(
+                            config = config,
+                            onUpdateNow = {
+                                // Fallback: open GitHub releases page in browser
+                                runCatching {
+                                    val owner = BuildConfig.GITHUB_REPO_OWNER
+                                    val repo = BuildConfig.GITHUB_REPO_NAME
+                                    val fallbackUrl = "https://github.com/$owner/$repo/releases/latest"
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl))
+                                    startActivity(intent)
+                                }
+                            },
+                            onDismiss = {
+                                Log.d("MainActivity", "Update popup dismissed by user.")
+                                if (config == rcUpdateConfig) {
+                                    dismissedRcUpdateKey = config.dismissKey
+                                    rcUpdateConfig = null
+                                } else {
+                                    dismissedUpdateShowFlag = true
+                                    dismissedUpdateKey = config.dismissKey
+                                    updateConfig = null
+                                }
+                            }
+                        )
+                    }
             }
         }
     }
