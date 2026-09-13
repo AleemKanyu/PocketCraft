@@ -47,6 +47,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Warning
 import com.pockethost.app.service.MissingModDependency
 import androidx.compose.material.icons.filled.ContentCopy
@@ -927,7 +928,12 @@ fun ServerScreen(
             isResolving = stateHolder.isResolvingModDependencies,
             resolveStatus = stateHolder.modDependencyResolveStatus,
             onInstallAll = { stateHolder.resolveAndInstallMissingDependencies() },
+            onInstallSingle = { dep -> stateHolder.installSingleMissingDependency(dep) },
             onDisableMods = { stateHolder.disableIncompatibleModsAndStart() },
+            onGoToPlugins = {
+                stateHolder.dismissMissingModDependenciesDialog()
+                currentTab = PocketTab.MODS
+            },
             onStartAnyway = { stateHolder.startServerAnyway() },
             onDismiss = { stateHolder.dismissMissingModDependenciesDialog() }
         )
@@ -942,13 +948,16 @@ fun ServerScreen(
 @Composable
 fun MissingModDependenciesDialog(
     missingDependencies: List<MissingModDependency>,
-    isResolving: Boolean,
-    resolveStatus: String?,
-    onInstallAll: () -> Unit,
+    isResolving: Boolean = false,
+    resolveStatus: String? = null,
+    onInstallAll: () -> Unit = {},
+    onInstallSingle: (MissingModDependency) -> Unit = {},
     onDisableMods: () -> Unit,
+    onGoToPlugins: () -> Unit,
     onStartAnyway: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     androidx.compose.material3.ModalBottomSheet(
@@ -994,7 +1003,7 @@ fun MissingModDependenciesDialog(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "Some mods require additional dependencies to run. Starting the server now will cause it to crash.",
+                    text = "Some mods require additional dependencies to run. You can auto-install them directly from Modrinth, disable affected mods, or manage them in Plugins & Mods.",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -1033,7 +1042,7 @@ fun MissingModDependenciesDialog(
                             }
                             Column(
                                 modifier = Modifier.padding(start = 16.dp),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 deps.forEach { dep ->
                                     val reqText = if (!dep.versionRequirement.isNullOrBlank()) {
@@ -1041,11 +1050,59 @@ fun MissingModDependenciesDialog(
                                     } else {
                                         dep.dependencyId
                                     }
-                                    Text(
-                                        text = "Requires: $reqText",
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Requires: $reqText",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            androidx.compose.material3.Button(
+                                                onClick = { onInstallSingle(dep) },
+                                                enabled = !isResolving,
+                                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                                    containerColor = PocketColors.Primary,
+                                                    contentColor = Color.White
+                                                ),
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                                modifier = Modifier.height(28.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Install",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            androidx.compose.material3.IconButton(
+                                                onClick = {
+                                                    runCatching {
+                                                        val url = "https://modrinth.com/mod/${dep.dependencyId}"
+                                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                        }
+                                                        context.startActivity(intent)
+                                                    }
+                                                },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                                    contentDescription = "Open in browser",
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1057,7 +1114,11 @@ fun MissingModDependenciesDialog(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp),
+                        .background(
+                            PocketColors.Primary.copy(alpha = 0.12f),
+                            RoundedCornerShape(14.dp)
+                        )
+                        .padding(vertical = 14.dp, horizontal = 16.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1068,14 +1129,24 @@ fun MissingModDependenciesDialog(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = resolveStatus ?: "Installing dependencies...",
+                        text = resolveStatus ?: "Installing dependencies from Modrinth...",
                         fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             } else {
-                // Action: Auto-Install Dependencies
+                if (!resolveStatus.isNullOrBlank()) {
+                    Text(
+                        text = resolveStatus,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                // Action: Auto-Install All Dependencies
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1090,14 +1161,14 @@ fun MissingModDependenciesDialog(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Auto-Install Dependencies",
+                        text = "Auto-Install All Dependencies",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp
                     )
                 }
 
-                // Action: Disable Incompatible Mods
+                // Action: Disable Affected Mods & Start
                 androidx.compose.material3.OutlinedButton(
                     onClick = onDisableMods,
                     modifier = Modifier.fillMaxWidth(),
@@ -1105,6 +1176,18 @@ fun MissingModDependenciesDialog(
                 ) {
                     Text(
                         text = "Disable Affected Mods & Start",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                }
+
+                // Action: Manage in Plugins & Mods
+                androidx.compose.material3.TextButton(
+                    onClick = onGoToPlugins,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Manage in Plugins & Mods",
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp
                     )

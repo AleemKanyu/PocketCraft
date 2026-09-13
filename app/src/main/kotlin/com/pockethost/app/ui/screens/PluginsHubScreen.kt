@@ -164,6 +164,8 @@ fun PluginsHubScreen(
     var pendingRemoteInstall by remember { mutableStateOf<PluginManager.RemoteCatalogItem?>(null) }
     var dependenciesList by remember { mutableStateOf<List<PluginManager.ModDependency>>(emptyList()) }
     var isLoadingDependencies by remember { mutableStateOf(false) }
+    var isDependencyAutoInstalling by remember { mutableStateOf(false) }
+    var installingDepSlug by remember { mutableStateOf<String?>(null) }
 
     val availableTabs: List<ContentTab> = remember(stateHolder.config.serverType) {
         when (stateHolder.config.serverType) {
@@ -617,7 +619,7 @@ fun PluginsHubScreen(
                                 RemoteContentRow(
                                     item = remote,
                                     installed = installed,
-                                    isDownloading = false,
+                                    isDownloading = isUploading && downloadingCatalogKey == remote.catalogKey,
                                     onShowDetails = {
                                         detailCard = ContentDetailCard.Remote(
                                             item = remote,
@@ -627,7 +629,7 @@ fun PluginsHubScreen(
                                     },
                                     onInstall = {
                                         if (!installed && remote.canInstall) {
-                                            pendingRemoteInstall = remote
+                                            performDirectInstall(remote)
                                         }
                                     }
                                 )

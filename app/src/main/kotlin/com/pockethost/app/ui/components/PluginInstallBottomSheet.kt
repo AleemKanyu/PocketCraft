@@ -26,6 +26,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
 import com.pockethost.app.service.PluginManager
 import com.pockethost.app.ui.theme.PocketColors
 import kotlinx.coroutines.launch
@@ -42,7 +44,12 @@ fun PluginInstallBottomSheet(
     isLoadingDependencies: Boolean,
     contentTypeLabel: String,
     worldName: String,
-    onDependencyFileSelected: (PluginManager.ModDependency, Uri, onComplete: () -> Unit) -> Unit
+    onDependencyFileSelected: (PluginManager.ModDependency, Uri, onComplete: () -> Unit) -> Unit,
+    onDirectInstall: (() -> Unit)? = null,
+    onDependencyAutoInstall: ((PluginManager.ModDependency, onComplete: () -> Unit) -> Unit)? = null,
+    isDirectInstalling: Boolean = false,
+    isDependencyInstalling: Boolean = false,
+    installingDepSlug: String? = null
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -134,6 +141,95 @@ fun PluginInstallBottomSheet(
                 verticalArrangement = Arrangement.spacedBy(20.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
+                if (onDirectInstall != null) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                    RoundedCornerShape(16.dp)
+                                )
+                                .border(
+                                    BorderStroke(1.dp, PocketColors.Primary.copy(alpha = 0.35f)),
+                                    RoundedCornerShape(16.dp)
+                                )
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = null,
+                                    tint = PocketColors.Primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "One-Tap In-App Install (Recommended)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
+                            Text(
+                                text = "Downloads and installs $itemName directly into your server using the Modrinth API, automatically pulling required dependencies.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 16.sp
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            listOf(PocketColors.Primary, Color(0xFF4CAF50))
+                                        )
+                                    )
+                                    .clickable(enabled = !isDirectInstalling) {
+                                        onDirectInstall()
+                                    }
+                                    .padding(vertical = 13.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isDirectInstalling) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = Color.White
+                                    )
+                                } else {
+                                    Text(
+                                        text = "Install Directly in App",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                            Text(
+                                text = "  OR INSTALL MANUALLY  ",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                letterSpacing = 1.sp
+                            )
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                        }
+                    }
+                }
+
                 // ── Step 1 – Download in Browser ───────────────────────────────────
                 item {
                     PluginInstallStep(
@@ -307,22 +403,51 @@ fun PluginInstallBottomSheet(
                                     )
                                 }
                             } else {
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Button(
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    if (onDependencyAutoInstall != null) {
+                                        val isThisInstalling = isDependencyInstalling && installingDepSlug == dep.slug
+                                        Button(
+                                            onClick = {
+                                                onDependencyAutoInstall(dep) {
+                                                    refreshCounter++
+                                                }
+                                            },
+                                            enabled = !isDependencyInstalling,
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = PocketColors.Primary,
+                                                contentColor = Color.White
+                                            ),
+                                            modifier = Modifier.height(32.dp)
+                                        ) {
+                                            if (isThisInstalling) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(14.dp),
+                                                    strokeWidth = 2.dp,
+                                                    color = Color.White
+                                                )
+                                            } else {
+                                                Text("Auto-Install", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+
+                                    OutlinedButton(
                                         onClick = {
                                             runCatching {
                                                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(dep.pageUrl)))
                                             }
                                         },
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                         shape = RoundedCornerShape(8.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = PocketColors.PrimaryMuted,
-                                            contentColor = PocketColors.PrimaryDark
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                         ),
                                         modifier = Modifier.height(32.dp)
                                     ) {
-                                        Text("Download", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Text("Browser", fontSize = 11.sp, fontWeight = FontWeight.Medium)
                                     }
 
                                     OutlinedButton(
@@ -330,7 +455,7 @@ fun PluginInstallBottomSheet(
                                             activeFilePickerTarget = dep
                                             filePickerLauncher.launch(pickerMimeTypes)
                                         },
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                         shape = RoundedCornerShape(8.dp),
                                         border = BorderStroke(1.dp, PocketColors.Primary.copy(alpha = 0.4f)),
                                         colors = ButtonDefaults.outlinedButtonColors(
@@ -338,7 +463,7 @@ fun PluginInstallBottomSheet(
                                         ),
                                         modifier = Modifier.height(32.dp)
                                     ) {
-                                        Text("Select", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Text("File", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }

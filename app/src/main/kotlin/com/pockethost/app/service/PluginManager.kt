@@ -1510,12 +1510,64 @@ object PluginManager {
         }
     }
 
+    private val KNOWN_MOD_DEPENDENCY_ALIASES = mapOf(
+        "voicechat_api" to "simple-voice-chat",
+        "voicechat" to "simple-voice-chat",
+        "fabric" to "fabric-api",
+        "fabric-api" to "fabric-api",
+        "fabric-language-kotlin" to "fabric-language-kotlin",
+        "fabric_language_kotlin" to "fabric-language-kotlin",
+        "cloth-config" to "cloth-config",
+        "cloth-config2" to "cloth-config",
+        "cloth_config" to "cloth-config",
+        "cloth_config2" to "cloth-config",
+        "architectury" to "architectury-api",
+        "architectury-api" to "architectury-api",
+        "curios" to "curios-continuation",
+        "trinkets" to "trinkets",
+        "cardinal-components" to "cardinal-components-api",
+        "cardinal-components-base" to "cardinal-components-api",
+        "cardinal_components_base" to "cardinal-components-api",
+        "geckolib" to "geckolib",
+        "geckolib3" to "geckolib",
+        "pehkui" to "pehkui",
+        "citresewn" to "cit-resewn",
+        "badpackets" to "badpackets",
+        "modmenu" to "modmenu",
+        "sodium" to "sodium",
+        "iris" to "iris",
+        "indium" to "indium",
+        "ferritecore" to "ferrite-core",
+        "lithium" to "lithium",
+        "krypton" to "krypton",
+        "spark" to "spark",
+        "appleskin" to "appleskin",
+        "roughlyenoughitems" to "rei",
+        "rei" to "rei",
+        "jei" to "jei",
+        "emi" to "emi",
+        "wthit" to "wthit",
+        "jade" to "jade",
+        "entityculling" to "entityculling",
+        "immediatelyfast" to "immediatelyfast",
+        "memoryleakfix" to "memoryleakfix",
+        "ferrite-core" to "ferrite-core",
+        "camerautils" to "camera-utils",
+        "sound-physics-remastered" to "sound-physics-remastered",
+        "presence-footsteps" to "presence-footsteps",
+        "viaversion" to "viaversion",
+        "viabackwards" to "viabackwards",
+        "geyser" to "geyser",
+        "floodgate" to "floodgate"
+    )
+
     suspend fun resolveAndInstallMissingDependency(
         context: Context,
         worldName: String,
         dependencyId: String,
         minecraftVersion: String,
-        runtimeKey: String = worldName
+        runtimeKey: String = worldName,
+        onProgress: (Int) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
         val type = ContentType.MODS
         val effectiveRuntimeKey = if (supportsMods(runtimeKey)) {
@@ -1531,64 +1583,114 @@ object PluginManager {
                 "fabric"
             }
         }
-        val stub = RemoteCatalogItem(
-            source = MODRINTH_PROVIDER,
-            projectId = dependencyId,
-            title = dependencyId,
-            slug = dependencyId,
-            iconUrl = null,
-            description = "",
-            downloads = 0L
-        )
-        var candidate = runCatching {
-            resolveModrinthDownload(context, stub, type, minecraftVersion, effectiveRuntimeKey)
-        }.getOrNull()
 
-        if (candidate == null) {
-            val searchResult = runCatching {
-                searchModrinthCatalog(
-                    context = context,
-                    type = type,
-                    query = dependencyId,
-                    minecraftVersion = minecraftVersion,
-                    runtimeKey = effectiveRuntimeKey,
-                    offset = 0,
-                    limit = 5
-                )
+        val normalizedId = dependencyId.trim().lowercase(Locale.US)
+        val candidateProjectIds = mutableListOf<String>()
+
+        // 1. Static alias dictionary
+        KNOWN_MOD_DEPENDENCY_ALIASES[normalizedId]?.let { candidateProjectIds.add(it) }
+
+        // 2. Direct ID / slug
+        candidateProjectIds.add(dependencyId.trim())
+
+        // 3. Normalized slug variations
+        val hyphenated = normalizedId.replace('_', '-')
+        if (hyphenated !in candidateProjectIds) candidateProjectIds.add(hyphenated)
+        if (hyphenated.endsWith("-api")) {
+            val withoutApi = hyphenated.removeSuffix("-api")
+            if (withoutApi !in candidateProjectIds) candidateProjectIds.add(withoutApi)
+        }
+
+        var downloadCandidate: DownloadCandidate? = null
+
+        // Try direct project lookup
+        for (projId in candidateProjectIds.distinct()) {
+            val stub = RemoteCatalogItem(
+                source = MODRINTH_PROVIDER,
+                projectId = projId,
+                title = projId,
+                slug = projId,
+                iconUrl = null,
+                description = "",
+                downloads = 0L
+            )
+            downloadCandidate = runCatching {
+                resolveModrinthDownload(context, stub, type, minecraftVersion, effectiveRuntimeKey)
             }.getOrNull()
+            if (downloadCandidate != null) break
+        }
 
-            val bestMatch = searchResult?.items?.firstOrNull { item ->
-                item.slug.equals(dependencyId, ignoreCase = true) ||
-                    item.projectId.equals(dependencyId, ignoreCase = true) ||
-                    item.title.replace(" ", "").equals(dependencyId.replace(" ", "").replace("-", "").replace("_", ""), ignoreCase = true)
-            } ?: searchResult?.items?.firstOrNull()
+        // 4. Modrinth search API fallback
+        if (downloadCandidate == null) {
+            val searchQueries = listOf(
+                normalizedId,
+                hyphenated,
+                normalizedId.replace("_api", "").replace("-api", "")
+            ).distinct()
 
-            if (bestMatch != null) {
-                candidate = runCatching {
-                    resolveModrinthDownload(context, bestMatch, type, minecraftVersion, effectiveRuntimeKey)
+            for (q in searchQueries) {
+                val searchResult = runCatching {
+                    searchModrinthCatalog(
+                        context = context,
+                        type = type,
+                        query = q,
+                        minecraftVersion = minecraftVersion,
+                        runtimeKey = effectiveRuntimeKey,
+                        offset = 0,
+                        limit = 5
+                    )
                 }.getOrNull()
+
+                val bestMatch = searchResult?.items?.firstOrNull { item ->
+                    item.slug.equals(q, ignoreCase = true) ||
+                        item.projectId.equals(q, ignoreCase = true) ||
+                        item.title.replace(" ", "").equals(q.replace(" ", "").replace("-", "").replace("_", ""), ignoreCase = true)
+                } ?: searchResult?.items?.firstOrNull()
+
+                if (bestMatch != null) {
+                    downloadCandidate = runCatching {
+                        resolveModrinthDownload(context, bestMatch, type, minecraftVersion, effectiveRuntimeKey)
+                    }.getOrNull()
+                    if (downloadCandidate != null) break
+                }
             }
         }
 
-        if (candidate == null) {
-            return@withContext Result.failure(Exception("Could not find download candidate for dependency '$dependencyId'."))
+        if (downloadCandidate == null) {
+            return@withContext Result.failure(Exception("Could not find download candidate on Modrinth for dependency '$dependencyId'."))
         }
 
         val targetDir = getContentDir(context, worldName, type)
-        val targetFile = File(targetDir, candidate.fileName)
-        if (targetFile.exists()) {
+        val targetFile = File(targetDir, downloadCandidate.fileName)
+        if (targetFile.exists() && targetFile.length() > 0L) {
             return@withContext Result.success(targetFile)
         }
 
-        installFromUrl(
+        val installResult = installFromUrl(
             context = context,
-            sourceUrl = candidate.downloadUrl,
+            sourceUrl = downloadCandidate.downloadUrl,
             worldName = worldName,
             type = type,
-            fileNameHint = candidate.fileName,
-            runtimeKey = runtimeKey,
-            onProgress = {}
+            fileNameHint = downloadCandidate.fileName,
+            runtimeKey = effectiveRuntimeKey,
+            onProgress = onProgress
         )
+
+        if (installResult.isSuccess && downloadCandidate.requiredDependencies.isNotEmpty()) {
+            runCatching {
+                installRequiredDependencies(
+                    context = context,
+                    projectIds = downloadCandidate.requiredDependencies,
+                    worldName = worldName,
+                    type = type,
+                    runtimeKey = effectiveRuntimeKey,
+                    minecraftVersion = minecraftVersion,
+                    onDependencyInstalled = {}
+                )
+            }
+        }
+
+        installResult
     }
 
     data class CatalogSearchResult(

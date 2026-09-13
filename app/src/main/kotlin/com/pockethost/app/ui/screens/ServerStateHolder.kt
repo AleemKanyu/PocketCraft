@@ -1034,6 +1034,91 @@ class ServerStateHolder(
         modDependencyResolveStatus = null
     }
 
+    fun resolveAndInstallMissingDependencies() {
+        if (isResolvingModDependencies) return
+        scope.launch {
+            isResolvingModDependencies = true
+            modDependencyResolveStatus = "Resolving missing mod dependencies..."
+            try {
+                val gameVer = config.gameVersion.ifBlank { "1.20.4" }
+                val currentWorld = activeWorld.ifBlank { "world" }
+                val runtimeKey = "${config.serverType.name.lowercase(java.util.Locale.US)} ${gameVer.ifBlank { versionId }}"
+                val missingDeps = missingModDependencies.map { it.dependencyId }.distinct()
+                var installedCount = 0
+                for ((index, depId) in missingDeps.withIndex()) {
+                    modDependencyResolveStatus = "Downloading $depId (${index + 1}/${missingDeps.size})..."
+                    val result = PluginManager.resolveAndInstallMissingDependency(
+                        context = appContext,
+                        worldName = currentWorld,
+                        dependencyId = depId,
+                        minecraftVersion = gameVer,
+                        runtimeKey = runtimeKey
+                    )
+                    if (result.isSuccess) {
+                        installedCount++
+                    } else {
+                        android.util.Log.w("ServerStateHolder", "Failed to resolve dependency $depId: ${result.exceptionOrNull()?.message}")
+                    }
+                }
+
+                // Re-detect to see if any missing dependencies remain
+                val remaining = ModDependencyValidator.detectMissingDependencies(appContext, currentWorld, config.serverType)
+                if (remaining.isEmpty()) {
+                    showMissingModDependenciesDialog = false
+                    missingModDependencies = emptyList()
+                    modDependencyResolveStatus = null
+                    isResolvingModDependencies = false
+                    startServer(bypassModDependencyCheck = false)
+                } else {
+                    missingModDependencies = remaining
+                    isResolvingModDependencies = false
+                    modDependencyResolveStatus = "Installed $installedCount dependencies. ${remaining.size} remain unsatisfied."
+                }
+            } catch (e: Exception) {
+                modDependencyResolveStatus = "Failed to install dependencies: ${e.message}"
+                isResolvingModDependencies = false
+            }
+        }
+    }
+
+    fun installSingleMissingDependency(dep: MissingModDependency) {
+        if (isResolvingModDependencies) return
+        scope.launch {
+            isResolvingModDependencies = true
+            modDependencyResolveStatus = "Downloading ${dep.dependencyId}..."
+            try {
+                val gameVer = config.gameVersion.ifBlank { "1.20.4" }
+                val currentWorld = activeWorld.ifBlank { "world" }
+                val runtimeKey = "${config.serverType.name.lowercase(java.util.Locale.US)} ${gameVer.ifBlank { versionId }}"
+                val result = PluginManager.resolveAndInstallMissingDependency(
+                    context = appContext,
+                    worldName = currentWorld,
+                    dependencyId = dep.dependencyId,
+                    minecraftVersion = gameVer,
+                    runtimeKey = runtimeKey
+                )
+                val remaining = ModDependencyValidator.detectMissingDependencies(appContext, currentWorld, config.serverType)
+                missingModDependencies = remaining
+                if (remaining.isEmpty()) {
+                    showMissingModDependenciesDialog = false
+                    modDependencyResolveStatus = null
+                    isResolvingModDependencies = false
+                    startServer(bypassModDependencyCheck = false)
+                } else {
+                    isResolvingModDependencies = false
+                    modDependencyResolveStatus = if (result.isSuccess) {
+                        "Installed ${dep.dependencyId} successfully."
+                    } else {
+                        "Failed to install ${dep.dependencyId}: ${result.exceptionOrNull()?.message}"
+                    }
+                }
+            } catch (e: Exception) {
+                modDependencyResolveStatus = "Error: ${e.message}"
+                isResolvingModDependencies = false
+            }
+        }
+    }
+
     fun disableIncompatibleModsAndStart() {
         val currentWorld = activeWorld.ifBlank { "world" }
         val modsDir = PluginManager.getModsDir(appContext, currentWorld)
@@ -1053,41 +1138,6 @@ class ServerStateHolder(
         showMissingModDependenciesDialog = false
         missingModDependencies = emptyList()
         startServer(bypassModDependencyCheck = true)
-    }
-
-    fun resolveAndInstallMissingDependencies() {
-        if (isResolvingModDependencies) return
-        scope.launch {
-            isResolvingModDependencies = true
-            modDependencyResolveStatus = "Resolving missing mod dependencies..."
-            try {
-                val gameVer = config.gameVersion.ifBlank { "1.20.4" }
-                val currentWorld = activeWorld.ifBlank { "world" }
-                val runtimeKey = "${config.serverType.name.lowercase(java.util.Locale.US)} ${gameVer.ifBlank { versionId }}"
-                val missingDeps = missingModDependencies.map { it.dependencyId }.distinct()
-                for (depId in missingDeps) {
-                    modDependencyResolveStatus = "Downloading $depId..."
-                    val result = PluginManager.resolveAndInstallMissingDependency(
-                        context = appContext,
-                        worldName = currentWorld,
-                        dependencyId = depId,
-                        minecraftVersion = gameVer,
-                        runtimeKey = runtimeKey
-                    )
-                    if (result.isFailure) {
-                        android.util.Log.w("ServerStateHolder", "Failed to resolve dependency $depId: ${result.exceptionOrNull()?.message}")
-                    }
-                }
-                showMissingModDependenciesDialog = false
-                missingModDependencies = emptyList()
-                modDependencyResolveStatus = null
-                isResolvingModDependencies = false
-                startServer(bypassModDependencyCheck = false)
-            } catch (e: Exception) {
-                modDependencyResolveStatus = "Failed to install dependencies: ${e.message}"
-                isResolvingModDependencies = false
-            }
-        }
     }
 
     var showBatteryOptimizationDialog by mutableStateOf(false)
