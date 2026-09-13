@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.pockethost.app.setup.JreExtractor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -45,37 +46,146 @@ object ModpackManager {
         "adventure",
         "tech"
     )
-    private val KNOWN_CLIENT_ONLY_MOD_IDS = setOf(
-        "better_client",
-        "sodium",
-        "reeses_sodium_options",
-        "continuity",
-        "iris",
-        "indium",
-        "modmenu",
-        "dynamic_fps",
-        "entityculling",
-        "notenoughanimations",
-        "lambdynlights",
+    val KNOWN_CLIENT_ONLY_MOD_IDS = setOf(
+        // Minimap & World Map
         "xaerominimap",
+        "xaerominimapfair",
         "xaeroworldmap",
-        "journeymap"
-    )
-    private val KNOWN_CLIENT_ONLY_FILE_HINTS = listOf(
+        "journeymap",
+        "voxelmap",
+        "mapwriter",
+        "antiqueatlas",
+
+        // Shaders & Rendering Engines
         "better_client",
         "sodium",
-        "iris",
+        "rubidium",
         "embeddium",
+        "oculus",
+        "iris",
         "optifine",
+        "optifabric",
+        "magnesium",
+        "chlorine",
+        "indium",
+        "reeses_sodium_options",
+        "reesessodiumoptions",
+        "sodium_extra",
+        "sodiumextra",
+        "embeddiumplus",
+        "embeddium_plus",
+        "textrues_embeddium_options",
+        "rubidium_extra",
+        "entityculling",
+        "entity_culling",
+        "dynamic_fps",
+        "dynamicfps",
+        "continuity",
+        "lambdynlights",
+        "lambdynamiclights",
+        "cullleaves",
+        "cull_leaves",
+        "visuality",
+        "waveycapes",
+        "wavey_capes",
+        "skinlayers3d",
+        "3dskinlayers",
+        "fallingleaves",
+        "falling_leaves",
+        "bobby",
+        "dashloader",
+        "borderless",
+        "borderlesswindow",
+        "fpsreducer",
+        "fps_reducer",
+
+        // Audio & Atmosphere (Client-only)
+        "presencefootsteps",
+        "presence_footsteps",
+        "soundphysics",
+        "sound_physics_remastered",
+        "soundphysicsremastered",
+        "auditory",
+        "ambientenvironment",
+        "ambient_environment",
+        "ambientsounds",
+
+        // UI, HUD, Menus & Client Tooling
         "modmenu",
+        "controlling",
+        "catalogue",
+        "fancymenu",
+        "drippyloadingscreen",
+        "drippy_loading_screen",
+        "customloadingscreen",
+        "loadingscreen",
+        "custommainmenu",
+        "custom_main_menu",
+        "toastcontrol",
+        "defaultoptions",
+        "default_options",
+        "tips",
+        "tipthescales",
+        "titleloader",
+        "chat_heads",
+        "chatheads",
+        "notenoughanimations",
+        "not_enough_animations",
+        "firstperson",
+        "firstpersonmod",
+        "betterthirdperson",
+        "better_third_person",
+        "mousewheelie",
+        "itemphysic_lite",
+        "inventoryhud",
+        "inventory_hud",
+        "legendarytooltips",
+        "item_borders",
+        "highlight",
+        "smooth_scrolling_everywhere",
+        "make_bubbles_pop",
+        "notenoughcrashes",
+        "cherishedworlds",
+        "neat",
+        "replaymod",
+        "resourceloader",
+        "tooltipfix",
+        "zoomify",
+        "justzoom",
+        "ok_zoomer",
+        "logical_zoom",
+        "wi_zoom"
+    )
+    val KNOWN_CLIENT_ONLY_FILE_HINTS = listOf(
+        "better_client",
+        "sodium",
+        "rubidium",
+        "embeddium",
+        "oculus",
+        "iris",
+        "optifine",
+        "optifabric",
+        "modmenu",
+        "controlling",
+        "fancymenu",
+        "drippyloadingscreen",
+        "drippy-loading-screen",
+        "presencefootsteps",
+        "presence-footsteps",
+        "soundphysics",
+        "sound-physics",
         "dynamic-fps",
         "dynamic_fps",
         "entityculling",
+        "entity-culling",
         "not-enough-animations",
         "notenoughanimations",
         "lambdynamiclights",
+        "lambdynlights",
         "xaeros_minimap",
+        "xaeros-minimap",
         "xaeros-world-map",
+        "xaeros_world_map",
         "journeymap"
     )
     private val MODPACK_MANAGED_DIRS = setOf(
@@ -1745,12 +1855,13 @@ object ModpackManager {
             }
     }
 
-    private data class ModJarDecision(
+    internal data class ModJarDecision(
         val remove: Boolean,
         val reason: String
     )
 
-    private fun evaluateModJarForServer(jar: File): ModJarDecision {
+    @VisibleForTesting
+    internal fun evaluateModJarForServer(jar: File): ModJarDecision {
         val loweredName = jar.name.lowercase()
         if (KNOWN_CLIENT_ONLY_FILE_HINTS.any { loweredName.contains(it) }) {
             return ModJarDecision(remove = true, reason = "filename matches known client-only mod")
@@ -1758,6 +1869,7 @@ object ModpackManager {
 
         return runCatching {
             ZipFile(jar).use { zip ->
+                // 1. Fabric mod metadata
                 val fabricModEntry = zip.getEntry("fabric.mod.json")
                 if (fabricModEntry != null) {
                     val json = zip.getInputStream(fabricModEntry).bufferedReader().use { it.readText() }
@@ -1770,6 +1882,62 @@ object ModpackManager {
                     }
                     if (environment == "client") {
                         return ModJarDecision(remove = true, reason = "Fabric environment=client")
+                    }
+                }
+
+                // 2. Quilt mod metadata
+                val quiltModEntry = zip.getEntry("quilt.mod.json")
+                if (quiltModEntry != null) {
+                    val json = zip.getInputStream(quiltModEntry).bufferedReader().use { it.readText() }
+                    val modMeta = JSONObject(json)
+                    val quiltLoader = modMeta.optJSONObject("quilt_loader")
+                    val id = quiltLoader?.optString("id")?.trim()?.lowercase()
+                        ?: modMeta.optString("id").trim().lowercase()
+                    val minecraftObj = modMeta.optJSONObject("minecraft")
+                    val environment = minecraftObj?.optString("environment")?.trim()?.lowercase().orEmpty()
+
+                    if (id.isNotBlank() && id in KNOWN_CLIENT_ONLY_MOD_IDS) {
+                        return ModJarDecision(remove = true, reason = "known client-only Quilt mod id '$id'")
+                    }
+                    if (environment == "client") {
+                        return ModJarDecision(remove = true, reason = "Quilt environment=client")
+                    }
+                }
+
+                // 3. NeoForge / Forge mods.toml metadata
+                val tomlEntries = listOfNotNull(
+                    zip.getEntry("META-INF/neoforge.mods.toml"),
+                    zip.getEntry("META-INF/mods.toml")
+                )
+                val tomlModIdRegex = Regex("""(?m)^\s*modId\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+                for (entry in tomlEntries) {
+                    val tomlContent = zip.getInputStream(entry).bufferedReader().use { it.readText() }
+                    val declaredModIds = tomlModIdRegex.findAll(tomlContent)
+                        .map { it.groupValues[1].trim().lowercase() }
+                        .filter { it.isNotBlank() }
+                        .toList()
+
+                    for (modId in declaredModIds) {
+                        if (modId in KNOWN_CLIENT_ONLY_MOD_IDS) {
+                            return ModJarDecision(remove = true, reason = "known client-only Forge/NeoForge mod id '$modId'")
+                        }
+                    }
+                }
+
+                // 4. Legacy Forge mcmod.info metadata
+                val mcmodEntry = zip.getEntry("mcmod.info")
+                if (mcmodEntry != null) {
+                    val mcmodContent = zip.getInputStream(mcmodEntry).bufferedReader().use { it.readText() }
+                    val mcmodIdRegex = Regex("""["']modid["']\s*:\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+                    val declaredModIds = mcmodIdRegex.findAll(mcmodContent)
+                        .map { it.groupValues[1].trim().lowercase() }
+                        .filter { it.isNotBlank() }
+                        .toList()
+
+                    for (modId in declaredModIds) {
+                        if (modId in KNOWN_CLIENT_ONLY_MOD_IDS) {
+                            return ModJarDecision(remove = true, reason = "known client-only legacy Forge mod id '$modId'")
+                        }
                     }
                 }
 

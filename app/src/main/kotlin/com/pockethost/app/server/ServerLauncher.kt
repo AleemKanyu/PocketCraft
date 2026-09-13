@@ -6,6 +6,7 @@ import com.pockethost.app.NativeLauncher
 import com.pockethost.app.data.repository.ServerConfigRepository
 import com.pockethost.app.service.PluginManager
 import com.pockethost.app.service.PlayerDataManager
+import com.pockethost.app.service.ModDependencyValidator
 import com.pockethost.app.service.ServerFileManager
 import com.pockethost.app.service.ServerPropertiesHelper
 import com.pockethost.app.server.ServerPropertiesWriter
@@ -220,6 +221,7 @@ class ServerLauncher(private val context: Context) {
         } else {
             ServerFileManager.prepareRuntimeArtifacts(context, worldName)
             PluginManager.removeIncompatiblePlugins(context, worldName)
+            ModDependencyValidator.quarantineMissingDependencies(ServerFileManager.getServerDir(context, worldName), onOutput)
         }
 
         val serverDirFileLocal = ServerFileManager.getServerDir(context, worldName)
@@ -404,9 +406,9 @@ class ServerLauncher(private val context: Context) {
         }
 
         runCatching {
-            // PowerNukkitX is a plain fat JAR, not a Paperclip bootstrap — rewriting its version
-            // check would corrupt it. It does bundle JNA, so that native still needs patching.
-            if (!isBedrockServer) {
+            // Paperclip bootstrap rewrite applies only to Paper and Purpur JARs;
+            // rewriting Fabric or PowerNukkitX JARs would corrupt them.
+            if (serverType == com.pockethost.app.data.model.ServerType.PAPER || serverType == com.pockethost.app.data.model.ServerType.PURPUR) {
                 patchPaperclipJavaVersionCheck(File(normalizedJarPath), onOutput)
             }
             if (extractAndPatchJnaLibrary(normalizedJarPath, serverDirFile, shimDir)) {
@@ -452,15 +454,24 @@ class ServerLauncher(private val context: Context) {
                         onOutput("[PocketHost] SELinux/permission blocked external java process (exit=$result). Automatically switching to in-process JNI JVM execution...")
                         NativeLauncher.hasInProcessJvmRunInThisProcess = true
                         val bypassFlags = buildString {
-                            append("-DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true ")
-                            append("-DPurpur.IgnoreJavaVersion=true -Dpurpur.ignoreJavaVersion=true -Dpurpur.bypass-java-check=true -Dpurpur.ignore-java-version=true ")
-                            append("-Dpaper.oshi.disabled=true -Dpaper.disable-hardware-info=true -Doshi.os.disabled=true -Dpurpur.oshi.disabled=true -Dpurpur.disable-hardware-info=true")
-                            if (resolvedRuntime.id == "java25" || resolvedRuntime.id == "java26") {
-                                append(" -Djava.specification.version=26 -Djava.version=26.0.0")
+                            if (serverType == com.pockethost.app.data.model.ServerType.PAPER || serverType == com.pockethost.app.data.model.ServerType.PURPUR) {
+                                append("-DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true ")
+                                append("-DPurpur.IgnoreJavaVersion=true -Dpurpur.ignoreJavaVersion=true -Dpurpur.bypass-java-check=true -Dpurpur.ignore-java-version=true ")
+                                append("-Dpaper.oshi.disabled=true -Dpaper.disable-hardware-info=true -Doshi.os.disabled=true -Dpurpur.oshi.disabled=true -Dpurpur.disable-hardware-info=true")
+                                if (resolvedRuntime.id == "java25" || resolvedRuntime.id == "java26") {
+                                    append(" -Djava.specification.version=26 -Djava.version=26.0.0")
+                                }
+                            } else if (serverType == com.pockethost.app.data.model.ServerType.FABRIC) {
+                                append("-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Doshi.os.linux.procfs.logwarning=false")
                             }
                         }
-                        runCatching { android.system.Os.setenv("JAVA_TOOL_OPTIONS", bypassFlags, true) }
-                        runCatching { android.system.Os.setenv("_JAVA_OPTIONS", bypassFlags, true) }
+                        if (bypassFlags.isNotEmpty()) {
+                            runCatching { android.system.Os.setenv("JAVA_TOOL_OPTIONS", bypassFlags, true) }
+                            runCatching { android.system.Os.setenv("_JAVA_OPTIONS", bypassFlags, true) }
+                        } else {
+                            runCatching { android.system.Os.unsetenv("JAVA_TOOL_OPTIONS") }
+                            runCatching { android.system.Os.unsetenv("_JAVA_OPTIONS") }
+                        }
                         result = runCatching {
                             NativeLauncher.launchJVM(
                                 jrePath = jrePath,
@@ -481,15 +492,24 @@ class ServerLauncher(private val context: Context) {
                         onOutput("[PocketHost] Launching in-process JVM (${resolvedRuntime.displayName}) on Android ${Build.VERSION.RELEASE}.")
                         NativeLauncher.hasInProcessJvmRunInThisProcess = true
                         val bypassFlags = buildString {
-                            append("-DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true ")
-                            append("-DPurpur.IgnoreJavaVersion=true -Dpurpur.ignoreJavaVersion=true -Dpurpur.bypass-java-check=true -Dpurpur.ignore-java-version=true ")
-                            append("-Dpaper.oshi.disabled=true -Dpaper.disable-hardware-info=true -Doshi.os.disabled=true -Dpurpur.oshi.disabled=true -Dpurpur.disable-hardware-info=true")
-                            if (resolvedRuntime.id == "java25" || resolvedRuntime.id == "java26") {
-                                append(" -Djava.specification.version=26 -Djava.version=26.0.0")
+                            if (serverType == com.pockethost.app.data.model.ServerType.PAPER || serverType == com.pockethost.app.data.model.ServerType.PURPUR) {
+                                append("-DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true ")
+                                append("-DPurpur.IgnoreJavaVersion=true -Dpurpur.ignoreJavaVersion=true -Dpurpur.bypass-java-check=true -Dpurpur.ignore-java-version=true ")
+                                append("-Dpaper.oshi.disabled=true -Dpaper.disable-hardware-info=true -Doshi.os.disabled=true -Dpurpur.oshi.disabled=true -Dpurpur.disable-hardware-info=true")
+                                if (resolvedRuntime.id == "java25" || resolvedRuntime.id == "java26") {
+                                    append(" -Djava.specification.version=26 -Djava.version=26.0.0")
+                                }
+                            } else if (serverType == com.pockethost.app.data.model.ServerType.FABRIC) {
+                                append("-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Doshi.os.linux.procfs.logwarning=false")
                             }
                         }
-                        runCatching { android.system.Os.setenv("JAVA_TOOL_OPTIONS", bypassFlags, true) }
-                        runCatching { android.system.Os.setenv("_JAVA_OPTIONS", bypassFlags, true) }
+                        if (bypassFlags.isNotEmpty()) {
+                            runCatching { android.system.Os.setenv("JAVA_TOOL_OPTIONS", bypassFlags, true) }
+                            runCatching { android.system.Os.setenv("_JAVA_OPTIONS", bypassFlags, true) }
+                        } else {
+                            runCatching { android.system.Os.unsetenv("JAVA_TOOL_OPTIONS") }
+                            runCatching { android.system.Os.unsetenv("_JAVA_OPTIONS") }
+                        }
                         NativeLauncher.launchJVM(
                             jrePath = jrePath,
                             jarPath = effectiveLaunchTarget,
@@ -886,38 +906,40 @@ class ServerLauncher(private val context: Context) {
             "-Dpaper.anticheat.moved-too-quickly-threshold=100.0",
             "-Dpaper.watchdog.early-warning-delay=60000",
             "-Dpaper.watchdog.early-warning-every=60000",
-            "-DPaper.IgnoreJavaVersion=true",
-            "-Dpaper.ignoreJavaVersion=true",
-            "-Dpaper.bypass-java-check=true",
-            "-Dpaper.ignore-java-version=true",
-            "-DPurpur.IgnoreJavaVersion=true",
-            "-Dpurpur.ignoreJavaVersion=true",
-            "-Dpurpur.bypass-java-check=true",
-            "-Dpurpur.ignore-java-version=true",
-            "-Dpaper.oshi.disabled=true",
-            "-Dpaper.disable-hardware-info=true",
-            "-Dpurpur.oshi.disabled=true",
-            "-Dpurpur.disable-hardware-info=true",
             "-Doshi.os.disabled=true",
-            "-Doshi.os=unknown",
-            "-Doshi.architecture=aarch64",
-            "-Dpaper.disable-update-check=true",
-            "-Dpaper.disable-plugin-update-check=true",
-            "-Dpurpur.disable-update-check=true",
-            "-Dpurpur.disable-plugin-update-check=true",
-            "-Dpurpur.playerconnection.keepalive=90",
-            "-Dpurpur.watchdog.early-warning-delay=60000",
-            "-Dpurpur.watchdog.early-warning-every=60000",
+            "-Doshi.os.linux.allowudev=false",
+            "-Doshi.os.linux.procfs.logwarning=false",
             "-Dsun.zip.disableMemoryMapping=true",
             "-Djdk.attach.allowAttachSelf=true",
-            "-Djna.nosys=true",
+            "-Djna.nosys=false",
             "-Xshare:off",
             "-XX:MaxGCPauseMillis=40",
             "-XX:+DisableExplicitGC",
         ).apply {
-            if (runtime.id == "java25" || runtime.id == "java26") {
-                add("-Djava.specification.version=26")
-                add("-Djava.version=26.0.0")
+            if (serverType == com.pockethost.app.data.model.ServerType.PAPER || serverType == com.pockethost.app.data.model.ServerType.PURPUR) {
+                add("-DPaper.IgnoreJavaVersion=true")
+                add("-Dpaper.ignoreJavaVersion=true")
+                add("-Dpaper.bypass-java-check=true")
+                add("-Dpaper.ignore-java-version=true")
+                add("-DPurpur.IgnoreJavaVersion=true")
+                add("-Dpurpur.ignoreJavaVersion=true")
+                add("-Dpurpur.bypass-java-check=true")
+                add("-Dpurpur.ignore-java-version=true")
+                add("-Dpaper.oshi.disabled=true")
+                add("-Dpaper.disable-hardware-info=true")
+                add("-Dpurpur.oshi.disabled=true")
+                add("-Dpurpur.disable-hardware-info=true")
+                add("-Dpaper.disable-update-check=true")
+                add("-Dpaper.disable-plugin-update-check=true")
+                add("-Dpurpur.disable-update-check=true")
+                add("-Dpurpur.disable-plugin-update-check=true")
+                add("-Dpurpur.playerconnection.keepalive=90")
+                add("-Dpurpur.watchdog.early-warning-delay=60000")
+                add("-Dpurpur.watchdog.early-warning-every=60000")
+                if (runtime.id == "java25" || runtime.id == "java26") {
+                    add("-Djava.specification.version=26")
+                    add("-Djava.version=26.0.0")
+                }
             }
 
             val gameVerProps = ServerPropertiesHelper.readProperties(File(serverDir))
@@ -2037,7 +2059,8 @@ class ServerLauncher(private val context: Context) {
                 android.system.Os.chmod(javaBin.absolutePath, 0x1ED)
                 val jreLibDir = File(javaBin.parentFile?.parentFile, "lib")
                 val pb = ProcessBuilder(javaBin.absolutePath, "-version").redirectErrorStream(true)
-                pb.environment()["LD_LIBRARY_PATH"] = "$jreLibDir/server:$jreLibDir:$jreLibDir/jli"
+                val nativeLibDir = context.applicationInfo.nativeLibraryDir
+                pb.environment()["LD_LIBRARY_PATH"] = "$nativeLibDir:$jreLibDir/server:$jreLibDir:$jreLibDir/jli"
                 val p = pb.start()
                 val finished = p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
                 if (!finished) p.destroyForcibly()
@@ -2093,7 +2116,8 @@ class ServerLauncher(private val context: Context) {
                 val pb = ProcessBuilder(canonical.absolutePath, "-Xshare:off", "-version")
                     .redirectErrorStream(true)
                 pb.environment()["JAVA_HOME"] = jreHomeDir?.absolutePath ?: ""
-                pb.environment()["LD_LIBRARY_PATH"] = "$jreLibDir/server:$jreLibDir:$jreLibDir/jli"
+                val nativeLibDir = context.applicationInfo.nativeLibraryDir
+                pb.environment()["LD_LIBRARY_PATH"] = "$nativeLibDir:$jreLibDir/server:$jreLibDir:$jreLibDir/jli"
                 val p = pb.start()
                 val out = p.inputStream.bufferedReader().readText()
                 val finished = p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
@@ -2165,7 +2189,8 @@ class ServerLauncher(private val context: Context) {
                 val pb = ProcessBuilder(copy.absolutePath, "-Xshare:off", "-version")
                     .redirectErrorStream(true)
                 pb.environment()["JAVA_HOME"] = jreHomeDir?.absolutePath ?: ""
-                pb.environment()["LD_LIBRARY_PATH"] = "$jreLibDir/server:$jreLibDir:$jreLibDir/jli"
+                val nativeLibDir = context.applicationInfo.nativeLibraryDir
+                pb.environment()["LD_LIBRARY_PATH"] = "$nativeLibDir:$jreLibDir/server:$jreLibDir:$jreLibDir/jli"
                 val p = pb.start()
                 val out = p.inputStream.bufferedReader().readText()
                 val finished = p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
@@ -2297,12 +2322,14 @@ class ServerLauncher(private val context: Context) {
 
         val dest = File(shimDir, "libjnidispatch.so")
         val stampFile = File(shimDir, "libjnidispatch.meta")
-        val expectedStamp = "packaged|${packagedJna.length()}|${packagedJna.lastModified()}"
+        val expectedStamp = "packaged-v3|${packagedJna.length()}|${packagedJna.lastModified()}"
         val currentStamp = runCatching { stampFile.readText(Charsets.UTF_8).trim() }.getOrDefault("")
         if (currentStamp == expectedStamp && dest.exists()) {
             return false
         }
-        packagedJna.copyTo(dest, overwrite = true)
+        val rawBytes = runCatching { packagedJna.readBytes() }.getOrNull() ?: return false
+        val patchedBytes = patchElfDtNeeded(rawBytes) ?: rawBytes
+        dest.writeBytes(patchedBytes)
         dest.setExecutable(true)
         stampFile.writeText(expectedStamp, Charsets.UTF_8)
         return true
@@ -2349,6 +2376,7 @@ class ServerLauncher(private val context: Context) {
     private fun buildJnaCacheStamp(paperJarPath: String): String {
         val jarFile = File(paperJarPath)
         return listOf(
+            "v3",
             jarFile.absolutePath,
             jarFile.length().toString(),
             jarFile.lastModified().toString()
@@ -2449,6 +2477,12 @@ class ServerLauncher(private val context: Context) {
                 '_'.code.toByte(), '_'.code.toByte(), 'e'.code.toByte(),
                 'r'.code.toByte(), 'r'.code.toByte(), 'n'.code.toByte(),
                 'o'.code.toByte(), 0, 0, 0, 0, 0, 0, 0, 0, 0
+            ),
+            // __getdelim -> getdelim + 2 zero pads
+            "__getdelim".toByteArray() to byteArrayOf(
+                'g'.code.toByte(), 'e'.code.toByte(), 't'.code.toByte(),
+                'd'.code.toByte(), 'e'.code.toByte(), 'l'.code.toByte(),
+                'i'.code.toByte(), 'm'.code.toByte(), 0, 0
             )
         )
 
@@ -2467,9 +2501,10 @@ class ServerLauncher(private val context: Context) {
                 if (match) {
                     for (i in replacement.indices) result[pos + i] = replacement[i]
                     found = true
-                    break
+                    pos += target.size
+                } else {
+                    pos++
                 }
-                pos++
             }
         }
 

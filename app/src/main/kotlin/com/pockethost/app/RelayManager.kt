@@ -73,8 +73,8 @@ class RelayManager(private val context: Context) {
         private const val IDLE_SOCKET_REFRESH_INTERVAL_MS = 5 * 60_000L
         private const val SOCKET_IDLE_TIMEOUT_MS = 8 * 60_000L
         private const val SOCKET_IDLE_TIMEOUT_JITTER_MS = 90_000L
-        private const val INITIAL_POOL_READY_TIMEOUT_MS = 8_000L
-        private const val READY_POOL_SIZE = 2
+        private const val INITIAL_POOL_READY_TIMEOUT_MS = 15_000L
+        private const val READY_POOL_SIZE = 1
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
         // Shared across all resolveRelayIp() calls (register/heartbeat/every pool-socket-open)
@@ -1310,6 +1310,7 @@ class RelayManager(private val context: Context) {
         resolvedRelayIp = null
         activeRelayIsFallback = false
         preferFallbackRelay = false
+        consecutiveFailures.set(0)
         _isPoolReady.value = false
 
         synchronized(socketPool) {

@@ -97,11 +97,21 @@ try {
   const options = {
     credential: buildCredential()
   };
+  let detectedConfigProjectId = "";
+  try {
+    const firebasercPath = path.join(__dirname, "../.firebaserc");
+    if (fs.existsSync(firebasercPath)) {
+      const rc = JSON.parse(fs.readFileSync(firebasercPath, "utf8"));
+      detectedConfigProjectId = rc.projects?.default || rc.projects?.Mailing || "";
+    }
+  } catch (_) {}
+
   const resolvedProjectId =
     explicitProjectId ||
     loadedServiceAccount?.project_id ||
     loadedServiceAccount?.projectId ||
     process.env.GCLOUD_PROJECT ||
+    detectedConfigProjectId ||
     "";
   if (resolvedProjectId) {
     options.projectId = resolvedProjectId;
@@ -332,13 +342,13 @@ async function saveBroadcast(input) {
 
   const startDate = parseOptionalTimestamp(input.startDate, "startDate");
   const expiryDate = parseOptionalTimestamp(input.expiryDate, "expiryDate");
-  const timerExpiresAt = parseOptionalTimestamp(input.timerExpiresAt, "timerExpiresAt");
   const showTimer = ensureBoolean(input.showTimer, false);
+  const timerExpiresAt = showTimer ? parseOptionalTimestamp(input.timerExpiresAt, "timerExpiresAt") : null;
 
-  payload.startDate = startDate;
-  payload.expiryDate = expiryDate;
+  payload.startDate = startDate || FieldValue.delete();
+  payload.expiryDate = expiryDate || FieldValue.delete();
   payload.showTimer = showTimer;
-  payload.timerExpiresAt = timerExpiresAt;
+  payload.timerExpiresAt = timerExpiresAt || FieldValue.delete();
   payload.createdAt = existing.exists && existing.get("createdAt")
     ? existing.get("createdAt")
     : FieldValue.serverTimestamp();
@@ -379,6 +389,10 @@ async function duplicateBroadcast(id) {
     ...data,
     title: clonedTitle,
     active: false,
+    startDate: null,
+    expiryDate: null,
+    showTimer: false,
+    timerExpiresAt: null,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp()
   };
@@ -548,11 +562,19 @@ async function duplicateRemoteCommand(id) {
   }
   const data = snapshot.data() || {};
   const copyRef = db.collection("remote_commands").doc();
-  await copyRef.set({
+  const payload = {
     ...data,
+    expiresAt: null,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp()
-  });
+  };
+  if (data.type === "show_message" && data.payload && typeof data.payload === "object") {
+    payload.payload = {
+      ...data.payload,
+      title: ensureString(data.payload.title) ? `${ensureString(data.payload.title)} Copy` : "Notification Copy"
+    };
+  }
+  await copyRef.set(payload);
   return serializeRemoteCommand(await copyRef.get());
 }
 
@@ -659,7 +681,7 @@ async function listBetaFeedbacks() {
   // Documents written by different app versions carry different timestamps, and no single
   // orderBy can see all of them, so each ordering is queried and the results merged. Bounded at
   // two queries of 50, which is plenty for a feedback inbox.
-  const orderCandidates = ["createdAt", "emailCheckedAt"];
+  const orderCandidates = ["createdAt", "emailSentAt", "emailCheckedAt"];
   const collected = new Map();
   for (const field of orderCandidates) {
     try {
@@ -706,6 +728,7 @@ async function listBetaFeedbacks() {
       // nothing to read and always reported a clean run.
       appLogExcerpt: ensureString(data.appLogExcerpt),
       logFileName: ensureString(data.logFileName),
+      logFilePath: ensureString(data.logFilePath),
       currentConsoleLog: ensureString(data.currentConsoleLog),
       serverLatestLog: ensureString(data.serverLatestLog),
       crashArtifacts: ensureString(data.crashArtifacts),
@@ -719,8 +742,26 @@ async function listBetaFeedbacks() {
 }
 
 async function listRootCollections() {
-  const collections = await db.listCollections();
-  return collections.map((collection) => collection.id).sort((left, right) => left.localeCompare(right));
+  let collections = [];
+  try {
+    const list = await db.listCollections();
+    collections = list.map((collection) => collection.id);
+  } catch (error) {
+    // If permissions are restricted or emulator listCollections is unsupported, fall back.
+  }
+  const known = [
+    "app_config",
+    "beta_feedback",
+    "broadcast_responses",
+    "broadcast_results",
+    "broadcasts",
+    "promotions",
+    "remote_commands",
+    "social_prompts",
+    "users"
+  ];
+  const set = new Set([...collections, ...known]);
+  return Array.from(set).sort((left, right) => left.localeCompare(right));
 }
 
 async function loadCollectionDocuments(collectionName, limitCount = 100) {
@@ -791,7 +832,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "DELETE" && pathname.startsWith("/api/broadcasts/")) {
+    if (req.method === "DELETE" && pathname.startsWith("/api/broadcasts/") && !pathname.endsWith("/duplicate")) {
       const id = decodeURIComponent(pathname.replace(/^\/api\/broadcasts\//, ""));
       await deleteBroadcast(id);
       sendJson(res, 200, { ok: true });
@@ -819,7 +860,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "DELETE" && pathname.startsWith("/api/promotions/")) {
+    if (req.method === "DELETE" && pathname.startsWith("/api/promotions/") && !pathname.endsWith("/duplicate")) {
       const id = decodeURIComponent(pathname.replace(/^\/api\/promotions\//, ""));
       await deletePromotion(id);
       sendJson(res, 200, { ok: true });
@@ -847,7 +888,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "DELETE" && pathname.startsWith("/api/remote-commands/")) {
+    if (req.method === "DELETE" && pathname.startsWith("/api/remote-commands/") && !pathname.endsWith("/duplicate")) {
       const id = decodeURIComponent(pathname.replace(/^\/api\/remote-commands\//, ""));
       await deleteRemoteCommand(id);
       sendJson(res, 200, { ok: true });

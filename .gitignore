@@ -60,3 +60,4 @@ scratch/
 
 # Local Graphify Cache
 graphify-out/
+firebase-debug.log

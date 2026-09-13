@@ -206,6 +206,8 @@
       word-break: break-word;
       min-width: 250px;
       max-width: 600px;
+      max-height: 280px;
+      overflow-y: auto;
       margin: 0;
       font-family: "Cascadia Code", "SFMono-Regular", monospace;
       font-size: .85rem;
@@ -563,24 +565,37 @@
       if (!isoString) return { date: "", time: "00:00" };
       const date = new Date(isoString);
       if (Number.isNaN(date.getTime())) return { date: "", time: "00:00" };
-      const offset = date.getTimezoneOffset() * 60000;
-      const local = new Date(date.getTime() - offset).toISOString();
-      return { date: local.slice(0, 10), time: local.slice(11, 16) || "00:00" };
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, "0");
+      const d = String(date.getDate()).padStart(2, "0");
+      const hh = String(date.getHours()).padStart(2, "0");
+      const mm = String(date.getMinutes()).padStart(2, "0");
+      return { date: `${y}-${m}-${d}`, time: `${hh}:${mm}` };
     }
 
     function fromDateAndTime(dateValue, timeValue) {
       const date = (dateValue || "").trim();
       if (!date) return "";
-      const time = (timeValue || "00:00").trim() || "00:00";
-      const composed = new Date(`${date}T${time}:00`);
+      let time = (timeValue || "00:00").trim() || "00:00";
+      if (time.split(":").length === 2) {
+        time += ":00";
+      }
+      const composed = new Date(`${date}T${time}`);
       return Number.isNaN(composed.getTime()) ? "" : composed.toISOString();
+    }
+
+    function getLocalDateString(d = new Date()) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
     }
 
     function setMidnightDefault(dateId, timeId) {
       const timeInput = document.getElementById(timeId);
       if (timeInput && !timeInput.value) timeInput.value = "00:00";
       const dateInput = document.getElementById(dateId);
-      if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+      if (dateInput && !dateInput.value) dateInput.value = getLocalDateString();
     }
 
     async function fetchJson(url, options = {}) {
@@ -607,6 +622,7 @@
 
     function renderDataTable(containerId, rows) {
       const container = document.getElementById(containerId);
+      if (!container) return;
       if (!rows.length) {
         container.innerHTML = '<div class="empty">No data found.</div>';
         return;
@@ -658,6 +674,7 @@
 
     function resetBroadcastForm() {
       document.getElementById("broadcastForm").reset();
+      document.getElementById("broadcastDocId").value = "";
       document.getElementById("broadcastType").value = "info";
       document.getElementById("broadcastInteractionType").value = "none";
       document.getElementById("broadcastTargetMinVersion").value = 0;
@@ -665,17 +682,20 @@
       document.getElementById("broadcastActive").checked = true;
       document.getElementById("broadcastDismissible").checked = true;
       document.getElementById("broadcastShowTimer").checked = false;
+      document.getElementById("broadcastStartDate").value = "";
+      document.getElementById("broadcastStartTime").value = "00:00";
+      document.getElementById("broadcastExpiryDate").value = "";
+      document.getElementById("broadcastExpiryTime").value = "23:59";
       document.getElementById("broadcastTimerExpiresDate").value = "";
       document.getElementById("broadcastTimerExpiresTime").value = "23:59";
       updateBroadcastTimerFields();
-      setMidnightDefault("broadcastStartDate", "broadcastStartTime");
-      setMidnightDefault("broadcastExpiryDate", "broadcastExpiryTime");
       updateBroadcastInteractionFields();
       setStatus("broadcastStatus", "Ready.");
     }
 
     function resetPromotionForm() {
       document.getElementById("promotionForm").reset();
+      document.getElementById("promotionDocId").value = "";
       document.getElementById("promotionTargetGroup").value = "free";
       document.getElementById("promotionActive").checked = true;
       setStatus("promotionStatus", "Ready.");
@@ -683,9 +703,11 @@
 
     function resetCommandForm() {
       document.getElementById("remoteCommandForm").reset();
+      document.getElementById("commandDocId").value = "";
       document.getElementById("commandTarget").value = "all";
       document.getElementById("commandType").value = "show_message";
-      setMidnightDefault("commandExpiresDate", "commandExpiresTime");
+      document.getElementById("commandExpiresDate").value = "";
+      document.getElementById("commandExpiresTime").value = "23:59";
       updateCommandFields();
       setStatus("commandStatus", "Ready.");
     }
@@ -696,7 +718,21 @@
         list.innerHTML = '<div class="empty">No broadcasts yet.</div>';
         return;
       }
-      list.innerHTML = state.broadcasts.map((broadcast) => `
+      list.innerHTML = state.broadcasts.map((broadcast) => {
+        const resSummary = broadcast.resultSummary;
+        let resultsChip = "";
+        let resultsBreakdown = "";
+        if (broadcast.interactionType === "question" && resSummary) {
+          const totalVotes = Object.values(resSummary.optionCounts || {}).reduce((a, b) => a + Number(b || 0), 0);
+          resultsChip = `<span class="chip ${totalVotes > 0 ? "live" : ""}">🗳️ ${totalVotes} vote${totalVotes === 1 ? "" : "s"}</span>`;
+          if (Object.keys(resSummary.optionCounts || {}).length > 0) {
+            resultsBreakdown = `<div class="result-lines" style="margin-top:6px;">${Object.entries(resSummary.optionCounts).map(([opt, cnt]) => `<span class="chip"><strong>${escapeHtml(opt)}:</strong> ${cnt}</span>`).join("")}</div>`;
+          }
+        } else if (broadcast.interactionType === "opt_in" && resSummary) {
+          resultsChip = `<span class="chip ${(resSummary.optInsCount || 0) > 0 ? "live" : ""}">📨 ${resSummary.optInsCount || 0} opt-in${resSummary.optInsCount === 1 ? "" : "s"}</span>`;
+        }
+
+        return `
         <article class="card">
           <div class="card-header">
             <div>
@@ -708,11 +744,13 @@
               <span class="chip">${escapeHtml(broadcast.interactionType)}</span>
               <span class="chip">${escapeHtml(broadcast.type)}</span>
               ${broadcast.showTimer ? `<span class="chip" style="background:rgba(37,101,74,.14);color:var(--accent-strong);">⏱ Timer</span>` : ""}
+              ${resultsChip}
             </div>
           </div>
           <div class="card-body">${escapeHtml(broadcast.body || "No body copy.")}</div>
           ${broadcast.question?.prompt ? `<small>Prompt: ${escapeHtml(broadcast.question.prompt)}</small>` : ""}
           ${(broadcast.question?.options || []).length ? `<div class="chips">${broadcast.question.options.map((option) => `<span class="chip">${escapeHtml(option)}</span>`).join("")}</div>` : ""}
+          ${resultsBreakdown}
           <small>Start: ${escapeHtml(broadcast.startDate || "Immediate")} | End: ${escapeHtml(broadcast.expiryDate || "No expiry")}</small>
           ${broadcast.showTimer && broadcast.timerExpiresAt ? `<small style="color:var(--accent-strong);">⏱ Timer ends: ${escapeHtml(broadcast.timerExpiresAt)}</small>` : ""}
           <div class="card-actions">
@@ -721,7 +759,8 @@
             <button class="danger" data-kind="broadcast" data-action="delete" data-id="${escapeHtml(broadcast.id)}">Delete</button>
           </div>
         </article>
-      `).join("");
+      `;
+      }).join("");
     }
 
     function renderPromotions() {
@@ -791,6 +830,7 @@
 
     function toggleDetails(id) {
       const el = document.getElementById(id);
+      if (!el) return;
       if (el.style.display === "none") {
         el.style.display = "block";
       } else {
@@ -805,7 +845,8 @@
         list.innerHTML = '<div class="empty">No beta feedback submissions found.</div>';
         return;
       }
-      list.innerHTML = state.feedbacks.map((f) => {
+      list.innerHTML = state.feedbacks.map((f, idx) => {
+        const safeId = `fb-${idx}`;
         // createdAt is when the user actually sent the report; emailSentAt is when the mail
         // function got round to it, which can be much later or never.
         const submittedAt = f.createdAt
@@ -813,7 +854,6 @@
           : f.emailSentAt
             ? new Date(f.emailSentAt).toLocaleString() + " (email time)"
             : "Unknown";
-        const emailSentAt = f.emailSentAt ? new Date(f.emailSentAt).toLocaleString() : "Pending";
         const emailStatusClass = f.emailStatus === "sent" ? "live" : f.emailStatus === "failed" ? "off" : "";
         
         const analyzeLogs = (...logSources) => {
@@ -828,7 +868,7 @@
           }
           if (logs.includes("NullPointerException")) {
             const match = logs.match(/[a-zA-Z0-9\._]*NullPointerException[^\n]*/);
-            errors.push(`🚨 <strong>NullPointerException</strong>: <code>${match ? match[0] : "Null pointer encountered in server plugin."}</code>`);
+            errors.push(`🚨 <strong>NullPointerException</strong>: <code>${escapeHtml(match ? match[0] : "Null pointer encountered in server plugin.")}</code>`);
           }
           if (logs.includes("PluginLoadException") || logs.includes("PluginLoader")) {
             errors.push("⚠️ <strong>Plugin Error</strong>: A plugin failed to load or crashed during initialization.");
@@ -837,15 +877,15 @@
             errors.push("🚨 <strong>Java Class Version Mismatch</strong>: A plugin requires a newer Java/JRE version than the server is currently running.");
           }
           
-          const exceptionRegex = /(?:[a-zA-Z0-9\._]+Exception):[^\n]+/g;
+          const exceptionRegex = /(?:[a-zA-Z0-9\._]+(?:Exception|Error)):?[^\n]*/g;
           let match;
           let count = 0;
           const seen = new Set();
-          while ((match = exceptionRegex.exec(logs)) !== null && count < 3) {
+          while ((match = exceptionRegex.exec(logs)) !== null && count < 5) {
             const errStr = match[0].trim();
-            if (!seen.has(errStr)) {
+            if (!seen.has(errStr) && !errStr.includes("OutOfMemoryError") && !errStr.includes("BindException")) {
               seen.add(errStr);
-              errors.push(`🔍 <strong>Caught Exception</strong>: <code>${errStr}</code>`);
+              errors.push(`🔍 <strong>Caught Exception/Error</strong>: <code>${escapeHtml(errStr)}</code>`);
               count++;
             }
           }
@@ -872,7 +912,8 @@
             <div class="chips">
               <span class="chip">App: ${escapeHtml(f.appVersion)} (${escapeHtml(f.appVersionCode)})</span>
               <span class="chip">Server: ${escapeHtml(f.serverVersion)}</span>
-              <span class="chip">Device: ${escapeHtml(f.deviceManufacturer)} ${escapeHtml(f.deviceModel)} (SDK ${escapeHtml(f.androidSdk)})</span>
+              <span class="chip">Device: ${escapeHtml(f.deviceManufacturer)} ${escapeHtml(f.deviceModel)} (Android ${escapeHtml(f.androidRelease || "N/A")}, SDK ${escapeHtml(f.androidSdk)})</span>
+              <span class="chip">Source: ${escapeHtml(f.source || "general")}</span>
               <span class="chip ${emailStatusClass}">Email: ${escapeHtml(f.emailStatus || "pending")}</span>
             </div>
           </div>
@@ -881,45 +922,48 @@
             <strong>Message:</strong> ${escapeHtml(f.message || "(No message)")}
           </div>
 
+          ${f.emailError ? `<div style="margin-top:10px; padding:8px 12px; border-radius:8px; background:rgba(156,45,48,0.08); color:var(--danger); font-size:0.88rem;">⚠️ <strong>Email Error:</strong> ${escapeHtml(f.emailError)}</div>` : ""}
+
           <div style="margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.5);">
             <div style="font-weight:700; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); margin-bottom:8px;">💡 Auto-Diagnosis Report:</div>
             <div style="font-size:0.9rem; line-height:1.45;">${diagnosisHtml}</div>
           </div>
 
           <div class="card-actions" style="margin-top: 14px;">
-            ${f.appLogExcerpt ? `<button class="secondary" onclick="toggleDetails('${f.id}-applog')">App Log Excerpt</button>` : ""}
-            ${f.runtimeState ? `<button class="secondary" onclick="toggleDetails('${f.id}-runtime')">Runtime State</button>` : ""}
-            ${f.currentConsoleLog ? `<button class="secondary" onclick="toggleDetails('${f.id}-console')">App Console Log</button>` : ""}
-            ${f.serverLatestLog ? `<button class="secondary" onclick="toggleDetails('${f.id}-latest')">Server latest.log</button>` : ""}
-            ${f.crashArtifacts ? `<button class="secondary" onclick="toggleDetails('${f.id}-crash')">Crash Artifacts</button>` : ""}
+            ${f.appLogExcerpt ? `<button class="secondary" onclick="toggleDetails('${safeId}-applog')">App Log Excerpt</button>` : ""}
+            ${f.runtimeState ? `<button class="secondary" onclick="toggleDetails('${safeId}-runtime')">Runtime State</button>` : ""}
+            ${f.currentConsoleLog ? `<button class="secondary" onclick="toggleDetails('${safeId}-console')">App Console Log</button>` : ""}
+            ${f.serverLatestLog ? `<button class="secondary" onclick="toggleDetails('${safeId}-latest')">Server latest.log</button>` : ""}
+            ${f.crashArtifacts ? `<button class="secondary" onclick="toggleDetails('${safeId}-crash')">Crash Artifacts</button>` : ""}
           </div>
 
           ${f.appLogExcerpt ? `
-          <div id="${f.id}-applog" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
+          <div id="${safeId}-applog" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
             <strong>App Log Excerpt${f.logFileName ? " (" + escapeHtml(f.logFileName) + ")" : ""}:</strong>
+            ${f.logFilePath ? `<div style="font-size:0.75rem; color:var(--muted); margin-bottom:4px;">File: <code>${escapeHtml(f.logFilePath)}</code></div>` : ""}
             <pre class="long-cell">${escapeHtml(f.appLogExcerpt)}</pre>
           </div>` : ""}
 
           ${f.runtimeState ? `
-          <div id="${f.id}-runtime" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
+          <div id="${safeId}-runtime" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
             <strong>Runtime State:</strong>
             <pre class="long-cell">${escapeHtml(f.runtimeState)}</pre>
           </div>` : ""}
 
           ${f.currentConsoleLog ? `
-          <div id="${f.id}-console" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
+          <div id="${safeId}-console" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
             <strong>App Console Log:</strong>
             <pre class="long-cell">${escapeHtml(f.currentConsoleLog)}</pre>
           </div>` : ""}
 
           ${f.serverLatestLog ? `
-          <div id="${f.id}-latest" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
+          <div id="${safeId}-latest" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
             <strong>Server latest.log:</strong>
             <pre class="long-cell">${escapeHtml(f.serverLatestLog)}</pre>
           </div>` : ""}
 
           ${f.crashArtifacts ? `
-          <div id="${f.id}-crash" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
+          <div id="${safeId}-crash" style="display:none; margin-top:10px; border-top: 1px solid var(--line); padding-top:10px;">
             <strong>Crash Artifacts:</strong>
             <pre class="long-cell">${escapeHtml(f.crashArtifacts)}</pre>
           </div>` : ""}
@@ -985,6 +1029,7 @@
 
     function renderResults() {
       const container = document.getElementById("resultsCards");
+      if (!container) return;
       if (!state.results.length) {
         container.innerHTML = '<div class="empty">No poll or opt-in results found yet.</div>';
         return;
@@ -993,7 +1038,7 @@
       const filterValue = document.getElementById("resultsFilterSelect").value || "all";
       const filteredResults = state.results.filter(result => {
         if (filterValue === "all") return true;
-        if (filterValue === "type:poll") return result.type === "poll";
+        if (filterValue === "type:poll") return result.type === "poll" || result.type === "question";
         if (filterValue === "type:opt_in") return result.type === "opt_in" || result.type === "optin";
         if (filterValue.startsWith("id:")) {
           const targetId = filterValue.substring(3);
@@ -1007,21 +1052,15 @@
         return;
       }
 
-      container.innerHTML = filteredResults.map((result) => {
+      container.innerHTML = filteredResults.map((result, idx) => {
         const optionRows = Object.entries(result.optionCounts || {}).map(([option, count]) => ({ option, count }));
-        const responseTableId = `responses-table-${result.id}`;
-        const optionsTableId = `options-table-${result.id}`;
-        const optInsTableId = `optins-table-${result.id}`;
-        
-        // Generate side border color classes dynamically
+        const optionsTableId = `res-${idx}-options`;
+        const responseTableId = `res-${idx}-responses`;
+        const optInsTableId = `res-${idx}-optins`;
         const isOptIn = result.type === "opt_in" || result.type === "optin";
         const cardClass = `card result-card ${isOptIn ? "type-opt_in" : "type-poll"}`;
+        const hasData = optionRows.length > 0 || (result.responses && result.responses.length > 0) || (result.optIns && result.optIns.length > 0);
         
-        setTimeout(() => {
-          if (optionRows.length) renderDataTable(optionsTableId, optionRows);
-          if (result.responses?.length) renderDataTable(responseTableId, result.responses);
-          if (result.optIns?.length) renderDataTable(optInsTableId, result.optIns);
-        }, 0);
         return `
           <article class="${cardClass}">
             <div class="card-header">
@@ -1042,9 +1081,17 @@
             ${optionRows.length ? `<div class="result-section-title">Option Counts</div><div id="${optionsTableId}" class="table-wrap" style="margin-top:8px;"></div>` : ""}
             ${result.responses?.length ? `<div class="result-section-title">Responses</div><div id="${responseTableId}" class="table-wrap" style="margin-top:8px;"></div>` : ""}
             ${result.optIns?.length ? `<div class="result-section-title">Opt-In Entries</div><div id="${optInsTableId}" class="table-wrap" style="margin-top:8px;"></div>` : ""}
+            ${!hasData ? `<div class="empty" style="margin-top:12px;">No responses or option counts recorded yet for this broadcast.</div>` : ""}
           </article>
         `;
       }).join("");
+
+      filteredResults.forEach((result, idx) => {
+        const optionRows = Object.entries(result.optionCounts || {}).map(([option, count]) => ({ option, count }));
+        if (optionRows.length) renderDataTable(`res-${idx}-options`, optionRows);
+        if (result.responses?.length) renderDataTable(`res-${idx}-responses`, result.responses);
+        if (result.optIns?.length) renderDataTable(`res-${idx}-optins`, result.optIns);
+      });
     }
 
     function fillBroadcastForm(broadcast) {
@@ -1084,6 +1131,7 @@
       document.getElementById("promotionIconEmoji").value = promotion.iconEmoji || "";
       document.getElementById("promotionActive").checked = !!promotion.active;
       setStatus("promotionStatus", `Editing ${promotion.id}`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
     function fillCommandForm(command) {
@@ -1097,14 +1145,15 @@
       document.getElementById("commandExpiresTime").value = expires.time || "00:00";
       updateCommandFields();
       setStatus("commandStatus", `Editing ${command.id}`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
     function fillUpdateForm(config) {
       document.getElementById("updatePlayStoreUrl").value = config.playStoreUrl || "";
-      document.getElementById("updateVersionCode").value = config.versionCode || "";
+      document.getElementById("updateVersionCode").value = config.versionCode == null ? "" : config.versionCode;
       document.getElementById("updateLatestVersion").value = config.latestVersion || "";
       document.getElementById("updateLatestVersionCode").value = config.latestVersionCode == null ? "" : config.latestVersionCode;
-      document.getElementById("updateExcludeVersionCode").value = config.excludeVersionCode || "";
+      document.getElementById("updateExcludeVersionCode").value = config.excludeVersionCode == null ? "" : config.excludeVersionCode;
       document.getElementById("updateShowPopup").checked = !!config.showUpdatePopup;
       document.getElementById("updateForced").checked = !!config.isForced;
       document.getElementById("updateEnableRatingPrompt").checked = config.enablePlayStoreRatingPrompt !== false;
@@ -1197,7 +1246,11 @@
     }
 
     function findTimeValue(doc) {
-      const timeKeys = ['createdAt', 'timestamp', 'time', 'date', 'created', 'updatedAt', 'lastUpdated'];
+      const timeKeys = [
+        'createdAt', 'timestamp', 'time', 'date', 'created',
+        'updatedAt', 'lastUpdated', 'emailSentAt', 'emailCheckedAt',
+        'expiresAt', 'respondedAt', 'startDate', 'expiryDate', 'timerExpiresAt'
+      ];
       for (const key of timeKeys) {
         if (doc[key] !== undefined && doc[key] !== null) {
           const val = doc[key];
@@ -1234,7 +1287,11 @@
           return Object.entries(doc).some(([key, val]) => {
             if (val === null || val === undefined) return false;
             if (typeof val === 'object') {
-              return JSON.stringify(val).toLowerCase().includes(search);
+              try {
+                return JSON.stringify(val).toLowerCase().includes(search);
+              } catch (_) {
+                return false;
+              }
             }
             return String(val).toLowerCase().includes(search);
           });
@@ -1263,8 +1320,8 @@
       
       renderDataTable("collectionTable", docs);
       
-      const collectionName = document.getElementById("collectionSelect").value;
-      let msg = `Showing ${docs.length} of ${state.activeCollectionDocs.length} docs from ${collectionName}.`;
+      const collectionName = document.getElementById("collectionSelect").value || "";
+      let msg = `Showing ${docs.length} of ${state.activeCollectionDocs.length} docs from ${collectionName || "collection"}.`;
       if (search) {
         msg += ` (Filtered by "${search}")`;
       }
@@ -1272,7 +1329,11 @@
     }
 
     async function loadCollectionData() {
-      const collectionName = document.getElementById("collectionSelect").value;
+      const collectionName = (document.getElementById("collectionSelect").value || "").trim();
+      if (!collectionName) {
+        setStatus("collectionStatus", "Select a collection above and click Load Collection.");
+        return;
+      }
       const limit = document.getElementById("collectionLimit").value || "100";
       document.getElementById("collectionLoadButton").disabled = true;
       try {
@@ -1434,9 +1495,13 @@
       try {
         if (action === "duplicate") {
           await duplicateItem(kind, id);
+          const statusId = kind === "broadcast" ? "broadcastStatus" : kind === "promotion" ? "promotionStatus" : "commandStatus";
+          setStatus(statusId, `Duplicated ${kind} "${id}".`);
         } else if (action === "delete") {
           if (!confirm(`Delete ${kind} "${id}"?`)) return;
           await deleteItem(kind, id);
+          const statusId = kind === "broadcast" ? "broadcastStatus" : kind === "promotion" ? "promotionStatus" : "commandStatus";
+          setStatus(statusId, `Deleted ${kind} "${id}".`);
         }
       } catch (error) {
         const statusId = kind === "broadcast" ? "broadcastStatus" : kind === "promotion" ? "promotionStatus" : "commandStatus";
@@ -1457,7 +1522,7 @@
       document.getElementById("collectionSearchInput").value = "";
       applyCollectionFilterAndSort();
     });
-    document.getElementById("collectionSearchInput").addEventListener("keypress", (e) => {
+    document.getElementById("collectionSearchInput").addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         applyCollectionFilterAndSort();
       }
@@ -1482,7 +1547,12 @@
       loadResults(),
       loadCollections(),
       loadFeedbacks()
-    ]).then(() => loadCollectionData()).catch((error) => {
+    ]).then(() => {
+      const select = document.getElementById("collectionSelect");
+      if (select && select.value) {
+        loadCollectionData();
+      }
+    }).catch((error) => {
       setStatus("broadcastStatus", error.message, true);
       setStatus("promotionStatus", error.message, true);
       setStatus("commandStatus", error.message, true);

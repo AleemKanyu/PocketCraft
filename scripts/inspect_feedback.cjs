@@ -90,8 +90,8 @@ async function inspect() {
   console.log(`App Version:     ${data.appVersion || "unknown"} (${data.appVersionCode ?? "unknown"})`);
   console.log(`Server Version:  ${data.serverVersion || "unknown"}`);
   console.log(`Device:          ${data.deviceManufacturer || "unknown"} ${data.deviceModel || "unknown"}`);
-  console.log(`Android SDK:     ${data.androidSdk ?? "unknown"}`);
-  console.log(`Submitted:       ${data.createdAt?.toDate?.().toISOString() || "unknown"}`);
+  const submittedTime = data.createdAt?.toDate?.().toISOString() || data.emailSentAt?.toDate?.().toISOString() || data.emailCheckedAt?.toDate?.().toISOString() || "unknown";
+  console.log(`Submitted:       ${submittedTime}`);
   console.log(`Source:          ${data.source || "unknown"}`);
   console.log(`Email Status:    ${data.emailStatus || "pending"}`);
   if (data.emailError) {

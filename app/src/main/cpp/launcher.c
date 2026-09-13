@@ -53,9 +53,21 @@ static void jvm_shutdown_signal_handler(int sig) {
         // Terminate the crashing JVM background thread immediately so the main Android app survives.
         pthread_exit(NULL);
     }
+    LOGE("Intercepted unexpected signal %d outside JVM teardown! Passing through.", sig);
     // Not in shutdown — re-raise so debuggerd can capture the real crash.
     signal(sig, SIG_DFL);
     raise(sig);
+}
+
+static void install_shutdown_signal_handlers(void) {
+    struct sigaction sa_shutdown;
+    memset(&sa_shutdown, 0, sizeof(sa_shutdown));
+    sa_shutdown.sa_handler = jvm_shutdown_signal_handler;
+    sigemptyset(&sa_shutdown.sa_mask);
+    sigaction(SIGABRT, &sa_shutdown, NULL);
+    sigaction(SIGSEGV, &sa_shutdown, NULL);
+    sigaction(SIGBUS, &sa_shutdown, NULL);
+    sigaction(SIGPIPE, &sa_shutdown, NULL);
 }
 
 
@@ -72,24 +84,28 @@ JNIEXPORT void JNICALL Java_com_pockethost_app_NativeLauncher_notifyShutdownStar
     (void)env;
     (void)thiz;
     jvm_is_shutting_down = 1;
+    install_shutdown_signal_handlers();
     apply_exit_plt_hooks();
 }
 
 _Noreturn void exit(int status) {
     LOGI("Intercepted exit(%d) from in-process JVM runtime.", status);
     jvm_is_shutting_down = 1;
+    install_shutdown_signal_handlers();
     pthread_exit(NULL);
 }
 
 _Noreturn void _exit(int status) {
     LOGI("Intercepted _exit(%d) from in-process JVM runtime.", status);
     jvm_is_shutting_down = 1;
+    install_shutdown_signal_handlers();
     pthread_exit(NULL);
 }
 
 _Noreturn void quick_exit(int status) {
     LOGI("Intercepted quick_exit(%d) from in-process JVM runtime.", status);
     jvm_is_shutting_down = 1;
+    install_shutdown_signal_handlers();
     pthread_exit(NULL);
 }
 
@@ -271,21 +287,6 @@ static void update_ld_library_path(const char *ld_library_path) {
   ((android_update_LD_LIBRARY_PATH_fn)symbol)(ld_library_path);
 }
 
-static void reset_signal_handlers(void) {
-  struct sigaction clean_action;
-  memset(&clean_action, 0, sizeof(clean_action));
-
-  for (int signal_id = SIGHUP; signal_id < NSIG; signal_id++) {
-    // Skip real-time signals (signals >= 32, like 34, 35) used by Android ART for GC and thread suspension.
-    // Resetting them causes Dalvik/ART GC pauses or thread suspensions to kill the process with signal 34.
-    if (signal_id >= 32) continue;
-    if (signal_id == SIGKILL || signal_id == SIGSTOP) continue;
-
-    clean_action.sa_handler = SIG_DFL;
-    sigaction(signal_id, &clean_action, NULL);
-  }
-}
-
 static void preload_shims(const char *shim_dir) {
   DIR *dir = opendir(shim_dir);
   if (!dir) {
@@ -407,8 +408,6 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
   (void)thiz;
   start_logger();
   LOGI("NativeLauncher starting...");
-  setenv("JAVA_TOOL_OPTIONS", "-Djava.specification.version=26 -Djava.version=26.0.0 -DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true", 1);
-  setenv("_JAVA_OPTIONS", "-Djava.specification.version=26 -Djava.version=26.0.0 -DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true", 1);
 
   jint result = 0;
   const char *jre_path = (*env)->GetStringUTFChars(env, jJrePath, NULL);
@@ -418,6 +417,14 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
   const char *native_lib_dir = (*env)->GetStringUTFChars(env, jNativeLibDir, NULL);
   const char *shim_dir = (*env)->GetStringUTFChars(env, jShimDir, NULL);
   const char *server_type = (*env)->GetStringUTFChars(env, jServerType, NULL);
+
+  if (server_type && (strcmp(server_type, "PAPER") == 0 || strcmp(server_type, "PURPUR") == 0)) {
+    setenv("JAVA_TOOL_OPTIONS", "-Djava.specification.version=26 -Djava.version=26.0.0 -DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true", 0);
+    setenv("_JAVA_OPTIONS", "-Djava.specification.version=26 -Djava.version=26.0.0 -DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true", 0);
+  } else if (server_type && strcmp(server_type, "FABRIC") == 0) {
+    setenv("JAVA_TOOL_OPTIONS", "-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true", 0);
+    setenv("_JAVA_OPTIONS", "-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true", 0);
+  }
 
   char runtime_lib_dir[512];
   char runtime_jli_dir[512];
@@ -580,9 +587,10 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
   snprintf(jna_tmp_opt, sizeof(jna_tmp_opt), "-Djna.tmpdir=%s", tmp_dir);
   snprintf(jansi_tmp_opt, sizeof(jansi_tmp_opt), "-Djansi.tmpdir=%s", tmp_dir);
   snprintf(netty_tmp_opt, sizeof(netty_tmp_opt), "-Dio.netty.native.workdir=%s", tmp_dir);
-  char jna_path[1024];
-  snprintf(jna_path, sizeof(jna_path), "%s/libjnidispatch.so", native_lib_dir);
-  const char *jna_dir = path_exists(jna_path) ? native_lib_dir : shim_dir;
+  char shim_jna_path[1024];
+  snprintf(shim_jna_path, sizeof(shim_jna_path), "%s/libjnidispatch.so", shim_dir);
+  // Prioritize shim_dir which contains our patched libjnidispatch.so (without DT_VERNEED/libc.so.6)
+  const char *jna_dir = path_exists(shim_jna_path) ? shim_dir : native_lib_dir;
   long cpu_count = sysconf(_SC_NPROCESSORS_ONLN);
   if (cpu_count < 1) cpu_count = 4;
   long netty_threads = cpu_count / 2;
@@ -600,8 +608,8 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
   char netty_threads_opt[64];
   snprintf(netty_threads_opt, sizeof(netty_threads_opt), "-Dio.netty.eventLoopThreads=%ld", netty_threads);
   snprintf(lib_path_opt, sizeof(lib_path_opt),
-           "-Djava.library.path=%s/lib/server:%s:%s:%s/lib:%s/lib:/system/lib64:/vendor/lib64:/vendor/lib64/hw:%s/lib/arm64",
-           jre_path, shim_dir, tmp_dir, jre_path, jre_path, native_lib_dir);
+           "-Djava.library.path=%s/lib/server:%s:%s:%s/lib:/system/lib64:/vendor/lib64:/vendor/lib64/hw:%s",
+           jre_path, shim_dir, tmp_dir, jre_path, native_lib_dir);
   snprintf(port_str, sizeof(port_str), "%d", port);
 
   char arg_file_opt[1024];
@@ -643,7 +651,6 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
   argv[a++] = netty_threads_opt;
   argv[a++] = "-Dfile.encoding=UTF-8";
   argv[a++] = "-Dusing.aikars.flags=https://mcflags.emc.gs";
-  argv[a++] = "-Dpaper.playerconnection.keepalive=90";
   argv[a++] = "-Dorg.jline.terminal.jna=false";
   argv[a++] = "-Dorg.jline.terminal.jni=false";
   argv[a++] = "-Dorg.jline.terminal.dumb=true";
@@ -651,30 +658,45 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
   argv[a++] = "-Dsun.java2d.opengl=false";
   argv[a++] = "-Djdk.lang.Process.launchMechanism=FORK";
   argv[a++] = lib_path_opt;
-  argv[a++] = "-DPaper.IgnoreJavaVersion=true";
-  argv[a++] = "-Dpaper.ignoreJavaVersion=true";
-  argv[a++] = "-Dpaper.bypass-java-check=true";
-  argv[a++] = "-Dpaper.ignore-java-version=true";
-  argv[a++] = "-DPurpur.IgnoreJavaVersion=true";
-  argv[a++] = "-Dpurpur.ignoreJavaVersion=true";
-  argv[a++] = "-Dpurpur.bypass-java-check=true";
-  argv[a++] = "-Dpurpur.ignore-java-version=true";
-  argv[a++] = "-Dpaper.oshi.disabled=true";
-  argv[a++] = "-Dpaper.disable-hardware-info=true";
+
+  bool is_fabric = (server_type && strcmp(server_type, "FABRIC") == 0);
+  bool is_paper_or_purpur = (server_type && (strcmp(server_type, "PAPER") == 0 || strcmp(server_type, "PURPUR") == 0));
+
+  if (is_paper_or_purpur) {
+    argv[a++] = "-Dpaper.playerconnection.keepalive=90";
+    argv[a++] = "-DPaper.IgnoreJavaVersion=true";
+    argv[a++] = "-Dpaper.ignoreJavaVersion=true";
+    argv[a++] = "-Dpaper.bypass-java-check=true";
+    argv[a++] = "-Dpaper.ignore-java-version=true";
+    argv[a++] = "-DPurpur.IgnoreJavaVersion=true";
+    argv[a++] = "-Dpurpur.ignoreJavaVersion=true";
+    argv[a++] = "-Dpurpur.bypass-java-check=true";
+    argv[a++] = "-Dpurpur.ignore-java-version=true";
+    argv[a++] = "-Dpaper.oshi.disabled=true";
+    argv[a++] = "-Dpaper.disable-hardware-info=true";
+    argv[a++] = "-Dpaper.disable-update-check=true";
+    argv[a++] = "-Dpaper.disable-plugin-update-check=true";
+    argv[a++] = "-Dpurpur.disable-update-check=true";
+    argv[a++] = "-Dpurpur.disable-plugin-update-check=true";
+    argv[a++] = "-Dpurpur.watchdog.early-warning-delay=60000";
+    argv[a++] = "-Dpurpur.watchdog.early-warning-every=60000";
+  }
+
+  if (is_fabric) {
+    argv[a++] = "-Dfabric.chunkSystem.workerThreads=2";
+    argv[a++] = "-Dfabric.chunkSystem.ioThreads=2";
+    argv[a++] = "-Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false";
+    argv[a++] = "-Dfabric.log.disableAnsi=true";
+  }
+
   argv[a++] = "-Doshi.os.disabled=true";
-  argv[a++] = "-Doshi.os=unknown";
-  argv[a++] = "-Doshi.architecture=aarch64";
-  argv[a++] = "-Dpaper.disable-update-check=true";
-  argv[a++] = "-Dpaper.disable-plugin-update-check=true";
-  argv[a++] = "-Dpurpur.disable-update-check=true";
-  argv[a++] = "-Dpurpur.disable-plugin-update-check=true";
-  argv[a++] = "-Dpurpur.watchdog.early-warning-delay=60000";
-  argv[a++] = "-Dpurpur.watchdog.early-warning-every=60000";
+  argv[a++] = "-Doshi.os.linux.allowudev=false";
+  argv[a++] = "-Doshi.os.linux.procfs.logwarning=false";
   argv[a++] = "-Dsun.net.client.defaultConnectTimeout=5000";
   argv[a++] = "-Dsun.net.client.defaultReadTimeout=5000";
   argv[a++] = "-Dsun.zip.disableMemoryMapping=true";
   argv[a++] = "-Djdk.attach.allowAttachSelf=true";
-  argv[a++] = "-Djna.nosys=true";
+  argv[a++] = "-Djna.nosys=false";
   argv[a++] = "-Djna.nounpack=true";
   argv[a++] = "-Djline.terminal=none";
   argv[a++] = "-Xshare:off";
@@ -727,20 +749,8 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
     LOGI("argv[%d] = %s", i, argv[i]);
   }
 
-  reset_signal_handlers();
-
-  // Install shutdown signal handlers before launching the JVM.
-  // Intercept SIGABRT, SIGSEGV, SIGBUS, SIGPIPE during JVM teardown.
-  struct sigaction sa_shutdown;
-  memset(&sa_shutdown, 0, sizeof(sa_shutdown));
-  sa_shutdown.sa_handler = jvm_shutdown_signal_handler;
-  sigemptyset(&sa_shutdown.sa_mask);
-  sigaction(SIGABRT, &sa_shutdown, NULL);
-  sigaction(SIGSEGV, &sa_shutdown, NULL);
-  sigaction(SIGBUS, &sa_shutdown, NULL);
-  sigaction(SIGPIPE, &sa_shutdown, NULL);
-
-  jvm_is_shutting_down = 0;
+  // Protect against broken network or pipe writes terminating the app with SIGPIPE.
+  signal(SIGPIPE, SIG_IGN);
 
   const char *full_version = (strstr(jre_path, "25") != NULL) ? "25.0.3-internal" :
                              ((strstr(jre_path, "26") != NULL) ? "26-internal" :
@@ -753,6 +763,7 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
   result = launch(argc, argv, 0, NULL, 0, NULL, full_version, dot_version,
                   argv[0], argv[0], JNI_FALSE, JNI_TRUE, JNI_FALSE, 0);
   jvm_is_shutting_down = 1;
+  install_shutdown_signal_handlers();
   LOGI("JLI_Launch returned: %d", result);
 
 

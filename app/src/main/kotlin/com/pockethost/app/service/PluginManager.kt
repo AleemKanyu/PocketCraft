@@ -1510,6 +1510,87 @@ object PluginManager {
         }
     }
 
+    suspend fun resolveAndInstallMissingDependency(
+        context: Context,
+        worldName: String,
+        dependencyId: String,
+        minecraftVersion: String,
+        runtimeKey: String = worldName
+    ): Result<File> = withContext(Dispatchers.IO) {
+        val type = ContentType.MODS
+        val effectiveRuntimeKey = if (supportsMods(runtimeKey)) {
+            runtimeKey
+        } else {
+            val serverType = ServerPropertiesHelper
+                .readProperties(ServerFileManager.getServerDir(context, worldName), persistDefaults = false)
+                .getProperty("pocketcraft-server-type")
+                .orEmpty()
+            if (serverType.isNotBlank() && supportsMods(serverType)) {
+                serverType.lowercase(Locale.US)
+            } else {
+                "fabric"
+            }
+        }
+        val stub = RemoteCatalogItem(
+            source = MODRINTH_PROVIDER,
+            projectId = dependencyId,
+            title = dependencyId,
+            slug = dependencyId,
+            iconUrl = null,
+            description = "",
+            downloads = 0L
+        )
+        var candidate = runCatching {
+            resolveModrinthDownload(context, stub, type, minecraftVersion, effectiveRuntimeKey)
+        }.getOrNull()
+
+        if (candidate == null) {
+            val searchResult = runCatching {
+                searchModrinthCatalog(
+                    context = context,
+                    type = type,
+                    query = dependencyId,
+                    minecraftVersion = minecraftVersion,
+                    runtimeKey = effectiveRuntimeKey,
+                    offset = 0,
+                    limit = 5
+                )
+            }.getOrNull()
+
+            val bestMatch = searchResult?.items?.firstOrNull { item ->
+                item.slug.equals(dependencyId, ignoreCase = true) ||
+                    item.projectId.equals(dependencyId, ignoreCase = true) ||
+                    item.title.replace(" ", "").equals(dependencyId.replace(" ", "").replace("-", "").replace("_", ""), ignoreCase = true)
+            } ?: searchResult?.items?.firstOrNull()
+
+            if (bestMatch != null) {
+                candidate = runCatching {
+                    resolveModrinthDownload(context, bestMatch, type, minecraftVersion, effectiveRuntimeKey)
+                }.getOrNull()
+            }
+        }
+
+        if (candidate == null) {
+            return@withContext Result.failure(Exception("Could not find download candidate for dependency '$dependencyId'."))
+        }
+
+        val targetDir = getContentDir(context, worldName, type)
+        val targetFile = File(targetDir, candidate.fileName)
+        if (targetFile.exists()) {
+            return@withContext Result.success(targetFile)
+        }
+
+        installFromUrl(
+            context = context,
+            sourceUrl = candidate.downloadUrl,
+            worldName = worldName,
+            type = type,
+            fileNameHint = candidate.fileName,
+            runtimeKey = runtimeKey,
+            onProgress = {}
+        )
+    }
+
     data class CatalogSearchResult(
         val items: List<RemoteCatalogItem>,
         val totalHits: Int = 0,

@@ -48,6 +48,8 @@ import com.pockethost.app.service.PluginManager
 import com.pockethost.app.service.ConsoleParser
 import com.pockethost.app.service.ParsedPlayerPing
 import com.pockethost.app.service.DimensionMigrator
+import com.pockethost.app.service.ModDependencyValidator
+import com.pockethost.app.service.MissingModDependency
 import com.pockethost.app.service.ServerFileManager
 import com.pockethost.app.service.AutoBackupReceiver
 import com.pockethost.app.service.ServerPropertiesHelper
@@ -1016,6 +1018,78 @@ class ServerStateHolder(
         crashWasDuringStartup = false
     }
 
+    var showMissingModDependenciesDialog by mutableStateOf(false)
+        private set
+    var missingModDependencies by mutableStateOf<List<MissingModDependency>>(emptyList())
+        private set
+    var isResolvingModDependencies by mutableStateOf(false)
+        private set
+    var modDependencyResolveStatus by mutableStateOf<String?>(null)
+        private set
+
+    fun dismissMissingModDependenciesDialog() {
+        showMissingModDependenciesDialog = false
+        missingModDependencies = emptyList()
+        isResolvingModDependencies = false
+        modDependencyResolveStatus = null
+    }
+
+    fun disableIncompatibleModsAndStart() {
+        val currentWorld = activeWorld.ifBlank { "world" }
+        val modsDir = PluginManager.getModsDir(appContext, currentWorld)
+        val fileNames = missingModDependencies.map { it.modFileName }.distinct()
+        for (fileName in fileNames) {
+            val jarFile = File(modsDir, fileName)
+            if (jarFile.exists()) {
+                ModDependencyValidator.disableMod(jarFile)
+            }
+        }
+        showMissingModDependenciesDialog = false
+        missingModDependencies = emptyList()
+        startServer(bypassModDependencyCheck = true)
+    }
+
+    fun startServerAnyway() {
+        showMissingModDependenciesDialog = false
+        missingModDependencies = emptyList()
+        startServer(bypassModDependencyCheck = true)
+    }
+
+    fun resolveAndInstallMissingDependencies() {
+        if (isResolvingModDependencies) return
+        scope.launch {
+            isResolvingModDependencies = true
+            modDependencyResolveStatus = "Resolving missing mod dependencies..."
+            try {
+                val gameVer = config.gameVersion.ifBlank { "1.20.4" }
+                val currentWorld = activeWorld.ifBlank { "world" }
+                val runtimeKey = "${config.serverType.name.lowercase(java.util.Locale.US)} ${gameVer.ifBlank { versionId }}"
+                val missingDeps = missingModDependencies.map { it.dependencyId }.distinct()
+                for (depId in missingDeps) {
+                    modDependencyResolveStatus = "Downloading $depId..."
+                    val result = PluginManager.resolveAndInstallMissingDependency(
+                        context = appContext,
+                        worldName = currentWorld,
+                        dependencyId = depId,
+                        minecraftVersion = gameVer,
+                        runtimeKey = runtimeKey
+                    )
+                    if (result.isFailure) {
+                        android.util.Log.w("ServerStateHolder", "Failed to resolve dependency $depId: ${result.exceptionOrNull()?.message}")
+                    }
+                }
+                showMissingModDependenciesDialog = false
+                missingModDependencies = emptyList()
+                modDependencyResolveStatus = null
+                isResolvingModDependencies = false
+                startServer(bypassModDependencyCheck = false)
+            } catch (e: Exception) {
+                modDependencyResolveStatus = "Failed to install dependencies: ${e.message}"
+                isResolvingModDependencies = false
+            }
+        }
+    }
+
     var showBatteryOptimizationDialog by mutableStateOf(false)
         private set
 
@@ -1101,7 +1175,7 @@ class ServerStateHolder(
         }
     }
 
-    fun startServer(isRestart: Boolean = false) {
+    fun startServer(isRestart: Boolean = false, bypassModDependencyCheck: Boolean = false) {
         if (isBackingUp || isRestoringBackup || isDownloadingBackup) {
             val msg = "Cannot start server while a backup, restore, or download is in progress."
             appendLog("[ERROR] $msg")
@@ -1139,6 +1213,15 @@ class ServerStateHolder(
             return
         }
         if (isRunning || (!isRestart && isStarting) || (isStopping && !isRestart)) return
+
+        if (!bypassModDependencyCheck) {
+            val missing = ModDependencyValidator.detectMissingDependencies(appContext, activeWorld, config.serverType)
+            if (missing.isNotEmpty()) {
+                missingModDependencies = missing
+                showMissingModDependenciesDialog = true
+                return
+            }
+        }
 
         val pm = appContext.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
         if (pm != null && !pm.isIgnoringBatteryOptimizations(appContext.packageName)) {

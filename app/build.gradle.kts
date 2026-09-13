@@ -89,7 +89,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = autoVersionCode
-        versionName = "1.0.3"
+        versionName = "1.2.1"
 
         buildConfigField("String", "RELAY_PUBLIC_DOMAIN", "\"joinmc.link\"")
         buildConfigField("String", "GITHUB_REPO_OWNER", "\"$githubRepoOwner\"")
@@ -122,6 +122,10 @@ android {
 
     androidResources {
         noCompress += listOf("jar", "jks", "xz", "gz")
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 
     sourceSets {
@@ -297,6 +301,9 @@ dependencies {
 
     implementation("com.google.zxing:core:3.5.3")
     implementation("androidx.graphics:graphics-path:1.0.1")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }
 
 tasks.matching { it.name.startsWith("uploadCrashlyticsMappingFile") }.configureEach {

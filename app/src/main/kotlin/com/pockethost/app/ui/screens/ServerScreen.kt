@@ -48,6 +48,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
+import com.pockethost.app.service.MissingModDependency
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Forum
@@ -918,6 +919,218 @@ fun ServerScreen(
             },
             onDismiss = { stateHolder.dismissBatteryOptimizationDialog() }
         )
+    }
+
+    if (stateHolder.showMissingModDependenciesDialog) {
+        MissingModDependenciesDialog(
+            missingDependencies = stateHolder.missingModDependencies,
+            isResolving = stateHolder.isResolvingModDependencies,
+            resolveStatus = stateHolder.modDependencyResolveStatus,
+            onInstallAll = { stateHolder.resolveAndInstallMissingDependencies() },
+            onDisableMods = { stateHolder.disableIncompatibleModsAndStart() },
+            onStartAnyway = { stateHolder.startServerAnyway() },
+            onDismiss = { stateHolder.dismissMissingModDependenciesDialog() }
+        )
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Missing Mod Dependencies Warning Dialog
+// ──────────────────────────────────────────────────────────────────────────────
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun MissingModDependenciesDialog(
+    missingDependencies: List<MissingModDependency>,
+    isResolving: Boolean,
+    resolveStatus: String?,
+    onInstallAll: () -> Unit,
+    onDisableMods: () -> Unit,
+    onStartAnyway: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        dragHandle = null
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(top = 28.dp, bottom = 36.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            // Icon + Title + Subtitle
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(
+                            Color(0xFFFF9800).copy(alpha = 0.15f),
+                            CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = Color(0xFFFFB74D),
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
+                Text(
+                    text = "Missing Mod Dependencies",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Some mods require additional dependencies to run. Starting the server now will cause it to crash.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 18.sp
+                )
+            }
+
+            // List of missing dependencies
+            androidx.compose.material3.Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    missingDependencies.groupBy { it.modName }.forEach { (modName, deps) ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(Color(0xFFFFB74D), CircleShape)
+                                )
+                                Text(
+                                    text = modName,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
+                            Column(
+                                modifier = Modifier.padding(start = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                deps.forEach { dep ->
+                                    val reqText = if (!dep.versionRequirement.isNullOrBlank()) {
+                                        "${dep.dependencyId} (${dep.versionRequirement})"
+                                    } else {
+                                        dep.dependencyId
+                                    }
+                                    Text(
+                                        text = "Requires: $reqText",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (isResolving) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = PocketColors.Primary
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = resolveStatus ?: "Installing dependencies...",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            } else {
+                // Action: Auto-Install Dependencies
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(PocketColors.Primary, Color(0xFF4CAF50))
+                            )
+                        )
+                        .clickable(onClick = onInstallAll)
+                        .padding(vertical = 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Auto-Install Dependencies",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                }
+
+                // Action: Disable Incompatible Mods
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onDisableMods,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text(
+                        text = "Disable Affected Mods & Start",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                }
+
+                // Bottom row: Start Anyway / Cancel
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    androidx.compose.material3.TextButton(onClick = onDismiss) {
+                        Text(
+                            text = "Cancel",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    androidx.compose.material3.TextButton(onClick = onStartAnyway) {
+                        Text(
+                            text = "Start Anyway",
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
