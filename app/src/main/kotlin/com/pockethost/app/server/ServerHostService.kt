@@ -429,7 +429,7 @@ class ServerHostService : Service() {
         // Must precede any isBedrockWorld() caller: switching this world's type leaves a stale
         // cached answer that would send the log tail to the wrong file.
         bedrockWorldCache.clear()
-        startServerLogTail(versionId)
+        startServerLogTail(versionId, worldName)
         val serverPort = resolveServerPort(worldName)
         currentServerPort = serverPort
         startPortProbe(versionId, serverPort)
@@ -548,10 +548,16 @@ class ServerHostService : Service() {
                         EVENT_OUTPUT,
                         "[PocketHost] Server exited unexpectedly. Auto-restarting in ${delayMs / 1000}s (attempt $attempt/$AUTO_RECOVER_MAX_ATTEMPTS)..."
                     )
-                    serviceScope.launch {
-                        kotlinx.coroutines.delay(delayMs)
-                        if (stopReason != "user") {
-                            start(applicationContext, versionId, activeWorldNameOrDefault())
+                    if (NativeLauncher.hasInProcessJvmRunInThisProcess) {
+                        android.util.Log.i("ServerHostService", "Recycling :server process for auto-recover in ${delayMs}ms.")
+                        scheduleProcessRestart(versionId, activeWorldNameOrDefault(), delayMs)
+                        android.os.Process.killProcess(android.os.Process.myPid())
+                    } else {
+                        serviceScope.launch {
+                            kotlinx.coroutines.delay(delayMs)
+                            if (stopReason != "user") {
+                                start(applicationContext, versionId, activeWorldNameOrDefault())
+                            }
                         }
                     }
                 }
@@ -570,6 +576,15 @@ class ServerHostService : Service() {
                 }
                 if (!stopInProgress.get()) {
                     stopInProgress.set(false)
+                    if (NativeLauncher.hasInProcessJvmRunInThisProcess) {
+                        if (keepListenerRunning) {
+                            android.util.Log.i("ServerHostService", "Recycling :server process to reset JVM state after server exit.")
+                            scheduleKeepAliveRestart(500L)
+                        } else {
+                            try { stopSelf() } catch (_: Throwable) {}
+                        }
+                        android.os.Process.killProcess(android.os.Process.myPid())
+                    }
                 }
             }
         )
@@ -789,12 +804,24 @@ class ServerHostService : Service() {
                     android.util.Log.i("ServerHostService", "Restart requested: launching server $restartVersionId for world $restartWorldName...")
                     stopInProgress.set(false)
                     isLaunching = false
+                    if (NativeLauncher.hasInProcessJvmRunInThisProcess) {
+                        android.util.Log.i("ServerHostService", "Recycling :server process on restart to allow clean JVM boot.")
+                        scheduleProcessRestart(restartVersionId, restartWorldName, 1000L)
+                        android.os.Process.killProcess(android.os.Process.myPid())
+                        return@launch
+                    }
                     delay(500L)
                     start(applicationContext, restartVersionId, restartWorldName)
                     return@launch
                 }
 
                 if (keepListenerRunning) {
+                    if (NativeLauncher.hasInProcessJvmRunInThisProcess) {
+                        android.util.Log.i("ServerHostService", "Recycling :server process to reset JVM state while keeping listener alive.")
+                        scheduleKeepAliveRestart(500L)
+                        android.os.Process.killProcess(android.os.Process.myPid())
+                        return@launch
+                    }
                     val notification = createForegroundNotification(ServerStage.DASHBOARD_LISTENER_ACTIVE.notificationText)
                     val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                     manager?.notify(NOTIFICATION_ID, notification)
@@ -813,6 +840,10 @@ class ServerHostService : Service() {
                         stopSelf()
                     } catch (e: Throwable) {
                         android.util.Log.e("PocketHost", "Error in stopSelf: ${e.message}")
+                    }
+                    if (NativeLauncher.hasInProcessJvmRunInThisProcess) {
+                        android.util.Log.i("ServerHostService", "Terminating :server process on stop to clear in-process JVM.")
+                        android.os.Process.killProcess(android.os.Process.myPid())
                     }
                 }
 
@@ -1353,10 +1384,11 @@ class ServerHostService : Service() {
         }
     }
 
-    private fun startServerLogTail(versionId: String) {
+    private fun startServerLogTail(versionId: String, worldName: String = activeWorldNameOrDefault()) {
         if (logTailRunning.getAndSet(true)) return
 
-        val serverDir = ServerFileManager.getServerDir(applicationContext, activeWorldNameOrDefault())
+        val resolvedWorld = worldName.trim().ifBlank { activeWorldNameOrDefault() }
+        val serverDir = ServerFileManager.getServerDir(applicationContext, resolvedWorld)
         // PowerNukkitX writes logs/server.log; Java servers write logs/latest.log.
         val latestLog = if (isBedrockWorld()) {
             File(serverDir, "logs/server.log")
@@ -1441,6 +1473,20 @@ class ServerHostService : Service() {
                         val line = "[PocketHost] Server port $port is open. Finalizing startup..."
                         sendEvent(versionId, EVENT_OUTPUT, line)
                         updateNotification("Finalizing server startup...", force = true)
+                        hasSeenServerStarting = true
+
+                        // If the log tail missed the "Done!" line or logcat bridge is inactive,
+                        // promote readiness after a short grace period once the port is open and listening.
+                        serviceScope.launch {
+                            delay(10_000L)
+                            if (currentVersionId == versionId && !serverReadyHandled.get()) {
+                                val stillOpen = isLocalServerPortOpen(port)
+                                if (stillOpen) {
+                                    android.util.Log.i("ServerHostService", "Port $port verified open; promoting server readiness via port probe watchdog.")
+                                    onServerReady()
+                                }
+                            }
+                        }
                         break
                     } catch (_: Exception) {
                         Thread.sleep(400)
@@ -1751,12 +1797,68 @@ class ServerHostService : Service() {
         triggerDashboardStatusUpdate()
     }
 
+    private fun scheduleProcessRestart(versionId: String, worldName: String, delayMs: Long) {
+        val restartIntent = Intent(applicationContext, ServerHostService::class.java).apply {
+            action = ACTION_START
+            putExtra(EXTRA_VERSION_ID, versionId)
+            putExtra(EXTRA_WORLD_NAME, worldName)
+        }
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_ONE_SHOT
+        }
+        val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            PendingIntent.getForegroundService(applicationContext, 9101, restartIntent, flags)
+        } else {
+            PendingIntent.getService(applicationContext, 9101, restartIntent, flags)
+        }
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+        val triggerAt = SystemClock.elapsedRealtime() + delayMs.coerceAtLeast(500L)
+        alarmManager?.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent)
+    }
+
+    private fun scheduleKeepAliveRestart(delayMs: Long) {
+        val keepAliveIntent = Intent(applicationContext, ServerHostService::class.java).apply {
+            action = ACTION_START_LISTENER
+        }
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_ONE_SHOT
+        }
+        val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            PendingIntent.getForegroundService(applicationContext, 9102, keepAliveIntent, flags)
+        } else {
+            PendingIntent.getService(applicationContext, 9102, keepAliveIntent, flags)
+        }
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+        val triggerAt = SystemClock.elapsedRealtime() + delayMs.coerceAtLeast(300L)
+        alarmManager?.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent)
+    }
+
     private fun scheduleServerReadyFallback(versionId: String) {
         serverReadyFallbackJob?.cancel()
         serverReadyFallbackJob = serviceScope.launch {
-            // Paper startup on Android devices can take 5+ minutes for level prep and plugin init.
-            // Use 10 minutes (600,000ms) as fallback so the timer never fires while Paper is actively booting.
-            delay(600_000L)
+            val deadline = SystemClock.elapsedRealtime() + 600_000L
+            while (isActive && SystemClock.elapsedRealtime() < deadline) {
+                delay(5_000L)
+                if (currentVersionId == versionId && !serverReadyHandled.get()) {
+                    val portOpen = isLocalServerPortOpen(currentServerPort)
+                    val hasProc = serverProcess?.isAlive == true ||
+                        ServerLauncher.hasActiveExternalProcess() ||
+                        NativeLauncher.hasInProcessJvmRunInThisProcess
+                    if (portOpen && hasProc) {
+                        android.util.Log.w(
+                            "ServerHostService",
+                            "Port $currentServerPort verified open during fallback poll for $versionId. Promoting readiness."
+                        )
+                        setServerReadyState(true)
+                        onServerReady()
+                        return@launch
+                    }
+                }
+            }
             val shouldPromote = currentVersionId == versionId &&
                 !serverReadyHandled.get() &&
                 (serverProcess?.isAlive == true ||
@@ -1765,7 +1867,7 @@ class ServerHostService : Service() {
             if (shouldPromote) {
                 android.util.Log.w(
                     "ServerHostService",
-                    "Server ready signal was missed for $versionId. Promoting readiness via fallback poll after 10m."
+                    "Server ready signal was missed for $versionId. Promoting readiness via fallback poll after timeout."
                 )
                 setServerReadyState(true)
                 onServerReady()
@@ -1906,12 +2008,9 @@ class ServerHostService : Service() {
     }
 
     private fun activeWorldNameOrDefault(): String {
-        val serverRunning = serverReadyHandled.get()
-        if (serverRunning) {
-            return currentWorldName
-                ?.trim()
-                ?.takeIf { it.isNotBlank() }
-                ?: "world"
+        val existing = currentWorldName?.trim()?.takeIf { it.isNotBlank() }
+        if (existing != null) {
+            return existing
         }
         val world = AppPreferences(applicationContext).selectedWorld.trim().ifBlank { "world" }
         currentWorldName = world
@@ -1949,7 +2048,7 @@ class ServerHostService : Service() {
             startForeground(NOTIFICATION_ID, createForegroundNotification(ServerStage.RUNNING.notificationText))
         }
         startLogcatBridge(versionId)
-        startServerLogTail(versionId)
+        startServerLogTail(versionId, worldName)
         acquireWakeLock()
         sendEvent(
             versionId,
@@ -2070,7 +2169,7 @@ class ServerHostService : Service() {
         }
 
 
-        startServerLogTail(versionId)
+        startServerLogTail(versionId, worldName)
 
         startPortProbe(versionId, serverPort)
         scheduleServerReadyFallback(versionId)
@@ -2182,10 +2281,16 @@ class ServerHostService : Service() {
                         EVENT_OUTPUT,
                         "[PocketHost] Server exited unexpectedly. Auto-restarting in ${delayMs / 1000}s (attempt $attempt/$AUTO_RECOVER_MAX_ATTEMPTS)..."
                     )
-                    serviceScope.launch {
-                        kotlinx.coroutines.delay(delayMs)
-                        if (stopReason != "user") {
-                            start(applicationContext, versionId, activeWorldNameOrDefault())
+                    if (NativeLauncher.hasInProcessJvmRunInThisProcess) {
+                        android.util.Log.i("ServerHostService", "Recycling :server process for auto-recover in ${delayMs}ms.")
+                        scheduleProcessRestart(versionId, activeWorldNameOrDefault(), delayMs)
+                        android.os.Process.killProcess(android.os.Process.myPid())
+                    } else {
+                        serviceScope.launch {
+                            kotlinx.coroutines.delay(delayMs)
+                            if (stopReason != "user") {
+                                start(applicationContext, versionId, activeWorldNameOrDefault())
+                            }
                         }
                     }
                 }
@@ -2208,6 +2313,15 @@ class ServerHostService : Service() {
                 pushWidgetUpdate()
                 if (!stopInProgress.get()) {
                     stopInProgress.set(false)
+                    if (NativeLauncher.hasInProcessJvmRunInThisProcess) {
+                        if (keepListenerRunning) {
+                            android.util.Log.i("ServerHostService", "Recycling :server process to reset JVM state after server exit.")
+                            scheduleKeepAliveRestart(500L)
+                        } else {
+                            try { stopSelf() } catch (_: Throwable) {}
+                        }
+                        android.os.Process.killProcess(android.os.Process.myPid())
+                    }
                 }
             }
         )
