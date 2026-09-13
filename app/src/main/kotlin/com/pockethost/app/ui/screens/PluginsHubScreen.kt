@@ -220,6 +220,7 @@ fun PluginsHubScreen(
             downloadingCatalogKey = remote.catalogKey
             onMessage("Downloading & installing ${remote.title}…")
 
+            val installedDependencies = mutableListOf<String>()
             val installRes = PluginManager.installRemoteItem(
                 context = context,
                 item = remote,
@@ -227,13 +228,22 @@ fun PluginsHubScreen(
                 type = currentTab().type,
                 runtimeKey = runtimeKey,
                 minecraftVersion = stateHolder.config.gameVersion,
+                onDependencyInstalled = { installedDependencies.add(it) },
                 onProgress = { uploadProgress = it.coerceIn(0, 100) }
             )
 
             isUploading = false
             downloadingCatalogKey = null
             installRes.onSuccess {
-                onMessage("Successfully installed ${remote.title}!")
+                onMessage(
+                    if (installedDependencies.isEmpty()) {
+                        "Successfully installed ${remote.title}!"
+                    } else {
+                        "Installed ${remote.title} + ${installedDependencies.size} required " +
+                            (if (installedDependencies.size == 1) "dependency" else "dependencies") +
+                            ": ${installedDependencies.joinToString()}"
+                    }
+                )
                 refreshDownloadedItems()
             }.onFailure { err ->
                 onMessage("Installation error: ${err.message}")
@@ -797,19 +807,28 @@ fun PluginsHubScreen(
         isDownloading = true
         downloadingCatalogKey = item.catalogKey
         downloadProgress = 0
+        val installedDependencies = mutableListOf<String>()
         val result = PluginManager.installRemoteItem(
             context = context,
             item = item,
             worldName = stateHolder.activeWorld,
             type = itemType,
             runtimeKey = runtimeKey,
+            onDependencyInstalled = { installedDependencies.add(it) },
             onProgress = { downloadProgress = it }
         )
         isDownloading = false
         downloadingCatalogKey = null
         pendingRemoteInstall = null
         result.onSuccess {
-            onMessage("Installed ${item.title} successfully!")
+            onMessage(
+                if (installedDependencies.isEmpty()) {
+                    "Installed ${item.title} successfully!"
+                } else {
+                    "Installed ${item.title} + ${installedDependencies.size} required " +
+                        (if (installedDependencies.size == 1) "dependency" else "dependencies") + "."
+                }
+            )
             refreshDownloadedItems()
         }.onFailure { err ->
             onMessage("Install failed: ${err.message}")
@@ -1741,6 +1760,9 @@ private fun normalizeInstallKey(value: String): String {
     return value.lowercase(Locale.US).replace(Regex("[^a-z0-9]+"), "")
 }
 
+/** Below this length a name fragment is too generic to identify a project by prefix. */
+private const val MIN_FUZZY_INSTALL_KEY_LENGTH = 5
+
 private fun isRemoteInstalled(
     item: PluginManager.RemoteCatalogItem,
     installedKeys: Set<String>
@@ -1750,10 +1772,26 @@ private fun isRemoteInstalled(
         .filter { it.isNotBlank() }
 
     return candidates.any { candidate ->
-        installedKeys.any { installed ->
-            installed == candidate || installed.contains(candidate) || candidate.contains(installed)
-        }
+        installedKeys.any { installed -> installKeysMatch(installed, candidate) }
     }
+}
+
+/**
+ * Whether an installed file identifies the catalog entry [candidate].
+ *
+ * This used to test containment in *both* directions, which marked unrelated entries as installed:
+ * one item whose name normalises to "api" flagged Cloth Config API and Architectury API as well,
+ * "sodium" flagged Sodium Extra, and any short name flagged most of the catalogue. Matching is now
+ * anchored at the start, which is where a real filename carries the project name
+ * ("Terralith_26.2_v2.6.4" -> "terralith262v264" starts with "terralith"), and the prefix has to be
+ * long enough to mean something on its own.
+ */
+private fun installKeysMatch(installed: String, candidate: String): Boolean {
+    if (installed == candidate) return true
+    if (candidate.length < MIN_FUZZY_INSTALL_KEY_LENGTH) return false
+    if (!installed.startsWith(candidate)) return false
+    // Only a version suffix may follow the name; "sodium" must not match "sodiumextra".
+    return installed.drop(candidate.length).none { it in 'a'..'z' }
 }
 
 private fun formatDownloads(downloads: Long): String {

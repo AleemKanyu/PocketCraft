@@ -118,7 +118,9 @@ object PluginManager {
 
     private data class DownloadCandidate(
         val downloadUrl: String,
-        val fileName: String
+        val fileName: String,
+        /** Modrinth project ids this version declares as required. */
+        val requiredDependencies: List<String> = emptyList()
     )
 
     private data class BundledPluginUpdate(
@@ -1390,6 +1392,9 @@ object PluginManager {
         }
     }
 
+    /** Guards against a pathological dependency graph pulling down the whole catalogue. */
+    private const val MAX_DEPENDENCY_INSTALLS = 8
+
     suspend fun installRemoteItem(
         context: Context,
         item: RemoteCatalogItem,
@@ -1397,6 +1402,7 @@ object PluginManager {
         type: ContentType,
         runtimeKey: String = worldName,
         minecraftVersion: String? = null,
+        onDependencyInstalled: (String) -> Unit = {},
         onProgress: (Int) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         if (!item.canInstall) {
@@ -1412,7 +1418,7 @@ object PluginManager {
             else -> null
         } ?: return@withContext Result.failure(Exception("Could not find a compatible download for ${item.title}."))
 
-        installFromUrl(
+        val installed = installFromUrl(
             context = context,
             sourceUrl = candidate.downloadUrl,
             worldName = worldName,
@@ -1421,6 +1427,87 @@ object PluginManager {
             runtimeKey = runtimeKey,
             onProgress = onProgress
         )
+
+        if (installed.isSuccess && candidate.requiredDependencies.isNotEmpty()) {
+            runCatching {
+                installRequiredDependencies(
+                    context = context,
+                    projectIds = candidate.requiredDependencies,
+                    worldName = worldName,
+                    type = type,
+                    runtimeKey = runtimeKey,
+                    minecraftVersion = resolvedVersion,
+                    onDependencyInstalled = onDependencyInstalled
+                )
+            }.onFailure { error ->
+                Log.w("PluginManager", "Dependency install for ${item.title} failed: ${error.message}")
+            }
+        }
+
+        installed
+    }
+
+    /**
+     * Installs the required dependencies of a just-installed project, breadth first.
+     *
+     * A mod installed without its hard dependencies is not merely missing a feature: Fabric Loader
+     * aborts the entire server launch when one is absent, so the player sees a server that refuses
+     * to start rather than a mod that quietly does nothing.
+     */
+    private suspend fun installRequiredDependencies(
+        context: Context,
+        projectIds: List<String>,
+        worldName: String,
+        type: ContentType,
+        runtimeKey: String,
+        minecraftVersion: String,
+        onDependencyInstalled: (String) -> Unit
+    ) {
+        val targetDir = getContentDir(context, worldName, type)
+        val visited = mutableSetOf<String>()
+        val queue = ArrayDeque(projectIds)
+        var installs = 0
+
+        while (queue.isNotEmpty() && installs < MAX_DEPENDENCY_INSTALLS) {
+            val projectId = queue.removeFirst()
+            if (!visited.add(projectId)) continue
+
+            // resolveModrinthDownload only reads projectId, so a stub is enough to reuse the same
+            // loader/game-version filtering the primary download went through.
+            val stub = RemoteCatalogItem(
+                source = MODRINTH_PROVIDER,
+                projectId = projectId,
+                title = projectId,
+                slug = projectId,
+                iconUrl = null,
+                description = "",
+                downloads = 0L
+            )
+            val dependency = runCatching {
+                resolveModrinthDownload(context, stub, type, minecraftVersion, runtimeKey)
+            }.getOrNull() ?: continue
+
+            if (File(targetDir, dependency.fileName).exists()) {
+                // Already satisfied; still follow its own requirements.
+                queue.addAll(dependency.requiredDependencies)
+                continue
+            }
+
+            val result = installFromUrl(
+                context = context,
+                sourceUrl = dependency.downloadUrl,
+                worldName = worldName,
+                type = type,
+                fileNameHint = dependency.fileName,
+                runtimeKey = runtimeKey,
+                onProgress = {}
+            )
+            if (result.isSuccess) {
+                installs++
+                onDependencyInstalled(dependency.fileName.removeSuffix(".jar").removeSuffix(".zip"))
+                queue.addAll(dependency.requiredDependencies)
+            }
+        }
     }
 
     data class CatalogSearchResult(
@@ -1745,7 +1832,9 @@ object PluginManager {
 
             for (indexValue in 0 until versions.length()) {
                 val version = versions.optJSONObject(indexValue) ?: continue
-                val candidate = extractPrimaryFile(version, defaultExtension(type)) ?: continue
+                val candidate = extractPrimaryFile(version, defaultExtension(type))
+                    ?.copy(requiredDependencies = requiredDependencyProjectIds(version))
+                    ?: continue
                 val declaredVersions = jsonArrayStrings(version.optJSONArray("game_versions"))
 
                 if (declaredVersions.any { it == minecraftVersion }) {
@@ -2006,6 +2095,25 @@ object PluginManager {
         if (fromUrl.isNotBlank()) return fromUrl
 
         return "item_${System.currentTimeMillis()}${defaultExtension(type)}"
+    }
+
+    /**
+     * Project ids a Modrinth version declares as hard requirements.
+     *
+     * Installing a mod without these leaves the server unable to start: a Fabric mod whose
+     * required dependency is missing makes Fabric Loader abort the whole launch rather than skip
+     * the mod, which reads to the player as "the app installed a broken mod".
+     */
+    private fun requiredDependencyProjectIds(version: JSONObject): List<String> {
+        val dependencies = version.optJSONArray("dependencies") ?: return emptyList()
+        val ids = mutableListOf<String>()
+        for (index in 0 until dependencies.length()) {
+            val dependency = dependencies.optJSONObject(index) ?: continue
+            if (!dependency.optString("dependency_type").equals("required", ignoreCase = true)) continue
+            val projectId = dependency.optString("project_id").trim()
+            if (projectId.isNotBlank()) ids.add(projectId)
+        }
+        return ids.distinct()
     }
 
     private fun extractPrimaryFile(version: JSONObject, extension: String): DownloadCandidate? {

@@ -122,7 +122,11 @@ class MainActivity : ComponentActivity() {
         val onboardingCompleted = preferences.onboardingCompleted
         preferences.recordAppLaunch()
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+        // Only ask for notifications once the user is actually inside the app. During onboarding
+        // the dedicated permissions step explains why the server needs a notification before
+        // asking; firing a bare system dialog over the welcome screen gives the user no context
+        // and burns the one prompt Android grants before it starts silently denying.
+        if (onboardingCompleted && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
             }

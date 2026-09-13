@@ -555,7 +555,15 @@ private fun OnboardingScreen(
                     total = steps.size,
                     currentMobTheme = currentMobTheme,
                     onMobThemeChange = onMobThemeChange,
-                    onSkipAll = onComplete
+                    // Skipping the tour must still land on server setup — leaving onboarding
+                    // entirely drops the user into the app with no server configured.
+                    onSkipAll = { currentStep = steps.lastIndex },
+                    // The terms and privacy policy live on the first step, so skipping past them
+                    // would mean never accepting them.
+                    skipEnabled = privacyAccepted,
+                    // Tapping the dimmed button takes the user to the step holding the checkbox
+                    // rather than doing nothing.
+                    onSkipBlocked = { currentStep = 0 }
                 )
 
                 OnboardingPhoneFrame(
@@ -1157,7 +1165,9 @@ private fun TopHeader(
     total: Int,
     currentMobTheme: MobTheme,
     onMobThemeChange: (MobTheme) -> Unit,
-    onSkipAll: () -> Unit
+    onSkipAll: () -> Unit,
+    skipEnabled: Boolean = true,
+    onSkipBlocked: () -> Unit = {}
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
@@ -1186,19 +1196,22 @@ private fun TopHeader(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
-                    onClick = onSkipAll,
+                    onClick = { if (skipEnabled) onSkipAll() else onSkipBlocked() },
                     modifier = Modifier.defaultMinSize(minHeight = 48.dp),
                     shape = RoundedCornerShape(12.dp),
-                    color = onboardingAccentGreen().copy(alpha = 0.18f),
-                    border = BorderStroke(1.dp, onboardingAccentGreen().copy(alpha = 0.6f))
+                    color = onboardingAccentGreen().copy(alpha = if (skipEnabled) 0.18f else 0.06f),
+                    border = BorderStroke(
+                        1.dp,
+                        onboardingAccentGreen().copy(alpha = if (skipEnabled) 0.6f else 0.25f)
+                    )
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
-                            text = "Skip All",
+                            text = "Skip to Setup",
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = onboardingTextPrimary()
+                            color = onboardingTextPrimary().copy(alpha = if (skipEnabled) 1f else 0.45f)
                         )
                     }
                 }
