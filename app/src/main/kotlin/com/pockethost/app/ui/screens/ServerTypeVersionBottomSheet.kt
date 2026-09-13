@@ -44,6 +44,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
+import com.pockethost.app.ui.theme.tabularNums
 import com.pockethost.app.ui.theme.Monocraft
 import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.data.model.ServerType
@@ -540,7 +541,7 @@ fun ServerTypeVersionBottomSheet(
                                                 if (downloadingVersion == version) {
                                                     Text(
                                                         text = "Downloading: $downloadProgressPercent%",
-                                                        style = MaterialTheme.typography.bodySmall,
+                                                        style = tabularNums(MaterialTheme.typography.bodySmall),
                                                         fontWeight = FontWeight.Bold,
                                                         color = PocketColors.Primary
                                                     )
@@ -916,6 +917,7 @@ fun ServerTypeVersionBottomSheet(
                                 ) {
                                     Text(
                                         text = "$downloadProgressPercent%",
+                                        style = tabularNums(),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         fontFamily = Monocraft,

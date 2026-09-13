@@ -65,6 +65,7 @@ import com.pockethost.app.ui.components.DuoButtonVariant
 import com.pockethost.app.ui.components.GameCard
 import com.pockethost.app.ui.components.duoOutlinedTextFieldColors
 import com.pockethost.app.ui.components.duoTextFieldShape
+import com.pockethost.app.ui.theme.tabularNums
 import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.ui.theme.Monocraft
 import com.pockethost.app.util.LocalAppStrings
@@ -362,6 +363,7 @@ fun FilesScreen(
                                 )
                                 Text(
                                     text = "$cloudBackupProgress%",
+                                    style = tabularNums(),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = PocketColors.PrimaryDark

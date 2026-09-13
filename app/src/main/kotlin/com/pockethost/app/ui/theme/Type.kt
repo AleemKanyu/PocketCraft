@@ -1,6 +1,8 @@
 package com.pockethost.app.ui.theme
 
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Typography
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -32,6 +34,18 @@ val DMMono = FontFamily.Monospace
 
 /** Convenience alias used by button components. */
 val ButtonFont = Outfit
+
+/**
+ * Fixed-width digits for numbers that change while on screen.
+ *
+ * Outfit's default figures are proportional, so a counter ticking 9% -> 10% -> 100% changes width
+ * on almost every update and shoves whatever sits next to it — progress labels, RAM readouts and
+ * player counts all visibly twitch. "tnum" makes every digit occupy the same advance width, so the
+ * number updates in place. Apply it to live values, not to prose.
+ */
+@Composable
+fun tabularNums(base: TextStyle = LocalTextStyle.current): TextStyle =
+    base.copy(fontFeatureSettings = "tnum")
 
 val PocketCraftTypography = Typography(
     displayLarge = TextStyle(

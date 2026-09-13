@@ -99,6 +99,7 @@ import com.pockethost.app.ui.components.GameCard
 import com.pockethost.app.ui.components.IosDragHandle
 import com.pockethost.app.ui.components.PocketWorldIcon
 import com.pockethost.app.ui.components.AnimatedEntranceContainer
+import com.pockethost.app.ui.theme.tabularNums
 import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.util.LocalAppStrings
 import kotlinx.coroutines.launch
@@ -827,6 +828,7 @@ private fun DimensionRow(
             if (isImporting) {
                 Text(
                     text = "${importProgress.toInt().coerceIn(0, 100)}%",
+                    style = tabularNums(),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
@@ -1101,6 +1103,7 @@ private fun BackupsManagementCard(
                         )
                         Text(
                             text = "$cloudBackupProgress%",
+                            style = tabularNums(),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = PocketColors.PrimaryDark

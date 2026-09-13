@@ -96,6 +96,7 @@ import com.pockethost.app.ui.components.AnnouncementDialog
 import com.pockethost.app.ui.components.BroadcastPopup
 import com.pockethost.app.ui.components.NewFeaturesPopup
 import com.pockethost.app.ui.components.DuoButton
+import com.pockethost.app.ui.theme.tabularNums
 import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.ui.theme.PocketMotion
 import com.pockethost.app.ui.theme.card3d
@@ -2046,6 +2047,7 @@ private fun ModpackImportProgressCard(
                 if (!isError) {
                     Text(
                         text = "${progress.coerceIn(0, 100)}%",
+                        style = tabularNums(),
                         color = PocketColors.Primary,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 18.sp
@@ -2265,6 +2267,7 @@ private fun RestoreProgressDialog(stateHolder: ServerStateHolder) {
                             )
                             Text(
                                 text = "$progress%",
+                                style = tabularNums(),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = PocketColors.Primary,

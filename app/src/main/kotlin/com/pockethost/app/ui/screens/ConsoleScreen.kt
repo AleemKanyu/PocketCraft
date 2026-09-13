@@ -165,6 +165,7 @@ import com.pockethost.app.ui.components.VersionUpgradeCard
 import com.pockethost.app.ui.components.duoOutlinedTextFieldColors
 import com.pockethost.app.ui.components.duoTextFieldShape
 import com.pockethost.app.service.VersionCatalog
+import com.pockethost.app.ui.theme.tabularNums
 import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.ui.theme.PocketMotion
 import com.pockethost.app.feedback.FeedbackService
@@ -1308,6 +1309,7 @@ private fun StartupProgressCard(
                 ) {
                     Text(
                         text = "$progressPercent%",
+                        style = tabularNums(),
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                         color = PocketColors.Primary,
                         fontWeight = FontWeight.ExtraBold,
@@ -3118,6 +3120,7 @@ private fun RamUsageCard(usedMb: Int, maxMb: Int) {
                 }
                 Text(
                     text = "${usedMb} MB / ${maxMb} MB  (${(fraction * 100).toInt()}%)",
+                    style = tabularNums(),
                     fontSize = 12.sp,
                     color = barColor,
                     fontWeight = FontWeight.SemiBold,

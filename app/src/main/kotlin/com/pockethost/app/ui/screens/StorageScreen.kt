@@ -62,6 +62,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.pockethost.app.service.ServerFileManager
+import com.pockethost.app.ui.theme.tabularNums
 import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.ui.theme.PocketMotion
 import java.io.File
@@ -291,6 +292,7 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                         }
                         Text(
                             text = if (uploadIndeterminate) LocalAppStrings.current.uploading else "$uploadProgress%",
+                            style = tabularNums(),
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 16.sp,
                             color = MaterialTheme.colorScheme.primary
