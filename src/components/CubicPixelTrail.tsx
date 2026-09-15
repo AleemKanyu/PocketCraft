@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 const H = 12; // Grid cell size (12px)
 
@@ -12,6 +12,12 @@ interface Particle {
 
 export const CubicPixelTrail: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [isDark, setIsDark] = useState(() =>
+    typeof document !== "undefined"
+      ? document.documentElement.classList.contains("dark") ||
+        window.matchMedia("(prefers-color-scheme: dark)").matches
+      : true
+  );
 
   useEffect(() => {
     // Only enable on desktop pointer devices with motion allowed
@@ -28,20 +34,25 @@ export const CubicPixelTrail: React.FC = () => {
       document.documentElement.classList.contains("dark") ||
       window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-    // Palette: dark mode has warm stone/charcoal; light mode has soft light-grey stone (NO black)
+    // Dark mode uses difference-tuned values so white text turns pitch-black (#000000) under pixels
+    // Light mode uses soft clean light-stone shades (no black)
     const getColors = (dark: boolean) => ({
       grays: dark
-        ? ["#221e19", "#39332a", "#6a6350", "#ece7da"]
+        ? ["#302a20", "#706855", "#d0cbbe", "#ffffff"]
         : ["#f2f1ec", "#e3e1d8", "#cbc8bb", "#b2afa0"],
       hot: dark
         ? ["#f6d64a", "#e8842a", "#b52f10"]
         : ["#f3cc51", "#e69b52", "#9e9a8f"],
     });
 
-    let colors = getColors(getIsDark());
+    let currentIsDark = getIsDark();
+    let colors = getColors(currentIsDark);
 
     const observer = new MutationObserver(() => {
-      colors = getColors(getIsDark());
+      const dark = getIsDark();
+      currentIsDark = dark;
+      setIsDark(dark);
+      colors = getColors(dark);
     });
     observer.observe(document.documentElement, {
       attributes: true,
@@ -166,7 +177,7 @@ export const CubicPixelTrail: React.FC = () => {
       shakeMagnitude = 4.5;
       isShaking = true;
 
-      // Spawn subtle localized mini blast sparks (8-10 small particles)
+      // Spawn subtle localized mini blast sparks (8 small particles)
       const numParticles = 8;
       for (let i = 0; i < numParticles; i++) {
         const angle = (Math.PI * 2 * i) / numParticles + (Math.random() * 0.4 - 0.2);
@@ -261,7 +272,7 @@ export const CubicPixelTrail: React.FC = () => {
           // Viewport culling
           if (r < visibleMinRow || r > visibleMaxRow) continue;
 
-          // 4-tier palette: dark mode stone vs light mode clean light-stone (no black)
+          // 4-tier palette: tuned for difference inversion over text
           const color =
             val > 1.15
               ? colors.grays[3]
@@ -335,7 +346,10 @@ export const CubicPixelTrail: React.FC = () => {
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="pointer-events-none fixed inset-0 -z-10 select-none"
+      className="pointer-events-none fixed inset-0 z-30 select-none"
+      style={{
+        mixBlendMode: isDark ? "difference" : "normal",
+      }}
     />
   );
 };

@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, X, ZoomIn } from "lucide-react";
 
 interface ScreenshotItem {
   id: number;
+  number: string;
   title: string;
   tag: string;
   description: string;
@@ -15,6 +16,7 @@ interface ScreenshotItem {
 const screenshots: ScreenshotItem[] = [
   {
     id: 1,
+    number: "01",
     title: "Server Dashboard",
     tag: "Real-time Metrics",
     description:
@@ -23,6 +25,7 @@ const screenshots: ScreenshotItem[] = [
   },
   {
     id: 2,
+    number: "02",
     title: "Player Controls & Stats",
     tag: "Player Management",
     description:
@@ -31,6 +34,7 @@ const screenshots: ScreenshotItem[] = [
   },
   {
     id: 3,
+    number: "03",
     title: "Operator Chat & Terminal",
     tag: "Live Console",
     description:
@@ -39,6 +43,7 @@ const screenshots: ScreenshotItem[] = [
   },
   {
     id: 4,
+    number: "04",
     title: "Themes & Customization",
     tag: "Personalization",
     description:
@@ -47,6 +52,7 @@ const screenshots: ScreenshotItem[] = [
   },
   {
     id: 5,
+    number: "05",
     title: "Performance & Optimization",
     tag: "Engine Tuning",
     description:
@@ -55,6 +61,7 @@ const screenshots: ScreenshotItem[] = [
   },
   {
     id: 6,
+    number: "06",
     title: "Resource Packs & Mods",
     tag: "Addon Support",
     description:
@@ -63,6 +70,7 @@ const screenshots: ScreenshotItem[] = [
   },
   {
     id: 7,
+    number: "07",
     title: "Worlds & Cloud Backups",
     tag: "Safe Storage",
     description:
@@ -76,10 +84,18 @@ interface ScreenshotCardProps {
   index: number;
   theme: string;
   isLowEnd: boolean;
+  isActive: boolean;
   onSelect: (screenshot: ScreenshotItem) => void;
 }
 
-const ScreenshotCard = ({ screenshot, index, theme, isLowEnd, onSelect }: ScreenshotCardProps) => {
+const ScreenshotCard = ({
+  screenshot,
+  index,
+  theme,
+  isLowEnd,
+  isActive,
+  onSelect,
+}: ScreenshotCardProps) => {
   return (
     <motion.div
       initial={{ opacity: 0, y: 30, scale: 0.95 }}
@@ -87,7 +103,7 @@ const ScreenshotCard = ({ screenshot, index, theme, isLowEnd, onSelect }: Screen
       viewport={{ once: true, margin: "-40px" }}
       transition={{
         duration: 0.5,
-        delay: index * 0.06,
+        delay: index * 0.05,
         ease: [0.25, 0.46, 0.45, 0.94],
       }}
       className="flex-shrink-0 snap-center group cursor-pointer"
@@ -95,10 +111,13 @@ const ScreenshotCard = ({ screenshot, index, theme, isLowEnd, onSelect }: Screen
     >
       {/* Phone Frame */}
       <motion.div
-        className="relative phone-frame w-48 sm:w-56 md:w-64"
-        whileHover={isLowEnd ? undefined : { y: -8, rotateY: -3, rotateX: 3, scale: 1.02 }}
+        className={`relative phone-frame w-52 sm:w-60 md:w-64 transition-all duration-300 ${
+          isActive
+            ? "ring-2 ring-[#7FE620] shadow-[0_20px_50px_rgba(127,230,32,0.2)]"
+            : "ring-1 ring-white/10 dark:ring-white/15 hover:ring-white/30"
+        }`}
+        whileHover={isLowEnd ? undefined : { y: -8, scale: 1.02 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
-        style={{ perspective: 1000 }}
       >
         {/* Side buttons */}
         <div className="side-button-right" />
@@ -106,15 +125,17 @@ const ScreenshotCard = ({ screenshot, index, theme, isLowEnd, onSelect }: Screen
         <div className="side-button-left-2" />
         <div className="side-button-left-3" />
 
-        {/* Glow behind phone on hover */}
-        <div
-          className="absolute -inset-4 rounded-[3rem] opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none blur-xl"
-          style={{
-            background: `radial-gradient(circle, ${
-              theme === "dark" ? "rgba(127,230,32,0.2)" : "rgba(127,230,32,0.15)"
-            }, transparent 70%)`,
-          }}
-        />
+        {/* Ambient glow behind active phone */}
+        {isActive && (
+          <div
+            className="absolute -inset-4 rounded-[3rem] opacity-70 pointer-events-none blur-2xl -z-10"
+            style={{
+              background: `radial-gradient(circle, ${
+                theme === "dark" ? "rgba(127,230,32,0.25)" : "rgba(127,230,32,0.2)"
+              }, transparent 70%)`,
+            }}
+          />
+        )}
 
         {/* Screen */}
         <div className="phone-screen relative overflow-hidden bg-black">
@@ -136,15 +157,16 @@ const ScreenshotCard = ({ screenshot, index, theme, isLowEnd, onSelect }: Screen
           <div
             className="absolute inset-0 pointer-events-none z-10 opacity-30 group-hover:opacity-50 transition-opacity duration-300"
             style={{
-              background: "linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 50%, transparent 100%)",
+              background:
+                "linear-gradient(135deg, rgba(255,255,255,0.25) 0%, transparent 50%, transparent 100%)",
             }}
           />
 
-          {/* Hover Zoom Prompt Badge */}
-          <div className="absolute inset-0 z-20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-black/40 backdrop-blur-[2px]">
-            <div className="px-3.5 py-2 rounded-sm bg-[#7FE620] text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
+          {/* Hover Zoom Badge */}
+          <div className="absolute inset-0 z-20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-black/45 backdrop-blur-[2px]">
+            <div className="px-3.5 py-2 rounded-sm bg-[#7FE620] text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-xl transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
               <ZoomIn size={14} className="stroke-[2.5]" />
-              <span>Click to Expand</span>
+              <span>Expand Preview</span>
             </div>
           </div>
         </div>
@@ -153,11 +175,15 @@ const ScreenshotCard = ({ screenshot, index, theme, isLowEnd, onSelect }: Screen
       {/* Label below */}
       <div className="text-center mt-4 sm:mt-5">
         <span className="font-mono text-[11px] uppercase tracking-widest text-[#7FE620] font-bold block mb-1">
-          {screenshot.tag}
+          {screenshot.number} • {screenshot.tag}
         </span>
         <p
           className={`text-xs sm:text-sm font-bold tracking-wide transition-colors ${
-            theme === "dark" ? "text-white/80 group-hover:text-white" : "text-black/80 group-hover:text-black"
+            isActive
+              ? "text-[#7FE620]"
+              : theme === "dark"
+              ? "text-white/80 group-hover:text-white"
+              : "text-black/80 group-hover:text-black"
           }`}
         >
           {screenshot.title}
@@ -269,10 +295,10 @@ export default function Screenshots() {
         theme === "dark" ? "border-white/5" : "border-black/5"
       }`}
     >
-      {/* Decorative gradient ambient glow */}
+      {/* Decorative ambient stage glow */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <motion.div
-          className={`absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] rounded-full blur-3xl ${
+          className={`absolute top-1/4 left-1/2 -translate-x-1/2 w-[900px] h-[450px] rounded-full blur-3xl ${
             theme === "dark" ? "bg-[#7FE620]/5" : "bg-[#7FE620]/8"
           }`}
           animate={isLowEnd ? undefined : { scale: [1, 1.1, 1] }}
@@ -299,64 +325,65 @@ export default function Screenshots() {
               theme === "dark" ? "text-white/60" : "text-black/60"
             }`}
           >
-            Built for touch-first server administration. Tap any screen to inspect live controls, player
-            management, and performance telemetry.
+            Built for touch-first server administration. Tap any phone to inspect real-time metrics,
+            live console commands, and player controls in high-resolution detail.
           </p>
         </div>
 
-        {/* Category Pills / Navigation Tabs */}
+        {/* Category Selector Tabs */}
         <div className="flex items-center justify-start sm:justify-center gap-2 overflow-x-auto pb-4 mb-8 scrollbar-hide px-2">
           {screenshots.map((item, idx) => (
             <button
               key={item.id}
               onClick={() => scrollToIndex(idx)}
-              className={`font-mono text-xs px-3.5 py-1.5 rounded-sm whitespace-nowrap transition-all duration-200 border ${
+              className={`font-mono text-xs px-3.5 py-2 rounded-sm whitespace-nowrap transition-all duration-200 border flex items-center gap-1.5 ${
                 currentIndex === idx
-                  ? "bg-[#7FE620] text-black font-bold border-[#7FE620] shadow-[0_0_12px_rgba(127,230,32,0.4)]"
+                  ? "bg-[#7FE620] text-black font-bold border-[#7FE620] shadow-[0_0_15px_rgba(127,230,32,0.4)]"
                   : theme === "dark"
                   ? "bg-white/[0.03] text-white/60 border-white/10 hover:border-white/20 hover:text-white"
                   : "bg-black/[0.03] text-black/60 border-black/10 hover:border-black/20 hover:text-black"
               }`}
             >
-              {item.title}
+              <span className="opacity-60">{item.number}</span>
+              <span>{item.title}</span>
             </button>
           ))}
         </div>
 
-        {/* Carousel Container with Floating Navigation Arrows */}
-        <div className="relative max-w-6xl mx-auto group/carousel">
-          {/* Left Navigation Arrow */}
+        {/* Enhanced Carousel Stage with Outer Floating Arrows (NO side gradient masks) */}
+        <div className="relative max-w-6xl mx-auto py-4">
+          {/* Left Floating Arrow */}
           <button
             onClick={scrollPrev}
             disabled={currentIndex === 0}
-            className={`absolute left-0 sm:-left-5 top-[40%] -translate-y-1/2 z-30 w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 shadow-xl border ${
+            className={`absolute -left-2 sm:-left-6 top-[42%] -translate-y-1/2 z-30 w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 shadow-2xl border ${
               currentIndex === 0
-                ? "opacity-30 cursor-not-allowed bg-black/40 border-white/10 text-white/40"
-                : "bg-black/80 hover:bg-[#7FE620] border-white/20 hover:border-[#7FE620] text-white hover:text-black hover:scale-110 active:scale-95 cursor-pointer backdrop-blur-md"
+                ? "opacity-20 cursor-not-allowed bg-black/40 border-white/10 text-white/30"
+                : "bg-black/85 hover:bg-[#7FE620] border-white/20 hover:border-[#7FE620] text-white hover:text-black hover:scale-110 active:scale-95 cursor-pointer backdrop-blur-md"
             }`}
             aria-label="Previous screenshot"
           >
-            <ChevronLeft size={22} className="stroke-[2.5] -translate-x-0.5" />
+            <ChevronLeft size={24} className="stroke-[2.5] -translate-x-0.5" />
           </button>
 
-          {/* Right Navigation Arrow */}
+          {/* Right Floating Arrow */}
           <button
             onClick={scrollNext}
             disabled={currentIndex === screenshots.length - 1}
-            className={`absolute right-0 sm:-right-5 top-[40%] -translate-y-1/2 z-30 w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 shadow-xl border ${
+            className={`absolute -right-2 sm:-right-6 top-[42%] -translate-y-1/2 z-30 w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 shadow-2xl border ${
               currentIndex === screenshots.length - 1
-                ? "opacity-30 cursor-not-allowed bg-black/40 border-white/10 text-white/40"
-                : "bg-black/80 hover:bg-[#7FE620] border-white/20 hover:border-[#7FE620] text-white hover:text-black hover:scale-110 active:scale-95 cursor-pointer backdrop-blur-md"
+                ? "opacity-20 cursor-not-allowed bg-black/40 border-white/10 text-white/30"
+                : "bg-black/85 hover:bg-[#7FE620] border-white/20 hover:border-[#7FE620] text-white hover:text-black hover:scale-110 active:scale-95 cursor-pointer backdrop-blur-md"
             }`}
             aria-label="Next screenshot"
           >
-            <ChevronRight size={22} className="stroke-[2.5] translate-x-0.5" />
+            <ChevronRight size={24} className="stroke-[2.5] translate-x-0.5" />
           </button>
 
-          {/* Horizontally Scrollable Carousel Strip */}
+          {/* Horizontally Scrollable Carousel Strip (Clear unobstructed views) */}
           <div
             ref={containerRef}
-            className="flex gap-4 sm:gap-8 md:gap-10 overflow-x-auto pb-6 px-4 sm:px-8 md:px-12 scrollbar-hide scroll-smooth"
+            className="flex gap-4 sm:gap-8 md:gap-10 overflow-x-auto py-6 px-4 sm:px-8 md:px-12 scrollbar-hide scroll-smooth"
             style={{
               scrollSnapType: "x mandatory",
               WebkitOverflowScrolling: "touch",
@@ -369,31 +396,16 @@ export default function Screenshots() {
                   index={index}
                   theme={theme}
                   isLowEnd={isLowEnd}
+                  isActive={currentIndex === index}
                   onSelect={(item) => setSelectedScreenshot(item)}
                 />
               </div>
             ))}
           </div>
-
-          {/* Gradient fade edges */}
-          <div
-            className={`absolute left-0 top-0 bottom-0 w-12 pointer-events-none z-20 ${
-              theme === "dark"
-                ? "bg-gradient-to-r from-[#0a0a0a] to-transparent"
-                : "bg-gradient-to-r from-white to-transparent"
-            }`}
-          />
-          <div
-            className={`absolute right-0 top-0 bottom-0 w-12 pointer-events-none z-20 ${
-              theme === "dark"
-                ? "bg-gradient-to-l from-[#0a0a0a] to-transparent"
-                : "bg-gradient-to-l from-white to-transparent"
-            }`}
-          />
         </div>
 
-        {/* Progress Bar and Indicator Dots */}
-        <div className="flex flex-col items-center gap-3 mt-6 sm:mt-8">
+        {/* Bottom Navigation & Indicator Progress */}
+        <div className="flex flex-col items-center gap-3 mt-4 sm:mt-6">
           <div className="flex justify-center items-center gap-2">
             {screenshots.map((_, index) => (
               <button
@@ -416,7 +428,7 @@ export default function Screenshots() {
               theme === "dark" ? "text-white/40" : "text-black/50"
             }`}
           >
-            {currentIndex + 1} of {screenshots.length} • Click phone to inspect
+            {currentIndex + 1} of {screenshots.length} • Tap any phone to inspect
           </p>
         </div>
       </div>
@@ -429,7 +441,7 @@ export default function Screenshots() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-xl select-none"
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-2xl select-none"
             onClick={() => setSelectedScreenshot(null)}
           >
             {/* Modal Container */}
@@ -444,7 +456,7 @@ export default function Screenshots() {
               {/* Close Button */}
               <button
                 onClick={() => setSelectedScreenshot(null)}
-                className="absolute -top-2 right-2 sm:top-2 sm:right-2 z-50 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all duration-200 border border-white/20 hover:scale-105"
+                className="absolute -top-2 right-2 sm:top-2 sm:right-2 z-50 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all duration-200 border border-white/20 hover:scale-105"
                 aria-label="Close popup"
               >
                 <X size={20} className="stroke-[2.5]" />
@@ -453,21 +465,21 @@ export default function Screenshots() {
               {/* Prev / Next Buttons in Modal */}
               <button
                 onClick={handleModalPrev}
-                className="absolute left-1 sm:left-2 top-1/2 -translate-y-1/2 z-40 w-11 h-11 rounded-full bg-black/70 hover:bg-[#7FE620] border border-white/20 hover:border-[#7FE620] text-white hover:text-black flex items-center justify-center transition-all duration-200 shadow-2xl hover:scale-110"
+                className="absolute left-1 sm:left-2 top-1/2 -translate-y-1/2 z-40 w-12 h-12 rounded-full bg-black/70 hover:bg-[#7FE620] border border-white/20 hover:border-[#7FE620] text-white hover:text-black flex items-center justify-center transition-all duration-200 shadow-2xl hover:scale-110"
                 aria-label="Previous screenshot"
               >
-                <ChevronLeft size={24} className="stroke-[2.5]" />
+                <ChevronLeft size={26} className="stroke-[2.5]" />
               </button>
               <button
                 onClick={handleModalNext}
-                className="absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 z-40 w-11 h-11 rounded-full bg-black/70 hover:bg-[#7FE620] border border-white/20 hover:border-[#7FE620] text-white hover:text-black flex items-center justify-center transition-all duration-200 shadow-2xl hover:scale-110"
+                className="absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 z-40 w-12 h-12 rounded-full bg-black/70 hover:bg-[#7FE620] border border-white/20 hover:border-[#7FE620] text-white hover:text-black flex items-center justify-center transition-all duration-200 shadow-2xl hover:scale-110"
                 aria-label="Next screenshot"
               >
-                <ChevronRight size={24} className="stroke-[2.5]" />
+                <ChevronRight size={26} className="stroke-[2.5]" />
               </button>
 
               {/* Premium Phone Mockup Showcase */}
-              <div className="relative phone-frame w-56 sm:w-64 md:w-72 flex-shrink-0 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/20">
+              <div className="relative phone-frame w-56 sm:w-64 md:w-72 flex-shrink-0 shadow-[0_30px_70px_rgba(0,0,0,0.95)] ring-2 ring-white/25">
                 {/* Physical side buttons */}
                 <div className="side-button-right" />
                 <div className="side-button-left-1" />
@@ -475,7 +487,7 @@ export default function Screenshots() {
                 <div className="side-button-left-3" />
 
                 {/* Subtle outer emerald aura */}
-                <div className="absolute -inset-6 rounded-[3.5rem] bg-[#7FE620]/20 blur-2xl pointer-events-none -z-10" />
+                <div className="absolute -inset-6 rounded-[3.5rem] bg-[#7FE620]/25 blur-2xl pointer-events-none -z-10" />
 
                 {/* High-res Screen */}
                 <div className="phone-screen bg-black relative">
@@ -502,7 +514,7 @@ export default function Screenshots() {
               {/* Feature Description Card on Right */}
               <div className="text-left max-w-sm text-white space-y-4">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-sm border border-[#7FE620]/50 bg-[#7FE620]/10 font-mono text-xs uppercase tracking-widest text-[#7FE620] font-bold">
-                  {selectedScreenshot.tag}
+                  {selectedScreenshot.number} • {selectedScreenshot.tag}
                 </div>
                 <h3 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
                   {selectedScreenshot.title}
@@ -520,7 +532,7 @@ export default function Screenshots() {
                         setSelectedScreenshot(s);
                         scrollToIndex(idx);
                       }}
-                      className={`w-8 h-10 rounded-sm overflow-hidden border transition-all ${
+                      className={`w-8 h-11 rounded-sm overflow-hidden border transition-all ${
                         s.id === selectedScreenshot.id
                           ? "border-[#7FE620] ring-2 ring-[#7FE620]/50 scale-110"
                           : "border-white/20 opacity-50 hover:opacity-100"
