@@ -13,39 +13,44 @@ const faqs = [
       "No! PocketHost runs entirely on your Android phone. You don't need a computer, laptop, or separate server. All you need is an Android device and an internet connection.",
   },
   {
-    question: "Can Bedrock players join my Java server?",
+    question: "How much does PocketHost cost?",
     answer:
-      "Yes! With cross-platform support, players on Bedrock, Pocket Edition, and consoles can join your Java Edition server. It just works.",
+      "PocketHost is 100% free forever. There are no credit cards required, no monthly subscriptions, no coin or credit grinding systems, and no paywalls. You get unlimited player slots, instant server starts with zero queue times, and complete plugin and mod support without paying anything.",
   },
   {
-    question: "How much does it cost?",
+    question: "Why is PocketHost free? What's the catch?",
     answer:
-      "PocketHost is free to download and use. You can host one world server with unlimited player slots. However, relay hosting involves costs to keep servers running online across the globe. Some premium features may be introduced in the future, such as hosting multiple worlds simultaneously, advanced analytics, or priority relay infrastructure. These may be available through a one-time purchase or optional ads. The core experience will always remain free.",
+      "There is no catch! Traditional hosting services (like Aternos or paid hosts) charge money or enforce 30+ minute waiting queues because they must rent and power expensive cloud datacenters. PocketHost runs the server engine directly on your Android phone's processor and RAM. Your phone does the hosting locally, eliminating cloud server rental costs entirely.",
+  },
+  {
+    question: "Can Bedrock players join my Java server?",
+    answer:
+      "Yes! With built-in GeyserMC cross-platform support, players on Minecraft Bedrock (Android, iOS, Windows, Xbox, PlayStation, Switch) can seamlessly join your Java Edition server. It works out of the box with zero complex setup.",
   },
   {
     question: "Will my server stay online when I lock my phone?",
     answer:
-      "Yes. Once your server starts, it keeps running even if your screen turns off. You can use your phone normally while friends play on your server.",
+      "Yes. PocketHost runs as an optimized Android background service. Once your server starts, it keeps running even if your screen is locked or you switch to other apps, letting your friends play uninterrupted.",
   },
   {
     question: "What's the maximum number of players?",
     answer:
-      "It depends on your phone's hardware. Most modern Android devices can handle 10-20 players comfortably. More powerful devices can support more players.",
+      "PocketHost sets no artificial player caps or slot paywalls (unlike Minehut's 10-player limit). Capacity depends entirely on your phone's hardware. Most modern Android devices handle 10–25+ players comfortably.",
   },
   {
     question: "Can I install plugins and mods?",
     answer:
-      "Yes! PocketHost supports Bukkit plugins and Spigot community plugins. Drag and drop .jar files directly in the app. Changes take effect immediately.",
+      "Yes! PocketHost provides full support for PaperMC, Bukkit, and Spigot .jar plugins, as well as Bedrock add-ons (.mcpack/.mcaddon). You can drop custom .jar files directly into your plugins folder or use our built-in modpack browser.",
   },
   {
-    question: "Is my world data safe?",
+    question: "Is my world data safe? Will it ever be deleted?",
     answer:
-      "Yes. Your world files stay on your device. You can also backup to Google Drive for extra safety. I never access or inspect your game data.",
+      "Your world files stay safely stored directly on your phone's storage. Unlike free cloud hosts that wipe servers after a few weeks of inactivity, PocketHost will never delete your worlds. You can also create automated local backups or sync to Google Drive.",
   },
   {
-    question: "Do I need port forwarding?",
+    question: "Do I need port forwarding or router access?",
     answer:
-      "No! PocketHost uses proprietary relay technology so players connect without any router configuration. Just tap start and share the join link.",
+      "No! PocketHost features built-in encrypted relay tunneling. Friends can connect from anywhere over Wi-Fi or mobile data with zero router configuration or port forwarding needed.",
   },
 ];
 

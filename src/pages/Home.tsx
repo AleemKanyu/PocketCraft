@@ -26,6 +26,11 @@ const DiscordIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
 
 const homeFaqs = [
   {
+    question: "Is PocketHost really 100% free?",
+    answer:
+      "Yes, completely free. No credit cards, subscriptions, coin grinding, or paywalls. PocketHost runs locally on your phone rather than costly cloud servers, keeping it free forever.",
+  },
+  {
     question: "Do I need a PC to use PocketHost?",
     answer:
       "No. PocketHost is built for Android-first hosting, so you can start and manage your server directly from your phone.",
