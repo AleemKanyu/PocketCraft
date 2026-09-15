@@ -2,7 +2,7 @@ import { lazy, Suspense } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { useScrollToTop } from "./hooks/useScrollToTop";
 import Home from "./pages/Home";
-import { ThemeProvider } from "./lib/ThemeContext";
+import { ThemeProvider, useTheme } from "./lib/ThemeContext";
 import { CubicPixelTrail } from "./components/CubicPixelTrail";
 
 const FAQ = lazy(() => import("./pages/FAQ"));
@@ -39,13 +39,22 @@ function AppRoutes() {
   );
 }
 
-export default function App() {
+function MainLayout() {
+  const { theme } = useTheme();
   return (
-    <ThemeProvider>
+    <div className={`relative isolate min-h-screen select-none ${theme === "dark" ? "bg-[#0a0a0a]" : "bg-white"}`}>
       <CubicPixelTrail />
       <Router>
         <AppRoutes />
       </Router>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <MainLayout />
     </ThemeProvider>
   );
 }

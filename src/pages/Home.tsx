@@ -53,7 +53,7 @@ const Home = () => {
   return (
     <div
       className={`min-h-screen selection:bg-[#7FE620] selection:text-black font-sans section-transition ${
-        theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"
+        theme === "dark" ? "text-white" : "text-black"
       }`}
     >
       <SEO
@@ -75,10 +75,10 @@ const Home = () => {
       <section
         id="faq"
         className={`py-24 px-6 border-t-4 section-transition ${
-          theme === "dark" ? "bg-[#0a0a0a] border-white/5" : "bg-white border-black/5"
+          theme === "dark" ? "border-white/5" : "border-black/5"
         }`}
       >
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto relative z-10">
           <div className="text-center mb-12">
             <h2
               className={`text-3xl md:text-5xl font-extrabold mb-4 ${
@@ -127,7 +127,7 @@ const Home = () => {
       <section
         id="download"
         className={`py-32 px-6 relative overflow-hidden border-t-4 section-transition ${
-          theme === "dark" ? "bg-[#0a0a0a] border-white/5" : "bg-white border-black/5"
+          theme === "dark" ? "border-white/5" : "border-black/5"
         }`}
       >
         {!isLowEnd && (

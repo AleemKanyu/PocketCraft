@@ -133,8 +133,8 @@ export default function HowItWorks() {
   return (
     <section className={`py-32 px-4 sm:px-6 border-t-4 section-transition ${
       theme === "dark"
-        ? "bg-[#0a0a0a] border-white/5"
-        : "bg-white border-black/5"
+        ? "border-white/5"
+        : "border-black/5"
     }`}>
       {/* Grid bg */}
       <div className={`absolute inset-0 z-0 opacity-5 [mask-image:radial-gradient(ellipse_at_center,transparent_20%,black)] pointer-events-none`}>

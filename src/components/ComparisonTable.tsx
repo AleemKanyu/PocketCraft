@@ -163,10 +163,10 @@ export const ComparisonTable: React.FC = () => {
     <section
       id="compare"
       className={`py-24 px-4 sm:px-6 border-t-4 section-transition ${
-        isDark ? "bg-[#0a0a0a] border-white/5" : "bg-[#faf8f5] border-black/5"
+        isDark ? "border-white/5" : "border-black/5"
       }`}
     >
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-5xl mx-auto relative z-10">
         {/* Section Header */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1 mb-4 rounded-sm border border-[#7FE620]/40 bg-[#7FE620]/10 font-mono text-xs uppercase tracking-widest text-[#7FE620] font-bold">

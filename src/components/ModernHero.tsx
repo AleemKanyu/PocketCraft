@@ -104,9 +104,7 @@ export function ModernHero() {
         const rect = e.currentTarget.getBoundingClientRect();
         setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
       }}
-      className={`relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden pt-32 pb-20 section-transition ${
-        theme === "dark" ? "bg-[#0a0a0a]" : "bg-white"
-      }`}
+      className="relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden pt-32 pb-20 section-transition"
     >
       {/* Interactive Cursor Ambient Spotlight */}
       {!isLowEnd && (
@@ -123,8 +121,8 @@ export function ModernHero() {
       {/* Animated gradient background */}
       <div className={`absolute inset-0 ${isLowEnd ? "" : "animate-gradient-shift"} pointer-events-none ${
         theme === "dark"
-          ? "bg-gradient-to-br from-[#7FE620]/5 via-[#0a0a0a] to-[#1CB0F6]/5"
-          : "bg-gradient-to-br from-[#7FE620]/10 via-white to-[#1CB0F6]/5"
+          ? "bg-gradient-to-br from-[#7FE620]/5 via-transparent to-[#1CB0F6]/5"
+          : "bg-gradient-to-br from-[#7FE620]/10 via-transparent to-[#1CB0F6]/5"
       }`} style={{ backgroundSize: "400% 400%" }} />
 
       {/* Colorful gradient blobs */}

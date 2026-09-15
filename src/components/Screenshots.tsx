@@ -149,8 +149,8 @@ export default function Screenshots() {
   return (
     <section className={`py-12 sm:py-24 md:py-40 px-3 sm:px-6 border-t-4 relative overflow-hidden section-transition ${
       theme === "dark"
-        ? "bg-[#0a0a0a] border-white/5"
-        : "bg-white border-black/5"
+        ? "border-white/5"
+        : "border-black/5"
     }`}>
       {/* Decorative gradient */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
