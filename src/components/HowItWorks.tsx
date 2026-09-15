@@ -131,7 +131,7 @@ export default function HowItWorks() {
   const { theme } = useTheme();
 
   return (
-    <section className={`py-32 px-4 sm:px-6 border-t-4 section-transition ${
+    <section className={`py-20 sm:py-32 px-4 sm:px-6 relative border-t section-transition ${
       theme === "dark"
         ? "border-white/5"
         : "border-black/5"

@@ -104,7 +104,7 @@ export function ModernHero() {
         const rect = e.currentTarget.getBoundingClientRect();
         setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
       }}
-      className="relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden pt-32 pb-20 section-transition"
+      className="relative min-h-[100dvh] sm:min-h-screen w-full flex flex-col items-center justify-start md:justify-center overflow-x-clip pt-20 sm:pt-28 md:pt-32 pb-28 sm:pb-36 section-transition"
     >
       {/* Interactive Cursor Ambient Spotlight */}
       {!isLowEnd && (
@@ -180,16 +180,16 @@ export function ModernHero() {
         </div>
       )}
 
-      {/* Mobile-only decorative items placed in open space below text */}
-      <div className="md:hidden absolute bottom-8 inset-x-0 pointer-events-none z-0">
+      {/* Mobile-only decorative items placed safely above bottom gradient */}
+      <div className="md:hidden absolute bottom-24 sm:bottom-28 inset-x-0 pointer-events-none z-0">
         <motion.img
           src={MINECRAFT_ICONS.hero.pickaxe}
           alt=""
           aria-hidden="true"
           loading="lazy"
           decoding="async"
-          className="absolute left-6 w-10 h-10 image-pixelated opacity-50"
-          animate={isLowEnd ? undefined : { y: [0, 8, 0], rotate: [-8, 8, -8] }}
+          className="absolute left-6 w-9 h-9 image-pixelated opacity-45"
+          animate={isLowEnd ? undefined : { y: [0, 6, 0], rotate: [-8, 8, -8] }}
           transition={isLowEnd ? undefined : { duration: 5, repeat: Infinity, ease: "easeInOut" }}
         />
         <motion.img
@@ -198,16 +198,25 @@ export function ModernHero() {
           aria-hidden="true"
           loading="lazy"
           decoding="async"
-          className="absolute right-6 w-9 h-9 image-pixelated opacity-55"
-          animate={isLowEnd ? undefined : { y: [0, 8, 0], rotate: [8, -8, 8] }}
+          className="absolute right-6 w-8 h-8 image-pixelated opacity-50"
+          animate={isLowEnd ? undefined : { y: [0, 6, 0], rotate: [8, -8, 8] }}
           transition={isLowEnd ? undefined : { duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
         />
       </div>
 
-      <div className="container relative z-10 px-6 mx-auto flex flex-col items-center text-center">
+      {/* Bottom transition gradient to smoothly blend into the next section */}
+      <div
+        className={`absolute bottom-0 inset-x-0 h-32 sm:h-44 md:h-56 pointer-events-none z-10 ${
+          theme === "dark"
+            ? "bg-gradient-to-b from-transparent via-[#0a0a0a]/75 to-[#0a0a0a]"
+            : "bg-gradient-to-b from-transparent via-white/75 to-white"
+        }`}
+      />
+
+      <div className="container relative z-20 px-4 sm:px-6 mx-auto flex flex-col items-center text-center">
         {/* Staggered headline */}
         <motion.h1
-          className={`text-4xl md:text-7xl leading-tight mb-6 font-extrabold ${
+          className={`text-3xl sm:text-5xl md:text-7xl leading-[1.18] sm:leading-tight mb-4 sm:mb-6 font-extrabold ${
             theme === "dark" ? "text-white" : "text-black"
           }`}
         >
@@ -258,7 +267,7 @@ export function ModernHero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.7 }}
-          className={`text-base md:text-lg max-w-2xl mx-auto mb-12 leading-relaxed font-medium ${
+          className={`text-sm sm:text-base md:text-lg max-w-2xl mx-auto mb-8 sm:mb-12 leading-relaxed font-medium ${
             theme === "dark" ? "text-white/50" : "text-black/60"
           }`}
         >
@@ -269,7 +278,7 @@ export function ModernHero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.8 }}
-          className="flex flex-col sm:flex-row gap-4 items-center justify-center w-full max-w-md mx-auto sm:max-w-none"
+          className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-center justify-center w-full max-w-xs sm:max-w-none mx-auto"
         >
           <motion.a
             href="https://github.com/AleemKanyu/PocketCraft/releases/latest/download/PocketHost.apk"
