@@ -1,21 +1,17 @@
 import React, { useEffect, useRef } from "react";
 
-interface PixelParticle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  size: number;
-  maxLife: number;
-  life: number;
-  shade: number;
+interface GridCell {
+  col: number;
+  row: number;
+  intensity: number; // 0.0 to 1.0
+  birth: number;     // timestamp in ms
 }
 
 export const CubicPixelTrail: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
-    // Only enable for desktop pointer devices with fine control
+    // Only enable on desktop pointer devices
     const isFinePointer = window.matchMedia("(pointer: fine)").matches;
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!isFinePointer || prefersReducedMotion) return;
@@ -30,11 +26,13 @@ export const CubicPixelTrail: React.FC = () => {
     let width = (canvas.width = window.innerWidth);
     let height = (canvas.height = window.innerHeight);
 
-    const particles: PixelParticle[] = [];
-    const MAX_PARTICLES = 65;
-    let lastX = 0;
-    let lastY = 0;
-    let hasMoved = false;
+    // 12px grid cell (matches the Minecraft pixel brush size in the reference)
+    const GRID_SIZE = 12;
+    const TRAIL_DURATION = 550; // ms lifetime
+
+    const activeCells = new Map<string, GridCell>();
+    let lastX: number | null = null;
+    let lastY: number | null = null;
 
     const handleResize = () => {
       if (!canvas) return;
@@ -48,46 +46,43 @@ export const CubicPixelTrail: React.FC = () => {
       document.documentElement.classList.contains("dark") ||
       window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-    const spawnParticle = (x: number, y: number, burst = false, angleOverride?: number) => {
-      if (particles.length >= MAX_PARTICLES) {
-        particles.shift();
-      }
-
-      const baseSize = burst ? 4 + Math.random() * 5 : 6 + Math.random() * 7;
-
-      let vx: number;
-      let vy: number;
-
-      if (burst && angleOverride !== undefined) {
-        const speed = 1.4 + Math.random() * 1.8;
-        vx = Math.cos(angleOverride) * speed;
-        vy = Math.sin(angleOverride) * speed;
+    const touchCell = (col: number, row: number, intensity: number, now: number) => {
+      const key = `${col},${row}`;
+      const existing = activeCells.get(key);
+      if (existing) {
+        existing.intensity = Math.max(existing.intensity, intensity);
+        existing.birth = now;
       } else {
-        vx = (Math.random() - 0.5) * 0.6;
-        vy = (Math.random() - 0.5) * 0.6;
+        activeCells.set(key, { col, row, intensity, birth: now });
       }
+    };
 
-      particles.push({
-        x: Math.round(x + (Math.random() - 0.5) * 4),
-        y: Math.round(y + (Math.random() - 0.5) * 4),
-        vx,
-        vy,
-        size: Math.round(baseSize),
-        maxLife: burst ? 28 + Math.random() * 12 : 38 + Math.random() * 18,
-        life: 0,
-        shade: Math.random(),
-      });
+    // Brush stamp: 1 core cell + 4 direct neighbors at medium + 4 diagonals at low
+    const stampBrush = (col: number, row: number, now: number) => {
+      touchCell(col, row, 1.0, now);
+
+      // Direct neighbors (cardinal)
+      touchCell(col + 1, row, 0.55, now);
+      touchCell(col - 1, row, 0.55, now);
+      touchCell(col, row + 1, 0.55, now);
+      touchCell(col, row - 1, 0.55, now);
+
+      // Diagonal neighbors
+      touchCell(col + 1, row + 1, 0.28, now);
+      touchCell(col - 1, row + 1, 0.28, now);
+      touchCell(col + 1, row - 1, 0.28, now);
+      touchCell(col - 1, row - 1, 0.28, now);
     };
 
     const handlePointerMove = (e: PointerEvent) => {
       const x = e.clientX;
       const y = e.clientY;
+      const now = performance.now();
 
-      if (!hasMoved) {
-        hasMoved = true;
+      if (lastX === null || lastY === null) {
         lastX = x;
         lastY = y;
-        spawnParticle(x, y);
+        stampBrush(Math.floor(x / GRID_SIZE), Math.floor(y / GRID_SIZE), now);
         return;
       }
 
@@ -95,77 +90,99 @@ export const CubicPixelTrail: React.FC = () => {
       const dy = y - lastY;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (dist > 14) {
-        const count = Math.min(Math.floor(dist / 14), 2);
-        for (let i = 0; i < count; i++) {
-          const ratio = (i + 1) / count;
-          spawnParticle(lastX + dx * ratio, lastY + dy * ratio);
-        }
-        lastX = x;
-        lastY = y;
+      // Interpolate points along the cursor trajectory to prevent gaps during fast movement
+      const stepSize = GRID_SIZE * 0.45;
+      const steps = Math.max(1, Math.ceil(dist / stepSize));
+
+      for (let i = 1; i <= steps; i++) {
+        const interpX = lastX + (dx * i) / steps;
+        const interpY = lastY + (dy * i) / steps;
+        const col = Math.floor(interpX / GRID_SIZE);
+        const row = Math.floor(interpY / GRID_SIZE);
+        stampBrush(col, row, now);
       }
+
+      lastX = x;
+      lastY = y;
+    };
+
+    const handlePointerLeave = () => {
+      lastX = null;
+      lastY = null;
     };
 
     const handlePointerDown = (e: MouseEvent) => {
-      const count = 6;
-      for (let i = 0; i < count; i++) {
-        const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
-        spawnParticle(e.clientX, e.clientY, true, angle);
+      const now = performance.now();
+      const col = Math.floor(e.clientX / GRID_SIZE);
+      const row = Math.floor(e.clientY / GRID_SIZE);
+
+      // Mini click burst
+      for (let dc = -2; dc <= 2; dc++) {
+        for (let dr = -2; dr <= 2; dr++) {
+          const dist = Math.sqrt(dc * dc + dr * dr);
+          if (dist <= 2.2) {
+            const intensity = Math.max(0.2, 1 - dist / 2.5);
+            touchCell(col + dc, row + dr, intensity, now);
+          }
+        }
       }
     };
 
     window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    window.addEventListener("pointerleave", handlePointerLeave, { passive: true });
     window.addEventListener("mousedown", handlePointerDown, { passive: true });
 
-    // Main animation loop rendering 2D flat pixel blocks matching the background
-    const render = () => {
+    // Render loop
+    const render = (time: number) => {
       ctx.clearRect(0, 0, width, height);
       const dark = isDarkMode();
 
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.life++;
+      activeCells.forEach((cell, key) => {
+        const age = time - cell.birth;
 
-        if (p.life >= p.maxLife) {
-          particles.splice(i, 1);
-          continue;
+        if (age >= TRAIL_DURATION) {
+          activeCells.delete(key);
+          return;
         }
 
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vx *= 0.96;
-        p.vy *= 0.96;
+        const life = 1 - age / TRAIL_DURATION;
+        const alpha = Math.max(0, life * cell.intensity);
 
-        const progress = p.life / p.maxLife;
-        const alpha = Math.max(0, 1 - progress);
-        const currentSize = Math.max(2, Math.round(p.size * (1 - progress * 0.35)));
+        const x = cell.col * GRID_SIZE;
+        const y = cell.row * GRID_SIZE;
+        // 1px gap leaves the authentic dark grid outline seen in the screenshot
+        const w = GRID_SIZE - 1;
+        const h = GRID_SIZE - 1;
 
-        const px = Math.round(p.x - currentSize / 2);
-        const py = Math.round(p.y - currentSize / 2);
-
-        // 2D flat pixel square (no vibrant colors, blends with background tone)
         if (dark) {
-          // Dark theme: subtle elevated monochrome grey-whites
-          const fillAlpha = (0.04 + p.shade * 0.08) * alpha;
-          const strokeAlpha = (0.08 + p.shade * 0.12) * alpha;
-          ctx.fillStyle = `rgba(255, 255, 255, ${fillAlpha})`;
-          ctx.fillRect(px, py, currentSize, currentSize);
+          // Dark mode: stone / parchment pixel tones from reference image
+          // Center: rgb(110, 103, 85), Edges: rgb(58, 52, 42), Dim: rgb(35, 31, 25)
+          let r: number, g: number, b: number;
+          if (cell.intensity > 0.8) {
+            r = 115; g = 108; b = 88;
+          } else if (cell.intensity > 0.4) {
+            r = 65; g = 59; b = 48;
+          } else {
+            r = 38; g = 34; b = 28;
+          }
 
-          ctx.strokeStyle = `rgba(255, 255, 255, ${strokeAlpha})`;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(px, py, currentSize, currentSize);
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.95})`;
+          ctx.fillRect(x + 0.5, y + 0.5, w, h);
         } else {
-          // Light theme: subtle monochrome charcoal-blacks
-          const fillAlpha = (0.03 + p.shade * 0.06) * alpha;
-          const strokeAlpha = (0.07 + p.shade * 0.1) * alpha;
-          ctx.fillStyle = `rgba(0, 0, 0, ${fillAlpha})`;
-          ctx.fillRect(px, py, currentSize, currentSize);
+          // Light mode: clean matching subtle pencil/stone pixel tones
+          let r: number, g: number, b: number;
+          if (cell.intensity > 0.8) {
+            r = 80; g = 75; b = 65;
+          } else if (cell.intensity > 0.4) {
+            r = 130; g = 125; b = 115;
+          } else {
+            r = 180; g = 175; b = 165;
+          }
 
-          ctx.strokeStyle = `rgba(0, 0, 0, ${strokeAlpha})`;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(px, py, currentSize, currentSize);
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.75})`;
+          ctx.fillRect(x + 0.5, y + 0.5, w, h);
         }
-      }
+      });
 
       animId = requestAnimationFrame(render);
     };
@@ -176,6 +193,7 @@ export const CubicPixelTrail: React.FC = () => {
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerleave", handlePointerLeave);
       window.removeEventListener("mousedown", handlePointerDown);
     };
   }, []);
