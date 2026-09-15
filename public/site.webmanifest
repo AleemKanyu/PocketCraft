@@ -1,0 +1,22 @@
+{
+  "name": "PocketHost - Minecraft Server Hosting on Android",
+  "short_name": "PocketHost",
+  "description": "Host dedicated Minecraft Java & Bedrock servers directly on your Android device.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#7FE620",
+  "icons": [
+    {
+      "src": "/favicon-circle-hd.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/app-icon-circle-hd.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

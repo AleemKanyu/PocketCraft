@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { Shield, Eye, Server, Users, Lock, Mail } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import { SEO } from "../components/SEO";
 import { useTheme } from "../lib/ThemeContext";
 
 const sections = [
@@ -79,6 +80,11 @@ export default function Privacy() {
     <div className={`min-h-screen selection:bg-[#7FE620] selection:text-black font-sans section-transition ${
       theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"
     }`}>
+      <SEO
+        title="Privacy Policy - PocketHost"
+        description="Learn how PocketHost handles your data. We respect your privacy: your Minecraft world files and server data stay exclusively on your device."
+        path="/privacy"
+      />
       <Navbar />
 
       {/* Hero */}

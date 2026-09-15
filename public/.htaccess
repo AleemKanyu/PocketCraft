@@ -1,8 +1,114 @@
+# ----------------------------------------------------------------------
+# PocketHost Production .htaccess (Optimized for SEO, Caching & Performance)
+# ----------------------------------------------------------------------
+
+# 1. Enable Compression (Gzip / Deflate)
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/plain
+  AddOutputFilterByType DEFLATE text/html
+  AddOutputFilterByType DEFLATE text/xml
+  AddOutputFilterByType DEFLATE text/css
+  AddOutputFilterByType DEFLATE text/javascript
+  AddOutputFilterByType DEFLATE application/xml
+  AddOutputFilterByType DEFLATE application/xhtml+xml
+  AddOutputFilterByType DEFLATE application/rss+xml
+  AddOutputFilterByType DEFLATE application/javascript
+  AddOutputFilterByType DEFLATE application/x-javascript
+  AddOutputFilterByType DEFLATE application/json
+  AddOutputFilterByType DEFLATE application/ld+json
+  AddOutputFilterByType DEFLATE application/manifest+json
+  AddOutputFilterByType DEFLATE image/svg+xml
+  AddOutputFilterByType DEFLATE font/ttf
+  AddOutputFilterByType DEFLATE font/otf
+  AddOutputFilterByType DEFLATE font/woff
+  AddOutputFilterByType DEFLATE font/woff2
+</IfModule>
+
+# 2. Proper MIME Types
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest
+  AddType application/xml .xml
+  AddType text/plain .txt
+  AddType application/vnd.android.package-archive .apk
+  AddType font/ttf .ttf
+  AddType font/woff2 .woff2
+  AddType image/svg+xml .svg
+</IfModule>
+
+# 3. Browser Caching (Expires Headers)
+<IfModule mod_expires.c>
+  ExpiresActive On
+
+  # Default expiration: 1 month
+  ExpiresDefault "access plus 1 month"
+
+  # HTML: Never cache so updates take effect immediately
+  ExpiresByType text/html "access plus 0 seconds"
+
+  # Data & Manifests
+  ExpiresByType application/json "access plus 0 seconds"
+  ExpiresByType application/xml "access plus 1 hour"
+  ExpiresByType text/xml "access plus 1 hour"
+  ExpiresByType application/manifest+json "access plus 1 week"
+
+  # Static CSS & JS (Vite assets have cache-busting hashes)
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType text/javascript "access plus 1 year"
+
+  # Images and Icons
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/webp "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 year"
+  ExpiresByType image/x-icon "access plus 1 year"
+
+  # Web Fonts
+  ExpiresByType font/ttf "access plus 1 year"
+  ExpiresByType font/woff "access plus 1 year"
+  ExpiresByType font/woff2 "access plus 1 year"
+</IfModule>
+
+# 4. Cache-Control & Security Headers
+<IfModule mod_headers.c>
+  # 1-year immutable caching for hashed assets and fonts
+  <FilesMatch "\.(css|js|png|jpg|jpeg|gif|ico|svg|woff2|woff|ttf)$">
+    Header set Cache-Control "max-age=31536000, public, immutable"
+  </FilesMatch>
+
+  # HTML must revalidate
+  <FilesMatch "\.(html|htm)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+
+  # Security Headers
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# 5. SPA Rewrite Engine
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
-  RewriteRule ^index\.html$ - [L]
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteRule . /index.html [L]
+
+  # Serve sitemap.xml directly
+  RewriteRule ^sitemap\.xml$ sitemap.xml [L]
+
+  # Serve robots.txt directly
+  RewriteRule ^robots\.txt$ robots.txt [L]
+
+  # Serve app-ads.txt directly
+  RewriteRule ^app-ads\.txt$ app-ads.txt [L]
+
+  # Serve site.webmanifest directly
+  RewriteRule ^site\.webmanifest$ site.webmanifest [L]
+
+  # Pass existing files and directories directly
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Rewrite all other routes to index.html for React Router
+  RewriteRule ^ index.html [L]
 </IfModule>

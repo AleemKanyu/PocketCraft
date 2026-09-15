@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { CheckCircle } from "lucide-react";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
+import { SEO } from "../components/SEO";
 import { useTheme } from "../lib/ThemeContext";
 
 const roadmapItems = [
@@ -69,6 +70,11 @@ export default function Roadmap() {
 
   return (
     <div className={`min-h-screen section-transition ${theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"}`}>
+      <SEO
+        title="Product Roadmap - PocketHost"
+        description="See what features are planned, currently in development, and recently launched for PocketHost Android Minecraft server hosting."
+        path="/roadmap"
+      />
       <Navbar />
       {/* Header */}
       <section

@@ -3,23 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Host Minecraft Java Edition servers directly on your Android phone for free. PocketHost offers PaperMC support, Bedrock crossplay, and zero-latency relay tunneling. No PC or port forwarding required." />
-    <meta name="keywords" content="Minecraft, Server Hosting, Android Minecraft Server, PocketHost, Free Minecraft Server, Bedrock crossplay, Java Edition on Android, PaperMC mobile" />
+    <meta name="description" content="Host Minecraft Java & Bedrock Edition servers directly on your Android phone for free. PocketHost offers PaperMC support, Bedrock crossplay, and zero-port-forwarding relay tunneling." />
+    <meta name="keywords" content="Minecraft server hosting, Android Minecraft server, PocketHost, Free Minecraft Server, Bedrock crossplay, Java Edition on Android, PaperMC mobile, GeyserMC Android" />
+    <meta name="author" content="PocketHost" />
     <meta name="theme-color" content="#7FE620" />
-    <meta name="robots" content="index, follow" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <link rel="canonical" href="https://pockethost.online" />
+    <link rel="alternate" hreflang="x-default" href="https://pockethost.online" />
 
-    <!-- Favicons -->
-    <link rel="icon" type="image/png" href="/favicon-circle-hd.png" />
+    <!-- Google Search Console Verification -->
+    <meta name="google-site-verification" content="INSERT_YOUR_GOOGLE_CONSOLE_VERIFICATION_TOKEN_HERE" />
+
+    <!-- Favicons & Manifest -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-circle-hd.png" />
     <link rel="shortcut icon" href="/favicon-circle-hd.png" />
-    <link rel="apple-touch-icon" href="/app-icon-circle-hd.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/app-icon-circle-hd.png" />
+    <link rel="manifest" href="/site.webmanifest" />
 
     <!-- Open Graph for Search & Social -->
+    <meta property="og:site_name" content="PocketHost" />
     <meta property="og:title" content="PocketHost - Free Minecraft Server Hosting on Android" />
-    <meta property="og:description" content="Host your own Minecraft Java server directly from your Android phone with zero lag. Free, no root required, features Bedrock crossplay support." />
+    <meta property="og:description" content="Host your own Minecraft Java & Bedrock server directly on your Android device with zero lag and zero port forwarding." />
     <meta property="og:image" content="https://pockethost.online/app-icon-circle-hd.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:alt" content="PocketHost Logo" />
     <meta property="og:url" content="https://pockethost.online" />
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_US" />
     
     <!-- Twitter/X -->
     <meta name="twitter:card" content="summary_large_image" />
@@ -27,21 +38,76 @@
     <meta name="twitter:description" content="Host your own Minecraft Java server directly from your Android phone with zero lag. Support for PaperMC and Bedrock Crossplay." />
     <meta name="twitter:image" content="https://pockethost.online/app-icon-circle-hd.png" />
 
+    <!-- Performance: Preconnect to Font CDNs -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&family=Press+Start+2P&family=Space+Grotesk:wght@500;600;700&display=swap"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&family=Press+Start+2P&family=Space+Grotesk:wght@500;600;700&display=swap"
+      />
+    </noscript>
+
     <style>
       @font-face {
         font-family: 'Monocraft';
         src: url('/Monocraft.ttf') format('truetype');
         font-weight: normal;
         font-style: normal;
+        font-display: swap;
       }
     </style>
     <title>PocketHost - Host Minecraft Servers on your Phone</title>
+
+    <!-- Schema.org JSON-LD Structured Data for Google Console & Rich Results -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://pockethost.online/#website",
+          "url": "https://pockethost.online",
+          "name": "PocketHost",
+          "description": "Host dedicated Minecraft Java & Bedrock servers directly on Android.",
+          "inLanguage": "en-US"
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://pockethost.online/#software",
+          "name": "PocketHost",
+          "operatingSystem": "Android 8.0+",
+          "applicationCategory": "GameApplication",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "description": "Turn your Android smartphone or tablet into a high-performance dedicated Minecraft Java and Bedrock server with zero port forwarding.",
+          "downloadUrl": "https://pockethost.online/api/apk/download",
+          "softwareVersion": "1.2.1",
+          "image": "https://pockethost.online/app-icon-circle-hd.png"
+        },
+        {
+          "@type": "Organization",
+          "@id": "https://pockethost.online/#organization",
+          "name": "PocketHost",
+          "url": "https://pockethost.online",
+          "logo": "https://pockethost.online/app-icon-circle-hd.png",
+          "sameAs": [
+            "https://discord.com/invite/nc7ceYWVfT",
+            "https://github.com/AleemKanyu/PocketCraft"
+          ]
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>

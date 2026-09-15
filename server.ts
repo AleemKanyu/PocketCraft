@@ -1,6 +1,7 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
+import fs from "fs";
 import { Readable } from "stream";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
@@ -153,6 +154,48 @@ async function startServer() {
     res.send("google.com, pub-7133828334952044, DIRECT, f08c47fec0942fa0");
   });
 
+  // Explicit route for sitemap.xml (crucial for Google Search Console)
+  app.get("/sitemap.xml", (_req, res) => {
+    const sitemapDist = path.join(__dirname, "dist", "sitemap.xml");
+    const sitemapPublic = path.join(__dirname, "public", "sitemap.xml");
+    const filePath = fs.existsSync(sitemapDist) ? sitemapDist : sitemapPublic;
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    if (fs.existsSync(filePath)) {
+      res.sendFile(filePath);
+    } else {
+      res.status(404).send("Sitemap not found");
+    }
+  });
+
+  // Explicit route for robots.txt
+  app.get("/robots.txt", (_req, res) => {
+    const robotsDist = path.join(__dirname, "dist", "robots.txt");
+    const robotsPublic = path.join(__dirname, "public", "robots.txt");
+    const filePath = fs.existsSync(robotsDist) ? robotsDist : robotsPublic;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    if (fs.existsSync(filePath)) {
+      res.sendFile(filePath);
+    } else {
+      res.status(404).send("Robots.txt not found");
+    }
+  });
+
+  // Explicit route for site.webmanifest
+  app.get("/site.webmanifest", (_req, res) => {
+    const manifestDist = path.join(__dirname, "dist", "site.webmanifest");
+    const manifestPublic = path.join(__dirname, "public", "site.webmanifest");
+    const filePath = fs.existsSync(manifestDist) ? manifestDist : manifestPublic;
+    res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    if (fs.existsSync(filePath)) {
+      res.sendFile(filePath);
+    } else {
+      res.status(404).send("Manifest not found");
+    }
+  });
+
   app.get("/api/apk", async (_req, res) => {
     try {
       const latest = await resolveLatestRelease();
@@ -260,9 +303,19 @@ async function startServer() {
       : path.join(__dirname, "dist");
 
     const dashboardPath = path.join(distPath, "..", "dashboard");
-    app.use("/dashboard", express.static(dashboardPath));
+    app.use("/dashboard", express.static(dashboardPath, {
+      maxAge: "1d",
+    }));
 
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      maxAge: "1y",
+      immutable: true,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith(".html")) {
+          res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        }
+      },
+    }));
 
     app.get("/dashboard*", (req, res) => {
       res.sendFile(path.join(dashboardPath, "index.html"));

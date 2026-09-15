@@ -3,6 +3,7 @@ import HowItWorks from "../components/HowItWorks";
 import Screenshots from "../components/Screenshots";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
+import { SEO } from "../components/SEO";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "../lib/ThemeContext";
@@ -54,6 +55,11 @@ const Home = () => {
         theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"
       }`}
     >
+      <SEO
+        title="PocketHost - Free Minecraft Server Hosting on Android"
+        description="Host Minecraft Java & Bedrock Edition servers directly on your Android phone for free. Zero port forwarding, PaperMC plugins, and high-performance relay tunneling."
+        path="/"
+      />
       <Navbar />
       <ModernHero />
 

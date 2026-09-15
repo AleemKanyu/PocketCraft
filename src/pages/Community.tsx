@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { MessageCircle, Users } from "lucide-react";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
+import { SEO } from "../components/SEO";
 import { useTheme } from "../lib/ThemeContext";
 
 const communityLinks = [
@@ -26,6 +27,11 @@ export default function Community() {
 
   return (
     <div className={`min-h-screen section-transition ${theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"}`}>
+      <SEO
+        title="Community & Support - PocketHost"
+        description="Join the PocketHost Minecraft community on Discord and Instagram. Connect with server admins, get help, and share feedback."
+        path="/community"
+      />
       <Navbar />
       {/* Header */}
       <section

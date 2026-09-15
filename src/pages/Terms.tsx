@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { ScrollText, FileCheck, AlertTriangle, Scale, Gamepad2, Ban, RefreshCw, Mail } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import { SEO } from "../components/SEO";
 import { useTheme } from "../lib/ThemeContext";
 
 const sections = [
@@ -103,6 +104,11 @@ export default function Terms() {
     <div className={`min-h-screen selection:bg-[#7FE620] selection:text-black font-sans section-transition ${
       theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"
     }`}>
+      <SEO
+        title="Terms of Service - PocketHost"
+        description="Review the PocketHost terms of service for hosting dedicated Minecraft servers on Android devices and relay networking."
+        path="/terms"
+      />
       <Navbar />
 
       {/* Hero */}

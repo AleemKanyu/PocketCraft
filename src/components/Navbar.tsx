@@ -9,7 +9,7 @@ export default function Navbar() {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
 
-  const links = [
+  const links: { href: string; label: string; external?: boolean }[] = [
     { href: "/", label: "Home" },
     { href: "/faq", label: "FAQ" },
     { href: "/blog", label: "Blog" },

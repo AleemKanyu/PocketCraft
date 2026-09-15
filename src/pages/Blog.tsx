@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
+import { SEO } from "../components/SEO";
 import { blogPosts } from "../data/blogData";
 import { useTheme } from "../lib/ThemeContext";
 
@@ -16,6 +17,11 @@ export default function Blog() {
 
   return (
     <div className={`min-h-screen section-transition ${theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"}`}>
+      <SEO
+        title="Blog & Updates - PocketHost"
+        description="Latest announcements, engineering updates, server optimization tips, and feature releases for PocketHost Android Minecraft hosting."
+        path="/blog"
+      />
       <Navbar />
       {/* Header */}
       <section

@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
+import { SEO } from "../components/SEO";
 import { useTheme } from "../lib/ThemeContext";
 
 const faqs = [
@@ -52,8 +53,27 @@ export default function FAQ() {
   const { theme } = useTheme();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
+  const faqSchema = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqs.map((f) => ({
+      "@type": "Question",
+      name: f.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: f.answer,
+      },
+    })),
+  };
+
   return (
     <div className={`min-h-screen section-transition ${theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"}`}>
+      <SEO
+        title="Frequently Asked Questions - PocketHost"
+        description="Got questions about running a Minecraft server on Android? Find answers about Bedrock crossplay, port forwarding, performance, and plugins."
+        path="/faq"
+        schema={faqSchema}
+      />
       <Navbar />
       {/* Header */}
       <section

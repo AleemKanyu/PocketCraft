@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { useEffect } from "react";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
+import { SEO } from "../components/SEO";
 import { blogPosts } from "../data/blogData";
 import { useTheme } from "../lib/ThemeContext";
 
@@ -41,8 +42,35 @@ export default function BlogPost() {
     return <Navigate to="/blog" replace />;
   }
 
+  const articleSchema = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: post.excerpt,
+    datePublished: post.date,
+    author: {
+      "@type": "Organization",
+      name: "PocketHost",
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "PocketHost",
+      logo: {
+        "@type": "ImageObject",
+        url: "https://pockethost.online/app-icon-circle-hd.png",
+      },
+    },
+  };
+
   return (
     <div className={`min-h-screen section-transition ${theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"}`}>
+      <SEO
+        title={`${post.title} - PocketHost Blog`}
+        description={post.excerpt}
+        path={`/blog/${post.id}`}
+        type="article"
+        schema={articleSchema}
+      />
       <Navbar />
 
       {/* Header */}
