@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -42,5 +46,5 @@ jobs:
           username: ${{ secrets.HOSTINGER_FTP_USERNAME }}
           password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
           local-dir: dist/
-          server-dir: ${{ secrets.HOSTINGER_SERVER_DIR || 'public_html/' }}
+          server-dir: ${{ secrets.HOSTINGER_SERVER_DIR || './' }}
           dangerous-clean-slate: false
