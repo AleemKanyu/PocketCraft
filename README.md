@@ -1,19 +1,19 @@
 <h1 align="center">
     <img src="./readme_assets/app_icon.png" width="50" align="absmiddle">
-    PocketCraft
+    PocketHost
 </h1>
 
-PocketCraft is an Android app for hosting and managing Minecraft servers from your phone. It is built for players, friends, and small communities that want practical server control without depending on a desktop PC for everyday administration.
+PocketHost is an Android app for hosting and managing Minecraft servers from your phone. It is built for players, friends, and small communities that want practical server control without depending on a desktop PC for everyday administration.
 
 > [!Note]
-> This repository contains only the **source code for the PocketCraft web presence and other web-based PocketCraft utilities**.
+> This repository contains only the **source code for the PocketHost web presence and other web-based PocketHost utilities**.
 > The **actual Android application code is maintained in a separate private repository** for security reasons and is **not open source**.
 
 ---
 
 <h2 align="center"> Overview </h2>
 
-PocketCraft focuses on mobile-first server hosting with multiple ways for players to connect:
+PocketHost focuses on mobile-first server hosting with multiple ways for players to connect:
 
 - Public relay access for players joining over the internet
 - Local network access for players on the same Wi-Fi network
@@ -121,14 +121,14 @@ The app is designed to make server setup, administration, and player management 
 <h2 align="center"> Requirements </h2>
 
 - Android 8.0 or newer
-- At least 2 GB of RAM recommended
+- At least 4 GB of RAM recommended
 - Stable internet connection for relay-based access
 
 ---
 
 <h2 align="center"> Getting Started </h2>
 
-1. Install PocketCraft on your Android phone.
+1. Install PocketHost on your Android phone.
 2. Open the app and choose your server location if prompted.
 3. Pick the Minecraft version you want to host.
 4. Create or load a world.
@@ -139,7 +139,7 @@ The app is designed to make server setup, administration, and player management 
 
 <h2 align="center"> Links </h2>
 
-- Official Discord: [Join the PocketCraft Discord Community](https://dcd.gg/pocketcraft)
+- Official Discord: [Join the PocketHost Discord Community](https://dcd.gg/PocketCraft)
 
 ---
 
