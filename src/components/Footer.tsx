@@ -95,9 +95,10 @@ export default function Footer() {
                 <Github size={16} />
               </motion.a>
               <motion.a
-                href="https://instagram.com"
+                href="https://www.instagram.com/pockethostmc"
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label="Instagram @pockethostmc"
                 className="w-9 h-9 rounded-lg bg-white/5 hover:bg-[#E1306C]/20 flex items-center justify-center text-white/40 hover:text-[#E1306C] transition-all"
                 whileHover={{ scale: 1.1, y: -2 }}
                 whileTap={{ scale: 0.95 }}

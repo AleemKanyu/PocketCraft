@@ -16,7 +16,7 @@ const communityLinks = [
   {
     icon: Users,
     title: "Instagram",
-    description: "Follow for news, updates, and showcase of amazing servers.",
+    description: "Follow @pockethostmc for news, updates, and showcase of amazing servers.",
     url: "https://www.instagram.com/pockethostmc",
     color: "#E1306C",
   },
