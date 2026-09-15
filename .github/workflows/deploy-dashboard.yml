@@ -3,7 +3,10 @@ name: Deploy Web Dashboard to Hostinger
 on:
   push:
     branches:
+      - main
+      - external
       - feature/web-dashboard
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -36,5 +39,5 @@ jobs:
           username: ${{ secrets.HOSTINGER_FTP_USERNAME }}
           password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
           local-dir: dashboard/dist/
-          server-dir: ../nodejs/dashboard/
+          server-dir: ${{ secrets.HOSTINGER_SERVER_DIR || 'public_html/' }}
           dangerous-clean-slate: false  # Set to true only if you want to wipe files not in the build folder

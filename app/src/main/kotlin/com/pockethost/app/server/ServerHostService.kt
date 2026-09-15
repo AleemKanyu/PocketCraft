@@ -2571,9 +2571,9 @@ class ServerHostService : Service() {
     }
 
     private fun relayRegionWireValue(host: String): String? = when (host.trim().lowercase()) {
-        "mine.pocketcraft.online", "13.201.57.41" -> "as"
-        "eu.pocketcraft.online", "54.93.247.2" -> "eu"
-        "us.pocketcraft.online", "18.225.223.45" -> "us"
+        "mine.pocketcraft.online", "13.233.131.236", "13.201.57.41" -> "as"
+        "eu.pocketcraft.online", "3.72.235.245", "54.93.247.2" -> "eu"
+        "us.pocketcraft.online", "98.83.40.35", "18.225.223.45" -> "us"
         else -> null
     }
 

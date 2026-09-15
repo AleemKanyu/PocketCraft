@@ -24,7 +24,7 @@ object RelayServers {
         icon = "🌏",
         description = "Optimized for players in India and South Asia",
         bestFor = "Players in India, Pakistan, Bangladesh, Sri Lanka",
-        fallbackIp = "13.201.57.41"
+        fallbackIp = "13.233.131.236"
     )
 
 
@@ -36,7 +36,7 @@ object RelayServers {
         icon = "🇪🇺",
         description = "Frankfurt relay for lower latency across Europe",
         bestFor = "Players in Europe, Middle East, and nearby regions",
-        fallbackIp = "54.93.247.2"
+        fallbackIp = "3.72.235.245"
     )
 
     val AMERICA = RelayServerConfig(
@@ -46,7 +46,7 @@ object RelayServers {
         icon = "🇺🇸",
         description = "US East relay for North and South America",
         bestFor = "Players in the Americas",
-        fallbackIp = "18.225.223.45"
+        fallbackIp = "98.83.40.35"
     )
 
     private val defaultRegionConfigs = listOf(MUMBAI, EUROPE, AMERICA)

@@ -213,7 +213,7 @@ fun RelayRegionScreen(
                         OutlinedTextField(
                             value = customIpText,
                             onValueChange = { customIpText = it },
-                            placeholder = { Text("e.g. 18.225.223.45") },
+                            placeholder = { Text("e.g. 13.233.131.236") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             shape = duoTextFieldShape(),
