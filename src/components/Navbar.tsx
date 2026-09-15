@@ -11,6 +11,7 @@ export default function Navbar() {
 
   const links: { href: string; label: string; external?: boolean }[] = [
     { href: "/", label: "Home" },
+    { href: "/#compare", label: "Compare" },
     { href: "/faq", label: "FAQ" },
     { href: "/blog", label: "Blog" },
     { href: "/roadmap", label: "Roadmap" },

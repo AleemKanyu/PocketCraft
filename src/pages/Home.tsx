@@ -1,6 +1,7 @@
 import { ModernHero } from "../components/ModernHero";
 import HowItWorks from "../components/HowItWorks";
 import Screenshots from "../components/Screenshots";
+import ComparisonTable from "../components/ComparisonTable";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
 import { SEO } from "../components/SEO";
@@ -68,6 +69,8 @@ const Home = () => {
       </div>
 
       <Screenshots />
+
+      <ComparisonTable />
 
       <section
         id="faq"
