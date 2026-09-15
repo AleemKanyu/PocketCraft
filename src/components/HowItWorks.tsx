@@ -112,8 +112,8 @@ const Step: React.FC<StepProps> = ({ step, index, theme }) => {
               {step.title}
             </h3>
             <motion.span
-              className="px-3.5 py-1 bg-[#7FE620] text-xs font-bold text-black uppercase rounded-full w-fit shadow-[0_2px_0_0_rgba(0,0,0,0.1)]"
-              whileHover={{ scale: 1.08 }}
+              className="px-2.5 py-0.5 border border-[#7FE620]/60 text-[#7FE620] text-xs font-mono font-bold uppercase tracking-wider w-fit rounded-sm bg-[#7FE620]/10"
+              whileHover={{ scale: 1.05 }}
             >
               {step.tag}
             </motion.span>

@@ -124,7 +124,7 @@ export default function Roadmap() {
                     <div className="flex items-start justify-between mb-4">
                       <div>
                         <span
-                          className="text-xs font-bold uppercase px-3 py-1 rounded-full text-white"
+                          className="text-xs font-mono font-bold uppercase px-2.5 py-0.5 rounded-sm text-white tracking-wider"
                           style={{ backgroundColor: config.color }}
                         >
                           {config.label}

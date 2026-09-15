@@ -207,61 +207,6 @@ export function ModernHero() {
       </div>
 
       <div className="container relative z-10 px-6 mx-auto flex flex-col items-center text-center">
-        {/* Live Status Radar Pill */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          className={`mb-5 inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full border backdrop-blur-md shadow-[0_0_20px_rgba(127,230,32,0.12)] ${
-            theme === "dark"
-              ? "bg-[#7FE620]/10 border-[#7FE620]/30"
-              : "bg-[#7FE620]/15 border-[#7FE620]/40"
-          }`}
-        >
-          <span className="radar-dot">
-            <span className="ping" />
-            <span className="solid" />
-          </span>
-          <span className="text-[11px] sm:text-xs font-mono font-bold tracking-wider text-[#7FE620] uppercase">
-            PocketHost v1.2.1 • Zero Port Forwarding • Online
-          </span>
-        </motion.div>
-
-        {/* Badges */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5 }}
-          className="mb-8 flex flex-wrap items-center justify-center gap-3"
-        >
-          <motion.div
-            whileHover={{ scale: 1.05, y: -2 }}
-            className={`border-2 px-4 py-2 text-[10px] md:text-[11px] font-semibold uppercase rounded-full ${
-              theme === "dark"
-                ? "bg-white/5 border-white/10 text-white/60"
-                : "bg-black/5 border-black/10 text-black/60"
-            }`}
-          >
-            Free Forever
-          </motion.div>
-          <motion.div
-            whileHover={{ scale: 1.05, y: -2 }}
-            className="bg-[#7FE620]/15 border-2 border-[#7FE620]/30 px-4 py-2 text-[10px] md:text-[11px] font-semibold uppercase rounded-full text-[#7FE620]"
-          >
-            + Bedrock Crossplay
-          </motion.div>
-          <motion.div
-            whileHover={{ scale: 1.05, y: -2 }}
-            className={`border-2 px-4 py-2 text-[10px] md:text-[11px] font-semibold uppercase rounded-full ${
-              theme === "dark"
-                ? "bg-white/5 border-white/10 text-white/60"
-                : "bg-black/5 border-black/10 text-black/60"
-            }`}
-          >
-            PaperMC & Fabric
-          </motion.div>
-        </motion.div>
-
         {/* Staggered headline */}
         <motion.h1
           className={`text-4xl md:text-7xl leading-tight mb-6 font-extrabold ${

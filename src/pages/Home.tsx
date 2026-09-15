@@ -143,16 +143,6 @@ const Home = () => {
         )}
 
         <div className="max-w-xl mx-auto text-center relative z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-          >
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#7FE620]/20 border-2 border-[#7FE620] mb-8">
-              <span className="text-xs font-bold text-[#7FE620] tracking-wider uppercase">Ready to play?</span>
-            </div>
-          </motion.div>
 
           <motion.h2
             initial={{ opacity: 0, y: 20 }}

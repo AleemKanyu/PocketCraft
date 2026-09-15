@@ -67,7 +67,7 @@ export default function Blog() {
                     {post.title}
                   </h2>
                   <span
-                    className="px-3 py-1 rounded-full text-xs font-bold text-white flex-shrink-0"
+                    className="px-2.5 py-0.5 rounded-sm text-xs font-mono font-bold text-white flex-shrink-0"
                     style={{ backgroundColor: categoryColors[post.category] || "#7FE620" }}
                   >
                     {post.category}
