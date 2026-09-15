@@ -10,6 +10,9 @@ const categoryColors: Record<string, string> = {
   Announcement: "#7FE620",
   Feature: "#1CB0F6",
   Guide: "#FFD900",
+  Comparison: "#7FE620",
+  Update: "#1CB0F6",
+  Release: "#FF85B3",
 };
 
 export default function Blog() {

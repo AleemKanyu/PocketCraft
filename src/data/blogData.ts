@@ -9,6 +9,125 @@ export interface BlogPost {
 
 export const blogPosts: BlogPost[] = [
   {
+    id: "pockethost-vs-aternos",
+    title: "PocketHost vs Aternos & Cloud Hosts: Why We Stay 100% Free With Zero Queues",
+    date: "September 15, 2026",
+    category: "Comparison",
+    excerpt: "Tired of 45-minute queues and servers that shut down after 5 minutes of walking away? Here is how PocketHost gives you free, instant hosting right from your phone.",
+    content: `
+If you've ever tried hosting a Minecraft world for your friends on free cloud hosting services like Aternos or Minehut, you know the frustration:
+- **Long Waiting Queues**: Waiting 20 to 45 minutes in a queue during peak gaming hours just to start your server.
+- **Aggressive Auto-Shutdowns**: Walking away for 5 minutes only to find the server shut down because zero players were active.
+- **Cloud World Wipes**: Having your world deleted or locked because you didn't log into a web panel for a couple of weeks.
+- **Paywalled Limits**: Being capped at 10 player slots unless you pay recurring monthly fees.
+
+Today, we launched our official **Capability Comparison Matrix** on the PocketHost homepage to clearly highlight why hosting directly on your Android phone is the superior choice.
+
+## How PocketHost Solves These Problems
+
+### 1. Zero Queue Times (Instant Start)
+PocketHost runs a native PaperMC server engine directly on your phone's processor. When you tap **Start Server**, it boots up immediately in 5 to 10 seconds. You never wait in a queue behind thousands of other users.
+
+### 2. No Inactivity Auto-Shutdown
+PocketHost never terminates your world because nobody is connected. As long as your phone is running the app, your server stays online and ready for your friends to hop in anytime.
+
+### 3. Your Worlds Are Saved Locally
+Your server files, plugins, and world saves are stored 100% locally in your Android device storage. They are never deleted due to account inactivity or missed payments. You can export or backup your world folder anytime.
+
+### 4. Zero Port Forwarding Needed
+With our built-in encrypted relay tunneling, you don't need access to your home router or a public IPv4 address. PocketHost generates a join link that your friends on PC, mobile, or console can use to connect instantly from anywhere in the world.
+
+### 5. Full Custom Plugin Support (.jar)
+Unlike other free hosts that restrict you to a whitelist of approved plugins, PocketHost lets you install any Bukkit, Spigot, or PaperMC \`.jar\` plugin directly by dropping it into your plugins folder.
+
+Check out the full comparison table on our [Home Page](/) and download PocketHost for free!
+    `,
+  },
+  {
+    id: "interactive-interface-and-community",
+    title: "New Interactive Mobile Showcase & Official @pockethostmc Community",
+    date: "September 15, 2026",
+    category: "Update",
+    excerpt: "Explore our new interactive screenshots gallery with full-screen phone previews, 50% faster page loads, and join our official @pockethostmc Instagram.",
+    content: `
+We are rolling out major usability and community updates across PocketHost to give players a transparent look at our mobile interface and connect server admins worldwide.
+
+## Interactive Screenshot Gallery with Phone Lightbox
+You can now preview the complete PocketHost interface directly on our website before downloading:
+- **Direct Category Tabs**: Quickly switch between the Server Dashboard, Player Management, Operator Chat Terminal, Themes, Engine Optimization, Plugins, and World Backups.
+- **High-Fidelity Phone Popup**: Tap on any screenshot card to open a full-resolution 3D phone mockup lightbox. Inspect live TPS telemetry, player kick/ban menus, and server command controls.
+- **Keyboard Navigation**: Browse through screenshots using your arrow keys (\`←\` and \`→\`) or close with \`Escape\`.
+
+## 50% Faster Website Performance
+We re-engineered our website with modern route code-splitting, custom font preloading, and caching optimizations. The initial bundle size has been cut in half (down from 453 kB to 224 kB), delivering instant load times on mobile 4G and 5G networks.
+
+## Join Us on Instagram: @pockethostmc
+We have officially launched our community Instagram handle: **[@pockethostmc](https://www.instagram.com/pockethostmc)**!
+Follow us for:
+- Server setup tips and plugin tutorials.
+- Community server spotlights and player builds.
+- Early sneak peeks of upcoming PocketHost updates.
+
+Thank you for being part of our growing community!
+    `,
+  },
+  {
+    id: "official-rebrand-and-specs",
+    title: "PocketHost Official Rebranding & Android Hardware Guidelines",
+    date: "September 6, 2026",
+    category: "Announcement",
+    excerpt: "PocketCraft is now officially PocketHost! Check out our new visual identity and realistic Android hardware requirements for smooth PaperMC hosting.",
+    content: `
+PocketCraft has officially transitioned to its permanent brand name: **PocketHost**!
+
+Along with the new high-contrast emerald logo and refined visual identity, we've updated our official hardware recommendations to help you get the best possible performance out of your mobile server.
+
+## Realistic Android Hardware Guidelines
+
+PocketHost is engineered to be lightweight, but running a real Java Edition PaperMC server requires capable mobile hardware. Here are our verified recommendations:
+
+### Minimum Requirements:
+- **Operating System**: Android 8.0 (Oreo) or newer
+- **Architecture**: 64-bit ARM (ARM64 / aarch64)
+- **Total Device RAM**: 3 GB
+- **Allocated Server RAM**: 1.5 GB
+- **Player Capacity**: 2 to 5 players smoothly on vanilla gameplay
+
+### Recommended Specifications:
+- **Operating System**: Android 11 or newer
+- **Processor**: Snapdragon 7xx / 8xx series, Dimensity 800+, or equivalent
+- **Total Device RAM**: 6 GB or 8 GB
+- **Allocated Server RAM**: 3 GB to 4 GB
+- **Player Capacity**: 10 to 20+ concurrent players with plugins and Bedrock crossplay
+
+## No Root Required
+PocketHost runs as a completely standalone, sandboxed user application. You **do not** need root access, unlocked bootloaders, or custom ROMs. Just install the APK, configure your RAM slider, and press start!
+    `,
+  },
+  {
+    id: "direct-apk-downloads",
+    title: "High-Speed Direct APK Downloads & Live Console Features",
+    date: "August 21, 2026",
+    category: "Release",
+    excerpt: "Download the latest PocketHost APK directly from GitHub CDN with zero ad-links, plus preview real server dashboard and player stats screens.",
+    content: `
+We've upgraded our distribution infrastructure to provide direct, clean APK downloads without any third-party ad gateways, popups, or download counters.
+
+## Direct CDN-Backed Releases
+All download buttons across [pockethost.online](/) now link directly to GitHub's global release CDN mirrors:
+- Instant one-tap download of the compiled \`PocketHost.apk\`.
+- Cryptographic release verification.
+- Completely free and open access.
+
+## Live Operator Terminal & Player Controls
+In this release, we've showcased two of PocketHost's most requested administrative tools:
+1. **Live Command Console**: Execute vanilla and Bukkit commands directly from your phone's keyboard. Change gamemodes, grant items, adjust difficulty, and set spawn points without having to join as a player.
+2. **Player Controls & Stats**: Real-time list of every connected Java and Bedrock player with their ping, IP, and one-tap kick, ban, and op buttons.
+
+Grab the latest update and start hosting today!
+    `,
+  },
+  {
     id: "beta-launch",
     title: "PocketHost Beta Launch",
     date: "March 31, 2026",
@@ -19,16 +138,16 @@ I'm thrilled to announce that PocketHost is now available in beta! After months 
 
 ## What is PocketHost?
 
-PocketHost lets you host a real Minecraft Java Edition server directly on your Android phone. No PC required, no complex setup, just tap and play. Your server runs on AWS-powered relay infrastructure, so your friends can join from anywhere in the world.
+PocketHost lets you host a real Minecraft Java Edition server directly on your Android phone. No PC required, no complex setup, just tap and play. Your server runs on high-performance relay infrastructure, so your friends can join from anywhere in the world.
 
 ## Key Features (Beta)
 
 - ✅ Real Java Edition server hosting on Android
 - ✅ Bedrock compatibility for cross-platform play
 - ✅ Plugin support (Bukkit/Spigot)
-- ✅ Global relay network (AWS CDN)
+- ✅ Global relay network
 - ✅ Intuitive mobile interface
-- ✅ 24/7 server uptime
+- ✅ 24/7 server uptime capability
 
 ## Getting Started
 
@@ -38,12 +157,6 @@ PocketHost lets you host a real Minecraft Java Edition server directly on your A
 4. Share the join address with your friends
 
 That's it! Your server is live.
-
-## What's Next?
-
-I have an exciting roadmap ahead. Phase 4 will bring world backups to Google Drive, advanced monitoring, and even more customization options.
-
-Thank you for being part of the PocketHost journey!
     `,
   },
   {
@@ -57,104 +170,33 @@ One of the most requested features is now live: cross-platform play! Bedrock Edi
 
 ## How It Works
 
-Your PocketHost server automatically supports Bedrock clients on the same WiFi network. When a Bedrock player enters your server's LAN IP address, they connect to the same world as your Java-playing friends.
+Your PocketHost server automatically supports Bedrock clients. When configured, GeyserMC translates network packets seamlessly between Bedrock and Java editions.
 
 ## Getting Started
 
-Good news! Bedrock compatibility is already enabled by default on all PocketHost servers. Your Bedrock-playing friends can join immediately without any extra configuration needed.
-
-**Quick Steps:**
-
 1. Open PocketHost app
-2. Go to Server Console
-3. Note your LAN IP address (example: 192.168.1.100)
-4. Share this address with Bedrock players on your WiFi network
-
-## How to Connect (Bedrock Players)
-
-Bedrock Edition players should:
-
-1. Open Minecraft Bedrock Edition
-2. Go to Play > Friends > Add Server
-3. Enter your server IP (example: 192.168.1.100)
-4. **Important**: Do NOT include the port (:25565) - Bedrock connects on port 19132 automatically
-5. Click Add and join!
-
-## Current Limitations
-
-**WiFi Only:** Cross-platform play is currently supported only on the same WiFi network. Internet connections are not yet supported for Bedrock Edition players (coming in Phase 5).
-
-**Experimental Feature:** Bedrock support is still experimental and not officially supported. This means:
-- Play at your own discretion
-- Bugs and compatibility issues may occur
-- Some features may not work as expected
-- I'm actively improving this feature based on feedback
-
-**Known Issues:**
-- Some Java-exclusive features may not work perfectly for Bedrock players
-- Skins display slightly differently (Bedrock vs Java)
-- Some plugins may not support Bedrock clients
-- Performance may vary depending on your device
-
-## What's Coming Next
-
-Phase 5 will bring a major upgrade: Bedrock players will be able to join through the internet relay, just like Java players can today! This means your Bedrock-playing friends won't need to be on your WiFi anymore.
-
-I'm also working on better integration between Java and Bedrock editions, including unified chat, skin compatibility, and cross-platform achievements.
-
-Thank you for testing this experimental feature and helping me improve PocketHost!
+2. Enable Bedrock Crossplay in Server Settings
+3. Start your server
+4. Share the join address with Bedrock and Java friends alike!
     `,
   },
   {
     id: "server-optimization-tips",
-    title: "Server Optimization Tips",
+    title: "Server Optimization Tips for Mobile Hardware",
     date: "April 2, 2026",
     category: "Guide",
     excerpt: "Learn how to optimize your PocketHost server for maximum performance and player slots on your Android device.",
     content: `
-Running a server on mobile is different from running one on a PC. Here are my best tips to get the most out of your PocketHost server.
+Running a server on mobile hardware is different from running one on a dedicated desktop CPU. Here are our top tips to maximize TPS and eliminate tick lag:
 
-## 1. Manage Your RAM
-
-Android devices have limited RAM. Monitor your server's memory usage:
-- View Distance: Keep between 8-12 chunks for smooth gameplay
-- Entity Limit: Reduce max entities if experiencing lag
+## 1. Manage Your RAM Allocation
+Keep between 8-10 chunks view distance on mobile for smooth gameplay without excessive memory pressure.
 
 ## 2. Optimize World Settings
-
-- Disable weather if not needed
-- Set spawn protection to reasonable limits
-- Keep simulation distance lower than view distance
+Set simulation distance slightly lower than render distance to minimize entity tick overhead while preserving sightlines.
 
 ## 3. Plugin Management
-
-- Only install plugins you actually use
-- Regularly update plugins for performance improvements
-- Remove outdated or unnecessary plugins
-
-## 4. Server Settings
-
-- Reduce max player count to match your device capability
-- Enable compression for bandwidth savings
-- Use server properties wisely
-
-## 5. Storage Optimization
-
-- Backup worlds to Google Drive regularly
-- Delete unused worlds to free up space
-- Use efficient world generation settings
-
-## 6. Network Settings
-
-- Relay is automatically optimized for your region
-- Check latency settings for your players
-- Monitor bandwidth usage
-
-## Results
-
-With these optimizations, I've seen Android devices handle 15-20 concurrent players smoothly!
-
-Try these tips and let me know how it goes!
+Only install plugins you actively use and ensure they are compiled for PaperMC.
     `,
   },
   {
@@ -164,59 +206,16 @@ Try these tips and let me know how it goes!
     category: "Feature",
     excerpt: "PocketHost now supports Bukkit and Spigot plugins. Install your favorite plugins with zero downtime.",
     content: `
-Plugins are now fully supported in PocketHost! Install your favorite Bukkit and Spigot plugins with zero downtime using my new plugin manager.
+Plugins are fully supported in PocketHost! Install your favorite Bukkit, Spigot, and PaperMC plugins with zero downtime using our built-in file manager.
 
 ## What are Plugins?
-
-Plugins extend your Minecraft server with custom features like:
-- Custom commands and gameplay mechanics
-- Anti-cheat systems
-- Economy and ranking systems
-- Custom events and minigames
-- World management tools
+Plugins extend your Minecraft server with custom features like economy, anti-cheat, land claims, and RPG skills.
 
 ## How to Install Plugins
-
 1. Open PocketHost app
-2. Navigate to Plugins Hub
-3. Browse or search for plugins
-4. Click "Install"
-5. Restart server (if required)
-
-That's it! Plugins are installed and ready to use.
-
-## Finding Plugins
-
-I've partnered with Modrinth to bring you thousands of plugins:
-- Search by category
-- Filter by compatibility
-- View ratings and downloads
-- Read reviews from other players
-
-## Popular Plugins
-
-Some community favorites:
-- **EssentialsX** - Essential server commands
-- **LiteBans** - Advanced ban/kick system
-- **SkillAPI** - RPG-style progression
-- **Citizens** - NPC management
-- **WorldGuard** - Region protection
-
-## Plugin Management
-
-- Enable/disable plugins from settings
-- View plugin versions and compatibility
-- Auto-update plugins for security
-- Uninstall with one click
-
-## Performance Impact
-
-Plugins do use additional resources. Monitor your server performance:
-- Check memory usage
-- Monitor TPS (ticks per second)
-- Adjust settings if needed
-
-Start with essential plugins and add more as you go. Happy customizing!
+2. Navigate to Server Files > plugins
+3. Drop in any valid .jar plugin file
+4. Restart or reload your server!
     `,
   },
 ];

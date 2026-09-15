@@ -29,6 +29,30 @@
 
   <!-- Blog Posts -->
   <url>
+    <loc>https://pockethost.online/blog/pockethost-vs-aternos</loc>
+    <lastmod>2026-09-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://pockethost.online/blog/interactive-interface-and-community</loc>
+    <lastmod>2026-09-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://pockethost.online/blog/official-rebrand-and-specs</loc>
+    <lastmod>2026-09-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://pockethost.online/blog/direct-apk-downloads</loc>
+    <lastmod>2026-08-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://pockethost.online/blog/beta-launch</loc>
     <lastmod>2026-03-31</lastmod>
     <changefreq>monthly</changefreq>
