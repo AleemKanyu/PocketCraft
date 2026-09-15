@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { MINECRAFT_ICONS } from "../lib/minecraft-icons";
 import { useTheme } from "../lib/ThemeContext";
@@ -80,7 +81,7 @@ const Sparkle = ({ delay, x, y }: { delay: number; x: string; y: string; key?: a
 export function ModernHero() {
   const { theme } = useTheme();
   const isLowEnd = useLowEndDevice();
-
+  const [mousePos, setMousePos] = useState({ x: -1000, y: -1000 });
 
   const sparkles = [
     { delay: 0, x: "15%", y: "20%" },
@@ -97,9 +98,28 @@ export function ModernHero() {
   const headlineWords2 = ["from", "your", "phone"];
 
   return (
-    <section className={`relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden pt-32 pb-20 section-transition ${
-      theme === "dark" ? "bg-[#0a0a0a]" : "bg-white"
-    }`}>
+    <section
+      onMouseMove={(e) => {
+        if (isLowEnd) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+      }}
+      className={`relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden pt-32 pb-20 section-transition ${
+        theme === "dark" ? "bg-[#0a0a0a]" : "bg-white"
+      }`}
+    >
+      {/* Interactive Cursor Ambient Spotlight */}
+      {!isLowEnd && (
+        <div
+          className="absolute inset-0 pointer-events-none transition-opacity duration-300 z-0"
+          style={{
+            background: `radial-gradient(600px circle at ${mousePos.x}px ${mousePos.y}px, ${
+              theme === "dark" ? "rgba(127, 230, 32, 0.08)" : "rgba(127, 230, 32, 0.12)"
+            }, transparent 80%)`,
+          }}
+        />
+      )}
+
       {/* Animated gradient background */}
       <div className={`absolute inset-0 ${isLowEnd ? "" : "animate-gradient-shift"} pointer-events-none ${
         theme === "dark"
@@ -187,6 +207,26 @@ export function ModernHero() {
       </div>
 
       <div className="container relative z-10 px-6 mx-auto flex flex-col items-center text-center">
+        {/* Live Status Radar Pill */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className={`mb-5 inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full border backdrop-blur-md shadow-[0_0_20px_rgba(127,230,32,0.12)] ${
+            theme === "dark"
+              ? "bg-[#7FE620]/10 border-[#7FE620]/30"
+              : "bg-[#7FE620]/15 border-[#7FE620]/40"
+          }`}
+        >
+          <span className="radar-dot">
+            <span className="ping" />
+            <span className="solid" />
+          </span>
+          <span className="text-[11px] sm:text-xs font-mono font-bold tracking-wider text-[#7FE620] uppercase">
+            PocketHost v1.2.1 • Zero Port Forwarding • Online
+          </span>
+        </motion.div>
+
         {/* Badges */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
@@ -209,6 +249,16 @@ export function ModernHero() {
             className="bg-[#7FE620]/15 border-2 border-[#7FE620]/30 px-4 py-2 text-[10px] md:text-[11px] font-semibold uppercase rounded-full text-[#7FE620]"
           >
             + Bedrock Crossplay
+          </motion.div>
+          <motion.div
+            whileHover={{ scale: 1.05, y: -2 }}
+            className={`border-2 px-4 py-2 text-[10px] md:text-[11px] font-semibold uppercase rounded-full ${
+              theme === "dark"
+                ? "bg-white/5 border-white/10 text-white/60"
+                : "bg-black/5 border-black/10 text-black/60"
+            }`}
+          >
+            PaperMC & Fabric
           </motion.div>
         </motion.div>
 
@@ -281,7 +331,7 @@ export function ModernHero() {
           <motion.a
             href="https://github.com/AleemKanyu/PocketCraft/releases/latest/download/PocketHost.apk"
             download="PocketHost.apk"
-            className="btn-duo px-6 sm:px-12 py-4 text-sm uppercase tracking-wider font-bold inline-flex items-center justify-center gap-2 w-full sm:w-auto shadow-lg"
+            className="btn-duo shimmer-btn px-6 sm:px-12 py-4 text-sm uppercase tracking-wider font-bold inline-flex items-center justify-center gap-2 w-full sm:w-auto shadow-lg hover:shadow-[0_0_30px_rgba(127,230,32,0.35)] transition-shadow"
             whileHover={{ scale: 1.05, y: -3 }}
             whileTap={{ scale: 0.98 }}
             transition={{ type: "spring", stiffness: 400 }}

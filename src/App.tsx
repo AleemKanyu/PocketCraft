@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { useScrollToTop } from "./hooks/useScrollToTop";
 import Home from "./pages/Home";
 import { ThemeProvider } from "./lib/ThemeContext";
+import { CubicPixelTrail } from "./components/CubicPixelTrail";
 
 const FAQ = lazy(() => import("./pages/FAQ"));
 const Blog = lazy(() => import("./pages/Blog"));
@@ -41,6 +42,7 @@ function AppRoutes() {
 export default function App() {
   return (
     <ThemeProvider>
+      <CubicPixelTrail />
       <Router>
         <AppRoutes />
       </Router>

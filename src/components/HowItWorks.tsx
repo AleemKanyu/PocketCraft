@@ -85,35 +85,43 @@ const Step: React.FC<StepProps> = ({ step, index, theme }) => {
         initial={{ opacity: 0, x: -20 }}
         animate={isInView ? { opacity: 1, x: 0 } : {}}
         transition={{ duration: 0.5, delay: index * 0.12 + 0.1 }}
-        className={`pb-12 sm:pb-16 ${isLast ? "pb-0" : ""}`}
+        className={`pb-12 sm:pb-16 flex-1 ${isLast ? "pb-0" : ""}`}
       >
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4">
-          <motion.img
-            src={step.icon}
-            alt={`${step.title} icon`}
-            className="w-10 h-10 image-pixelated"
-            whileHover={{ rotate: 15, scale: 1.2 }}
-            transition={{ type: "spring", stiffness: 300 }}
-            onError={(e) => {
-              e.currentTarget.onerror = null;
-              e.currentTarget.src = "/grass-block.png";
-            }}
-          />
-          <h3 className={`text-lg md:text-xl font-bold uppercase tracking-tight ${
-            theme === "dark" ? "text-white" : "text-black"
-          }`}>
-            {step.title}
-          </h3>
-          <motion.span
-            className="px-4 py-1 bg-[#7FE620] text-xs font-bold text-black uppercase rounded-full w-fit shadow-[0_2px_0_0_rgba(0,0,0,0.1)]"
-            whileHover={{ scale: 1.1 }}
-          >
-            {step.tag}
-          </motion.span>
+        <div
+          className={`glow-card rounded-2xl border-2 p-5 sm:p-6 transition-all duration-300 ${
+            theme === "dark"
+              ? "bg-white/[0.02] border-white/10 hover:border-[#7FE620]/40 hover:bg-white/[0.04]"
+              : "bg-black/[0.01] border-black/10 hover:border-[#7FE620]/50 hover:bg-black/[0.02]"
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-3">
+            <motion.img
+              src={step.icon}
+              alt={`${step.title} icon`}
+              className="w-10 h-10 image-pixelated"
+              whileHover={{ rotate: 15, scale: 1.2 }}
+              transition={{ type: "spring", stiffness: 300 }}
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = "/grass-block.png";
+              }}
+            />
+            <h3 className={`text-lg md:text-xl font-bold uppercase tracking-tight flex-1 ${
+              theme === "dark" ? "text-white" : "text-black"
+            }`}>
+              {step.title}
+            </h3>
+            <motion.span
+              className="px-3.5 py-1 bg-[#7FE620] text-xs font-bold text-black uppercase rounded-full w-fit shadow-[0_2px_0_0_rgba(0,0,0,0.1)]"
+              whileHover={{ scale: 1.08 }}
+            >
+              {step.tag}
+            </motion.span>
+          </div>
+          <p className={`text-sm md:text-base font-medium leading-relaxed ${
+            theme === "dark" ? "text-white/60" : "text-black/70"
+          }`}>{step.description}</p>
         </div>
-        <p className={`text-sm md:text-base font-medium leading-relaxed max-w-sm ${
-          theme === "dark" ? "text-white/50" : "text-black/60"
-        }`}>{step.description}</p>
       </motion.div>
     </div>
   );
