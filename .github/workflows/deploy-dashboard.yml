@@ -32,10 +32,20 @@ jobs:
           cd dashboard
           npm run build
 
+      - name: Resolve and Sanitize FTP Server
+        id: ftp-config
+        run: |
+          RAW_SERVER="${{ secrets.HOSTINGER_FTP_SERVER }}"
+          CLEAN_SERVER=$(echo "$RAW_SERVER" | sed -e 's|^[^/]*://||' -e 's|/.*$||' -e 's|:[0-9]*$||' | xargs)
+          if [ -z "$CLEAN_SERVER" ]; then
+            CLEAN_SERVER="46.202.161.214"
+          fi
+          echo "server=$CLEAN_SERVER" >> $GITHUB_OUTPUT
+
       - name: Deploy to Hostinger via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ${{ secrets.HOSTINGER_FTP_SERVER }}
+          server: ${{ steps.ftp-config.outputs.server }}
           username: ${{ secrets.HOSTINGER_FTP_USERNAME }}
           password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
           local-dir: dashboard/dist/
