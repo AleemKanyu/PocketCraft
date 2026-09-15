@@ -8,6 +8,5 @@ coverage/
 !.env.example
 .env.local
 .env.*.local
-.vercel
 pocketcraft-*.zip
 hostinger-deploy.zip
