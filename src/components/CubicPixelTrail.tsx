@@ -2,13 +2,6 @@ import React, { useEffect, useRef } from "react";
 
 const H = 12; // Grid cell size (12px)
 
-interface Ripple {
-  cx: number;
-  cy: number;
-  t0: number;
-  power: number;
-}
-
 interface Particle {
   x: number;
   y: number;
@@ -35,12 +28,14 @@ export const CubicPixelTrail: React.FC = () => {
       document.documentElement.classList.contains("dark") ||
       window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-    // Exact Lodeway authentic Minecraft color thresholds
+    // Palette: dark mode has warm stone/charcoal; light mode has soft light-grey stone (NO black)
     const getColors = (dark: boolean) => ({
       grays: dark
         ? ["#221e19", "#39332a", "#6a6350", "#ece7da"]
-        : ["#e9e9e5", "#c9c9c2", "#8f8f86", "#191613"],
-      hot: ["#f6d64a", "#e8842a", "#b52f10"],
+        : ["#f2f1ec", "#e3e1d8", "#cbc8bb", "#b2afa0"],
+      hot: dark
+        ? ["#f6d64a", "#e8842a", "#b52f10"]
+        : ["#f3cc51", "#e69b52", "#9e9a8f"],
     });
 
     let colors = getColors(getIsDark());
@@ -119,7 +114,7 @@ export const CubicPixelTrail: React.FC = () => {
 
       if (lastX !== null && lastY !== null) {
         const dist = Math.hypot(curX - lastX, curY - lastY);
-        // If movement is within reasonable limit, interpolate continuously
+        // Interpolate continuously along any motion vector
         if (dist < H * 16) {
           const steps = Math.max(1, Math.ceil(dist / (H * 0.4)));
           for (let s = 0; s <= steps; s++) {
@@ -151,9 +146,9 @@ export const CubicPixelTrail: React.FC = () => {
       lastClientY = null;
     };
 
-    // Click shockwave and spark particles
-    let clickState: { cx: number; cy: number; t0: number } | null = null;
-    const ripples: Ripple[] = [];
+    // Screen shake state & subtle blast particles (no huge shockwave)
+    let shakeMagnitude = 0;
+    let isShaking = false;
     const particles: Particle[] = [];
 
     const handlePointerDown = (e: PointerEvent) => {
@@ -161,47 +156,40 @@ export const CubicPixelTrail: React.FC = () => {
         return;
       }
       if (e.button !== 0) return;
-      clickState = {
-        cx: e.clientX / H,
-        cy: (e.clientY + window.scrollY) / H,
-        t0: performance.now(),
-      };
-    };
 
-    const handlePointerUp = () => {
-      if (!clickState) return;
-      const now = performance.now();
-      const charge = 2.5 + ((now - clickState.t0) / 1000) * 5;
-      const { cx, cy } = clickState;
-      clickState = null;
+      const clickX = e.clientX;
+      const clickY = e.clientY + window.scrollY;
+      const cx = clickX / H;
+      const cy = clickY / H;
 
-      ripples.push({ cx, cy, t0: now, power: charge });
-      if (ripples.length > 6) ripples.shift();
+      // Trigger tactile screen shake
+      shakeMagnitude = 4.5;
+      isShaking = true;
 
-      const numParticles = Math.round(12 + charge * 2);
+      // Spawn subtle localized mini blast sparks (8-10 small particles)
+      const numParticles = 8;
       for (let i = 0; i < numParticles; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 15 + Math.random() * (18 + charge * 1.5);
+        const angle = (Math.PI * 2 * i) / numParticles + (Math.random() * 0.4 - 0.2);
+        const speed = 7 + Math.random() * 9;
         particles.push({
           x: cx,
           y: cy,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
-          life: 0.85 + Math.random() * 0.45,
+          life: 0.35 + Math.random() * 0.2, // ~350ms lifespan
         });
       }
 
-      stampBrush(cx * H, cy * H, Math.min(10, 2 + charge * 0.5), 1.4);
+      // Small subtle brush stamp at click point
+      stampBrush(clickX, clickY, 2.6, 1.25);
     };
 
     window.addEventListener("pointermove", handlePointerMove, { passive: true });
     window.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("pointerleave", handlePointerLeave, { passive: true });
     window.addEventListener("pointerdown", handlePointerDown, { passive: true });
-    window.addEventListener("pointerup", handlePointerUp, { passive: true });
     window.addEventListener("resize", resize);
 
-    // Check periodically if document height changed
     const heightCheckInterval = setInterval(() => {
       const docHeight = document.documentElement.scrollHeight;
       if (Math.abs(docHeight - totalRows * H) > H * 3) {
@@ -218,7 +206,31 @@ export const CubicPixelTrail: React.FC = () => {
       const dt = Math.min(0.05, (time - lastFrameTime) / 1000);
       lastFrameTime = time;
 
-      if (activeMaxRow < activeMinRow && !clickState && ripples.length === 0 && particles.length === 0) {
+      // Apply tactile screen shake to page content siblings
+      if (shakeMagnitude > 0.25) {
+        shakeMagnitude *= Math.pow(0.001, dt);
+        const shakeX = (Math.random() * 2 - 1) * shakeMagnitude;
+        const shakeY = (Math.random() * 2 - 1) * shakeMagnitude;
+        if (canvas.parentElement) {
+          for (const child of Array.from(canvas.parentElement.children)) {
+            if (child !== canvas) {
+              (child as HTMLElement).style.transform = `translate(${shakeX.toFixed(1)}px, ${shakeY.toFixed(1)}px)`;
+            }
+          }
+        }
+      } else if (isShaking) {
+        isShaking = false;
+        shakeMagnitude = 0;
+        if (canvas.parentElement) {
+          for (const child of Array.from(canvas.parentElement.children)) {
+            if (child !== canvas) {
+              (child as HTMLElement).style.transform = "";
+            }
+          }
+        }
+      }
+
+      if (activeMaxRow < activeMinRow && particles.length === 0) {
         return;
       }
 
@@ -249,7 +261,7 @@ export const CubicPixelTrail: React.FC = () => {
           // Viewport culling
           if (r < visibleMinRow || r > visibleMaxRow) continue;
 
-          // Authentic Lodeway 4-tier palette
+          // 4-tier palette: dark mode stone vs light mode clean light-stone (no black)
           const color =
             val > 1.15
               ? colors.grays[3]
@@ -272,50 +284,14 @@ export const CubicPixelTrail: React.FC = () => {
       activeMinRow = newMinRow;
       activeMaxRow = newMaxRow;
 
-      // Render expanding ripples
-      for (let i = ripples.length - 1; i >= 0; i--) {
-        const rip = ripples[i];
-        const age = (time - rip.t0) / 1000;
-        const maxRadius = rip.power * 10 + 26;
-        const speed = 62 + rip.power * 1.6;
-        const currentRadius = rip.power + age * speed;
-        const life = 1 - currentRadius / maxRadius;
-
-        if (life <= 0) {
-          ripples.splice(i, 1);
-          continue;
-        }
-
-        const minR = Math.max(visibleMinRow, Math.floor(rip.cy - currentRadius));
-        const maxR = Math.min(visibleMaxRow, Math.ceil(rip.cy + currentRadius));
-        const minC = Math.max(0, Math.floor(rip.cx - currentRadius));
-        const maxC = Math.min(totalCols - 1, Math.ceil(rip.cx + currentRadius));
-
-        for (let r = minR; r <= maxR; r++) {
-          for (let c = minC; c <= maxC; c++) {
-            const dist = Math.hypot(c + 0.5 - rip.cx, r + 0.5 - rip.cy);
-            if (Math.abs(dist - currentRadius) < 1.4) {
-              const ringColor =
-                dist < currentRadius * 0.4
-                  ? "#fff6cf"
-                  : dist < currentRadius * 0.75
-                  ? colors.hot[0]
-                  : colors.hot[1];
-              ctx.fillStyle = ringColor;
-              ctx.fillRect(c * H + 1, r * H + 1 - curScrollY, H - 1, H - 1);
-            }
-          }
-        }
-      }
-
-      // Render spark particles
+      // Render subtle mini blast particles
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         p.x += p.vx * dt;
         p.y += p.vy * dt;
-        p.life -= dt * 1.1;
-        p.vx *= Math.pow(0.35, dt);
-        p.vy *= Math.pow(0.35, dt);
+        p.life -= dt * 2.2;
+        p.vx *= Math.pow(0.2, dt);
+        p.vy *= Math.pow(0.2, dt);
 
         if (p.life <= 0) {
           particles.splice(i, 1);
@@ -327,7 +303,7 @@ export const CubicPixelTrail: React.FC = () => {
         if (cellY < visibleMinRow || cellY > visibleMaxRow) continue;
 
         const particleColor =
-          p.life > 0.55 ? colors.hot[2] : p.life > 0.25 ? colors.hot[1] : colors.grays[2];
+          p.life > 0.5 ? colors.hot[0] : p.life > 0.25 ? colors.hot[1] : colors.grays[2];
         ctx.fillStyle = particleColor;
         ctx.fillRect(cellX * H + 1, cellY * H + 1 - curScrollY, H - 1, H - 1);
       }
@@ -343,8 +319,15 @@ export const CubicPixelTrail: React.FC = () => {
       window.removeEventListener("scroll", handleScroll);
       window.removeEventListener("pointerleave", handlePointerLeave);
       window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("resize", resize);
+
+      if (canvas.parentElement) {
+        for (const child of Array.from(canvas.parentElement.children)) {
+          if (child !== canvas) {
+            (child as HTMLElement).style.transform = "";
+          }
+        }
+      }
     };
   }, []);
 
