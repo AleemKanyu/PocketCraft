@@ -1698,7 +1698,7 @@ object ModpackManager {
     private suspend fun blockedRuntimeFileFetch(url: String, dest: File, onProgress: (Int) -> Unit): Unit = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(url)
-            .header("User-Agent", "PocketHost-App/1.0 (Android; support@pockethost.app)")
+            .header("User-Agent", "PocketHost-App/1.0 (Android; support@pockethost.online)")
             .build()
 
         dest.parentFile?.mkdirs()

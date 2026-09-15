@@ -76,8 +76,8 @@ You agree to comply with applicable export control and sanctions laws.
 
 ## 15. Contact
 
-Legal contact: legal@pocketcraft.online  
-Support contact: support@pocketcraft.online
+Legal contact: legal@pockethost.online  
+Support contact: support@pockethost.online
 
 ## 16. Changes to Terms
 

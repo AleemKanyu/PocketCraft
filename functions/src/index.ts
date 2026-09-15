@@ -13,7 +13,7 @@ const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 const EMAIL_FROM = defineSecret("EMAIL_FROM");
 const GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = defineSecret("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON");
 const GOOGLE_PLAY_PACKAGE_NAME = defineSecret("GOOGLE_PLAY_PACKAGE_NAME");
-const SUPPORT_EMAIL = "support@pocketcraft.online";
+const SUPPORT_EMAIL = "support@pockethost.online";
 
 type FeedbackDoc = {
   message?: string;

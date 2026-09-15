@@ -49,6 +49,6 @@
     </entry>
     <entry>
         <key>feature_free_trial_enabled</key>
-        <value>true</value>
+        <value>false</value>
     </entry>
 </defaultsMap>

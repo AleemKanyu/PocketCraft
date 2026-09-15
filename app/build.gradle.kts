@@ -71,9 +71,15 @@ val (githubRepoOwner, githubRepoName) = parseGitHubRepo(gitRemoteUrl)
     ?: ("AleemKanyu" to "PocketCraft")
 
 val legalPrivacyPolicyUrl = configuredPrivacyPolicyUrl?.trim().takeUnless { it.isNullOrBlank() }
-    ?: "https://pocketcraft.online/privacy"
+    ?: "https://pockethost.online/privacy"
 val legalTermsOfUseUrl = configuredTermsOfUseUrl?.trim().takeUnless { it.isNullOrBlank() }
-    ?: "https://pocketcraft.online/terms"
+    ?: "https://pockethost.online/terms"
+val configuredSupportEmail = localProperties.getProperty("supportEmail")
+    ?: System.getenv("POCKETHOST_SUPPORT_EMAIL")
+    ?: "support@pockethost.online"
+val officialWebsiteUrl = localProperties.getProperty("officialWebsiteUrl")
+    ?: System.getenv("POCKETHOST_WEBSITE_URL")
+    ?: "https://pockethost.online"
 
 val autoVersionCode = (System.currentTimeMillis() / 60000).toInt()
 val fastReleaseBuild = providers.gradleProperty("pocketcraftFastRelease")
@@ -96,6 +102,8 @@ android {
         buildConfigField("String", "GITHUB_REPO_NAME", "\"$githubRepoName\"")
         buildConfigField("String", "PRIVACY_POLICY_URL", "\"$legalPrivacyPolicyUrl\"")
         buildConfigField("String", "TERMS_OF_USE_URL", "\"$legalTermsOfUseUrl\"")
+        buildConfigField("String", "SUPPORT_EMAIL", "\"$configuredSupportEmail\"")
+        buildConfigField("String", "WEBSITE_URL", "\"$officialWebsiteUrl\"")
         buildConfigField("String", "LEGAL_POLICY_VERSION", "\"2026-04-06\"")
         buildConfigField("String", "RELAY_SECRET", "\"$configuredRelaySecret\"")
 

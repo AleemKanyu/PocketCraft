@@ -341,11 +341,6 @@ class BillingManager private constructor(private val context: Context) {
                 }
 
                 val data = snapshot?.data.orEmpty()
-                val userOverride = data["eligibleForFreeTrial"] as? Boolean
-                val remoteConfigTrial = com.pockethost.app.config.RemoteConfigManager.isFreeTrialEnabledSync()
-                val parsedValue = userOverride ?: remoteConfigTrial
-                Log.d(TAG, "User entitlement synced: uid=$uid, exists=${snapshot?.exists()}, userOverride=$userOverride, remoteConfig=$remoteConfigTrial, final=$parsedValue")
-
                 val premiumSinceTime = (data["premiumSince"] as? com.google.firebase.Timestamp)?.toDate()?.time
                 val entitlement = PremiumEntitlement(
                     tier = PremiumTier.fromWireValue(data["premiumTier"] as? String),
@@ -357,20 +352,16 @@ class BillingManager private constructor(private val context: Context) {
                     prioritySupport = data["prioritySupport"] as? Boolean ?: false,
                     supporterHandle = data["supporterHandle"] as? String ?: "",
                     supporterOptOut = data["supporterOptOut"] as? Boolean ?: false,
-                    eligibleForFreeTrial = parsedValue
+                    eligibleForFreeTrial = false
                 )
                 applyEntitlement(entitlement)
             }
     }
 
     private fun applyEntitlement(entitlement: PremiumEntitlement) {
-        val eligibilityChanged = _entitlement.value.eligibleForFreeTrial != entitlement.eligibleForFreeTrial
         _entitlement.value = entitlement
         preferences.isPremiumUser = true
         _isPremium.value = true
-        if (eligibilityChanged) {
-            queryAvailableProducts()
-        }
     }
 
     private suspend fun verifyPurchaseServerSide(purchase: Purchase) {
@@ -518,22 +509,13 @@ class BillingManager private constructor(private val context: Context) {
         if (offers.isEmpty()) return null
 
         val offer = when (tier) {
-            PremiumTier.PREMIUM -> {
-                offers
-                    .maxWithOrNull(
-                        compareBy<SubscriptionOfferDetails> { freePhaseDurationDays(it) }
-                            .thenByDescending { recurringPricePhase(it)?.billingCycleCount ?: 0 }
-                    )
-                    ?: offers.first()
-            }
+            PremiumTier.PREMIUM,
             PremiumTier.SUPPORTIVE -> {
                 offers.firstOrNull { freePhaseDurationDays(it) == 0 } ?: offers.first()
             }
             PremiumTier.NONE -> return null
         }
         val recurringPhase = recurringPricePhase(offer) ?: offer.pricingPhases.pricingPhaseList.lastOrNull() ?: return null
-        val rawFreeTrialDays = freePhaseDurationDays(offer)
-        val freeTrialDays = if (tier == PremiumTier.PREMIUM && rawFreeTrialDays > 0) 7 else rawFreeTrialDays
         val title = if (tier == PremiumTier.PREMIUM) "Supporter (₹399/mo)" else "Champion (₹899/mo)"
         val description = if (tier == PremiumTier.PREMIUM) {
             "Voluntary monthly contribution to support PocketHost relays and development."
@@ -547,7 +529,7 @@ class BillingManager private constructor(private val context: Context) {
             recurringPrice = recurringPhase.formattedPrice,
             tier = tier,
             description = description,
-            freeTrialDays = freeTrialDays,
+            freeTrialDays = 0,
             offerToken = offer.offerToken,
             productDetails = productDetails
         )

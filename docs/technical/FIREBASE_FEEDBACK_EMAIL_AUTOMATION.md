@@ -6,7 +6,7 @@ This project now supports automatic outbound email forwarding for new feedback d
 
 1. App writes feedback into Firestore (`beta_feedback`).
 2. Cloud Function `forwardFeedbackEmail` triggers on document create.
-3. Function sends email to `support@pocketcraft.online` using Resend API.
+3. Function sends email to `support@pockethost.online` using Resend API.
 4. Function updates feedback doc with status fields:
    - `emailStatus`: `sent`, `failed`, or `skipped`
    - `emailSentAt`
@@ -43,7 +43,7 @@ firebase functions:secrets:set RESEND_API_KEY
 firebase functions:secrets:set EMAIL_FROM
 ```
 
-Recommended `EMAIL_FROM`: a verified sender in Resend, for example `PocketCraft <noreply@pocketcraft.online>`.
+Recommended `EMAIL_FROM`: a verified sender in Resend, for example `PocketHost <noreply@pockethost.online>`.
 
 5. Deploy functions:
 
@@ -62,5 +62,5 @@ firebase deploy --only functions
 
 - Function file: `functions/src/index.ts`
 - Trigger path: `beta_feedback/{feedbackId}`
-- Destination address is fixed to `support@pocketcraft.online`.
+- Destination address is fixed to `support@pockethost.online`.
 - Function is configured with `retry: false` to reduce duplicate sends.

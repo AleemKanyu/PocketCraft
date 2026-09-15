@@ -124,8 +124,8 @@ PocketCraft is not intended for children under 13 without parental involvement. 
 
 ## 11. Contact
 
-Privacy contact: privacy@pocketcraft.online  
-Support contact: support@pocketcraft.online
+Privacy contact: privacy@pockethost.online  
+Support contact: support@pockethost.online
 
 ## 12. Changes to This Policy
 

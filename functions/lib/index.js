@@ -47,7 +47,7 @@ const RESEND_API_KEY = (0, params_1.defineSecret)("RESEND_API_KEY");
 const EMAIL_FROM = (0, params_1.defineSecret)("EMAIL_FROM");
 const GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = (0, params_1.defineSecret)("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON");
 const GOOGLE_PLAY_PACKAGE_NAME = (0, params_1.defineSecret)("GOOGLE_PLAY_PACKAGE_NAME");
-const SUPPORT_EMAIL = "support@pocketcraft.online";
+const SUPPORT_EMAIL = "support@pockethost.online";
 exports.forwardFeedbackEmail = (0, firestore_2.onDocumentCreated)({
     document: "beta_feedback/{feedbackId}",
     region: "us-central1",

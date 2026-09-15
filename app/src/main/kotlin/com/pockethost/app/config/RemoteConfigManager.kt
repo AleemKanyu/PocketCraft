@@ -19,7 +19,7 @@ object RemoteConfigManager {
     private val _relayRegions = MutableStateFlow(RelayServers.defaultRegions())
     private val _customSubdomainEnabled = MutableStateFlow(false)
     private val _premiumPurchaseEnabled = MutableStateFlow(false)
-    private val _freeTrialEnabled = MutableStateFlow(true)
+    private val _freeTrialEnabled = MutableStateFlow(false)
 
     val showDiscordButton: Flow<Boolean> = _showDiscordButton.asStateFlow()
     val showInstagramButton: Flow<Boolean> = _showInstagramButton.asStateFlow()
@@ -103,7 +103,7 @@ object RemoteConfigManager {
     }
 
     fun isFreeTrialEnabledSync(): Boolean {
-        return runCatching { FirebaseRemoteConfig.getInstance().getBoolean("feature_free_trial_enabled") }.getOrDefault(true)
+        return false
     }
 
     private fun hydrateRelayRegionsFromCache(context: Context) {

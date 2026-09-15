@@ -62,7 +62,7 @@ fun LegalCenterScreen(
             GameCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Documents",
+                        text = "Documents & Web",
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 15.sp
                     )
@@ -81,6 +81,44 @@ fun LegalCenterScreen(
                             if (!openExternalUrl(context, BuildConfig.TERMS_OF_USE_URL)) {
                                 onMessage("Could not open Terms of Use URL.")
                             }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    DuoButton(
+                        text = "VISIT POCKETHOST.ONLINE",
+                        onClick = {
+                            if (!openExternalUrl(context, BuildConfig.WEBSITE_URL)) {
+                                onMessage("Could not open Website URL.")
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+
+        item {
+            GameCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Contact Support",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = "For data privacy inquiries, legal requests, or customer support:",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp
+                    )
+                    DuoButton(
+                        text = "EMAIL ${BuildConfig.SUPPORT_EMAIL.uppercase()}",
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${BuildConfig.SUPPORT_EMAIL}")).apply {
+                                putExtra(Intent.EXTRA_SUBJECT, "PocketHost Legal & Support Inquiry")
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            runCatching { context.startActivity(intent) }
+                                .onFailure { onMessage("Could not open email app.") }
                         },
                         modifier = Modifier.fillMaxWidth()
                     )

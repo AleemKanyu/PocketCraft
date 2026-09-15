@@ -1913,6 +1913,28 @@ fun SettingsScreen(
                 item {
                     AnimatedEntranceContainer(index = 7) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SettingsLinkRow(
+                                icon = Icons.Default.Language,
+                                label = "Official Website",
+                                description = BuildConfig.WEBSITE_URL.removePrefix("https://").removePrefix("http://"),
+                                onClick = {
+                                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.WEBSITE_URL))) }
+                                        .onFailure { onMessage("Could not open website.") }
+                                }
+                            )
+                            SettingsLinkRow(
+                                icon = Icons.Default.Email,
+                                label = "Customer Support",
+                                description = BuildConfig.SUPPORT_EMAIL,
+                                onClick = {
+                                    runCatching {
+                                        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${BuildConfig.SUPPORT_EMAIL}")).apply {
+                                            putExtra(Intent.EXTRA_SUBJECT, "PocketHost Support Request")
+                                        }
+                                        context.startActivity(intent)
+                                    }.onFailure { onMessage("Could not open email app.") }
+                                }
+                            )
                             SettingsLinkRow(icon = Icons.Default.Policy, label = activeS.legalCenter, description = activeS.legalCenterDesc, onClick = onOpenLegalPage)
                             SettingsLinkRow(icon = Icons.Default.BugReport, label = "Report a Bug", description = "Report on our Discord server", onClick = {
                                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(context.getString(R.string.discord_invite_url)))) }

@@ -4,6 +4,11 @@
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">pockethost.online</domain>
+        <domain includeSubdomains="true">play.pockethost.online</domain>
+        <domain includeSubdomains="true">mine.pockethost.online</domain>
+        <domain includeSubdomains="true">eu.pockethost.online</domain>
+        <domain includeSubdomains="true">us.pockethost.online</domain>
         <domain includeSubdomains="true">play.pocketcraft.online</domain>
         <domain includeSubdomains="true">mine.pocketcraft.online</domain>
         <domain includeSubdomains="true">eu.pocketcraft.online</domain>
