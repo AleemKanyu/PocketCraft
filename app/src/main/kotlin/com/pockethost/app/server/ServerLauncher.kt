@@ -221,6 +221,10 @@ class ServerLauncher(private val context: Context) {
         } else {
             ServerFileManager.prepareRuntimeArtifacts(context, worldName)
             PluginManager.removeIncompatiblePlugins(context, worldName)
+            // Try to supply what is missing before disabling anything: silently turning off a mod
+            // the player installed reads as the app breaking their server, and the dependency is
+            // usually one download away.
+            installMissingModDependencies(worldName, versionId, onOutput)
             ModDependencyValidator.quarantineMissingDependencies(ServerFileManager.getServerDir(context, worldName), onOutput)
         }
 
@@ -1973,6 +1977,48 @@ class ServerLauncher(private val context: Context) {
             }
         }.onFailure { error ->
             onError("[PocketHost] Failed to read HotSpot crash log: ${error.message}")
+        }
+    }
+
+    /**
+     * Downloads the dependencies the installed mods declare but the world does not have.
+     *
+     * Without this a mod whose dependency is absent is simply switched off at launch — the player
+     * installed Terralith, the server starts with Terralith disabled, and nothing explains that
+     * Lithostitched was the missing piece. Anything that still cannot be resolved is left for the
+     * quarantine step, which is the correct fallback: a Fabric mod with an unmet hard dependency
+     * aborts the whole server launch.
+     */
+    private fun installMissingModDependencies(
+        worldName: String,
+        versionId: String,
+        onOutput: (String) -> Unit
+    ) {
+        val missing = runCatching {
+            ModDependencyValidator.detectMissingDependencies(context, worldName)
+        }.getOrDefault(emptyList())
+        if (missing.isEmpty()) return
+
+        val wanted = missing.map { it.dependencyId }.distinct()
+        onOutput("[PocketHost] ${wanted.size} mod dependency/dependencies missing; attempting to install...")
+
+        wanted.forEach { dependencyId ->
+            val result = runCatching {
+                runBlocking {
+                    PluginManager.resolveAndInstallMissingDependency(
+                        context = context,
+                        worldName = worldName,
+                        dependencyId = dependencyId,
+                        minecraftVersion = versionId
+                    )
+                }
+            }.getOrElse { Result.failure(it) }
+
+            result.onSuccess { file ->
+                onOutput("[PocketHost] Installed missing dependency: ${file.name}")
+            }.onFailure { error ->
+                onOutput("[PocketHost] Could not install '$dependencyId': ${error.message ?: "not found"}")
+            }
         }
     }
 
