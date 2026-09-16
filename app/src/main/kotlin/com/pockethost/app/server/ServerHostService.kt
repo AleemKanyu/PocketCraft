@@ -548,11 +548,19 @@ class ServerHostService : Service() {
                         EVENT_OUTPUT,
                         "[PocketHost] Server exited unexpectedly. Auto-restarting in ${delayMs / 1000}s (attempt $attempt/$AUTO_RECOVER_MAX_ATTEMPTS)..."
                     )
-                    if (NativeLauncher.hasInProcessJvmRunInThisProcess) {
-                        android.util.Log.i("ServerHostService", "Recycling :server process for auto-recover in ${delayMs}ms.")
+                    val recycledForRecover = NativeLauncher.hasInProcessJvmRunInThisProcess &&
                         scheduleProcessRestart(versionId, activeWorldNameOrDefault(), delayMs)
+                    if (recycledForRecover) {
+                        android.util.Log.i("ServerHostService", "Recycling :server process for auto-recover in ${delayMs}ms.")
                         android.os.Process.killProcess(android.os.Process.myPid())
                     } else {
+                        if (NativeLauncher.hasInProcessJvmRunInThisProcess) {
+                            sendEvent(
+                                versionId,
+                                EVENT_OUTPUT,
+                                "[PocketHost] Could not schedule an automatic restart. Reopen PocketHost to start the server again."
+                            )
+                        }
                         serviceScope.launch {
                             kotlinx.coroutines.delay(delayMs)
                             if (stopReason != "user") {
@@ -577,13 +585,23 @@ class ServerHostService : Service() {
                 if (!stopInProgress.get()) {
                     stopInProgress.set(false)
                     if (NativeLauncher.hasInProcessJvmRunInThisProcess) {
-                        if (keepListenerRunning) {
-                            android.util.Log.i("ServerHostService", "Recycling :server process to reset JVM state after server exit.")
-                            scheduleKeepAliveRestart(500L)
+                        // Killing the process is only safe once something is scheduled to bring it
+                        // back; without that the listener would simply disappear.
+                        val relaunchPending = if (keepListenerRunning) {
+                            scheduleKeepAliveRestart(500L).also { scheduled ->
+                                android.util.Log.i(
+                                    "ServerHostService",
+                                    if (scheduled) "Recycling :server process to reset JVM state after server exit."
+                                    else "Keep-alive restart could not be scheduled; leaving process alive."
+                                )
+                            }
                         } else {
                             try { stopSelf() } catch (_: Throwable) {}
+                            true
                         }
-                        android.os.Process.killProcess(android.os.Process.myPid())
+                        if (relaunchPending) {
+                            android.os.Process.killProcess(android.os.Process.myPid())
+                        }
                     }
                 }
             }
@@ -805,10 +823,19 @@ class ServerHostService : Service() {
                     stopInProgress.set(false)
                     isLaunching = false
                     if (NativeLauncher.hasInProcessJvmRunInThisProcess) {
-                        android.util.Log.i("ServerHostService", "Recycling :server process on restart to allow clean JVM boot.")
-                        scheduleProcessRestart(restartVersionId, restartWorldName, 1000L)
-                        android.os.Process.killProcess(android.os.Process.myPid())
-                        return@launch
+                        // The in-process JVM cannot be booted twice in one process, so a restart
+                        // has to recycle — but only once the alarm that brings it back exists.
+                        if (scheduleProcessRestart(restartVersionId, restartWorldName, 1000L)) {
+                            android.util.Log.i("ServerHostService", "Recycling :server process on restart to allow clean JVM boot.")
+                            android.os.Process.killProcess(android.os.Process.myPid())
+                            return@launch
+                        }
+                        android.util.Log.e("ServerHostService", "Restart alarm could not be scheduled; not recycling.")
+                        sendEvent(
+                            restartVersionId,
+                            EVENT_OUTPUT,
+                            "[PocketHost] Restart could not be scheduled automatically. Start the server again from the app."
+                        )
                     }
                     delay(500L)
                     start(applicationContext, restartVersionId, restartWorldName)
@@ -817,10 +844,12 @@ class ServerHostService : Service() {
 
                 if (keepListenerRunning) {
                     if (NativeLauncher.hasInProcessJvmRunInThisProcess) {
-                        android.util.Log.i("ServerHostService", "Recycling :server process to reset JVM state while keeping listener alive.")
-                        scheduleKeepAliveRestart(500L)
-                        android.os.Process.killProcess(android.os.Process.myPid())
-                        return@launch
+                        if (scheduleKeepAliveRestart(500L)) {
+                            android.util.Log.i("ServerHostService", "Recycling :server process to reset JVM state while keeping listener alive.")
+                            android.os.Process.killProcess(android.os.Process.myPid())
+                            return@launch
+                        }
+                        android.util.Log.e("ServerHostService", "Keep-alive alarm could not be scheduled; keeping current process.")
                     }
                     val notification = createForegroundNotification(ServerStage.DASHBOARD_LISTENER_ACTIVE.notificationText)
                     val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
@@ -1389,8 +1418,10 @@ class ServerHostService : Service() {
 
         val resolvedWorld = worldName.trim().ifBlank { activeWorldNameOrDefault() }
         val serverDir = ServerFileManager.getServerDir(applicationContext, resolvedWorld)
-        // PowerNukkitX writes logs/server.log; Java servers write logs/latest.log.
-        val latestLog = if (isBedrockWorld()) {
+        // PowerNukkitX writes logs/server.log; Java servers write logs/latest.log. Ask about the
+        // world being tailed, not the active one — this is called before currentWorldName settles,
+        // which is the reason the world is passed in at all.
+        val latestLog = if (isBedrockWorld(resolvedWorld)) {
             File(serverDir, "logs/server.log")
         } else {
             File(serverDir, "logs/latest.log")
@@ -1797,7 +1828,28 @@ class ServerHostService : Service() {
         triggerDashboardStatusUpdate()
     }
 
-    private fun scheduleProcessRestart(versionId: String, worldName: String, delayMs: Long) {
+    /**
+     * Whether this build may set an exact alarm.
+     *
+     * From Android 12 setExactAndAllowWhileIdle throws SecurityException unless the app holds
+     * SCHEDULE_EXACT_ALARM or USE_EXACT_ALARM. PocketHost declares neither — USE_EXACT_ALARM is
+     * reserved for alarm and calendar apps under Play policy — so the call has to be guarded
+     * rather than attempted and allowed to blow up.
+     */
+    private fun canScheduleExactAlarm(alarmManager: AlarmManager?): Boolean {
+        if (alarmManager == null) return false
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        return runCatching { alarmManager.canScheduleExactAlarms() }.getOrDefault(false)
+    }
+
+    /**
+     * Schedules the alarm that brings the `:server` process back after it is recycled.
+     *
+     * Returns false when nothing could be scheduled. That return value matters: the callers kill
+     * their own process immediately afterwards, so a silently failed alarm leaves the server dead
+     * with nothing left running to restart it.
+     */
+    private fun scheduleProcessRestart(versionId: String, worldName: String, delayMs: Long): Boolean {
         val restartIntent = Intent(applicationContext, ServerHostService::class.java).apply {
             action = ACTION_START
             putExtra(EXTRA_VERSION_ID, versionId)
@@ -1815,10 +1867,38 @@ class ServerHostService : Service() {
         }
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
         val triggerAt = SystemClock.elapsedRealtime() + delayMs.coerceAtLeast(500L)
-        alarmManager?.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent)
+        return setRecycleAlarm(alarmManager, triggerAt, pendingIntent, "restart")
     }
 
-    private fun scheduleKeepAliveRestart(delayMs: Long) {
+    /**
+     * Sets the wake-up alarm, preferring an exact one and degrading to an inexact one rather than
+     * throwing. Returns whether an alarm is actually pending.
+     */
+    private fun setRecycleAlarm(
+        alarmManager: AlarmManager?,
+        triggerAt: Long,
+        pendingIntent: PendingIntent,
+        label: String
+    ): Boolean {
+        if (alarmManager == null) {
+            android.util.Log.e("ServerHostService", "No AlarmManager; cannot schedule $label.")
+            return false
+        }
+        if (canScheduleExactAlarm(alarmManager)) {
+            val exact = runCatching {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent)
+            }.isSuccess
+            if (exact) return true
+            android.util.Log.w("ServerHostService", "Exact alarm for $label was refused; falling back to inexact.")
+        }
+        return runCatching {
+            alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent)
+        }.onFailure { error ->
+            android.util.Log.e("ServerHostService", "Could not schedule $label alarm: ${error.message}")
+        }.isSuccess
+    }
+
+    private fun scheduleKeepAliveRestart(delayMs: Long): Boolean {
         val keepAliveIntent = Intent(applicationContext, ServerHostService::class.java).apply {
             action = ACTION_START_LISTENER
         }
@@ -1834,7 +1914,7 @@ class ServerHostService : Service() {
         }
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
         val triggerAt = SystemClock.elapsedRealtime() + delayMs.coerceAtLeast(300L)
-        alarmManager?.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent)
+        return setRecycleAlarm(alarmManager, triggerAt, pendingIntent, "keep-alive restart")
     }
 
     private fun scheduleServerReadyFallback(versionId: String) {
@@ -2281,11 +2361,19 @@ class ServerHostService : Service() {
                         EVENT_OUTPUT,
                         "[PocketHost] Server exited unexpectedly. Auto-restarting in ${delayMs / 1000}s (attempt $attempt/$AUTO_RECOVER_MAX_ATTEMPTS)..."
                     )
-                    if (NativeLauncher.hasInProcessJvmRunInThisProcess) {
-                        android.util.Log.i("ServerHostService", "Recycling :server process for auto-recover in ${delayMs}ms.")
+                    val recycledForRecover = NativeLauncher.hasInProcessJvmRunInThisProcess &&
                         scheduleProcessRestart(versionId, activeWorldNameOrDefault(), delayMs)
+                    if (recycledForRecover) {
+                        android.util.Log.i("ServerHostService", "Recycling :server process for auto-recover in ${delayMs}ms.")
                         android.os.Process.killProcess(android.os.Process.myPid())
                     } else {
+                        if (NativeLauncher.hasInProcessJvmRunInThisProcess) {
+                            sendEvent(
+                                versionId,
+                                EVENT_OUTPUT,
+                                "[PocketHost] Could not schedule an automatic restart. Reopen PocketHost to start the server again."
+                            )
+                        }
                         serviceScope.launch {
                             kotlinx.coroutines.delay(delayMs)
                             if (stopReason != "user") {
