@@ -225,6 +225,9 @@ class ServerLauncher(private val context: Context) {
             // the player installed reads as the app breaking their server, and the dependency is
             // usually one download away.
             installMissingModDependencies(worldName, versionId, onOutput)
+            // A mod quarantined on an earlier launch stays disabled until something turns it back
+            // on, so restoration has to run after the downloads and before the next quarantine.
+            ModDependencyValidator.restoreSatisfiedMods(ServerFileManager.getServerDir(context, worldName), onOutput)
             ModDependencyValidator.quarantineMissingDependencies(ServerFileManager.getServerDir(context, worldName), onOutput)
         }
 

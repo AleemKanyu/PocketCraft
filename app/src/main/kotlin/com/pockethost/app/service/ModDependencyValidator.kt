@@ -137,6 +137,63 @@ object ModDependencyValidator {
     }
 
     /**
+     * Re-enables mods that were quarantined earlier and whose dependencies are now present.
+     *
+     * Quarantine is one-way on its own: the mod is renamed to .jar.disabled and nothing ever
+     * renames it back, so installing the dependency afterwards left the mod switched off forever
+     * and the player with no indication that a file rename was all that stood in the way.
+     *
+     * Restoration repeats until nothing more can be restored, because one restored mod can satisfy
+     * another's dependency.
+     */
+    fun restoreSatisfiedMods(
+        serverDir: File,
+        onOutput: (String) -> Unit = {}
+    ): List<File> {
+        val modsDir = File(serverDir, "mods")
+        if (!modsDir.isDirectory) return emptyList()
+
+        val restored = mutableListOf<File>()
+        // Bounded so a metadata quirk can never spin here.
+        repeat(5) {
+            val disabled = modsDir.listFiles { file ->
+                file.isFile && file.name.endsWith(".jar.disabled", ignoreCase = true)
+            }?.toList().orEmpty()
+            if (disabled.isEmpty()) return@repeat
+
+            val available = mutableSetOf<String>()
+            modsDir.listFiles { file ->
+                file.isFile && file.extension.equals("jar", ignoreCase = true) && !file.name.endsWith(".disabled")
+            }?.forEach { jar ->
+                parseModJar(jar)?.let { meta ->
+                    available.add(meta.id.lowercase(Locale.US))
+                    meta.provides.forEach { available.add(it.lowercase(Locale.US)) }
+                }
+            }
+            if (available.contains("fabric-api")) available.add("fabric")
+            if (available.contains("fabric")) available.add("fabric-api")
+
+            var restoredThisPass = false
+            for (candidate in disabled) {
+                val meta = parseModJar(candidate) ?: continue
+                val unmet = meta.depends.keys.filter { dep ->
+                    val normalized = dep.lowercase(Locale.US)
+                    normalized !in BUILTIN_ENVIRONMENT_MOD_IDS && normalized !in available
+                }
+                if (unmet.isNotEmpty()) continue
+                if (enableMod(candidate)) {
+                    restoredThisPass = true
+                    restored.add(candidate)
+                    onOutput("[PocketHost] Re-enabled '${meta.name}' — its dependencies are installed now.")
+                    Log.i(TAG, "Restored ${candidate.name}; dependencies satisfied.")
+                }
+            }
+            if (!restoredThisPass) return@repeat
+        }
+        return restored
+    }
+
+    /**
      * Fail-safe quarantine for pre-launch: scans mods and automatically disables any mod
      * that has unsatisfied required dependencies to prevent startup crash loops.
      */
