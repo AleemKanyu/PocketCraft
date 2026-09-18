@@ -164,6 +164,30 @@ class ServerLauncher(private val context: Context) {
     }
 
 
+    /**
+     * Waits up to [timeoutMs] for a launch target to appear, polling every [pollMs].
+     *
+     * Returns immediately when the file is already there, so the normal path costs nothing; the
+     * wait only matters on a first launch that overlaps the jar download finishing.
+     */
+    private fun waitForLaunchTarget(
+        target: File,
+        timeoutMs: Long = 15_000L,
+        pollMs: Long = 250L
+    ): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (true) {
+            if (target.isFile && target.length() > 0L) return true
+            if (System.currentTimeMillis() >= deadline) return false
+            try {
+                Thread.sleep(pollMs)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return target.isFile && target.length() > 0L
+            }
+        }
+    }
+
     fun startServer(
         worldName: String,
         versionId: String,
@@ -176,10 +200,30 @@ class ServerLauncher(private val context: Context) {
     ) {
         val normalizedJarPath = normalizeAndroidPath(jarPath)
         val launchTarget = File(normalizedJarPath)
-        
-        // Pre-launch guard: abort immediately if the persisted launch target is missing.
-        if (!launchTarget.exists() || launchTarget.isDirectory) {
+
+        // Pre-launch guard.
+        //
+        // This used to abort the moment the target was absent, which made a first run on a fresh
+        // install look broken: the server jar download and the launch race each other, the file
+        // lands a second or two later, and the player got "PocketHost could not find the server
+        // launch files" for a server that would have started fine. Retrying by hand worked, which
+        // is the tell that nothing was actually wrong.
+        //
+        // So wait briefly for the file to appear rather than failing on the first look. A jar that
+        // is genuinely missing still fails, just after a pause nobody notices.
+        if (!waitForLaunchTarget(launchTarget)) {
             throw IllegalStateException("Launch target not found: ${launchTarget.absolutePath}")
+        }
+
+        // A download that was interrupted leaves a file that exists but is not a readable archive.
+        // That passed the old existence check and then failed much later as an opaque JVM error,
+        // so name it here instead.
+        if (launchMode == ServerFileManager.LaunchMode.JAR &&
+            !com.pockethost.app.server.BundledPluginInstaller.isZipValid(launchTarget)
+        ) {
+            throw IllegalStateException(
+                "Server jar is incomplete or corrupt: ${launchTarget.absolutePath}"
+            )
         }
 
         ServerFileManager.prepareEula(context, worldName)

@@ -1848,6 +1848,10 @@ private fun serverFailureSummary(
             reason = "PocketHost could not find the modpack files needed to launch this world.",
             fix = "Re-install the modpack from the Home screen so the missing launch files are restored."
         )
+        "incomplete or corrupt" in combined -> ServerFailureSummary(
+            reason = "The server file for this version downloaded only partially.",
+            fix = "Re-download the version from the version card — an interrupted download leaves a file that looks present but cannot be opened."
+        )
         "launch target not found" in combined || "server jar could not be resolved" in combined || mentionsLaunchTarget -> ServerFailureSummary(
             reason = "PocketHost could not find the server launch files needed for this world.",
             fix = "Re-select or re-install the server version from the version card, then start the server again."
