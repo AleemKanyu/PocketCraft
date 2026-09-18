@@ -426,9 +426,6 @@ class ServerHostService : Service() {
 
 
 
-        // Must precede any isBedrockWorld() caller: switching this world's type leaves a stale
-        // cached answer that would send the log tail to the wrong file.
-        bedrockWorldCache.clear()
         startServerLogTail(versionId, worldName)
         val serverPort = resolveServerPort(worldName)
         currentServerPort = serverPort
@@ -984,25 +981,13 @@ class ServerHostService : Service() {
         }
         runtimeJob.await()
         val jar = jarJob.await()
-        if (effectiveServerType == com.pockethost.app.data.model.ServerType.BEDROCK) {
-            com.pockethost.app.server.NukkitLaunchManager.prepareNukkitServer(
-                context = applicationContext,
-                worldName = currentWorldName ?: "world"
-            )
-        } else {
-            val wName = currentWorldName ?: "world"
-            com.pockethost.app.server.BundledPluginInstaller.installBundledPlugins(applicationContext, serverDir)
-            com.pockethost.app.service.PluginManager.enforceBedrockBridgeLocalConfig(applicationContext, wName)
-        }
+        val wName = currentWorldName ?: "world"
+        com.pockethost.app.server.BundledPluginInstaller.installBundledPlugins(applicationContext, serverDir)
+        com.pockethost.app.service.PluginManager.enforceBedrockBridgeLocalConfig(applicationContext, wName)
         jar
     }
 
     private fun isLocalServerPortOpen(port: Int): Boolean {
-        // A Bedrock server binds UDP only; a TCP connect to its port can never succeed, so it
-        // would report every healthy Bedrock server as down.
-        if (isBedrockWorld()) {
-            return com.pockethost.app.server.BedrockPortProbe.isOpen(port)
-        }
         return runCatching {
             Socket().use { socket ->
                 socket.connect(InetSocketAddress("127.0.0.1", port), 250)
@@ -1418,14 +1403,7 @@ class ServerHostService : Service() {
 
         val resolvedWorld = worldName.trim().ifBlank { activeWorldNameOrDefault() }
         val serverDir = ServerFileManager.getServerDir(applicationContext, resolvedWorld)
-        // PowerNukkitX writes logs/server.log; Java servers write logs/latest.log. Ask about the
-        // world being tailed, not the active one — this is called before currentWorldName settles,
-        // which is the reason the world is passed in at all.
-        val latestLog = if (isBedrockWorld(resolvedWorld)) {
-            File(serverDir, "logs/server.log")
-        } else {
-            File(serverDir, "logs/latest.log")
-        }
+        val latestLog = File(serverDir, "logs/latest.log")
         val tailStartLength = latestLog.takeIf { it.exists() }?.length() ?: 0L
         val initialOffset = tailStartLength
 
@@ -1484,22 +1462,12 @@ class ServerHostService : Service() {
     private fun startPortProbe(versionId: String, port: Int) {
         if (portProbeRunning.getAndSet(true)) return
 
-        val probeBedrock = isBedrockWorld()
         portProbeThread = Thread {
             try {
                 while (portProbeRunning.get() && !Thread.currentThread().isInterrupted) {
                     try {
-                        if (probeBedrock) {
-                            // RakNet answers an unconnected ping only once the server is actually
-                            // accepting players, which is exactly the signal wanted here.
-                            if (!com.pockethost.app.server.BedrockPortProbe.isOpen(port, timeoutMs = 350)) {
-                                Thread.sleep(400)
-                                continue
-                            }
-                        } else {
-                            Socket().use { socket ->
-                                socket.connect(InetSocketAddress("127.0.0.1", port), 350)
-                            }
+                        Socket().use { socket ->
+                            socket.connect(InetSocketAddress("127.0.0.1", port), 350)
                         }
                         val line = "[PocketHost] Server port $port is open. Finalizing startup..."
                         sendEvent(versionId, EVENT_OUTPUT, line)
@@ -1545,51 +1513,12 @@ class ServerHostService : Service() {
             propsFile.inputStream().use { input -> Properties().apply { load(input) } }
         }.getOrNull() ?: return 25565
 
-        if (com.pockethost.app.data.model.ServerType.fromString(props.getProperty("pocketcraft-server-type")).isBedrock) {
-            return com.pockethost.app.server.NukkitLaunchManager.resolvePort(serverDir)
-        }
         return props.getProperty("server-port", "25565").toIntOrNull() ?: 25565
     }
 
-    /**
-     * Whether the world currently being hosted is a Bedrock (PowerNukkitX) server.
-     *
-     * This gates every place the service assumes the Java protocol — most importantly liveness
-     * probing, which must speak RakNet over UDP instead of opening a TCP connection.
-     */
-    private fun isBedrockWorld(worldName: String? = currentWorldName): Boolean {
-        val name = worldName?.trim()?.ifBlank { null } ?: activeWorldNameOrDefault()
-        // Liveness probing calls this several times a second, so the answer is memoized per
-        // world rather than re-reading server.properties from disk on every probe.
-        bedrockWorldCache[name]?.let { return it }
-        return runCatching {
-            val serverDir = ServerFileManager.getServerDirNoCreate(applicationContext, name)
-            val propsFile = File(serverDir, "server.properties")
-            if (!propsFile.isFile) return false
-            val props = propsFile.inputStream().use { input -> Properties().apply { load(input) } }
-            com.pockethost.app.data.model.ServerType
-                .fromString(props.getProperty("pocketcraft-server-type"))
-                .isBedrock
-        }.getOrDefault(false).also { bedrockWorldCache[name] = it }
-    }
-
-    /** Cleared whenever a world's server type may have changed, i.e. on every launch. */
-    private val bedrockWorldCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
-
-    /**
-     * Directory holding the level's chunk data. PowerNukkitX nests its LevelDB levels under
-     * `worlds/`, while Java servers put the region folder straight in the server directory.
-     */
-    private fun resolveLevelDir(serverDir: File): File {
-        val levelName = resolveConfiguredLevelName(serverDir)
-        // Server directories are named after the world, so the directory itself identifies which
-        // world to inspect — this is called before currentWorldName is necessarily set.
-        return if (isBedrockWorld(serverDir.name)) {
-            File(File(serverDir, com.pockethost.app.server.NukkitVersions.LEVELS_DIR), levelName)
-        } else {
-            File(serverDir, levelName)
-        }
-    }
+    /** Directory holding the level's chunk data. */
+    private fun resolveLevelDir(serverDir: File): File =
+        File(serverDir, resolveConfiguredLevelName(serverDir))
 
     private fun resolveConfiguredLevelName(serverDir: File): String {
         return runCatching {
@@ -2237,7 +2166,6 @@ class ServerHostService : Service() {
         startDashboardStatusHeartbeat(versionId)
         sendEvent(versionId, EVENT_OUTPUT, "[PocketHost] Starting server...")
         startLogcatBridge(versionId)
-        bedrockWorldCache.clear()
         val serverPort = resolveServerPort(worldName)
         currentServerPort = serverPort
         val existingServerDetected = isLocalServerPortOpen(serverPort)
@@ -2491,8 +2419,6 @@ class ServerHostService : Service() {
             line.contains("Preparing level", ignoreCase = true) ||
             line.contains("Running Java", ignoreCase = true) ||
             line.contains("Initializing plugins", ignoreCase = true) ||
-            line.contains("PowerNukkit", ignoreCase = true) ||
-            line.contains("Starting Minecraft: BE", ignoreCase = true) ||
             ConsoleParser.isPreparingStartRegion(line)) {
             hasSeenServerStarting = true
         }
@@ -2696,24 +2622,13 @@ class ServerHostService : Service() {
     private suspend fun publishRelayStatus(versionId: String) {
         runCatching {
             val serverDir = ServerFileManager.getServerDir(applicationContext, activeWorldNameOrDefault())
-            val isBedrock = isBedrockWorld()
             val propsFile = File(serverDir, "server.properties")
             val props = Properties()
             if (propsFile.exists()) {
                 propsFile.inputStream().use { props.load(it) }
             }
-            // For a Bedrock world pnx.yml is what the server actually booted with, so the relay's
-            // server-list entry is built from it rather than from the app's mirrored copy.
-            val motd = if (isBedrock) {
-                com.pockethost.app.server.NukkitLaunchManager.resolveMotd(serverDir).trim()
-            } else {
-                props.getProperty("motd", "A PocketCraft Server").trim()
-            }
-            val maxPlayers = if (isBedrock) {
-                com.pockethost.app.server.NukkitLaunchManager.resolveMaxPlayers(serverDir)
-            } else {
-                props.getProperty("max-players", "10").toIntOrNull() ?: 10
-            }
+            val motd = props.getProperty("motd", "A PocketCraft Server").trim()
+            val maxPlayers = props.getProperty("max-players", "10").toIntOrNull() ?: 10
             relayManager.postServerStatus(
                 motd = motd,
                 players = relayStatusPlayerCount.get().coerceAtLeast(0),
@@ -2804,13 +2719,9 @@ class ServerHostService : Service() {
     }
 
     private suspend fun sendRconCommandSuspended(command: String): String = withContext(Dispatchers.IO) {
-        // PowerNukkitX implements no RCON server, so a Bedrock world goes straight to the
-        // process's stdin instead of waiting on a connection that can never be accepted.
-        if (!isBedrockWorld()) {
-            val rconResponse = RconClient.sendCommand(command)
-            if (rconResponse.isNotBlank()) {
-                return@withContext rconResponse
-            }
+        val rconResponse = RconClient.sendCommand(command)
+        if (rconResponse.isNotBlank()) {
+            return@withContext rconResponse
         }
         if (com.pockethost.app.server.ServerLauncher.hasActiveExternalProcess()) {
             com.pockethost.app.server.ServerLauncher.sendCommand(command)
@@ -3243,8 +3154,7 @@ class ServerHostService : Service() {
          *
          * The server JVM is a child of the `:server` process, so `ServerLauncher.sendCommand`
          * only reaches it from inside that process — calling it from the UI process is a silent
-         * no-op. Java servers do not need this because their console is reachable over RCON, but
-         * PowerNukkitX implements no RCON at all, making stdin the only route to it.
+         * no-op. Used as a fallback when RCON is not reachable.
          */
         fun sendConsoleCommand(context: Context, command: String) {
             val clean = command.trim()

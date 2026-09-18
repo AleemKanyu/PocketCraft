@@ -1134,7 +1134,6 @@ object PluginManager {
             com.pockethost.app.data.model.ServerType.FABRIC -> "fabric-$version"
             com.pockethost.app.data.model.ServerType.PAPER -> "paper-$version"
             com.pockethost.app.data.model.ServerType.PURPUR -> "purpur-$version"
-            com.pockethost.app.data.model.ServerType.BEDROCK -> "bedrock-$version"
             com.pockethost.app.data.model.ServerType.MODPACK -> {
                 val loader = props.getProperty("pocketcraft-modpack-loader").orEmpty().lowercase()
                 when {
@@ -2630,7 +2629,7 @@ object PluginManager {
         val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
         return when (ServerType.fromString(props.getProperty("pocketcraft-server-type"))) {
             ServerType.PAPER, ServerType.PURPUR, ServerType.FABRIC -> true
-            ServerType.BEDROCK, ServerType.VANILLA, ServerType.MODPACK -> false
+            ServerType.VANILLA, ServerType.MODPACK -> false
         }
     }
 

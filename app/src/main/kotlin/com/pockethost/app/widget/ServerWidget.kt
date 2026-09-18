@@ -619,14 +619,6 @@ object ServerWidgetUpdater {
             runCatching { propsFile.inputStream().use(props::load) }
         }
         val port = props.getProperty("server-port", "25565").toIntOrNull() ?: 25565
-        // A Bedrock server binds RakNet over UDP, so a TCP connect never succeeds against one and
-        // the widget would show every running Bedrock server as offline.
-        if (com.pockethost.app.data.model.ServerType
-                .fromString(props.getProperty("pocketcraft-server-type"))
-                .isBedrock
-        ) {
-            return com.pockethost.app.server.BedrockPortProbe.isOpen(port, timeoutMs = 700)
-        }
         return runCatching {
             java.net.Socket().use { socket ->
                 socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 700)

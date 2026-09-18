@@ -66,7 +66,6 @@ object ServerJarManager {
             )
             ServerType.PURPUR -> fetchPurpurVersions()
             ServerType.FABRIC -> fetchFabricVersions()
-            ServerType.BEDROCK -> fetchBedrockVersions()
             ServerType.MODPACK -> emptyList()
         }
 
@@ -230,9 +229,4 @@ object ServerJarManager {
         )
     }.flowOn(Dispatchers.IO)
 
-    /**
-     * Bedrock client versions a PocketHost Bedrock server can advertise. The JAR is the same
-     * PowerNukkitX build regardless of the choice, so this is the set that build supports.
-     */
-    private fun fetchBedrockVersions(): List<String> = NukkitVersions.SUPPORTED_BEDROCK_VERSIONS
 }

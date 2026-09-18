@@ -14,7 +14,6 @@ object ServerTypeDownloadUrls {
             ServerType.PAPER   -> "https://papermc.io/downloads/paper"
             ServerType.PURPUR  -> "https://purpurmc.org/downloads"
             ServerType.FABRIC  -> "https://fabricmc.net/use/server/"
-            ServerType.BEDROCK -> NukkitVersions.PNX_DOWNLOAD_PAGE
             ServerType.MODPACK -> "https://modrinth.com/modpacks"
         }
     }
@@ -75,7 +74,6 @@ object ServerTypeDownloadUrls {
                     bestUrl ?: throw IllegalStateException("No official Paper server JAR build found for version $version.")
                 }
                 ServerType.PURPUR  -> "https://api.purpurmc.org/v2/purpur/$version/latest/download"
-                ServerType.BEDROCK -> resolvePowerNukkitXJarUrl()
                 ServerType.MODPACK -> throw UnsupportedOperationException("Modpacks must be installed via the modpack manager.")
 
                 ServerType.FABRIC -> {
@@ -123,42 +121,10 @@ object ServerTypeDownloadUrls {
                 fabricServerJarUrl(cleanVersion, "0.16.10", "1.0.1")
             } else if (serverType == ServerType.PURPUR) {
                 "https://api.purpurmc.org/v2/purpur/$version/latest/download"
-            } else if (serverType == ServerType.BEDROCK) {
-                NukkitVersions.PNX_JAR_URL
             } else {
                 throw e
             }
         }
-    }
-
-    /**
-     * Resolves the download URL for the PowerNukkitX server JAR.
-     *
-     * The pinned release in [NukkitVersions.PNX_JAR_URL] is what PocketHost is tested against, so
-     * it is only replaced when the newest published release still exposes a `powernukkitx.jar`
-     * asset — a renamed or split release falls back to the pinned build rather than downloading
-     * something that will not launch.
-     */
-    private fun resolvePowerNukkitXJarUrl(): String {
-        return runCatching {
-            val conn = java.net.URL(NukkitVersions.PNX_RELEASES_API)
-                .openConnection() as java.net.HttpURLConnection
-            conn.setRequestProperty("User-Agent", "PocketHost/1.0")
-            conn.setRequestProperty("Accept", "application/vnd.github+json")
-            conn.connectTimeout = 8000
-            conn.readTimeout = 8000
-            val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-            val assets = json.getJSONArray("assets")
-            var url: String? = null
-            for (i in 0 until assets.length()) {
-                val asset = assets.getJSONObject(i)
-                if (asset.optString("name").equals("powernukkitx.jar", ignoreCase = true)) {
-                    url = asset.optString("browser_download_url").takeIf { it.isNotBlank() }
-                    break
-                }
-            }
-            url ?: NukkitVersions.PNX_JAR_URL
-        }.getOrDefault(NukkitVersions.PNX_JAR_URL)
     }
 
     private fun fabricServerJarUrl(

@@ -132,11 +132,7 @@ class ServerTypeVersionViewModel @Inject constructor(
     fun deleteDownloadedVersion(version: String) {
         viewModelScope.launch {
             runCatching {
-                // The Bedrock JAR is shared by every supported version, so it is addressed
-                // through the same resolver the launcher uses rather than by version directory.
-                val file = if (_selectedType.value.isBedrock) {
-                    ServerFileManager.getServerJarFile(getApplication(), version, _selectedType.value)
-                } else {
+                val file = run {
                     val versionDir = File(getApplication<Application>().filesDir, "servers/binaries/$version")
                     File(versionDir, jarNameForVersion(_selectedType.value, version))
                 }
@@ -261,9 +257,6 @@ class ServerTypeVersionViewModel @Inject constructor(
 
     private suspend fun quickFallbackVersions(type: ServerType): List<String> {
         if (!type.supportsVersionSelect) return emptyList()
-        // Bedrock versions come from the bundled PowerNukkitX build rather than any Java version
-        // catalog, so a network lookup would only ever return the wrong list.
-        if (type.isBedrock) return com.pockethost.app.server.NukkitVersions.SUPPORTED_BEDROCK_VERSIONS
         val downloaded = listDownloadedVersionsForType(type)
         if (downloaded.isNotEmpty()) return downloaded
 
@@ -293,20 +286,6 @@ class ServerTypeVersionViewModel @Inject constructor(
             return listDownloadedModpackIds()
         }
 
-        // The single PowerNukkitX JAR is cached per release, not per Minecraft version, so once
-        // it is present every Bedrock version it supports is playable offline.
-        if (type.isBedrock) {
-            val jar = ServerFileManager.getServerJarFile(
-                getApplication(),
-                com.pockethost.app.server.NukkitVersions.DEFAULT_BEDROCK_VERSION,
-                type
-            )
-            return if (jar.isFile && jar.length() > 1_000_000L) {
-                com.pockethost.app.server.NukkitVersions.SUPPORTED_BEDROCK_VERSIONS
-            } else {
-                emptyList()
-            }
-        }
 
         val serversDir = File(getApplication<Application>().filesDir, "servers/binaries")
         if (!serversDir.exists()) return emptyList()

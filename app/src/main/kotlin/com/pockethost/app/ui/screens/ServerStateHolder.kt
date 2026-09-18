@@ -176,6 +176,7 @@ class ServerStateHolder(
         get() = File(serverDir, "server_photos").also { it.mkdirs() }
     private val backupsDir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "PocketHost Server Backups").also { it.mkdirs() }
     private val logsQueue = ArrayDeque<String>(2000)
+    private var warnedCrossplayIncompatible = false
     private var receiverRegistered = false
     private var startedAtRealtime: Long? = null
     @Volatile private var startupStartedAtRealtime: Long? = null
@@ -1298,6 +1299,7 @@ class ServerStateHolder(
         tps = 4f
         startedAtRealtime = SystemClock.elapsedRealtime()
         startupStartedAtRealtime = SystemClock.elapsedRealtime()
+        warnedCrossplayIncompatible = false
         jvmStartedTracking = false
         publicAddress = null
         tunnelConnecting = false
@@ -1524,6 +1526,17 @@ class ServerStateHolder(
             cleanLine.contains("Did not find udev library", ignoreCase = true) ||
             cleanLine.contains("Failed retrieving info for group", ignoreCase = true)) {
             return
+        }
+
+        // Geyser/Floodgate refusing to enable is a stack trace the player can do nothing about,
+        // and it is not a fault in their server. Say what actually happened, once per run.
+        if (!warnedCrossplayIncompatible && ConsoleParser.isCrossplayPluginIncompatible(cleanLine)) {
+            warnedCrossplayIncompatible = true
+            appendLog(
+                "[PocketHost] Bedrock crossplay is unavailable on this Minecraft version. " +
+                    "Geyser has not released support for it yet, so Bedrock players cannot join " +
+                    "until GeyserMC updates. Java players are unaffected."
+            )
         }
 
         if (cleanLine.contains("Done", ignoreCase = true) || cleanLine.contains("Server port", ignoreCase = true)) {
@@ -1861,13 +1874,6 @@ class ServerStateHolder(
         }
         appendLog("> $clean")
         com.pockethost.app.server.ServerLauncher.sendCommand(clean)
-        if (config.serverType.isBedrock) {
-            // PowerNukkitX has no RCON, and ServerLauncher.sendCommand is a no-op here because
-            // the server JVM is a child of the :server process. Hand the command to that process
-            // instead; its output comes back on the normal console log stream.
-            com.pockethost.app.server.ServerHostService.sendConsoleCommand(context, clean)
-            return
-        }
         scope.launch(Dispatchers.IO) {
             runCatching {
                 val response = RconClient.sendCommand(clean, port = config.rconPort)
@@ -1881,10 +1887,6 @@ class ServerStateHolder(
     // Source RCON client (RFC-compliant packet framing over TCP socket 25575)
     fun sendRconCommand(command: String): String {
         val clean = command.trim().removePrefix("/")
-        if (config.serverType.isBedrock) {
-            com.pockethost.app.server.ServerHostService.sendConsoleCommand(context, clean)
-            return "[OK]"
-        }
         val rconResponse = RconClient.sendCommand(clean, port = config.rconPort)
         if (rconResponse.isNotBlank()) {
             return rconResponse
@@ -1895,10 +1897,6 @@ class ServerStateHolder(
 
     fun sendRconCommands(commands: List<String>): List<String> {
         if (commands.isEmpty()) return emptyList()
-        if (config.serverType.isBedrock) {
-            commands.forEach { com.pockethost.app.server.ServerHostService.sendConsoleCommand(context, it) }
-            return commands.map { "[OK]" }
-        }
         return RconClient.sendCommands(commands, port = config.rconPort)
     }
 
@@ -2046,12 +2044,14 @@ class ServerStateHolder(
             if (processAlive) {
                 jvmStartedTracking = true
                 startupStartedAtRealtime = SystemClock.elapsedRealtime()
+                warnedCrossplayIncompatible = false
                 appendLog("[PocketHost] JVM process launched (PID $extPid). Server boot timeout timer initialized.")
             }
         }
 
         if (isStarting && !isRunning && startupStartedAtRealtime == null) {
             startupStartedAtRealtime = SystemClock.elapsedRealtime()
+            warnedCrossplayIncompatible = false
             jvmStartedTracking = false
             startStartupProgressTracking()
         } else if (!isStarting || isRunning) {

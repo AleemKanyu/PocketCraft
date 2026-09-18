@@ -55,18 +55,6 @@ object ConsoleParser {
     // e.g. "[17:30:06 INFO]: Steve joined the game"
     private val JOINED_GAME_REGEX = Regex("""(\S+) joined the game""", RegexOption.IGNORE_CASE)
 
-    // PowerNukkitX logs its own connection lines in Nukkit's format rather than Minecraft's:
-    // "Steve[/203.0.113.7:51234] logged in with entity id 12 at (world, 0, 64, 0)" and
-    // "Steve[/203.0.113.7:51234] logged out due to Session disconnected".
-    private val NUKKIT_LOGIN_REGEX = Regex(
-        """([^\s\[]+)\[/[^\]]*\] logged in with entity id""",
-        RegexOption.IGNORE_CASE
-    )
-    private val NUKKIT_LOGOUT_REGEX = Regex(
-        """([^\s\[]+)\[/[^\]]*\] logged out""",
-        RegexOption.IGNORE_CASE
-    )
-
     // e.g. "Steve lost connection", "Steve left the game", "Steve was kicked", "Steve disconnected"
     private val LEAVE_REGEX = Regex(
         """(\S+) (lost connection|left the game|was kicked|disconnected)""",
@@ -91,8 +79,8 @@ object ConsoleParser {
         RegexOption.IGNORE_CASE
     )
 
-    // Match Nukkit format: 2026-08-26 11:16:11 [main] INFO - or 11:24:24 [main] [INFO]
-    private val PREFIX_REGEX_NUKKIT = Regex(
+    // Match log4j-style prefixes: 2026-08-26 11:16:11 [main] INFO - or 11:24:24 [main] [INFO]
+    private val PREFIX_REGEX_LOG4J = Regex(
         """^(?:\d{4}-\d{2}-\d{2}\s+)?\d{2}:\d{2}:\d{2}\s+\[.*?\]\s+\[?(?:INFO|WARN|ERROR|FATAL|ALERT|DEBUG|TRACE)\]?\s*(?:-\s*)?""",
         RegexOption.IGNORE_CASE
     )
@@ -111,7 +99,7 @@ object ConsoleParser {
         }
         // Strip the timestamp prefix for cleaner display
         val text = cleanRaw
-            .replace(PREFIX_REGEX_NUKKIT, "")
+            .replace(PREFIX_REGEX_LOG4J, "")
             .replace(PREFIX_REGEX_1, "")
             .replace(PREFIX_REGEX_2, "")
             .trim()
@@ -165,23 +153,12 @@ object ConsoleParser {
         JOINED_GAME_REGEX.find(line)?.let { match ->
             return match.groupValues[1] to ""
         }
-        NUKKIT_LOGIN_REGEX.find(line)?.let { match ->
-            return match.groupValues[1] to ""
-        }
         return null
     }
 
-    /**
-     * Returns player name if a player left.
-     *
-     * PowerNukkitX's line is checked first: it ends in a disconnect reason such as
-     * "logged out due to Session disconnected", whose trailing "disconnected" the generic Java
-     * pattern would otherwise match, reporting the player as "Session" and leaving the real
-     * player stuck in the online list forever.
-     */
+    /** Returns player name if a player left. */
     fun parseLeave(line: String): String? =
-        NUKKIT_LOGOUT_REGEX.find(line)?.groupValues?.get(1)
-            ?: LEAVE_REGEX.find(line)?.groupValues?.get(1)
+        LEAVE_REGEX.find(line)?.groupValues?.get(1)
 
     /** Returns (player, command) if a player issued a command. */
     fun parseCommand(line: String): Pair<String, String>? {
@@ -330,13 +307,32 @@ object ConsoleParser {
     }
 
 
+    /**
+     * True when Geyser or Floodgate failed to enable because the server's Minecraft version is
+     * newer than the crossplay plugin supports.
+     *
+     * Geyser is released against a specific Java-edition build; when Paper changes an internal
+     * API ahead of it (26.3 moved CraftItemStack's methods, for example) the plugin throws on
+     * enable. Nothing on this side can fix that -- the app already downloads the newest build
+     * GeyserMC publishes -- so the point of detecting it is to replace an alarming stack trace
+     * with an explanation, and to stop implying Bedrock players can join when they cannot.
+     */
+    fun isCrossplayPluginIncompatible(line: String): Boolean {
+        val l = line.lowercase()
+        val isBridge = l.contains("geyser") || l.contains("floodgate")
+        if (!isBridge) return false
+        return l.contains("error occurred while enabling") ||
+            l.contains("could not find") && l.contains("method") ||
+            l.contains("unsupported") && l.contains("version")
+    }
+
     /** Returns the cleaned console text, stripping ANSI color codes. */
     fun stripAnsi(text: String): String =
         text.replace(Regex("\u001B\\[[;\\d]*m"), "")
 
     private fun stripLogDecorations(text: String): String =
         text.trim()
-            .replace(PREFIX_REGEX_NUKKIT, "")
+            .replace(PREFIX_REGEX_LOG4J, "")
             .replace(PREFIX_REGEX_1, "")
             .replace(PREFIX_REGEX_2, "")
             .trim()

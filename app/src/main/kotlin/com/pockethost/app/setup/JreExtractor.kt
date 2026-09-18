@@ -67,17 +67,11 @@ object JreExtractor {
         return trimmed.substringBefore('.').toIntOrNull()
     }
 
-    /**
-     * Runtime for a given server type and version.
-     *
-     * A Bedrock (PowerNukkitX) server's Java requirement is set by the PowerNukkitX build, not by
-     * the Minecraft version it advertises: PowerNukkitX 3.x is compiled for Java 21 and refuses to
-     * load on the Java 17 runtime that a version string like "1.20.x" would otherwise select.
-     */
-    fun runtimeForServer(serverType: com.pockethost.app.data.model.ServerType, versionId: String): RuntimeSpec {
-        if (serverType.isBedrock) return RUNTIME_JAVA_21
-        return runtimeForVersion(versionId)
-    }
+    /** Runtime for a given server type and version. */
+    fun runtimeForServer(
+        @Suppress("UNUSED_PARAMETER") serverType: com.pockethost.app.data.model.ServerType,
+        versionId: String
+    ): RuntimeSpec = runtimeForVersion(versionId)
 
     fun runtimeForVersion(versionId: String): RuntimeSpec {
         val minor = parseMinecraftMinor(versionId) ?: return RUNTIME_JAVA_21

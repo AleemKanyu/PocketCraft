@@ -287,14 +287,7 @@ class ServerConfigRepository @Inject constructor(
             worldName = props["level-name"] ?: defaultName,
             worldSeed = props["level-seed"] ?: "",
             maxPlayers = (props["max-players"]?.toIntOrNull() ?: 15).coerceIn(1, maxPlayersLimit),
-            // Bedrock servers listen on RakNet/UDP 19132 rather than the Java port, and the LAN
-            // address shown to players is built from this value.
-            port = if (ServerType.fromString(props["pocketcraft-server-type"]).isBedrock) {
-                props["server-port"]?.toIntOrNull()?.takeIf { it in 1..65_535 }
-                    ?: com.pockethost.app.server.NukkitVersions.DEFAULT_BEDROCK_PORT
-            } else {
-                25565
-            },
+            port = 25565,
             difficulty = props["difficulty"] ?: "normal",
             gameMode = props["gamemode"] ?: "survival",
             onlineMode = props["online-mode"]?.toBoolean() ?: false,

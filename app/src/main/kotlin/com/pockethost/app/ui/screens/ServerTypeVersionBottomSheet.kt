@@ -385,7 +385,6 @@ fun ServerTypeVersionBottomSheet(
                     ServerType.PURPUR -> "Paper fork offering extensive customization and full plugin support."
                     ServerType.FABRIC -> "Lightweight modular loader compatible with Fabric mods."
                     ServerType.VANILLA -> "Standard official Minecraft server software."
-                    ServerType.BEDROCK -> "Native Bedrock server (PowerNukkitX). Only Bedrock players — mobile, console and Windows — can join; Java players cannot."
                     ServerType.MODPACK -> "Curated community modpack with custom mods and configs."
                 }
                 Spacer(modifier = Modifier.height(8.dp))

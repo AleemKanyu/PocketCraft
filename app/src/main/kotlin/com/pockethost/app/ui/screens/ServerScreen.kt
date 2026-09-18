@@ -178,7 +178,6 @@ fun ServerScreen(
     val entitlement by billingManager.entitlement.collectAsState()
     var showPremiumBottomSheet by remember { mutableStateOf(false) }
     var showUpgradeCelebrationAnimation by remember { mutableStateOf(false) }
-    var showDiscordBadgePopup by remember { mutableStateOf(false) }
     var hasInitiallyCheckedPremium by remember { mutableStateOf(false) }
 
     LaunchedEffect(isPremium) {
@@ -840,20 +839,7 @@ fun ServerScreen(
             if (showUpgradeCelebrationAnimation) {
                 com.pockethost.app.ui.components.UpgradeCelebrationDialog(
                     entitlement = entitlement,
-                    onDismissRequest = {
-                        showUpgradeCelebrationAnimation = false
-                        if (entitlement.isPremium && !entitlement.isSupportive && entitlement.discordId.isBlank()) {
-                            showDiscordBadgePopup = true
-                        }
-                    }
-                )
-            }
-
-            if (showDiscordBadgePopup) {
-                com.pockethost.app.ui.components.DiscordBadgePopup(
-                    entitlement = entitlement,
-                    onDismissRequest = { showDiscordBadgePopup = false },
-                    onMessage = showMessage
+                    onDismissRequest = { showUpgradeCelebrationAnimation = false }
                 )
             }
 

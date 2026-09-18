@@ -182,22 +182,7 @@ class ServerLauncher(private val context: Context) {
             throw IllegalStateException("Launch target not found: ${launchTarget.absolutePath}")
         }
 
-
-        // The server type decides how much of the Java-edition preparation below applies: a
-        // Bedrock (PowerNukkitX) server has no EULA, no Bukkit/Paper configuration, no NBT
-        // level.dat and no Java plugin directory, so those steps are skipped rather than run
-        // against files that do not exist.
-        val isBedrockServer = com.pockethost.app.data.model.ServerType
-            .fromString(
-                ServerPropertiesHelper
-                    .readProperties(ServerFileManager.getServerDir(context, worldName), persistDefaults = false)
-                    .getProperty("pocketcraft-server-type")
-            )
-            .isBedrock
-
-        if (!isBedrockServer) {
-            ServerFileManager.prepareEula(context, worldName)
-        }
+        ServerFileManager.prepareEula(context, worldName)
         ServerFileManager.prepareServerProperties(context, worldName)
 
         // Sync configuration from ServerConfigRepository to server.properties of the world before launch
@@ -213,49 +198,34 @@ class ServerLauncher(private val context: Context) {
             onOutput("[PocketHost] Warning: Failed to sync configuration properties: ${e.message}")
         }
 
-        if (isBedrockServer) {
-            // PowerNukkitX only needs its own directories and a pnx.yml carrying the settings
-            // the user configured in the app.
-            File(ServerFileManager.getServerDir(context, worldName), "logs").mkdirs()
-            NukkitLaunchManager.prepareNukkitServer(context, worldName)
-        } else {
-            ServerFileManager.prepareRuntimeArtifacts(context, worldName)
-            PluginManager.removeIncompatiblePlugins(context, worldName)
-            // Try to supply what is missing before disabling anything: silently turning off a mod
-            // the player installed reads as the app breaking their server, and the dependency is
-            // usually one download away.
-            installMissingModDependencies(worldName, versionId, onOutput)
-            // A mod quarantined on an earlier launch stays disabled until something turns it back
-            // on, so restoration has to run after the downloads and before the next quarantine.
-            ModDependencyValidator.restoreSatisfiedMods(ServerFileManager.getServerDir(context, worldName), onOutput)
-            ModDependencyValidator.quarantineMissingDependencies(ServerFileManager.getServerDir(context, worldName), onOutput)
-        }
+        ServerFileManager.prepareRuntimeArtifacts(context, worldName)
+        PluginManager.removeIncompatiblePlugins(context, worldName)
+        // Try to supply what is missing before disabling anything: silently turning off a mod
+        // the player installed reads as the app breaking their server, and the dependency is
+        // usually one download away.
+        installMissingModDependencies(worldName, versionId, onOutput)
+        // A mod quarantined on an earlier launch stays disabled until something turns it back
+        // on, so restoration has to run after the downloads and before the next quarantine.
+        ModDependencyValidator.restoreSatisfiedMods(ServerFileManager.getServerDir(context, worldName), onOutput)
+        ModDependencyValidator.quarantineMissingDependencies(ServerFileManager.getServerDir(context, worldName), onOutput)
 
         val serverDirFileLocal = ServerFileManager.getServerDir(context, worldName)
         val props = ServerPropertiesHelper.readProperties(serverDirFileLocal)
 
         // Validate level.dat and attempt recovery if corrupted
-        if (!isBedrockServer) {
-            try {
-                validateAndRecoverLevelDat(serverDirFileLocal, props, onOutput)
-            } catch (e: Exception) {
-                onOutput("[PocketHost] Level.dat validator exception: ${e.message}")
-            }
+        try {
+            validateAndRecoverLevelDat(serverDirFileLocal, props, onOutput)
+        } catch (e: Exception) {
+            onOutput("[PocketHost] Level.dat validator exception: ${e.message}")
         }
 
         val serverTypeStr = props.getProperty("pocketcraft-server-type", "PAPER")
         val serverType = com.pockethost.app.data.model.ServerType.fromString(serverTypeStr)
 
         val levelName = props.getProperty("level-name", "world")
-        // PowerNukkitX keeps its LevelDB levels under worlds/<name>; Java servers put the region
-        // folder directly in the server directory.
-        val worldDir = if (isBedrockServer) {
-            File(File(serverDirFileLocal, NukkitVersions.LEVELS_DIR), levelName)
-        } else {
-            File(serverDirFileLocal, levelName)
-        }
+        val worldDir = File(serverDirFileLocal, levelName)
         val levelDat = File(worldDir, "level.dat")
-        if (!isBedrockServer && serverType != com.pockethost.app.data.model.ServerType.PAPER && serverType != com.pockethost.app.data.model.ServerType.PURPUR && levelDat.exists()) {
+        if (serverType != com.pockethost.app.data.model.ServerType.PAPER && serverType != com.pockethost.app.data.model.ServerType.PURPUR && levelDat.exists()) {
             try {
                 com.pockethost.app.service.NBTParser.cleanPaperDatapack(levelDat, onOutput)
             } catch (e: Exception) {
@@ -263,9 +233,7 @@ class ServerLauncher(private val context: Context) {
             }
         }
         
-        // Bedrock levels are LevelDB databases, not NBT level.dat files, so none of the Java
-        // level maintenance below applies to them.
-        if (!isBedrockServer && levelDat.exists()) {
+        if (levelDat.exists()) {
             try {
                 val difficultyStr = props.getProperty("difficulty", "normal")
                 com.pockethost.app.service.NBTParser.updateDifficultyInLevelDat(levelDat, difficultyStr)
@@ -274,19 +242,15 @@ class ServerLauncher(private val context: Context) {
             }
         }
 
-        if (!isBedrockServer) {
-            com.pockethost.app.service.DimensionMigrator.syncDimensionsForServerType(context, worldName, serverType)
-            // Floodgate and the Bedrock bridge exist to let Bedrock players onto a *Java* server.
-            // A native Bedrock server speaks to those clients directly and needs neither.
-            PluginManager.preserveFloodgateKey(context, worldName)
-            PluginManager.enforceBedrockBridgeLocalConfig(context, worldName)
-            PlayerDataManager.warnIfFloodgateUsernamePrefixChanged(serverDirFileLocal)
-        }
+        com.pockethost.app.service.DimensionMigrator.syncDimensionsForServerType(context, worldName, serverType)
+        PluginManager.preserveFloodgateKey(context, worldName)
+        PluginManager.enforceBedrockBridgeLocalConfig(context, worldName)
+        PlayerDataManager.warnIfFloodgateUsernamePrefixChanged(serverDirFileLocal)
 
         // Paper 1.17+ crashes if it finds a legacy world/players/ directory alongside world/playerdata/
         // This is a leftover from pre-1.7.6 Minecraft. Remove it if it is empty (no .dat files inside).
         try {
-            if (!isBedrockServer) removeLegacyPlayersDir(worldDir, onOutput)
+            removeLegacyPlayersDir(worldDir, onOutput)
         } catch (e: Exception) {
             onOutput("[PocketHost] Warning: Could not clean legacy players/ dir: ${e.message}")
         }
@@ -301,11 +265,11 @@ class ServerLauncher(private val context: Context) {
         ensureSystemShims(shimDir, File(tmpDir), onOutput)
         val deviceProfile = buildDeviceStabilityProfile(totalRamMb = getTotalRamMb(context), availableRamMb = com.pockethost.app.util.RamUtils.getAvailableRamMb(context))
         val prefsForceExternal = AppPreferences(context).forceExternalJvm
-        // PowerNukkitX has no RCON, so the only way to reach its console is by writing to the
+        // The only way to reach the server console is by writing to the
         // server process's stdin — which exists only on the out-of-process launch path. The
         // in-process JNI JVM inherits the app's stdin and would leave the server unreachable by
         // /stop, kick, or any other command.
-        val forceExternal = prefsForceExternal || deviceProfile.forceExternalJvm || isBedrockServer
+        val forceExternal = prefsForceExternal || deviceProfile.forceExternalJvm
         val preferInProcessJvm = !forceExternal || isFilesdirNoexec(runtime)
 
         val resolvedRuntime = ensureLaunchableRuntime(
@@ -324,19 +288,17 @@ class ServerLauncher(private val context: Context) {
         val jrePath   = normalizeAndroidPath(JreExtractor.getJreDir(context, resolvedRuntime).absolutePath)
         chmodJreRuntime(context, resolvedRuntime)
         val totalRam = getTotalRamMb(context)
-        // bukkit.yml / spigot.yml / paper-global.yml are Java-server files; PowerNukkitX reads
+        // bukkit.yml / spigot.yml / paper-global.yml are Java-server files;
         // none of them and its own relay-friendly tuning already lives in pnx.yml.
-        if (!isBedrockServer) {
-            applyRelayReadyRuntimeProfile(serverDirFile, onOutput)
-            applyRelayReadyBukkitConfig(serverDirFile, onOutput)
-            applyRelayReadyPaperGlobalConfig(serverDirFile, onOutput)
-            applyRelayReadySpigotConfig(serverDirFile, onOutput)
-            applyRelayReadyPaperWorldDefaults(serverDirFile, onOutput)
-            if (serverType == com.pockethost.app.data.model.ServerType.PURPUR) {
-                applyRelayReadyPurpurConfig(serverDirFile, onOutput)
-            }
-            applyRelayReadyFabricConfig(serverDirFile, serverType, versionId, onOutput)
+        applyRelayReadyRuntimeProfile(serverDirFile, onOutput)
+        applyRelayReadyBukkitConfig(serverDirFile, onOutput)
+        applyRelayReadyPaperGlobalConfig(serverDirFile, onOutput)
+        applyRelayReadySpigotConfig(serverDirFile, onOutput)
+        applyRelayReadyPaperWorldDefaults(serverDirFile, onOutput)
+        if (serverType == com.pockethost.app.data.model.ServerType.PURPUR) {
+            applyRelayReadyPurpurConfig(serverDirFile, onOutput)
         }
+        applyRelayReadyFabricConfig(serverDirFile, serverType, versionId, onOutput)
 
         // Dynamic JVM heap allocation based on per-world UI settings in server.properties
         val worldProps = ServerPropertiesHelper.readProperties(serverDirFile)
@@ -414,7 +376,7 @@ class ServerLauncher(private val context: Context) {
 
         runCatching {
             // Paperclip bootstrap rewrite applies only to Paper and Purpur JARs;
-            // rewriting Fabric or PowerNukkitX JARs would corrupt them.
+            // rewriting Fabric JARs would corrupt them.
             if (serverType == com.pockethost.app.data.model.ServerType.PAPER || serverType == com.pockethost.app.data.model.ServerType.PURPUR) {
                 patchPaperclipJavaVersionCheck(File(normalizedJarPath), onOutput)
             }
@@ -996,25 +958,10 @@ class ServerLauncher(private val context: Context) {
                 ServerFileManager.LaunchMode.JAR -> {
                     add("-jar")
                     add(launchTargetPath)
-                    if (serverType.isBedrock) {
-                        // PowerNukkitX runs an interactive first-run wizard and reads from stdin;
-                        // on a server whose stdin is a pipe that would hang forever, so the setup
-                        // is explicitly skipped. ANSI is disabled so console lines and logs/
-                        // reach the app's parser clean.
-                        add("--language")
-                        add("eng")
-                        add("--skip-setup")
-                        add("--accept-license")
-                        add("--disable-ansi")
-                        add("--disable-auto-bug-report")
-                        // No --port: PowerNukkitX ignores it and binds what pnx.yml says, which
-                        // NukkitLaunchManager has already written from the world's settings.
-                    } else {
-                        add("nogui")
-                        if (serverType != com.pockethost.app.data.model.ServerType.FABRIC) {
-                            add("--port")
-                            add(resolveServerPort(worldName).toString())
-                        }
+                    add("nogui")
+                    if (serverType != com.pockethost.app.data.model.ServerType.FABRIC) {
+                        add("--port")
+                        add(resolveServerPort(worldName).toString())
                     }
                 }
                 ServerFileManager.LaunchMode.ARG_FILE -> {
@@ -2032,11 +1979,6 @@ class ServerLauncher(private val context: Context) {
         val props = runCatching {
             propsFile.inputStream().use { input -> Properties().apply { load(input) } }
         }.getOrNull() ?: return 25565
-        // A Bedrock world's authoritative port lives in pnx.yml, which PowerNukkitX may have
-        // rewritten since the app last recorded it.
-        if (com.pockethost.app.data.model.ServerType.fromString(props.getProperty("pocketcraft-server-type")).isBedrock) {
-            return NukkitLaunchManager.resolvePort(serverDir)
-        }
         return props.getProperty("server-port", "25565").toIntOrNull() ?: 25565
     }
 

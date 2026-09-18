@@ -58,14 +58,6 @@ object ServerFileManager {
     }
 
     fun getServerJarFile(context: Context, gameVersion: String, serverType: ServerType): File {
-        // PowerNukkitX ships a single fat JAR per release that serves every Bedrock client
-        // version it supports, so it is cached per PowerNukkitX release rather than per
-        // Minecraft version — otherwise changing the advertised version would re-download 60 MB
-        // of identical bytes.
-        if (serverType == ServerType.BEDROCK) {
-            val jarDir = getServerJarDir(context, "powernukkitx")
-            return File(jarDir, "bedrock-${com.pockethost.app.server.NukkitVersions.PNX_RELEASE}.jar")
-        }
         val jarDir = getServerJarDir(context, gameVersion)
         val jarName = "${serverType.name.lowercase()}-$gameVersion.jar"
         return File(jarDir, jarName)
@@ -141,23 +133,10 @@ object ServerFileManager {
     fun prepareServerProperties(context: Context, worldName: String) {
         val serverDir = getServerDir(context, worldName)
         val props = ServerPropertiesHelper.readProperties(serverDir)
-        val isBedrock = ServerType.fromString(props.getProperty("pocketcraft-server-type")).isBedrock
-        // resolveStableWorldName only understands the Java layout: it looks for level.dat or a
-        // region/ folder next to the server directory. A Bedrock level is a LevelDB database
-        // under worlds/<name>, so that search always comes up empty and its discovery fallback
-        // would rewrite level-name to "world" — pointing PowerNukkitX at a brand new empty level
-        // and orphaning the player's actual world.
-        val resolvedWorldName = if (isBedrock) {
-            props.getProperty("level-name")?.trim()?.takeIf { it.isNotEmpty() } ?: "world"
-        } else {
-            resolveStableWorldName(serverDir, props)
-        }
+        val resolvedWorldName = resolveStableWorldName(serverDir, props)
 
         // Forced configuration for runtime compatibility.
-        props.setProperty(
-            "server-port",
-            if (isBedrock) com.pockethost.app.server.NukkitVersions.DEFAULT_BEDROCK_PORT.toString() else "25565"
-        )
+        props.setProperty("server-port", "25565")
         props.setProperty("level-name", resolvedWorldName)
         props.setProperty("server-ip", "")                 // bind all interfaces
         // Preserve the user's online-mode choice; only default to false when the
