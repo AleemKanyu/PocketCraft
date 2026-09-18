@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.security.MessageDigest
 import java.util.Properties
 
 fun parseGitHubRepo(remoteUrl: String?): Pair<String, String>? {
@@ -319,27 +320,166 @@ tasks.matching { it.name.startsWith("uploadCrashlyticsMappingFile") }.configureE
 }
 
 tasks.register("verifyBundledJreMetadata") {
-    description = "Verifies that bundled JRE archives and release metadata do not contain third-party launcher or vendor identifiers."
+    description = "Verifies that every bundled JRE was built by PocketCraft and contains no third-party runtime binaries."
     group = "verification"
 
     val assetsDir = file("src/main/assets")
     inputs.dir(assetsDir)
 
     doLast {
-        val forbiddenStrings = listOf("ARM-MC", "arm-mc.com", "pojavlauncher", "pojav")
-        val assets = assetsDir.walkTopDown().filter { it.isFile && (it.name == "release" || it.name.endsWith(".tar.xz")) }.toList()
+        // Identifiers that must never appear in a runtime we ship. The last two
+        // are the important ones: "adhoc.root.openjdk" is the build stamp baked
+        // into the Anvil-MC/ARM-MC JDK 25, and the hash is that build's libjvm.so.
+        // Both survive any amount of editing of the plain-text `release` file,
+        // which is exactly how the previous version of this check was fooled.
+        val forbiddenStrings = listOf(
+            "ARM-MC", "arm-mc.com", "ANVIL-MC", "anvil-mc.com",
+            "pojavlauncher", "pojav", "adhoc.root.openjdk"
+        )
+        val forbiddenLibjvmHashes = mapOf(
+            "2138beda82c1d50dfb2984237a536b9a5dccc1b555e0424d32b896137d2ee0f5"
+                to "Anvil-MC / ARM-MC JDK 25"
+        )
+        // Our own builds pass --with-version-opt=pocketcraft, so this lands in
+        // the VM version string inside libjvm.so.
+        val requiredVendorMarker = "pocketcraft"
 
-        for (file in assets) {
-            if (file.name == "release") {
-                val text = file.readText()
-                for (forbidden in forbiddenStrings) {
-                    if (text.contains(forbidden, ignoreCase = true)) {
-                        throw GradleException("Found forbidden third-party identifier '$forbidden' in bundled JRE release file: ${file.path}")
-                    }
+        // Which bundled runtimes we build ourselves, and which are upstream
+        // artifacts we redistribute.
+        //
+        // jre25 is ours: tools/jdk25-android/ compiles it, so it must carry our
+        // vendor marker. jre17 and jre21 are public release builds from the
+        // PojavLauncher lineage (their libjvm.so reports "adhoc.runner.openjdk",
+        // i.e. built by a CI runner and published as a release, not lifted off
+        // someone's machine). GPLv2+CE allows redistributing those, so they are
+        // allowlisted here rather than required to be ours -- but the forbidden
+        // identifier and known-bad-hash checks below still apply to them.
+        //
+        // Removing an entry from this list is the right move once we build that
+        // version ourselves too.
+        val upstreamRedistributions = setOf("jre17", "jre21")
+
+        fun bytesContain(haystack: ByteArray, needle: String): Boolean {
+            val n = needle.lowercase().toByteArray(Charsets.US_ASCII)
+            if (n.isEmpty() || haystack.size < n.size) return false
+            outer@ for (i in 0..(haystack.size - n.size)) {
+                for (j in n.indices) {
+                    val c = haystack[i + j].toInt().toChar().lowercaseChar().code.toByte()
+                    if (c != n[j]) continue@outer
+                }
+                return true
+            }
+            return false
+        }
+
+        // 1. Plain-text release descriptors.
+        assetsDir.walkTopDown().filter { it.isFile && it.name == "release" }.forEach { file ->
+            val text = file.readText()
+            forbiddenStrings.forEach { forbidden ->
+                if (text.contains(forbidden, ignoreCase = true)) {
+                    throw GradleException(
+                        "Forbidden third-party identifier '$forbidden' in ${file.path}"
+                    )
                 }
             }
+            // A scrubbed SOURCE line. Upstream builds record a real revision here;
+            // ".:git:openjdk" is what is left when someone blanks it by hand.
+            if (text.contains("SOURCE=\".:git:openjdk\"")) {
+                throw GradleException(
+                    "${file.path} has a blanked SOURCE line. Restore the real revision " +
+                    "from the runtime it describes -- GPLv2 requires upstream notices be " +
+                    "kept intact, and a blanked SOURCE is exactly what gets noticed."
+                )
+            }
         }
-        logger.lifecycle("Bundled JRE metadata audit passed: no third-party identifiers found in bundled assets.")
+
+        // 2. The actual JVM binary inside each native archive. A `release` file
+        //    describes a binary; it is not evidence about it.
+        val archives = assetsDir.walkTopDown()
+            .filter { it.isFile && it.name.startsWith("bin-") && it.name.endsWith(".tar.xz") }
+            .toList()
+
+        if (archives.isEmpty()) {
+            logger.lifecycle("Bundled JRE audit: no native runtime archives present, nothing to verify.")
+            return@doLast
+        }
+
+        val tmp = File(layout.buildDirectory.get().asFile, "jre-audit").apply { mkdirs() }
+        archives.forEach { archive ->
+            val extracted = File(tmp, "${archive.parentFile.name}-${archive.name}-libjvm.so")
+            val ok = providers.exec {
+                commandLine("tar", "-xJOf", archive.absolutePath, "./lib/server/libjvm.so")
+            }.let { spec ->
+                runCatching {
+                    extracted.writeBytes(spec.standardOutput.asBytes.get())
+                    extracted.length() > 0
+                }.getOrDefault(false)
+            }
+            if (!ok) {
+                throw GradleException(
+                    "Could not read ./lib/server/libjvm.so out of ${archive.path}. " +
+                    "Every shipped runtime must expose its JVM for verification."
+                )
+            }
+
+            val sha = MessageDigest.getInstance("SHA-256")
+                .digest(extracted.readBytes())
+                .joinToString("") { b -> "%02x".format(b) }
+            forbiddenLibjvmHashes[sha]?.let { owner ->
+                throw GradleException(
+                    "${archive.path} ships the $owner libjvm.so (sha256 $sha). " +
+                    "Build our own with tools/jdk25-android/ instead."
+                )
+            }
+
+            val bytes = extracted.readBytes()
+            forbiddenStrings.forEach { forbidden ->
+                if (bytesContain(bytes, forbidden)) {
+                    throw GradleException(
+                        "Forbidden identifier '$forbidden' is compiled into ${archive.path}'s libjvm.so."
+                    )
+                }
+            }
+            // A loose `release` sitting next to the archive must agree with the one
+            // inside it. Editing only the outer copy is precisely how jre17 came to
+            // claim IMPLEMENTOR="The OpenJDK Community" while its own tarball still
+            // said "N/A" -- the archive is the authority, the loose file is a
+            // convenience copy.
+            val looseRelease = File(archive.parentFile, "release")
+            if (looseRelease.isFile) {
+                val inner = runCatching {
+                    providers.exec {
+                        commandLine("tar", "-xJOf", archive.absolutePath, "./release")
+                    }.standardOutput.asText.get()
+                }.getOrNull()
+                if (inner != null && inner.isNotBlank() &&
+                    inner.trim() != looseRelease.readText().trim()
+                ) {
+                    throw GradleException(
+                        "${looseRelease.path} does not match the release file inside " +
+                        "${archive.name}. The archive is authoritative; do not hand-edit " +
+                        "the loose copy."
+                    )
+                }
+            }
+
+            val runtimeDir = archive.parentFile.name
+            if (runtimeDir in upstreamRedistributions) {
+                logger.lifecycle(
+                    "Bundled JRE audit: $runtimeDir/${archive.name} is an allowlisted upstream " +
+                    "redistribution (sha256 $sha); no forbidden identifiers found."
+                )
+            } else if (!bytesContain(bytes, requiredVendorMarker)) {
+                throw GradleException(
+                    "$runtimeDir/${archive.name}'s libjvm.so does not identify itself as a " +
+                    "PocketCraft build. Build it with tools/jdk25-android/, which sets the vendor " +
+                    "at configure time, or add '$runtimeDir' to upstreamRedistributions if it is " +
+                    "genuinely an upstream release we are entitled to redistribute."
+                )
+            } else {
+                logger.lifecycle("Bundled JRE audit: $runtimeDir/${archive.name} verified as a PocketCraft build (sha256 $sha).")
+            }
+        }
     }
 }
 

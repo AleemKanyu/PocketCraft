@@ -106,6 +106,28 @@ OpenJDK (The OpenJDK Community)
 License: GPL-2.0 with Classpath Exception
 URL: https://openjdk.org
 
+PocketCraft bundles Java runtimes built from OpenJDK source. The Java 25
+runtime used by Minecraft 1.26+ servers is compiled by PocketCraft's own build
+pipeline from openjdk/jdk25u at tag jdk-25.0.4.1-ga, cross-compiled for Android
+with the Android NDK r28. It reports IMPLEMENTOR="PocketCraft" and carries
+SOURCE=, OPENJDK_TAG= and BUILD_SOURCE= lines in its `release` file naming the
+exact upstream commit it was built from.
+
+Written offer of corresponding source: the complete source of the bundled Java
+25 runtime is the upstream OpenJDK commit named in that `release` file, plus
+the patches and build scripts published at
+https://github.com/AleemKanyu/PocketCraft/tree/main/tools/jdk25-android
+Per-module OpenJDK licence texts ship inside the runtime itself, under
+assets/java/jre25/legal/.
+
+The Android/Bionic port patch applied to that source is not PocketCraft's
+work. It originates with the PojavLauncher project
+(https://github.com/PojavLauncherTeam/android-openjdk-build-multiarch) and was
+taken from FoldCraftLauncher's build repository
+(https://github.com/FCL-Team/Android-OpenJDK-Build). It is a derivative of
+OpenJDK and is redistributed under GPL-2.0 with Classpath Exception. Credit for
+that porting work belongs to those projects' contributors.
+
 ---
 GPL-2.0-only with Classpath Exception TEXT
 

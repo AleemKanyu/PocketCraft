@@ -1,0 +1,65 @@
+name: Build OpenJDK 25 for Android
+
+# Builds PocketCraft's own JDK 25 runtime from OpenJDK source.
+#
+# This workflow is the canonical build. Its public log is the provenance
+# record: it shows the upstream tag being cloned, the patches being applied,
+# and the compiler producing every binary that ends up in the APK. Nothing
+# prebuilt is downloaded and repackaged.
+#
+# Artifacts drop into assets/java/jre25/ in the app module.
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: Target architecture
+        type: choice
+        default: arm64
+        options: [arm64, arm, x86_64]
+  push:
+    paths:
+      - 'tools/jdk25-android/**'
+      - '.github/workflows/build-jdk25-android.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      ARCH: ${{ github.event.inputs.arch || 'arm64' }}
+      WORK_DIR: ${{ github.workspace }}/jdk25-build
+      OUT_DIR: ${{ github.workspace }}/jre25-out
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # An OpenJDK build tree plus the NDK needs roughly 16 GB; a stock runner
+      # is too tight without this.
+      - name: Reclaim runner disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          df -h /
+
+      - name: Build OpenJDK 25
+        run: |
+          chmod +x tools/jdk25-android/build.sh tools/jdk25-android/package.sh
+          tools/jdk25-android/build.sh "$ARCH"
+
+      - name: Package runtime
+        run: tools/jdk25-android/package.sh "$ARCH"
+
+      - name: Show provenance
+        run: cat "$OUT_DIR/BUILD-PROVENANCE-$ARCH.txt"
+
+      - name: Upload runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: jre25-${{ env.ARCH }}
+          path: ${{ env.OUT_DIR }}
+          if-no-files-found: error
+          retention-days: 30

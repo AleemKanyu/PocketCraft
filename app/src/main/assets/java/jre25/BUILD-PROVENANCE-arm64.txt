@@ -1,0 +1,20 @@
+PocketCraft OpenJDK 25 for Android -- build provenance
+======================================================
+
+Architecture:        arm64 (aarch64)
+OpenJDK source:      openjdk/jdk25u @ jdk-25.0.4.1-ga
+OpenJDK commit:      7b65d74bcbd7c3a0b4c1f5c5bd85e64aa2e51b4a
+Android NDK:         r28 (min API 21)
+Boot JDK:            Temurin 24.0.2+12
+Patch 0001 sha256:   c9aa3e953f9abcf1f4b3b3ac2af92d1a33fca9349d5cca6c38c4b75db450119b
+Patch 0002 sha256:   09af5927056bec8bbc49b3fb3a2a1b42f0a5c464e1c1fffe1541eb4889c09d8b
+SOURCE_DATE_EPOCH:   1787011200 (2026-08-18)
+Vendor:              PocketCraft
+
+Output hashes:
+9bc555e0b2f92d374d9cc29ee0068fe9df81ee85424b64849ee6f519d8c385d2  ./bin-arm64.tar.xz
+db8c19f99b1a9a97e654697f6eddc57d88caf872c48b5430dd48b2ef79c49d35  ./universal.tar.xz
+9d82dd5c5090dc5eb9fd2efacde8f1acdd60c610cee49cf3209ae95bebed2864  release
+
+Embedded VM version string:
+OpenJDK 64-Bit Server VM (25.0.4.1+1-pocketcraft) for linux-aarch64 JRE (25.0.4.1+1-pocketcraft), built on 2026-08-18T00:00:00Z with clang Android (12896553, +pgo, +bolt, +lto, +mlgo, based on r530567c) Clang 19.0.0 (https://android.googlesource.com/toolchain/llvm-project 97a699bf4812a18fb657c2779f5296a4ab2694d2)

@@ -507,15 +507,29 @@ object JreExtractor {
             copyFileIfMissing(nativeJvm, File(libDir, "server/libjvm.so"))
         }
 
-        // Copy all native shared runtime libraries and configs from jre-runtime into target libDir if missing
+        // Last-resort repair for a runtime that extracted incompletely: fill gaps
+        // from the Java 21 runtime.
+        //
+        // This only runs when the target has no lib/modules of its own, i.e. it is
+        // genuinely broken. A runtime that extracted correctly is left strictly
+        // alone, because back-filling it mixes major Java versions: a Java 21
+        // native library loaded into a Java 25 JVM fails in ways that surface much
+        // later than the copy that caused them.
+        //
+        // Even when repairing, native libraries are never copied across versions --
+        // a missing .so means the extraction must be retried, not patched over.
+        // hasRequiredRuntimeFiles() is checked by the caller straight after this
+        // and will fail the extraction loudly, which is the behaviour we want.
         val java21Dir = getJreDir(context, RUNTIME_JAVA_21)
         val j21LibDir = File(java21Dir, "lib")
-        if (j21LibDir.exists() && jreDir != java21Dir) {
-            j21LibDir.walkTopDown().filter { it.isFile && it.name != "modules" }.forEach { file ->
-                val relativePath = file.relativeTo(j21LibDir).path
-                val targetFile = File(libDir, relativePath)
-                copyFileIfMissing(file, targetFile)
-            }
+        val targetHasOwnModules = File(libDir, "modules").exists()
+        if (j21LibDir.exists() && jreDir != java21Dir && !targetHasOwnModules) {
+            j21LibDir.walkTopDown()
+                .filter { it.isFile && it.name != "modules" && !it.name.endsWith(".so") }
+                .forEach { file ->
+                    val relativePath = file.relativeTo(j21LibDir).path
+                    copyFileIfMissing(file, File(libDir, relativePath))
+                }
         }
     }
 
