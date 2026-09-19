@@ -34,15 +34,32 @@ export const CubicPixelTrail: React.FC = () => {
       document.documentElement.classList.contains("dark") ||
       window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-    // Dark mode uses difference-tuned values so white text turns pitch-black (#000000) under pixels
-    // Light mode uses soft clean light-stone shades (no black)
+    // Subtle, balanced lighter palette (not too dark or light)
     const getColors = (dark: boolean) => ({
       grays: dark
-        ? ["#302a20", "#706855", "#d0cbbe", "#ffffff"]
-        : ["#f2f1ec", "#e3e1d8", "#cbc8bb", "#b2afa0"],
+        ? [
+            "rgba(235, 230, 218, 0.18)",
+            "rgba(238, 233, 222, 0.32)",
+            "rgba(242, 238, 228, 0.50)",
+            "rgba(248, 245, 236, 0.68)",
+          ]
+        : [
+            "rgba(180, 175, 162, 0.16)",
+            "rgba(160, 155, 142, 0.28)",
+            "rgba(140, 135, 122, 0.42)",
+            "rgba(120, 115, 102, 0.56)",
+          ],
       hot: dark
-        ? ["#f6d64a", "#e8842a", "#b52f10"]
-        : ["#f3cc51", "#e69b52", "#9e9a8f"],
+        ? [
+            "rgba(246, 214, 74, 0.65)",
+            "rgba(232, 160, 60, 0.50)",
+            "rgba(240, 235, 225, 0.40)",
+          ]
+        : [
+            "rgba(225, 175, 45, 0.60)",
+            "rgba(210, 140, 50, 0.48)",
+            "rgba(150, 145, 132, 0.35)",
+          ],
     });
 
     let currentIsDark = getIsDark();
@@ -316,9 +333,9 @@ export const CubicPixelTrail: React.FC = () => {
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="pointer-events-none fixed inset-0 z-30 select-none"
+      className="pointer-events-none fixed inset-0 z-20 select-none"
       style={{
-        mixBlendMode: isDark ? "difference" : "normal",
+        mixBlendMode: "normal",
       }}
     />
   );

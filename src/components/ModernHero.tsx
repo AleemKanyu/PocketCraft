@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { MINECRAFT_ICONS } from "../lib/minecraft-icons";
 import { useTheme } from "../lib/ThemeContext";
 import { useLowEndDevice } from "../hooks/useLowEndDevice";
+import { DownloadDropdown } from "./DownloadDropdown";
 
 const DownloadIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -280,17 +281,7 @@ export function ModernHero() {
           transition={{ duration: 0.5, delay: 0.8 }}
           className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-center justify-center w-full max-w-xs sm:max-w-none mx-auto"
         >
-          <motion.a
-            href="https://github.com/AleemKanyu/PocketCraft/releases/latest/download/PocketHost.apk"
-            download="PocketHost.apk"
-            className="btn-duo shimmer-btn px-6 sm:px-12 py-4 text-sm uppercase tracking-wider font-bold inline-flex items-center justify-center gap-2 w-full sm:w-auto shadow-lg hover:shadow-[0_0_30px_rgba(127,230,32,0.35)] transition-shadow"
-            whileHover={{ scale: 1.05, y: -3 }}
-            whileTap={{ scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 400 }}
-          >
-            <DownloadIcon className="w-5 h-5 flex-shrink-0" />
-            Download APK
-          </motion.a>
+          <DownloadDropdown className="w-full sm:w-auto" buttonText="Download" />
 
           <motion.a
             href="https://discord.com/invite/nc7ceYWVfT"

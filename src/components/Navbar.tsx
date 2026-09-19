@@ -18,6 +18,21 @@ export default function Navbar() {
     { href: "/community", label: "Community" },
   ];
 
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (href.includes("#")) {
+      const [path, hash] = href.split("#");
+      const targetPath = path || "/";
+      if (location.pathname === targetPath) {
+        e.preventDefault();
+        const targetElement = document.getElementById(hash);
+        if (targetElement) {
+          targetElement.scrollIntoView({ behavior: "smooth" });
+          window.history.pushState(null, "", `#${hash}`);
+        }
+      }
+    }
+  };
+
   return (
     <nav className={`sticky top-0 z-50 backdrop-blur-xl border-b-2 section-transition ${
       theme === "dark"
@@ -60,12 +75,17 @@ export default function Navbar() {
                   </a>
                 );
               }
+              const isCurrent =
+                location.pathname === link.href ||
+                (link.href === "/#compare" && location.pathname === "/" && location.hash === "#compare");
+
               return (
                 <Link
                   key={link.href}
                   to={link.href}
+                  onClick={(e) => handleNavClick(e, link.href)}
                   className={`relative font-bold uppercase tracking-wider text-sm transition-colors ${
-                    location.pathname === link.href
+                    isCurrent
                       ? "text-[#7FE620]"
                       : theme === "dark"
                       ? "text-white/50 hover:text-white"
@@ -73,7 +93,7 @@ export default function Navbar() {
                   }`}
                 >
                   {link.label}
-                  {location.pathname === link.href && (
+                  {isCurrent && (
                     <motion.div
                       layoutId="nav-indicator"
                       className="absolute -bottom-1 left-0 right-0 h-0.5 bg-[#7FE620] rounded-full"
@@ -180,9 +200,13 @@ export default function Navbar() {
                   ) : (
                     <Link
                       to={link.href}
-                      onClick={() => setIsOpen(false)}
+                      onClick={(e) => {
+                        handleNavClick(e, link.href);
+                        setIsOpen(false);
+                      }}
                       className={`block font-bold uppercase tracking-wider text-sm transition-colors ${
-                        location.pathname === link.href
+                        (location.pathname === link.href ||
+                          (link.href === "/#compare" && location.pathname === "/" && location.hash === "#compare"))
                           ? "text-[#7FE620]"
                           : theme === "dark"
                           ? "text-white/50 hover:text-white"

@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "../lib/ThemeContext";
 import { useLowEndDevice } from "../hooks/useLowEndDevice";
+import { DownloadDropdown } from "../components/DownloadDropdown";
 
 const DownloadIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -161,7 +162,7 @@ const Home = () => {
               theme === "dark" ? "text-white" : "text-black"
             }`}
           >
-            Download PocketHost APK
+            Get PocketHost for Android
           </motion.h2>
 
           <motion.p
@@ -173,7 +174,7 @@ const Home = () => {
               theme === "dark" ? "text-white/50" : "text-black/60"
             }`}
           >
-            Tap below to download the latest PocketHost APK and install it directly on your Android device.
+            Install directly from Google Play or download the latest release APK for manual installation.
           </motion.p>
 
           <motion.p
@@ -186,20 +187,15 @@ const Home = () => {
             <strong>Version:</strong> Latest Release | <strong>Minimum Android:</strong> 8.0+ (ARM64)
           </motion.p>
 
-          <motion.a
-            href="https://github.com/AleemKanyu/PocketCraft/releases/latest/download/PocketHost.apk"
-            download="PocketHost.apk"
-            className="btn-duo inline-flex items-center justify-center gap-3 px-6 sm:px-12 py-4 text-sm uppercase tracking-wider font-bold w-full sm:w-auto shadow-lg"
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: 0.5 }}
-            whileHover={isLowEnd ? undefined : { scale: 1.05, y: -3 }}
-            whileTap={{ scale: 0.98 }}
+            className="flex justify-center"
           >
-            <DownloadIcon className="w-5 h-5 flex-shrink-0" />
-            Download APK (Free)
-          </motion.a>
+            <DownloadDropdown buttonText="Download Options" className="w-full sm:w-auto" />
+          </motion.div>
 
           <motion.p
             initial={{ opacity: 0 }}

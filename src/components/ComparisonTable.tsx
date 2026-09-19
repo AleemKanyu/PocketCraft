@@ -162,13 +162,13 @@ export const ComparisonTable: React.FC = () => {
   return (
     <section
       id="compare"
-      className={`py-24 px-4 sm:px-6 border-t-4 section-transition ${
+      className={`scroll-mt-20 md:scroll-mt-24 py-20 sm:py-24 px-3 sm:px-6 border-t-4 section-transition ${
         isDark ? "border-white/5" : "border-black/5"
       }`}
     >
       <div className="max-w-5xl mx-auto relative z-10">
         {/* Section Header */}
-        <div className="text-center mb-12">
+        <div className="text-center mb-10 sm:mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1 mb-4 rounded-sm border border-[#7FE620]/40 bg-[#7FE620]/10 font-mono text-xs uppercase tracking-widest text-[#7FE620] font-bold">
             Honest Comparison
           </div>
@@ -180,7 +180,7 @@ export const ComparisonTable: React.FC = () => {
             How PocketHost Compares
           </h2>
           <p
-            className={`text-sm sm:text-base max-w-2xl mx-auto leading-relaxed ${
+            className={`text-xs sm:text-sm md:text-base max-w-2xl mx-auto leading-relaxed ${
               isDark ? "text-white/60" : "text-black/60"
             }`}
           >
@@ -189,79 +189,91 @@ export const ComparisonTable: React.FC = () => {
           </p>
         </div>
 
-        {/* Authentic Comparison Table Container */}
-        <div className="border-2 border-[#2b251e] shadow-2xl overflow-hidden bg-[#14120e]">
-          {/* Responsive Scroll Wrapper */}
-          <div className="overflow-x-auto">
-            <div className="min-w-[680px]">
-              {/* Table Header Bar */}
-              <div className="flex items-stretch border-b border-[#28221b]">
-                {/* Parchment Section: Capability + Competitors */}
-                <div className="flex-1 flex items-stretch bg-[#ece3cb] text-[#191510] font-mono font-black text-xs sm:text-sm tracking-wider uppercase select-none">
-                  <div className="w-[42%] py-3.5 px-4 sm:px-6 flex items-center border-r border-[#d8cdb2]">
-                    Capability
-                  </div>
-                  <div className="w-[19%] py-3.5 px-2 flex items-center justify-center text-center border-r border-[#d8cdb2]">
+        {/* Authentic Comparison Table Container - 100% visible on mobile without horizontal scroll */}
+        <div className="border-2 border-[#2b251e] shadow-2xl overflow-hidden bg-[#14120e] w-full">
+          <div>
+            {/* Table Header Bar */}
+            <div className="flex items-stretch border-b border-[#28221b] h-32 sm:h-36 md:h-auto select-none">
+              {/* Parchment Section: Capability + Competitors */}
+              <div className="w-[86.5%] sm:w-[85.5%] md:w-[85%] flex items-stretch bg-[#ece3cb] text-[#191510] font-mono font-black tracking-wider uppercase">
+                {/* Capability Header */}
+                <div className="w-[53.18%] sm:w-[49.12%] md:w-[47.06%] px-3 sm:px-4 md:px-6 py-3.5 flex items-end md:items-center border-r border-[#d8cdb2] text-[11px] sm:text-xs md:text-sm">
+                  Capability
+                </div>
+
+                {/* Competitor: Aternos */}
+                <div className="w-[15.6%] sm:w-[16.96%] md:w-[17.65%] py-2 md:py-3.5 px-0.5 sm:px-1 flex items-center justify-center text-center border-r border-[#d8cdb2]">
+                  <span className="[writing-mode:vertical-rl] rotate-180 md:[writing-mode:horizontal-tb] md:rotate-0 text-[10px] sm:text-xs md:text-sm font-black tracking-widest">
                     Aternos
-                  </div>
-                  <div className="w-[19%] py-3.5 px-2 flex items-center justify-center text-center border-r border-[#d8cdb2]">
+                  </span>
+                </div>
+
+                {/* Competitor: Minehut */}
+                <div className="w-[15.6%] sm:w-[16.96%] md:w-[17.65%] py-2 md:py-3.5 px-0.5 sm:px-1 flex items-center justify-center text-center border-r border-[#d8cdb2]">
+                  <span className="[writing-mode:vertical-rl] rotate-180 md:[writing-mode:horizontal-tb] md:rotate-0 text-[10px] sm:text-xs md:text-sm font-black tracking-widest">
                     Minehut
-                  </div>
-                  <div className="w-[20%] py-3.5 px-2 flex items-center justify-center text-center">
+                  </span>
+                </div>
+
+                {/* Competitor: Paid Hosts */}
+                <div className="w-[15.6%] sm:w-[16.96%] md:w-[17.65%] py-2 md:py-3.5 px-0.5 sm:px-1 flex items-center justify-center text-center">
+                  <span className="[writing-mode:vertical-rl] rotate-180 md:[writing-mode:horizontal-tb] md:rotate-0 text-[10px] sm:text-xs md:text-sm font-black tracking-widest">
                     Paid Hosts
-                  </div>
+                  </span>
                 </div>
+              </div>
 
-                {/* PocketHost Green Header Block */}
-                <div className="w-[22%] bg-[#2d8647] text-white font-mono font-black text-xs sm:text-sm tracking-widest uppercase flex items-center justify-center py-3.5 px-3 select-none shadow-inner">
+              {/* PocketHost Green Header Block */}
+              <div className="w-[13.5%] sm:w-[14.5%] md:w-[15%] bg-[#2d8647] text-white font-mono font-black uppercase flex items-center justify-center py-2 md:py-3.5 px-0.5 sm:px-2 shadow-inner">
+                <span className="[writing-mode:vertical-rl] rotate-180 md:[writing-mode:horizontal-tb] md:rotate-0 text-[10px] sm:text-xs md:text-sm tracking-widest text-center">
                   PocketHost
-                </div>
+                </span>
               </div>
+            </div>
 
-              {/* Table Rows */}
-              <div className="divide-y divide-[#221e18]">
-                {COMPARISON_DATA.map((row, idx) => (
-                  <motion.div
-                    key={row.capability}
-                    initial={{ opacity: 0, y: 6 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.25, delay: idx * 0.02 }}
-                    className="flex items-stretch hover:bg-[#1b1813] transition-colors group"
-                  >
-                    {/* Capability Column */}
-                    <div className="w-[32.76%] py-3 sm:py-3.5 px-4 sm:px-6 font-mono text-xs sm:text-sm text-[#ddd6c7] flex items-center border-r border-[#221e18]">
-                      <span title={row.tooltip}>{row.capability}</span>
-                    </div>
+            {/* Table Rows */}
+            <div className="divide-y divide-[#221e18]">
+              {COMPARISON_DATA.map((row, idx) => (
+                <motion.div
+                  key={row.capability}
+                  initial={{ opacity: 0, y: 6 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.2, delay: Math.min(0.2, idx * 0.015) }}
+                  className="flex items-stretch hover:bg-[#1b1813] transition-colors group"
+                >
+                  {/* Capability Column */}
+                  <div className="w-[46%] sm:w-[42%] md:w-[40%] py-2.5 sm:py-3 px-2.5 sm:px-4 md:px-6 font-mono text-[11px] sm:text-xs md:text-sm text-[#ddd6c7] flex items-center border-r border-[#221e18] leading-snug">
+                    <span title={row.tooltip}>{row.capability}</span>
+                  </div>
 
-                    {/* Aternos */}
-                    <div className="w-[14.82%] py-3 sm:py-3.5 px-2 flex items-center justify-center border-r border-[#221e18]">
-                      <PixelIcon status={row.aternos} />
-                    </div>
+                  {/* Aternos */}
+                  <div className="w-[13.5%] sm:w-[14.5%] md:w-[15%] py-2.5 sm:py-3 px-1 flex items-center justify-center border-r border-[#221e18]">
+                    <PixelIcon status={row.aternos} />
+                  </div>
 
-                    {/* Minehut */}
-                    <div className="w-[14.82%] py-3 sm:py-3.5 px-2 flex items-center justify-center border-r border-[#221e18]">
-                      <PixelIcon status={row.minehut} />
-                    </div>
+                  {/* Minehut */}
+                  <div className="w-[13.5%] sm:w-[14.5%] md:w-[15%] py-2.5 sm:py-3 px-1 flex items-center justify-center border-r border-[#221e18]">
+                    <PixelIcon status={row.minehut} />
+                  </div>
 
-                    {/* Paid Hosts */}
-                    <div className="w-[15.6%] py-3 sm:py-3.5 px-2 flex items-center justify-center border-r border-[#221e18]">
-                      <PixelIcon status={row.paidHosts} />
-                    </div>
+                  {/* Paid Hosts */}
+                  <div className="w-[13.5%] sm:w-[14.5%] md:w-[15%] py-2.5 sm:py-3 px-1 flex items-center justify-center border-r border-[#221e18]">
+                    <PixelIcon status={row.paidHosts} />
+                  </div>
 
-                    {/* PocketHost Winning Column */}
-                    <div className="w-[22%] py-3 sm:py-3.5 px-3 flex items-center justify-center bg-[#22c55e]/[0.05] border-l border-[#22c55e]/25 group-hover:bg-[#22c55e]/[0.08] transition-colors">
-                      <PixelIcon status={row.pocketHost} />
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+                  {/* PocketHost Winning Column */}
+                  <div className="w-[13.5%] sm:w-[14.5%] md:w-[15%] py-2.5 sm:py-3 px-1 flex items-center justify-center bg-[#22c55e]/[0.08] border-l border-[#22c55e]/25 group-hover:bg-[#22c55e]/[0.14] transition-colors">
+                    <PixelIcon status={row.pocketHost} />
+                  </div>
+                </motion.div>
+              ))}
             </div>
           </div>
 
           {/* Table Footer Legend */}
-          <div className="border-t border-[#26211a] bg-[#0e0d0a] px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4 font-mono text-xs text-[#a09786]">
-            <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+          <div className="border-t border-[#26211a] bg-[#0e0d0a] px-3 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 font-mono text-[11px] sm:text-xs text-[#a09786]">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-6">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 bg-[#4ade80] shadow-[0_0_6px_rgba(74,222,128,0.7)]" />
                 <span>PocketHost Free Native</span>
@@ -275,17 +287,13 @@ export const ComparisonTable: React.FC = () => {
                   <rect x="1" y="6" width="5" height="5" />
                   <rect x="6" y="1" width="5" height="5" />
                 </svg>
-                <span>Partial / Paywalled / Delayed</span>
+                <span>Partial / Paywalled</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 border-[1.5px] border-[#524a3c] bg-transparent" />
                 <span>Not Supported</span>
               </div>
             </div>
-
-            <span className="text-[#6d6454] hidden md:inline">
-              Scroll horizontally on mobile
-            </span>
           </div>
         </div>
 
