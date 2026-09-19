@@ -83,6 +83,9 @@ val officialWebsiteUrl = localProperties.getProperty("officialWebsiteUrl")
     ?: "https://pockethost.online"
 
 val autoVersionCode = (System.currentTimeMillis() / 60000).toInt()
+val allowDebugSigningForRelease = providers.gradleProperty("pocketcraftAllowDebugSigning")
+    .map { it.toBoolean() }
+    .getOrElse(false)
 val fastReleaseBuild = providers.gradleProperty("pocketcraftFastRelease")
     .map { it.equals("true", ignoreCase = true) }
     .getOrElse(false)
@@ -168,9 +171,34 @@ android {
     buildTypes {
         release {
             val releaseSigning = signingConfigs.getByName("release")
-            signingConfig = if (releaseSigning.storeFile != null && !configuredReleaseStorePassword.isNullOrBlank()) {
+            val hasReleaseKey = releaseSigning.storeFile != null &&
+                !configuredReleaseStorePassword.isNullOrBlank()
+
+            // Never silently fall back to the debug keystore here. The debug key
+            // is the shared, publicly known Android one: an APK signed with it
+            // cannot be installed over a properly signed copy, so shipping one
+            // breaks updates for every existing user. Allow it only when the
+            // build explicitly opts in with -PpocketcraftAllowDebugSigning=true,
+            // which is for local smoke tests, never for anything published.
+            if (!hasReleaseKey && !allowDebugSigningForRelease) {
+                throw GradleException(
+                    "Release signing key not found, refusing to build an unsigned-for-release APK.\n" +
+                        "Expected a keystore via keystore.properties (storeFile/storePassword), " +
+                        "local.properties (releaseKeystorePath/releaseStorePassword), or the " +
+                        "POCKETCRAFT_RELEASE_KEYSTORE / POCKETCRAFT_RELEASE_STORE_PASSWORD " +
+                        "environment variables.\n" +
+                        "To build a throwaway debug-signed release locally, pass " +
+                        "-PpocketcraftAllowDebugSigning=true -- never publish that artifact."
+                )
+            }
+
+            signingConfig = if (hasReleaseKey) {
                 releaseSigning
             } else {
+                logger.warn(
+                    "WARNING: building release with the DEBUG signing key because " +
+                        "-PpocketcraftAllowDebugSigning=true was passed. Do not publish this APK."
+                )
                 signingConfigs.getByName("debug")
             }
             
