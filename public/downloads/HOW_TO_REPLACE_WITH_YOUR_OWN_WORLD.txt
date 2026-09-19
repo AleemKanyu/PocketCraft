@@ -1,0 +1,10 @@
+========================================================================
+             CREATOR NOTE: REPLACING WITH YOUR ACTUAL WORLD
+========================================================================
+To sell your actual Minecraft world:
+Simply replace the file at:
+  public/downloads/minecraft-world.zip
+
+with your own zipped world folder or .mcworld file (named minecraft-world.zip).
+Any customer who completes payment will immediately download that file!
+========================================================================

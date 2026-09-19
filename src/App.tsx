@@ -12,6 +12,7 @@ const Roadmap = lazy(() => import("./pages/Roadmap"));
 const Community = lazy(() => import("./pages/Community"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
+const WorldDrop = lazy(() => import("./pages/WorldDrop"));
 
 const RouteLoadingFallback = () => (
   <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
@@ -33,6 +34,7 @@ function AppRoutes() {
         <Route path="/community" element={<Community />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
+        <Route path="/world" element={<WorldDrop />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>

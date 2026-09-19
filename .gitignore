@@ -11,3 +11,4 @@ coverage/
 pocketcraft-*.zip
 hostinger-deploy.zip
 .vercel/
+*.zip

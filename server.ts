@@ -5,6 +5,8 @@ import fs from "fs";
 import { Readable } from "stream";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+import { createHmac, timingSafeEqual } from "crypto";
+import Razorpay from "razorpay";
 
 dotenv.config();
 
@@ -147,6 +149,95 @@ async function startServer() {
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true });
   });
+
+  // Razorpay Checkout Endpoints
+  const getRazorpayClient = () => {
+    const keyId = process.env.RAZORPAY_KEY_ID || "";
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || "";
+    if (!keyId || !keySecret) {
+      throw new Error("Razorpay credentials not configured in environment");
+    }
+    return new Razorpay({ key_id: keyId, key_secret: keySecret });
+  };
+
+  app.post("/api/create-order", async (req, res) => {
+    try {
+      const amount = Number(req.body?.amount);
+      const currency = String(req.body?.currency || "INR").toUpperCase();
+      const receipt = req.body?.receipt || `rcpt_${Date.now()}`;
+
+      if (isNaN(amount) || amount < 100) {
+        return res.status(400).json({ error: "Minimum amount is 100 paise (1 INR)." });
+      }
+
+      const keyId = process.env.RAZORPAY_KEY_ID || "";
+      const razorpay = getRazorpayClient();
+      const order = await razorpay.orders.create({
+        amount: Math.round(amount),
+        currency,
+        receipt: String(receipt).slice(0, 40),
+        notes: { product: "Minecraft World Map" }
+      });
+
+      return res.status(200).json({
+        order_id: order.id,
+        amount: order.amount,
+        currency: order.currency,
+        key_id: keyId
+      });
+    } catch (err: any) {
+      const statusCode = err?.statusCode === 401 ? 401 : 500;
+      return res.status(statusCode).json({
+        error: err?.error?.description || err?.message || "Failed to create order"
+      });
+    }
+  });
+
+  app.post("/api/verify-payment", (req, res) => {
+    try {
+      const order_id = String(req.body?.razorpay_order_id || req.body?.order_id || "").trim();
+      const payment_id = String(req.body?.razorpay_payment_id || req.body?.payment_id || "").trim();
+      const razorpay_signature = String(req.body?.razorpay_signature || req.body?.signature || "").trim();
+
+      if (!order_id || !payment_id || !razorpay_signature) {
+        return res.status(400).json({
+          success: false,
+          error: "Missing required fields: order_id, payment_id, or razorpay_signature"
+        });
+      }
+
+      const keySecret = process.env.RAZORPAY_KEY_SECRET || "";
+      if (!keySecret) {
+        return res.status(500).json({ success: false, error: "Server secret configuration missing" });
+      }
+
+      const dataToSign = `${order_id}|${payment_id}`;
+      const generatedSignature = createHmac("sha256", keySecret)
+        .update(dataToSign)
+        .digest("hex");
+
+      const expectedBuf = Buffer.from(generatedSignature, "utf8");
+      const receivedBuf = Buffer.from(razorpay_signature, "utf8");
+
+      if (expectedBuf.length !== receivedBuf.length || !timingSafeEqual(expectedBuf, receivedBuf)) {
+        return res.status(400).json({
+          success: false,
+          error: "Signature mismatch: payment verification failed"
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Payment verified successfully",
+        order_id,
+        payment_id,
+        downloadUrl: "/downloads/minecraft-world.zip"
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Verification error" });
+    }
+  });
+
 
   // Explicit route for AdMob app-ads.txt to guarantee it always serves as plain text
   app.get("/app-ads.txt", (_req, res) => {
