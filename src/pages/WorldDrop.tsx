@@ -106,6 +106,7 @@ const GALLERY_SHOTS = [
 export default function WorldDrop() {
   const [buyerEmail, setBuyerEmail] = useState("");
   const [buyerName, setBuyerName] = useState("");
+  const [buyerPhone, setBuyerPhone] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -208,7 +209,8 @@ export default function WorldDrop() {
         image: "/world-shots/shot-19.webp",
         prefill: {
           email: buyerEmail.trim(),
-          name: buyerName.trim() || "Minecraft Player"
+          name: buyerName.trim() || "Minecraft Player",
+          contact: buyerPhone.trim() || "9876543210"
         },
         theme: {
           color: "#7FE620"
@@ -679,6 +681,29 @@ export default function WorldDrop() {
               </div>
             )}
 
+            {/* Test Mode Card Helper Notice */}
+            <div className="border-2 border-black bg-[#FFE600] p-3.5 mb-5 shadow-[3px_3px_0px_#000000] font-mono text-xs text-black">
+              <div className="flex items-center justify-between mb-1 font-black uppercase">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 bg-black inline-block" />
+                  TEST GATEWAY INSTRUCTIONS
+                </span>
+                <span className="text-[10px] bg-black text-white px-1.5 py-0.5">TEST MODE</span>
+              </div>
+              <div className="text-[11px] text-neutral-900 mb-2 font-medium">
+                Testing the checkout? Use the test card credentials below (personal bank cards are rejected in test mode):
+              </div>
+              <div className="bg-white border border-black p-2.5 text-[11px] space-y-1.5 font-bold">
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                  <span><strong>TEST VISA:</strong> <code className="bg-[#f0f0ee] px-1.5 py-0.5 border border-black font-black select-all">4111 1111 1111 1111</code></span>
+                  <span className="text-neutral-600">EXP: <strong>12/28</strong> | CVV: <strong>123</strong></span>
+                </div>
+                <div className="text-[10px] text-neutral-700 font-medium">
+                  → On the bank simulation screen, click the green <strong>"Success"</strong> button (or OTP: <strong>123456</strong>).
+                </div>
+              </div>
+            </div>
+
             {/* Inputs */}
             <div className="space-y-4 mb-6">
               <div>
@@ -690,6 +715,20 @@ export default function WorldDrop() {
                   placeholder="name@email.com"
                   value={buyerEmail}
                   onChange={(e) => setBuyerEmail(e.target.value)}
+                  disabled={isLoading}
+                  className="w-full border-2 border-black bg-[#fafaf9] px-4 py-3.5 font-mono text-sm text-black placeholder-neutral-500 outline-none focus:bg-white focus:shadow-[3px_3px_0px_#000000] transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block font-mono text-xs font-black uppercase text-black mb-2">
+                  PHONE NUMBER (OPTIONAL / FOR INSTANT RECEIPT)
+                </label>
+                <input
+                  type="tel"
+                  placeholder="e.g. 9876543210"
+                  value={buyerPhone}
+                  onChange={(e) => setBuyerPhone(e.target.value)}
                   disabled={isLoading}
                   className="w-full border-2 border-black bg-[#fafaf9] px-4 py-3.5 font-mono text-sm text-black placeholder-neutral-500 outline-none focus:bg-white focus:shadow-[3px_3px_0px_#000000] transition-all"
                 />

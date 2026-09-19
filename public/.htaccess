@@ -104,6 +104,10 @@
   # Serve site.webmanifest directly
   RewriteRule ^site\.webmanifest$ site.webmanifest [L]
 
+  # Razorpay Backend Endpoints
+  RewriteRule ^api/create-order/?$ api/create-order.php [L]
+  RewriteRule ^api/verify-payment/?$ api/verify-payment.php [L]
+
   # Pass existing files and directories directly
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d
