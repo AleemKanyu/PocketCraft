@@ -1772,10 +1772,10 @@ fun SettingsScreen(
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     DuoButton(
-                                        text = "Donate on Ko-fi",
+                                        text = "Support on Patreon",
                                         onClick = {
                                             try {
-                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://ko-fi.com/aleemkanyu"))
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.patreon.com/cw/pockethost"))
                                                 context.startActivity(intent)
                                             } catch (_: Exception) {}
                                         },
@@ -1790,7 +1790,7 @@ fun SettingsScreen(
                                 }
 
                                 Text(
-                                    "Voluntary contribution via Ko-fi · Safe and secure payment",
+                                    "Voluntary contribution via Patreon · cancel your membership anytime",
                                     fontSize = 10.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     textAlign = TextAlign.Center,

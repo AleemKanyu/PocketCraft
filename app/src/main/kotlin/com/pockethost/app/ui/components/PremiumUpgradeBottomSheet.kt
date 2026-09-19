@@ -51,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
@@ -68,7 +69,7 @@ import com.pockethost.app.ui.theme.Monocraft
 import com.pockethost.app.ui.theme.PocketColors
 import kotlinx.coroutines.launch
 
-private const val KOFI_URL = "https://ko-fi.com/aleemkanyu"
+private const val PATREON_URL = "https://www.patreon.com/cw/pockethost"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -238,11 +239,11 @@ fun PremiumUpgradeBottomSheet(
                 }
             }
 
-            // Ko-fi Voluntary Donation
-            KofiDonationCard(
+            // Patreon supporter membership
+            PatreonDonationCard(
                 onClick = {
                     try {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(KOFI_URL))
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(PATREON_URL))
                         context.startActivity(intent)
                     } catch (_: Exception) {
                         Toast.makeText(context, "Could not open browser.", Toast.LENGTH_SHORT).show()
@@ -251,7 +252,7 @@ fun PremiumUpgradeBottomSheet(
             )
 
             Text(
-                text = "Voluntary contribution via Ko-fi · Safe and secure payment via Card, PayPal, or UPI",
+                text = "Voluntary contribution via Patreon · cancel your membership anytime",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center,
@@ -395,10 +396,10 @@ private fun MonthlyDonationCard(
 }
 
 @Composable
-private fun KofiDonationCard(
+private fun PatreonDonationCard(
     onClick: () -> Unit
 ) {
-    val kofiColor = Color(0xFFFF5E5B)
+    val patreonColor = Color(0xFFFF424D)
 
     GameCard(modifier = Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -416,14 +417,14 @@ private fun KofiDonationCard(
                     Box(
                         modifier = Modifier
                             .size(34.dp)
-                            .background(kofiColor.copy(alpha = 0.12f), RoundedCornerShape(9.dp))
-                            .border(1.dp, kofiColor.copy(alpha = 0.4f), RoundedCornerShape(9.dp)),
+                            .background(patreonColor.copy(alpha = 0.12f), RoundedCornerShape(9.dp))
+                            .border(1.dp, patreonColor.copy(alpha = 0.4f), RoundedCornerShape(9.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                             contentDescription = null,
-                            tint = kofiColor,
+                            tint = patreonColor,
                             modifier = Modifier.size(17.dp)
                         )
                     }
@@ -433,7 +434,7 @@ private fun KofiDonationCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = "Ko-fi Donation",
+                            text = "Patreon",
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 13.5.sp,
                             fontFamily = Monocraft,
@@ -444,15 +445,11 @@ private fun KofiDonationCard(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(5.dp))
-                                .background(
-                                    Brush.horizontalGradient(
-                                        listOf(Color(0xFFFF5E5B), Color(0xFFFF416C))
-                                    )
-                                )
+                                .background(patreonColor)
                                 .padding(horizontal = 5.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = "ONE-TIME",
+                                text = "MEMBERSHIP",
                                 color = Color.White,
                                 fontSize = 8.sp,
                                 fontWeight = FontWeight.ExtraBold,
@@ -465,7 +462,7 @@ private fun KofiDonationCard(
                 Text(
                     text = "Custom",
                     fontWeight = FontWeight.ExtraBold,
-                    color = kofiColor,
+                    color = patreonColor,
                     fontSize = 15.sp,
                     fontFamily = Monocraft,
                     maxLines = 1,
@@ -475,7 +472,7 @@ private fun KofiDonationCard(
             }
 
             Text(
-                text = "Direct one-time voluntary donation of any custom amount via card, PayPal, or UPI on Ko-fi.",
+                text = "Become a supporter on Patreon. Memberships are voluntary and help fund relays and continued development.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f),
                 lineHeight = 17.sp
@@ -483,16 +480,14 @@ private fun KofiDonationCard(
 
             // Action Button
             DuoButton(
-                text = "DONATE ON KO-FI",
+                text = "SUPPORT ON PATREON",
                 onClick = onClick,
                 variant = DuoButtonVariant.Warning,
                 enabled = true,
                 modifier = Modifier.fillMaxWidth(),
                 minHeight = 38.dp,
                 fontWeight = FontWeight.Bold,
-                backgroundBrush = Brush.linearGradient(
-                    listOf(Color(0xFFFF5E5B), Color(0xFFFF416C))
-                )
+                backgroundBrush = SolidColor(patreonColor)
             )
         }
     }
