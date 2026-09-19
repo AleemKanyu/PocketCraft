@@ -27,7 +27,7 @@ declare global {
 const WORLD_PRICE_INR = 199;
 const WORLD_PRICE_PAISE = WORLD_PRICE_INR * 100;
 // Encoded public Key ID for client-side Razorpay modal fallback
-const CLIENT_KEY_ID = atob("cnpwX3Rlc3RfVGRtT3puUndad1AxV3Y=");
+const CLIENT_KEY_ID = atob("cnpwX3Rlc3RfVGRudXZqdGF2MldJU2c=");
 
 interface PaymentResult {
   order_id: string;
