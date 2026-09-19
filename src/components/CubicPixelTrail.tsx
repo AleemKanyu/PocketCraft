@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
+import { useTheme } from "../lib/ThemeContext";
 
 const H = 12; // Grid cell size (12px)
 
@@ -10,14 +11,44 @@ interface Particle {
   life: number;
 }
 
+// Dark mode: soft luminous warm parchment tones
+const darkColors = {
+  grays: [
+    "rgba(235, 230, 218, 0.18)",
+    "rgba(238, 233, 222, 0.32)",
+    "rgba(242, 238, 228, 0.50)",
+    "rgba(248, 245, 236, 0.68)",
+  ],
+  hot: [
+    "rgba(246, 214, 74, 0.65)",
+    "rgba(232, 160, 60, 0.50)",
+    "rgba(240, 235, 225, 0.40)",
+  ],
+};
+
+// Light mode: clearly visible, crisp neutral slate-gray tones
+const lightColors = {
+  grays: [
+    "rgba(110, 115, 125, 0.45)",
+    "rgba(85, 92, 102, 0.65)",
+    "rgba(60, 68, 78, 0.82)",
+    "rgba(35, 42, 52, 0.95)",
+  ],
+  hot: [
+    "rgba(217, 119, 6, 0.90)",
+    "rgba(100, 108, 120, 0.75)",
+    "rgba(60, 68, 78, 0.60)",
+  ],
+};
+
 export const CubicPixelTrail: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [isDark, setIsDark] = useState(() =>
-    typeof document !== "undefined"
-      ? document.documentElement.classList.contains("dark") ||
-        window.matchMedia("(prefers-color-scheme: dark)").matches
-      : true
-  );
+  const { theme } = useTheme();
+  const themeRef = useRef(theme);
+
+  useEffect(() => {
+    themeRef.current = theme;
+  }, [theme]);
 
   useEffect(() => {
     // Only enable on desktop pointer devices with motion allowed
@@ -29,52 +60,6 @@ export const CubicPixelTrail: React.FC = () => {
 
     const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) return;
-
-    const getIsDark = () =>
-      document.documentElement.classList.contains("dark") ||
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
-
-    // Subtle, balanced lighter palette (not too dark or light)
-    const getColors = (dark: boolean) => ({
-      grays: dark
-        ? [
-            "rgba(235, 230, 218, 0.18)",
-            "rgba(238, 233, 222, 0.32)",
-            "rgba(242, 238, 228, 0.50)",
-            "rgba(248, 245, 236, 0.68)",
-          ]
-        : [
-            "rgba(130, 135, 142, 0.28)",
-            "rgba(105, 112, 120, 0.45)",
-            "rgba(80, 88, 98, 0.62)",
-            "rgba(60, 68, 78, 0.78)",
-          ],
-      hot: dark
-        ? [
-            "rgba(246, 214, 74, 0.65)",
-            "rgba(232, 160, 60, 0.50)",
-            "rgba(240, 235, 225, 0.40)",
-          ]
-        : [
-            "rgba(185, 145, 35, 0.70)",
-            "rgba(110, 118, 128, 0.55)",
-            "rgba(80, 88, 98, 0.45)",
-          ],
-    });
-
-    let currentIsDark = getIsDark();
-    let colors = getColors(currentIsDark);
-
-    const observer = new MutationObserver(() => {
-      const dark = getIsDark();
-      currentIsDark = dark;
-      setIsDark(dark);
-      colors = getColors(dark);
-    });
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
 
     let totalCols = 0;
     let totalRows = 0;
@@ -225,6 +210,9 @@ export const CubicPixelTrail: React.FC = () => {
     const render = (time: number) => {
       animId = requestAnimationFrame(render);
 
+      const isDark = themeRef.current === "dark";
+      const colors = isDark ? darkColors : lightColors;
+
       const dt = Math.min(0.05, (time - lastFrameTime) / 1000);
       lastFrameTime = time;
 
@@ -312,7 +300,6 @@ export const CubicPixelTrail: React.FC = () => {
     return () => {
       cancelAnimationFrame(animId);
       clearInterval(heightCheckInterval);
-      observer.disconnect();
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("scroll", handleScroll);
       window.removeEventListener("pointerleave", handlePointerLeave);
