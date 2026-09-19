@@ -11,9 +11,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
-import android.os.PowerManager
 import android.provider.Settings
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -26,7 +24,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -36,7 +33,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -58,6 +54,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -87,17 +84,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -113,9 +105,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
@@ -124,9 +113,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -154,20 +143,33 @@ import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.ui.theme.PocketMotion
 import com.pockethost.app.ui.theme.PocketHostTheme
 import com.pockethost.app.ui.theme.card3d
+import com.pockethost.app.ui.theme.pill3d
+import com.pockethost.app.ui.theme.pocketDecoratedBackground
 import com.pockethost.app.ui.theme.pocketIsDarkTheme
 import com.pockethost.app.ui.util.playAppHaptic
 import com.pockethost.app.ui.util.ThemePreferenceStore
 import com.pockethost.app.ui.util.MobTheme
 import com.pockethost.app.util.AppStrings
 import com.pockethost.app.util.LocalAppStrings
-import com.pockethost.app.util.appStringsFor
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
-private val OnboardingGreenLight = Color(0xFF3DDC84)
-private val OnboardingGoldLight = Color(0xFFFFB142)
+// ─────────────────────────────────────────────────────────────────────────────
+// Onboarding design tokens
+//
+// The tour is the first thing a new user sees, so it has to read as the same
+// product as the rest of the app: flat theme-coloured surfaces, chunky 3D
+// borders with a heavier bottom edge, Monocraft for anything that acts as a
+// label. Every colour below resolves through PocketColors / MaterialTheme so
+// the tour follows the mob theme and light/dark mode the user picks from the
+// header — there are deliberately no screen-local hex literals.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Corner radii, kept to three steps so the whole flow lines up. */
+private val OnboardingCardCorner = 18.dp
+private val OnboardingTileCorner = 14.dp
+private val OnboardingChipCorner = 12.dp
 
 private fun Dp.scaled(factor: Float): Dp = (value * factor).dp
 private fun TextUnit.scaledSp(factor: Float): TextUnit = (value * factor).sp
@@ -185,129 +187,198 @@ private fun onboardingCompactScale(): Float {
 @Composable
 private fun onboardingIsCompact(): Boolean = onboardingCompactScale() < 1f
 
-@Composable
-private fun onboardingAccentPurple(): Color = PocketColors.Primary
+// ── Accents ──────────────────────────────────────────────────────────────────
+// Three roles only: the theme's brand colour, a positive/confirmation colour and
+// an attention colour. Anything that needs a fourth is reusing one of these.
 
 @Composable
-private fun onboardingAccentPurpleDark(): Color = if (pocketIsDarkTheme()) PocketColors.TextDark else PocketColors.PrimaryDark
+private fun onboardingAccent(): Color = PocketColors.Primary
+
+/** Readable-on-tint variant of the brand colour, for text and small icons. */
+@Composable
+private fun onboardingAccentStrong(): Color =
+    if (pocketIsDarkTheme()) PocketColors.TextDark else PocketColors.PrimaryBorder
 
 @Composable
-private fun onboardingAccentPurpleMuted(): Color = if (pocketIsDarkTheme()) {
-    PocketColors.SurfaceVarDark.copy(alpha = 0.78f)
-} else {
-    PocketColors.PrimaryMuted
-}
+private fun onboardingSuccess(): Color = PocketColors.Online
 
 @Composable
-private fun onboardingAccentGreen(): Color = if (pocketIsDarkTheme()) Color(0xFF54D68C) else OnboardingGreenLight
+private fun onboardingWarn(): Color = PocketColors.Warning
+
+// ── Surfaces ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun onboardingAccentGold(): Color = if (pocketIsDarkTheme()) Color(0xFFFFC76B) else OnboardingGoldLight
+private fun onboardingSurface(): Color =
+    if (pocketIsDarkTheme()) PocketColors.SurfaceCardDark else PocketColors.SurfaceCard
 
 @Composable
-private fun onboardingSurfaceColor(): Color = MaterialTheme.colorScheme.surface
+private fun onboardingSurfaceSoft(): Color =
+    if (pocketIsDarkTheme()) PocketColors.SurfaceVarDark else PocketColors.SurfaceHover
 
 @Composable
-private fun onboardingSurfaceSoftColor(): Color = if (pocketIsDarkTheme()) {
-    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f)
-} else {
-    PocketColors.SurfaceVarLight
-}
+private fun onboardingBorder(): Color =
+    if (pocketIsDarkTheme()) PocketColors.BorderDark else PocketColors.CardBorder
 
 @Composable
-private fun onboardingBorderColor(): Color = if (pocketIsDarkTheme()) {
-    PocketColors.BorderDark.copy(alpha = 0.82f)
-} else {
-    PocketColors.BorderLight
-}
+private fun onboardingBorderDepth(): Color =
+    if (pocketIsDarkTheme()) PocketColors.CardBorderBottomDark else PocketColors.CardBorderBottom
+
+// ── Error / warning banners ──────────────────────────────────────────────────
 
 @Composable
-private fun onboardingTextPrimary(): Color = MaterialTheme.colorScheme.onSurface
-
-// Theme-aware equivalents of the warning/error banners' colors. These used to be
-// hardcoded light-mode-only hex literals (a near-white pink bg / dark-red text),
-// which rendered as a jarring bright patch stamped on top of dark surfaces in dark mode.
-@Composable
-private fun onboardingErrorSurfaceColor(): Color = if (pocketIsDarkTheme()) {
+private fun onboardingErrorSurface(): Color = if (pocketIsDarkTheme()) {
     MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.28f)
 } else {
-    Color(0xFFFFF1F0)
+    MaterialTheme.colorScheme.error.copy(alpha = 0.10f)
 }
 
 @Composable
-private fun onboardingErrorBorderColor(): Color = if (pocketIsDarkTheme()) {
-    MaterialTheme.colorScheme.error.copy(alpha = 0.55f)
-} else {
-    Color(0xFFFFB3AE)
+private fun onboardingErrorBorder(): Color = MaterialTheme.colorScheme.error.copy(alpha = 0.55f)
+
+@Composable
+private fun onboardingErrorText(): Color = MaterialTheme.colorScheme.error
+
+// ── Text ─────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun onboardingTextPrimary(): Color = PocketColors.TextPrimary
+
+@Composable
+private fun onboardingTextSecondary(): Color = PocketColors.TextSecondary
+
+@Composable
+private fun onboardingTextMuted(): Color = PocketColors.TextMuted
+
+// ── Shared building blocks ───────────────────────────────────────────────────
+
+/**
+ * The app's standard raised card: flat surface, 1.5dp border and a thicker
+ * bottom edge. Used for every panel in the tour so nothing floats on its own
+ * drop shadow the way the old gradient cards did.
+ */
+@Composable
+private fun OnboardingCard(
+    modifier: Modifier = Modifier,
+    corner: Dp = OnboardingCardCorner,
+    color: Color = onboardingSurface(),
+    borderColor: Color = Color.Unspecified,
+    depthColor: Color = Color.Unspecified,
+    content: @Composable () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(corner))
+            .background(color)
+            .card3d(
+                elevation = 4.dp,
+                cornerRadius = corner,
+                borderColor = borderColor,
+                depthColor = depthColor
+            )
+    ) {
+        content()
+    }
 }
 
+/**
+ * Small Monocraft label on a tinted pill — the tour's section markers
+ * ("STEP 3 OF 8", "PERMISSION REQUIRED", …).
+ */
 @Composable
-private fun onboardingErrorTextColor(): Color = if (pocketIsDarkTheme()) {
-    MaterialTheme.colorScheme.error
-} else {
-    Color(0xFF9F2D2D)
+private fun OnboardingEyebrow(
+    text: String,
+    accent: Color = onboardingAccent(),
+    modifier: Modifier = Modifier
+) {
+    val scale = onboardingCompactScale()
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(accent.copy(alpha = 0.14f))
+            .border(1.dp, accent.copy(alpha = 0.40f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Text(
+            text = text.uppercase(),
+            color = onboardingAccentStrong(),
+            fontSize = 9.5.sp.scaledSp(scale),
+            letterSpacing = 0.8.sp,
+            fontWeight = FontWeight.ExtraBold,
+            fontFamily = Monocraft,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
 }
 
+/**
+ * Square icon tile with the same raised treatment as the cards. Replaces the
+ * old concentric-glow halo, which was the only place in the app using soft
+ * radial gradients.
+ */
 @Composable
-private fun onboardingTextSecondary(): Color = MaterialTheme.colorScheme.onSurfaceVariant
-
-@Composable
-private fun onboardingTextDark(): Color = MaterialTheme.colorScheme.onSurface
-
-@Composable
-private fun onboardingTextMuted(): Color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.88f)
-
-@Composable
-private fun onboardingBackgroundBrush(): Brush = if (pocketIsDarkTheme()) {
-    Brush.verticalGradient(
-        colors = listOf(
-            PocketColors.BgDark,
-            Color(0xFF121620),
-            Color(0xFF07090E)
-        )
-    )
-} else {
-    Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFFFFFFFF),
-            PocketColors.BgLight,
-            Color(0xFFE8EDF5)
-        )
-    )
+private fun OnboardingIconTile(
+    accent: Color,
+    modifier: Modifier = Modifier,
+    size: Dp = 64.dp,
+    corner: Dp = OnboardingTileCorner,
+    content: @Composable () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(corner))
+            .background(accent.copy(alpha = 0.16f))
+            .card3d(
+                elevation = 4.dp,
+                cornerRadius = corner,
+                borderColor = accent.copy(alpha = 0.55f),
+                depthColor = accent.copy(alpha = 0.85f)
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        content()
+    }
 }
 
+/** Title block shared by every step: optional eyebrow, headline, supporting line. */
 @Composable
-private fun onboardingPhoneOuterBrush(): Brush = if (pocketIsDarkTheme()) {
-    Brush.verticalGradient(
-        listOf(
-            Color(0xFF252B36),
-            Color(0xFF161A22)
+private fun OnboardingHeading(
+    title: String,
+    subtitle: String? = null,
+    eyebrow: String? = null,
+    eyebrowAccent: Color = onboardingAccent(),
+    centered: Boolean = true,
+    titleSize: TextUnit = 21.sp
+) {
+    val scale = onboardingCompactScale()
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start,
+        verticalArrangement = Arrangement.spacedBy(7.dp.scaled(scale))
+    ) {
+        if (eyebrow != null) {
+            OnboardingEyebrow(text = eyebrow, accent = eyebrowAccent)
+        }
+        Text(
+            text = title,
+            fontSize = titleSize.scaledSp(scale),
+            lineHeight = (titleSize.value * 1.22f).sp.scaledSp(scale),
+            color = onboardingTextPrimary(),
+            fontWeight = FontWeight.ExtraBold,
+            fontFamily = Monocraft,
+            textAlign = if (centered) TextAlign.Center else TextAlign.Start
         )
-    )
-} else {
-    Brush.verticalGradient(
-        listOf(
-            Color.White,
-            Color(0xFFF7FAF2)
-        )
-    )
-}
-
-@Composable
-private fun onboardingPhoneInnerBrush(): Brush = if (pocketIsDarkTheme()) {
-    Brush.verticalGradient(
-        listOf(
-            onboardingSurfaceSoftColor(),
-            Color(0xFF202633)
-        )
-    )
-} else {
-    Brush.verticalGradient(
-        listOf(
-            PocketColors.SurfaceVarLight,
-            Color(0xFFE9EEF6)
-        )
-    )
+        if (subtitle != null) {
+            Text(
+                text = subtitle,
+                fontSize = 13.sp.scaledSp(scale),
+                lineHeight = 19.sp.scaledSp(scale),
+                color = onboardingTextSecondary(),
+                textAlign = if (centered) TextAlign.Center else TextAlign.Start
+            )
+        }
+    }
 }
 
 @AndroidEntryPoint
@@ -532,161 +603,151 @@ private fun OnboardingScreen(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(brush = onboardingBackgroundBrush())
+            .pocketDecoratedBackground()
     ) {
         val compact = maxHeight < 760.dp || maxWidth < 392.dp
         val outerPadding = if (compact) 14.dp else 18.dp
         val verticalPadding = if (compact) 8.dp else 12.dp
         val contentSpacing = if (compact) 10.dp else 14.dp
 
+        // Fixed header, a stage card that fills whatever is left, and a pinned
+        // Back/Next bar. Scrolling happens inside the card, so a short step
+        // never leaves a hole between the card and the buttons and the primary
+        // action is always reachable.
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .verticalScroll(scrollState)
                 .padding(horizontal = outerPadding, vertical = verticalPadding),
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.spacedBy(contentSpacing)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(contentSpacing)) {
-                TopHeader(
-                    progress = progress,
-                    step = currentStep + 1,
-                    total = steps.size,
-                    currentMobTheme = currentMobTheme,
-                    onMobThemeChange = onMobThemeChange,
-                    // Skipping the tour must still land on server setup — leaving onboarding
-                    // entirely drops the user into the app with no server configured.
-                    onSkipAll = { currentStep = steps.lastIndex },
-                    // The terms and privacy policy live on the first step, so skipping past them
-                    // would mean never accepting them.
-                    skipEnabled = privacyAccepted,
-                    // Tapping the dimmed button takes the user to the step holding the checkbox
-                    // rather than doing nothing.
-                    onSkipBlocked = { currentStep = 0 }
-                )
+            TopHeader(
+                progress = progress,
+                step = currentStep + 1,
+                total = steps.size,
+                stepLabel = steps[currentStep].label,
+                currentMobTheme = currentMobTheme,
+                onMobThemeChange = onMobThemeChange,
+                // Skipping the tour must still land on server setup — leaving onboarding
+                // entirely drops the user into the app with no server configured.
+                onSkipAll = { currentStep = steps.lastIndex },
+                // The terms and privacy policy live on the first step, so skipping past them
+                // would mean never accepting them.
+                skipEnabled = privacyAccepted,
+                // Tapping the dimmed button takes the user to the step holding the checkbox
+                // rather than doing nothing.
+                onSkipBlocked = { currentStep = 0 }
+            )
 
-                OnboardingPhoneFrame(
-                    step = currentStep,
-                    totalSteps = steps.size,
-                ) {
-                    AnimatedContent(
-                        targetState = currentStep,
-                        transitionSpec = {
-                            if (targetState > initialState) {
-                                slideInHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 520)) { it / 12 } +
-                                    fadeIn(PocketMotion.softFloatTween(durationMillis = 440)) +
-                                    scaleIn(initialScale = 0.985f, animationSpec = PocketMotion.softFloatTween(durationMillis = 500)) togetherWith
-                                    slideOutHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 440)) { -it / 14 } +
-                                    fadeOut(PocketMotion.softFloatTween(durationMillis = 320)) +
-                                    scaleOut(targetScale = 1.005f, animationSpec = PocketMotion.softFloatTween(durationMillis = 380))
-                            } else {
-                                slideInHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 520)) { -it / 12 } +
-                                    fadeIn(PocketMotion.softFloatTween(durationMillis = 440)) +
-                                    scaleIn(initialScale = 0.985f, animationSpec = PocketMotion.softFloatTween(durationMillis = 500)) togetherWith
-                                    slideOutHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 440)) { it / 14 } +
-                                    fadeOut(PocketMotion.softFloatTween(durationMillis = 320)) +
-                                    scaleOut(targetScale = 1.005f, animationSpec = PocketMotion.softFloatTween(durationMillis = 380))
+            OnboardingStage(
+                modifier = Modifier.weight(1f),
+                scrollState = scrollState
+            ) {
+                AnimatedContent(
+                    targetState = currentStep,
+                    transitionSpec = {
+                        if (targetState > initialState) {
+                            slideInHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 520)) { it / 12 } +
+                                fadeIn(PocketMotion.softFloatTween(durationMillis = 440)) +
+                                scaleIn(initialScale = 0.985f, animationSpec = PocketMotion.softFloatTween(durationMillis = 500)) togetherWith
+                                slideOutHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 440)) { -it / 14 } +
+                                fadeOut(PocketMotion.softFloatTween(durationMillis = 320)) +
+                                scaleOut(targetScale = 1.005f, animationSpec = PocketMotion.softFloatTween(durationMillis = 380))
+                        } else {
+                            slideInHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 520)) { -it / 12 } +
+                                fadeIn(PocketMotion.softFloatTween(durationMillis = 440)) +
+                                scaleIn(initialScale = 0.985f, animationSpec = PocketMotion.softFloatTween(durationMillis = 500)) togetherWith
+                                slideOutHorizontally(animationSpec = PocketMotion.softIntOffsetTween(durationMillis = 440)) { it / 14 } +
+                                fadeOut(PocketMotion.softFloatTween(durationMillis = 320)) +
+                                scaleOut(targetScale = 1.005f, animationSpec = PocketMotion.softFloatTween(durationMillis = 380))
+                        }
+                    },
+                    label = "onboarding-page"
+                ) { animatedPage ->
+                    when (animatedPage) {
+                        0 -> WelcomeScreen(
+                            privacyAccepted = privacyAccepted,
+                            onPrivacyChange = { privacyAccepted = it },
+                            onOpenPrivacy = {
+                                openExternalUrl(context, BuildConfig.PRIVACY_POLICY_URL)
+                            },
+                            onOpenTerms = {
+                                openExternalUrl(context, BuildConfig.TERMS_OF_USE_URL)
                             }
-                        },
-                        label = "onboarding-page"
-                    ) { animatedPage ->
-                        when (animatedPage) {
-                            0 -> WelcomeScreen(
-                                privacyAccepted = privacyAccepted,
-                                onPrivacyChange = { privacyAccepted = it },
-                                onOpenPrivacy = {
-                                    openExternalUrl(context, BuildConfig.PRIVACY_POLICY_URL)
-                                },
-                                onOpenTerms = {
-                                    openExternalUrl(context, BuildConfig.TERMS_OF_USE_URL)
-                                }
-                            )
-                            1 -> HowItWorksScreen()
-                            2 -> ImportScreen()
-                            3 -> FeaturesScreen()
-                            4 -> CrossPlayScreen()
-                            5 -> RelayRegionOnboardingScreen(
-                                selectedHost = setupRelayHost,
-                                regions = relayRegions,
-                                isFindingBestRelay = isFindingBestRelay,
-                                recommendation = relayRecommendation,
-                                onSelectHost = {
-                                    setupRelayHost = it
-                                    relayRecommendation = RelayServers.getDisplayName(it)
-                                    relaySelectionChangedManually = true
-                                    relayAutoSelectedByLatency = false
-                                }
-                            )
-                            6 -> PermissionsScreen(
-                                s = s,
-                                notificationsPermissionGranted = notificationsPermissionGranted,
-                                onAllowNotifications = {
-                                    playHaptic()
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                        if (!isNotificationPermissionGranted(context)) {
-                                            try {
-                                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                            } catch (_: Exception) {
-                                                openAppNotificationSettings(context)
-                                            }
-                                        } else {
-                                            notificationsPermissionGranted = true
+                        )
+                        1 -> HowItWorksScreen()
+                        2 -> ImportScreen()
+                        3 -> FeaturesScreen()
+                        4 -> CrossPlayScreen()
+                        5 -> RelayRegionOnboardingScreen(
+                            selectedHost = setupRelayHost,
+                            regions = relayRegions,
+                            isFindingBestRelay = isFindingBestRelay,
+                            recommendation = relayRecommendation,
+                            onSelectHost = {
+                                setupRelayHost = it
+                                relayRecommendation = RelayServers.getDisplayName(it)
+                                relaySelectionChangedManually = true
+                                relayAutoSelectedByLatency = false
+                            }
+                        )
+                        6 -> PermissionsScreen(
+                            s = s,
+                            notificationsPermissionGranted = notificationsPermissionGranted,
+                            onAllowNotifications = {
+                                playHaptic()
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    if (!isNotificationPermissionGranted(context)) {
+                                        try {
+                                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        } catch (_: Exception) {
+                                            openAppNotificationSettings(context)
                                         }
                                     } else {
                                         notificationsPermissionGranted = true
                                     }
-                                },
-                                errorText = permissionStepError,
-                                warningTick = permissionWarningTick,
-                                shakeConsumed = permissionShakeConsumed,
-                                onShakeConsumed = { permissionShakeConsumed = true }
-                            )
-                            else -> OnboardingSetupScreen(
-                                serverName = setupServerName,
-                                onServerNameChange = {
-                                    setupServerName = it
-                                    if (setupFormError.isNotBlank()) setupFormError = ""
-                                },
-                                worldDescription = setupWorldDescription,
-                                onWorldDescriptionChange = {
-                                    setupWorldDescription = it
-                                    if (setupFormError.isNotBlank()) setupFormError = ""
-                                },
-                                selectedServerType = setupServerType,
-                                selectedVersion = setupVersion,
-                                onVersionClick = {
-                                    setupShowVersionDialog = true
-                                    versionSelectionError = false
-                                    playHaptic()
-                                },
-                                worldSeed = setupSeed,
-                                onWorldSeedChange = { setupSeed = it },
-                                showVersionError = versionSelectionError,
-                                versionShakeTick = versionShakeTick,
-                                shakeConsumed = versionShakeConsumed,
-                                onShakeConsumed = { versionShakeConsumed = true }
-                            )
-                        }
+                                } else {
+                                    notificationsPermissionGranted = true
+                                }
+                            },
+                            errorText = permissionStepError,
+                            warningTick = permissionWarningTick,
+                            shakeConsumed = permissionShakeConsumed,
+                            onShakeConsumed = { permissionShakeConsumed = true }
+                        )
+                        else -> OnboardingSetupScreen(
+                            serverName = setupServerName,
+                            onServerNameChange = {
+                                setupServerName = it
+                                if (setupFormError.isNotBlank()) setupFormError = ""
+                            },
+                            worldDescription = setupWorldDescription,
+                            onWorldDescriptionChange = {
+                                setupWorldDescription = it
+                                if (setupFormError.isNotBlank()) setupFormError = ""
+                            },
+                            selectedServerType = setupServerType,
+                            selectedVersion = setupVersion,
+                            onVersionClick = {
+                                setupShowVersionDialog = true
+                                versionSelectionError = false
+                                playHaptic()
+                            },
+                            worldSeed = setupSeed,
+                            onWorldSeedChange = { setupSeed = it },
+                            showVersionError = versionSelectionError,
+                            versionShakeTick = versionShakeTick,
+                            shakeConsumed = versionShakeConsumed,
+                            onShakeConsumed = { versionShakeConsumed = true }
+                        )
                     }
                 }
             }
 
             Column(
-                modifier = Modifier.padding(top = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = steps[currentStep].footer,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                    color = onboardingTextMuted(),
-                    fontSize = 12.sp,
-                    fontFamily = Monocraft,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2
-                )
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -773,30 +834,32 @@ private fun OnboardingScreen(
         }
 
         if (scrollState.maxValue > 0 && scrollState.canScrollForward) {
-            Surface(
-                onClick = {
-                    scope.launch {
-                        scrollState.animateScrollTo((scrollState.value + 280).coerceAtMost(scrollState.maxValue))
-                    }
-                },
+            Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .navigationBarsPadding()
-                    .padding(end = 20.dp, bottom = 18.dp)
-                    .size(48.dp),
-                shape = CircleShape,
-                color = PocketColors.Primary,
-                border = BorderStroke(1.5.dp, PocketColors.PrimaryBorder),
-                shadowElevation = 0.dp
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Filled.KeyboardArrowDown,
-                        contentDescription = "Scroll down",
-                        tint = PocketColors.PrimaryText,
-                        modifier = Modifier.size(24.dp)
+                    .padding(end = 18.dp, bottom = 84.dp)
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(PocketColors.Primary)
+                    .pill3d(
+                        elevation = 4.dp,
+                        borderColor = PocketColors.PrimaryBorder,
+                        depthColor = PocketColors.PrimaryBorderBottom
                     )
-                }
+                    .clickable {
+                        scope.launch {
+                            scrollState.animateScrollTo((scrollState.value + 280).coerceAtMost(scrollState.maxValue))
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = "Scroll down",
+                    tint = PocketColors.PrimaryText,
+                    modifier = Modifier.size(22.dp)
+                )
             }
         }
 
@@ -846,7 +909,8 @@ private fun OnboardingScreen(
 }
 
 private data class OnboardingStep(
-    val footer: String
+    /** Short all-caps name of the step, shown next to the progress bar. */
+    val label: String
 )
 
 private fun onboardingSteps(s: AppStrings): List<OnboardingStep> {
@@ -933,49 +997,37 @@ private fun OnboardingGoogleSignInScreen(
 ) {
     val s = LocalAppStrings.current
     val scale = onboardingCompactScale()
+    val connected = signedInAccountEmail.isNotBlank()
+    val statusAccent = if (connected) onboardingSuccess() else onboardingAccent()
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
+        verticalArrangement = Arrangement.spacedBy(13.dp.scaled(scale))
     ) {
-        HaloIconBox(
-            accent = onboardingAccentPurple(),
-            icon = Icons.Filled.AccountCircle
+        OnboardingIconTile(accent = statusAccent, size = 64.dp.scaled(scale)) {
+            Icon(
+                imageVector = Icons.Filled.AccountCircle,
+                contentDescription = null,
+                tint = statusAccent,
+                modifier = Modifier.size(28.dp.scaled(scale))
+            )
+        }
+
+        OnboardingHeading(
+            title = s.onboardingGoogleTitle,
+            subtitle = s.onboardingGoogleSubtitle
         )
 
-        Text(
-            text = s.onboardingGoogleTitle,
-            fontSize = 21.sp.scaledSp(scale),
-            color = onboardingTextPrimary(),
-            fontWeight = FontWeight.ExtraBold,
-            fontFamily = Monocraft,
-            textAlign = TextAlign.Center
-        )
-
-        Text(
-            text = s.onboardingGoogleSubtitle,
-            fontSize = 13.sp.scaledSp(scale),
-            lineHeight = 19.sp.scaledSp(scale),
-            color = onboardingTextSecondary(),
-            textAlign = TextAlign.Center
-        )
-
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = onboardingSurfaceColor(),
-            border = BorderStroke(
-                width = 1.dp,
-                color = if (signedInAccountEmail.isBlank()) onboardingBorderColor() else onboardingAccentGreen().copy(alpha = 0.4f)
-            ),
-            shadowElevation = 2.dp
+        OnboardingCard(
+            modifier = Modifier.fillMaxWidth(),
+            borderColor = if (connected) onboardingSuccess().copy(alpha = 0.55f) else Color.Unspecified,
+            depthColor = if (connected) onboardingSuccess().copy(alpha = 0.85f) else Color.Unspecified
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(14.dp),
+                    .padding(14.dp.scaled(scale)),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(
@@ -984,44 +1036,39 @@ private fun OnboardingGoogleSignInScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(38.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                if (signedInAccountEmail.isBlank()) {
-                                    onboardingAccentPurple().copy(alpha = 0.1f)
-                                } else {
-                                    onboardingAccentGreen().copy(alpha = 0.1f)
-                                }
-                            ),
+                            .background(statusAccent.copy(alpha = 0.18f))
+                            .border(1.dp, statusAccent.copy(alpha = 0.40f), RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = if (signedInAccountEmail.isBlank()) Icons.Filled.AccountCircle else Icons.Filled.CheckCircle,
+                            imageVector = if (connected) Icons.Filled.CheckCircle else Icons.Filled.AccountCircle,
                             contentDescription = null,
-                            tint = if (signedInAccountEmail.isBlank()) onboardingAccentPurple() else onboardingAccentGreen(),
-                            modifier = Modifier.size(24.dp)
+                            tint = statusAccent,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-                    Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            text = if (signedInAccountEmail.isBlank()) s.onboardingGoogleStatusTitle else s.onboardingGoogleConnectedTitle,
+                            text = if (connected) s.onboardingGoogleConnectedTitle else s.onboardingGoogleStatusTitle,
                             fontSize = 13.sp.scaledSp(scale),
                             fontWeight = FontWeight.Bold,
                             color = onboardingTextPrimary()
                         )
                         Text(
-                            text = if (signedInAccountEmail.isBlank()) s.onboardingGoogleStatusInactive else s.onboardingGoogleStatusActive,
+                            text = if (connected) s.onboardingGoogleStatusActive else s.onboardingGoogleStatusInactive,
                             fontSize = 11.sp.scaledSp(scale),
-                            color = if (signedInAccountEmail.isBlank()) onboardingTextSecondary() else onboardingAccentGreen(),
+                            color = if (connected) onboardingSuccess() else onboardingTextSecondary(),
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
                 Text(
-                    text = if (signedInAccountEmail.isBlank()) {
-                        s.onboardingGoogleStatusDesc
-                    } else {
+                    text = if (connected) {
                         s.onboardingGoogleConnectedDesc.format(signedInAccountEmail)
+                    } else {
+                        s.onboardingGoogleStatusDesc
                     },
                     fontSize = 11.sp.scaledSp(scale),
                     lineHeight = 16.sp.scaledSp(scale),
@@ -1031,17 +1078,13 @@ private fun OnboardingGoogleSignInScreen(
         }
 
         DuoButton(
-            text = if (signedInAccountEmail.isBlank()) s.onboardingGoogleSignInButton else s.onboardingGoogleSignedInButton,
+            text = if (connected) s.onboardingGoogleSignedInButton else s.onboardingGoogleSignInButton,
             onClick = onSignInClick,
-            enabled = signedInAccountEmail.isBlank(),
-            iconContent = if (signedInAccountEmail.isBlank()) {
-                { GoogleLogoIcon() }
-            } else {
-                null
-            },
+            enabled = !connected,
+            iconContent = if (connected) null else ({ GoogleLogoIcon() }),
             variant = DuoButtonVariant.Primary,
             modifier = Modifier.fillMaxWidth(),
-            minHeight = 60.dp
+            minHeight = 56.dp
         )
 
         Text(
@@ -1065,61 +1108,99 @@ private fun RelayRegionOnboardingScreen(
     val scale = onboardingCompactScale()
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(14.dp.scaled(scale))
+        verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
     ) {
-        Text(
-            text = s.onboardingRegionTitle,
-            fontSize = 24.sp.scaledSp(scale),
-            fontWeight = FontWeight.ExtraBold,
-            color = onboardingTextPrimary(),
-            fontFamily = Monocraft
+        OnboardingHeading(
+            title = s.onboardingRegionTitle,
+            subtitle = s.onboardingRegionSubtitle,
+            eyebrow = "CONNECTION",
+            centered = false,
+            titleSize = 21.sp
         )
-        Text(
-            text = s.onboardingRegionSubtitle,
-            fontSize = 13.sp.scaledSp(scale),
-            color = onboardingTextSecondary(),
-            lineHeight = 18.sp.scaledSp(scale)
-        )
+
+        // Latency probe result. Shown as its own strip so the list below never
+        // shifts around while the probe is still running.
         if (isFindingBestRelay) {
-            Text(
-                text = s.onboardingRegionFinding,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = onboardingAccentPurpleDark()
-            )
-        } else if (!recommendation.isNullOrBlank()) {
-            Text(
-                text = s.onboardingRegionRecommended.format(recommendation),
-                fontSize = 12.sp,
-                color = onboardingTextSecondary()
-            )
-        }
-        RelayServers.ALL.filter { server -> regions.any { it.host == server.host } }.forEach { server ->
-            val selected = server.host == selectedHost
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSelectHost(server.host) },
-                shape = RoundedCornerShape(22.dp.scaled(scale)),
-                color = if (selected) onboardingAccentPurpleMuted() else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                border = BorderStroke(1.dp, if (selected) onboardingAccentPurple() else onboardingBorderColor())
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp.scaled(scale), vertical = 14.dp.scaled(scale)),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    strokeWidth = 2.dp,
+                    color = onboardingAccent()
+                )
+                Text(
+                    text = s.onboardingRegionFinding,
+                    fontSize = 12.sp.scaledSp(scale),
+                    fontWeight = FontWeight.Bold,
+                    color = onboardingAccentStrong()
+                )
+            }
+        } else if (!recommendation.isNullOrBlank()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Wifi,
+                    contentDescription = null,
+                    tint = onboardingSuccess(),
+                    modifier = Modifier.size(15.dp)
+                )
+                Text(
+                    text = s.onboardingRegionRecommended.format(recommendation),
+                    fontSize = 12.sp.scaledSp(scale),
+                    color = onboardingTextSecondary()
+                )
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(9.dp.scaled(scale))) {
+            RelayServers.ALL.filter { server -> regions.any { it.host == server.host } }.forEach { server ->
+                val selected = server.host == selectedHost
+                OnboardingCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelectHost(server.host) },
+                    corner = OnboardingTileCorner,
+                    color = if (selected) onboardingAccent().copy(alpha = 0.12f) else onboardingSurface(),
+                    borderColor = if (selected) onboardingAccent() else onboardingBorder(),
+                    depthColor = if (selected) onboardingAccent().copy(alpha = 0.9f) else onboardingBorderDepth()
                 ) {
-                    Text(text = server.icon, fontSize = 24.sp)
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(server.region, fontWeight = FontWeight.ExtraBold, color = onboardingTextPrimary())
-                        Text(server.bestFor, fontSize = 11.sp, color = onboardingTextSecondary())
-                    }
-                    if (selected) {
-                        Icon(
-                            imageVector = Icons.Filled.CheckCircle,
-                            contentDescription = null,
-                            tint = onboardingAccentPurpleDark()
-                        )
+                    Row(
+                        modifier = Modifier.padding(
+                            horizontal = 14.dp.scaled(scale),
+                            vertical = 12.dp.scaled(scale)
+                        ),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(text = server.icon, fontSize = 22.sp)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = server.region,
+                                fontSize = 13.sp.scaledSp(scale),
+                                fontWeight = FontWeight.ExtraBold,
+                                color = onboardingTextPrimary()
+                            )
+                            Text(
+                                text = server.bestFor,
+                                fontSize = 11.sp.scaledSp(scale),
+                                color = onboardingTextSecondary()
+                            )
+                        }
+                        if (selected) {
+                            Icon(
+                                imageVector = Icons.Filled.CheckCircle,
+                                contentDescription = null,
+                                tint = onboardingAccent(),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -1127,10 +1208,6 @@ private fun RelayRegionOnboardingScreen(
     }
 }
 
-private fun isBackgroundPermissionGranted(context: Context): Boolean {
-    val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
-    return pm.isIgnoringBatteryOptimizations(context.packageName)
-}
 
 private fun isNotificationPermissionGranted(context: Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
@@ -1163,216 +1240,255 @@ private fun TopHeader(
     progress: Float,
     step: Int,
     total: Int,
+    stepLabel: String,
     currentMobTheme: MobTheme,
     onMobThemeChange: (MobTheme) -> Unit,
     onSkipAll: () -> Unit,
     skipEnabled: Boolean = true,
     onSkipBlocked: () -> Unit = {}
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    val compact = onboardingIsCompact()
+    Column(verticalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(
-                    text = "PocketHost",
-                    fontSize = 23.sp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = Monocraft,
-                    color = onboardingTextDark(),
-                    letterSpacing = 0.1.sp
-                )
-                Text(
-                    text = "Your phone becomes the server",
-                    fontSize = 12.sp,
-                    color = onboardingTextMuted()
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                OnboardingIconTile(
+                    accent = onboardingAccent(),
+                    size = if (compact) 38.dp else 42.dp,
+                    corner = OnboardingChipCorner
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.app_logo_light),
+                        contentDescription = null,
+                        modifier = Modifier.size(if (compact) 24.dp else 26.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+                Column {
+                    Text(
+                        text = "PocketHost",
+                        fontSize = if (compact) 17.sp else 19.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = Monocraft,
+                        color = onboardingTextPrimary(),
+                        letterSpacing = 0.2.sp
+                    )
+                    Text(
+                        text = "Your phone becomes the server",
+                        fontSize = 10.5.sp,
+                        color = onboardingTextMuted(),
+                        maxLines = 1
+                    )
+                }
             }
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    onClick = { if (skipEnabled) onSkipAll() else onSkipBlocked() },
-                    modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    color = onboardingAccentGreen().copy(alpha = if (skipEnabled) 0.18f else 0.06f),
-                    border = BorderStroke(
-                        1.dp,
-                        onboardingAccentGreen().copy(alpha = if (skipEnabled) 0.6f else 0.25f)
+                OnboardingThemeButton(
+                    currentMobTheme = currentMobTheme,
+                    onMobThemeChange = onMobThemeChange
+                )
+                OnboardingHeaderChip(
+                    text = "Skip",
+                    enabled = skipEnabled,
+                    onClick = { if (skipEnabled) onSkipAll() else onSkipBlocked() }
+                )
+            }
+        }
+
+        StepProgressBar(progress = progress, step = step, total = total)
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "STEP $step OF $total",
+                fontSize = 10.sp,
+                letterSpacing = 0.8.sp,
+                color = onboardingAccentStrong(),
+                fontFamily = Monocraft,
+                fontWeight = FontWeight.ExtraBold
+            )
+            Text(
+                text = stepLabel.uppercase(),
+                fontSize = 10.sp,
+                letterSpacing = 0.6.sp,
+                color = onboardingTextMuted(),
+                fontFamily = Monocraft,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+        }
+    }
+}
+
+/**
+ * Segmented progress — one chunk per step, filled chunks carrying the theme's
+ * primary colour. A segmented bar reads as "8 short screens" at a glance, where
+ * the old continuous gradient bar gave no sense of how much was left.
+ */
+@Composable
+private fun StepProgressBar(progress: Float, step: Int, total: Int) {
+    val trackHeight = if (onboardingIsCompact()) 9.dp else 11.dp
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        repeat(total) { index ->
+            // The current segment fills proportionally so the bar still animates
+            // between steps rather than snapping a whole chunk at a time.
+            val fill = (progress * total - index).coerceIn(0f, 1f)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(trackHeight)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(onboardingSurfaceSoft())
+                    .border(1.dp, onboardingBorder(), RoundedCornerShape(999.dp))
+            ) {
+                if (fill > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(fill)
+                            .height(trackHeight)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(onboardingAccent())
                     )
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "Skip to Setup",
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = onboardingTextPrimary().copy(alpha = if (skipEnabled) 1f else 0.45f)
-                        )
-                    }
-                }
-
-                Box {
-                    var showThemeMenu by remember { mutableStateOf(false) }
-                    Surface(
-                        onClick = { showThemeMenu = true },
-                        modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        color = onboardingSurfaceSoftColor(),
-                        border = BorderStroke(1.dp, onboardingBorderColor())
-                    ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Palette,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = onboardingAccentGreen()
-                            )
-                            Text(
-                                text = currentMobTheme.themeName,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = onboardingTextPrimary()
-                            )
-                        }
-                    }
-                }
-
-                DropdownMenu(
-                    expanded = showThemeMenu,
-                    onDismissRequest = { showThemeMenu = false },
-                    modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-                ) {
-                    MobTheme.entries.filter { it != MobTheme.CUSTOM }.forEach { theme ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = theme.themeName,
-                                    fontWeight = if (theme == currentMobTheme) FontWeight.ExtraBold else FontWeight.Medium,
-                                    fontSize = 13.sp
-                                )
-                            },
-                            onClick = {
-                                showThemeMenu = false
-                                onMobThemeChange(theme)
-                            }
-                        )
-                    }
                 }
             }
         }
     }
+}
 
-        Surface(
-            color = if (pocketIsDarkTheme()) MaterialTheme.colorScheme.surface.copy(alpha = 0.82f) else Color.White.copy(alpha = 0.72f),
-            shape = RoundedCornerShape(999.dp),
+/** Square icon button matching the app's header controls. */
+@Composable
+private fun OnboardingThemeButton(
+    currentMobTheme: MobTheme,
+    onMobThemeChange: (MobTheme) -> Unit
+) {
+    var showThemeMenu by remember { mutableStateOf(false) }
+    Box {
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .border(
-                    1.dp,
-                    if (pocketIsDarkTheme()) onboardingBorderColor().copy(alpha = 0.9f) else Color.White.copy(alpha = 0.9f),
-                    RoundedCornerShape(999.dp)
+                .size(40.dp)
+                .clip(RoundedCornerShape(OnboardingChipCorner))
+                .background(onboardingSurface())
+                .card3d(
+                    elevation = 4.dp,
+                    cornerRadius = OnboardingChipCorner,
+                    borderColor = onboardingBorder(),
+                    depthColor = onboardingBorderDepth()
                 )
+                .clickable { showThemeMenu = true },
+            contentAlignment = Alignment.Center
         ) {
-            Box(modifier = Modifier.padding(6.dp)) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(progress.coerceIn(0.08f, 1f))
-                        .height(7.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(
-                            brush = Brush.horizontalGradient(
-                                listOf(onboardingAccentPurpleDark(), onboardingAccentPurple())
-                            )
+            Icon(
+                imageVector = Icons.Default.Palette,
+                contentDescription = "Change theme",
+                modifier = Modifier.size(18.dp),
+                tint = onboardingAccentStrong()
+            )
+        }
+
+        DropdownMenu(
+            expanded = showThemeMenu,
+            onDismissRequest = { showThemeMenu = false },
+            modifier = Modifier.background(onboardingSurface())
+        ) {
+            MobTheme.entries.filter { it != MobTheme.CUSTOM }.forEach { theme ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = theme.themeName,
+                            fontWeight = if (theme == currentMobTheme) FontWeight.ExtraBold else FontWeight.Medium,
+                            color = onboardingTextPrimary(),
+                            fontSize = 13.sp
                         )
+                    },
+                    onClick = {
+                        showThemeMenu = false
+                        onMobThemeChange(theme)
+                    }
                 )
             }
         }
-
-        Text(
-            text = "$step / $total",
-            fontSize = 11.sp,
-            color = onboardingTextMuted(),
-            fontWeight = FontWeight.SemiBold
-        )
     }
 }
 
 @Composable
-private fun OnboardingPhoneFrame(
-    step: Int,
-    totalSteps: Int,
+private fun OnboardingHeaderChip(
+    text: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val contentAlpha = if (enabled) 1f else 0.45f
+    Box(
+        modifier = Modifier
+            .defaultMinSize(minHeight = 40.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(onboardingSurface())
+            .pill3d(
+                elevation = 4.dp,
+                borderColor = onboardingBorder().copy(alpha = contentAlpha),
+                depthColor = onboardingBorderDepth().copy(alpha = contentAlpha)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            fontSize = 12.sp,
+            fontFamily = Monocraft,
+            fontWeight = FontWeight.Bold,
+            color = onboardingTextPrimary().copy(alpha = contentAlpha)
+        )
+    }
+}
+
+/**
+ * The panel every step is drawn into. Previously this was a fake phone mockup
+ * complete with a notch, which put a device bezel around content the user was
+ * already reading on a device. It is now simply the app's own raised card, so
+ * the tour looks like the screens it is introducing.
+ */
+@Composable
+private fun OnboardingStage(
+    modifier: Modifier = Modifier,
+    scrollState: ScrollState,
     content: @Composable () -> Unit
 ) {
     val scale = onboardingCompactScale()
-    val compact = onboardingIsCompact()
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(34.dp.scaled(scale)))
-            .background(brush = onboardingPhoneOuterBrush())
-            .border(1.5.dp, onboardingBorderColor().copy(alpha = 0.8f), RoundedCornerShape(34.dp.scaled(scale)))
-            .padding(horizontal = 14.dp.scaled(scale), vertical = 12.dp.scaled(scale)),
-        verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
+    OnboardingCard(
+        modifier = modifier.fillMaxWidth(),
+        corner = 24.dp.scaled(scale)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = if (compact) 54.dp else 70.dp)
-                .height(20.dp.scaled(scale))
-                .clip(RoundedCornerShape(0.dp, 0.dp, 12.dp.scaled(scale), 12.dp.scaled(scale)))
-                .background(if (pocketIsDarkTheme()) MaterialTheme.colorScheme.surface.copy(alpha = 0.92f) else Color(0xFFF6F8F1))
-                .border(1.dp, onboardingBorderColor().copy(alpha = 0.85f), RoundedCornerShape(0.dp, 0.dp, 12.dp.scaled(scale), 12.dp.scaled(scale)))
-        )
-
+        // fillMaxSize inside a vertical scroll sets the minimum height to the
+        // card, so short steps centre themselves and long ones scroll.
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = if (compact) 390.dp else 474.dp)
-                .clip(RoundedCornerShape(26.dp.scaled(scale)))
-                .background(brush = onboardingPhoneInnerBrush())
-                .border(1.dp, onboardingBorderColor().copy(alpha = 0.8f), RoundedCornerShape(26.dp.scaled(scale)))
-                .padding(horizontal = 20.dp.scaled(scale), vertical = 16.dp.scaled(scale)),
-            verticalArrangement = Arrangement.SpaceBetween
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(
+                    horizontal = 18.dp.scaled(scale),
+                    vertical = 20.dp.scaled(scale)
+                ),
+            verticalArrangement = Arrangement.Center
         ) {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                content()
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Spacer(modifier = Modifier.size(1.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun StepDots(currentStep: Int, totalSteps: Int) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        repeat(totalSteps) { index ->
-            Box(
-                modifier = Modifier
-                    .height(6.dp)
-                    .width(if (index == currentStep) 18.dp else 6.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(if (index == currentStep) onboardingAccentPurple() else onboardingBorderColor())
-            )
+            content()
         }
     }
 }
@@ -1386,123 +1502,67 @@ private fun WelcomeScreen(
 ) {
     val s = LocalAppStrings.current
     val scale = onboardingCompactScale()
-    val accentGreen  = onboardingAccentGreen()
-    val accentGold   = onboardingAccentGold()
-    val accentPurple = onboardingAccentPurple()
+    val accent = onboardingAccent()
+    val success = onboardingSuccess()
+    val warn = onboardingWarn()
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp.scaled(scale))
     ) {
-
-        // ── Hero icon: concentric glow rings ──────────────────────────────────
-        Box(contentAlignment = Alignment.Center) {
-            // Outer soft halo
-            Box(
-                modifier = Modifier
-                    .size(108.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            listOf(accentGreen.copy(alpha = 0.15f), Color.Transparent)
-                        )
-                    )
+        OnboardingIconTile(
+            accent = accent,
+            size = 72.dp.scaled(scale),
+            corner = 20.dp.scaled(scale)
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.app_logo_light),
+                contentDescription = null,
+                modifier = Modifier.size(42.dp.scaled(scale)),
+                contentScale = ContentScale.Fit
             )
-            // Mid ring
-            Box(
-                modifier = Modifier
-                    .size(84.dp)
-                    .clip(CircleShape)
-                    .background(accentGreen.copy(alpha = 0.10f))
-            )
-            // Icon square
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(accentGreen.copy(alpha = 0.20f))
-                    .border(
-                        1.5.dp,
-                        Brush.linearGradient(
-                            listOf(accentGreen.copy(alpha = 0.70f), accentGreen.copy(alpha = 0.25f))
-                        ),
-                        RoundedCornerShape(20.dp)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.app_logo_light),
-                    contentDescription = null,
-                    modifier = Modifier.size(40.dp),
-                    contentScale = ContentScale.Fit
-                )
-            }
         }
 
-        // ── Headline ──────────────────────────────────────────────────────────
-        Text(
-            text = "Your phone is now\na dedicated game server",
-            fontSize = 25.sp.scaledSp(scale),
-            lineHeight = 30.sp.scaledSp(scale),
-            color = onboardingTextPrimary(),
-            fontWeight = FontWeight.ExtraBold,
-            fontFamily = Monocraft,
-            textAlign = TextAlign.Center
+        OnboardingHeading(
+            title = "Your phone is now a\ndedicated game server",
+            subtitle = "Host Java Edition servers for free.\nNo PC required. Play with anyone.",
+            titleSize = 19.sp
         )
 
-        // ── Subtitle ──────────────────────────────────────────────────────────
-        Text(
-            text = "Host Java Edition servers for free.\nNo PC required. Play with anyone.",
-            fontSize = 13.sp.scaledSp(scale),
-            lineHeight = 19.sp.scaledSp(scale),
-            color = onboardingTextSecondary(),
-            textAlign = TextAlign.Center,
-            maxLines = 3
-        )
-
-        Text(
-            text = "NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.\nPocketHost is an independent software application and is not affiliated with, authorized, maintained, sponsored, or endorsed by Mojang AB, Microsoft Corporation, or any of their affiliates.",
-            fontSize = 9.sp.scaledSp(scale),
-            lineHeight = 12.sp.scaledSp(scale),
-            color = onboardingTextSecondary().copy(alpha = 0.7f),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-
-        // ── Feature cards: icon + label ───────────────────────────────────────
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             listOf(
-                Triple(Icons.Filled.Star,        s.onboardingFreeToHost, accentGold),
-                Triple(Icons.Filled.PhoneAndroid, s.onboardingNoPcNeeded, accentGreen),
-                Triple(Icons.Filled.Group,        s.onboardingInviteAnyone, accentPurple)
-            ).forEach { (icon, label, accent) ->
-                Surface(
-                    color = onboardingSurfaceSoftColor(),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, accent.copy(alpha = 0.28f)),
-                    modifier = Modifier.weight(1f)
+                Triple(Icons.Filled.Star, s.onboardingFreeToHost, warn),
+                Triple(Icons.Filled.PhoneAndroid, s.onboardingNoPcNeeded, accent),
+                Triple(Icons.Filled.Group, s.onboardingInviteAnyone, success)
+            ).forEach { (icon, label, tint) ->
+                OnboardingCard(
+                    modifier = Modifier.weight(1f),
+                    corner = OnboardingTileCorner,
+                    color = onboardingSurfaceSoft()
                 ) {
                     Column(
-                        modifier = Modifier.padding(vertical = 12.dp, horizontal = 6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp.scaled(scale), horizontal = 6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(accent.copy(alpha = 0.14f)),
+                                .size(30.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(tint.copy(alpha = 0.18f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = icon,
                                 contentDescription = null,
-                                tint = accent,
-                                modifier = Modifier.size(18.dp)
+                                tint = tint,
+                                modifier = Modifier.size(17.dp)
                             )
                         }
                         Text(
@@ -1518,34 +1578,40 @@ private fun WelcomeScreen(
             }
         }
 
-        // ── Terms & policy ────────────────────────────────────────────────────
-        Surface(
+        // Terms gate. Tapping anywhere on the card toggles it; the two links open
+        // the documents without toggling.
+        OnboardingCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { onPrivacyChange(!privacyAccepted) },
-            shape = RoundedCornerShape(14.dp.scaled(scale)),
-            color = if (privacyAccepted) accentGreen.copy(alpha = 0.08f)
-                    else onboardingSurfaceSoftColor().copy(alpha = 0.5f),
-            border = BorderStroke(
-                1.dp,
-                if (privacyAccepted) accentGreen.copy(alpha = 0.4f)
-                else onboardingBorderColor().copy(alpha = 0.5f)
-            )
+            corner = OnboardingTileCorner,
+            color = if (privacyAccepted) success.copy(alpha = 0.10f) else onboardingSurfaceSoft(),
+            borderColor = if (privacyAccepted) success.copy(alpha = 0.55f) else onboardingBorder(),
+            depthColor = if (privacyAccepted) success.copy(alpha = 0.85f) else onboardingBorderDepth()
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 14.dp.scaled(scale), vertical = 10.dp.scaled(scale)),
+                modifier = Modifier.padding(
+                    start = 6.dp,
+                    end = 14.dp.scaled(scale),
+                    top = 8.dp.scaled(scale),
+                    bottom = 8.dp.scaled(scale)
+                ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Checkbox(
                     checked = privacyAccepted,
                     onCheckedChange = onPrivacyChange,
                     colors = CheckboxDefaults.colors(
-                        checkedColor = accentGreen,
-                        uncheckedColor = onboardingBorderColor()
+                        checkedColor = success,
+                        checkmarkColor = PocketColors.PrimaryText,
+                        uncheckedColor = onboardingTextSecondary()
                     )
                 )
-                Spacer(modifier = Modifier.width(10.dp.scaled(scale)))
-                Column(modifier = Modifier.weight(1f)) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
                     Text(
                         text = s.onboardingAgreeTermsPolicy,
                         fontSize = 12.sp.scaledSp(scale),
@@ -1558,7 +1624,7 @@ private fun WelcomeScreen(
                     ) {
                         Text(
                             text = s.onboardingPrivacyPolicy,
-                            color = accentPurple,
+                            color = onboardingAccentStrong(),
                             fontSize = 11.sp.scaledSp(scale),
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.clickable { onOpenPrivacy() }
@@ -1566,7 +1632,7 @@ private fun WelcomeScreen(
                         Text(text = "•", color = onboardingTextMuted(), fontSize = 10.sp.scaledSp(scale))
                         Text(
                             text = s.onboardingTermsOfUse,
-                            color = accentPurple,
+                            color = onboardingAccentStrong(),
                             fontSize = 11.sp.scaledSp(scale),
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.clickable { onOpenTerms() }
@@ -1575,6 +1641,17 @@ private fun WelcomeScreen(
                 }
             }
         }
+
+        // Mojang disclaimer — required, but it is fine print, so it sits last and
+        // quietest rather than interrupting the hero copy.
+        Text(
+            text = "NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT. PocketHost is an independent software application and is not affiliated with, authorized, maintained, sponsored, or endorsed by Mojang AB, Microsoft Corporation, or any of their affiliates.",
+            fontSize = 8.5.sp.scaledSp(scale),
+            lineHeight = 12.sp.scaledSp(scale),
+            color = onboardingTextMuted().copy(alpha = 0.75f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
     }
 }
 
@@ -1585,36 +1662,35 @@ private fun HowItWorksScreen() {
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
+        verticalArrangement = Arrangement.spacedBy(14.dp.scaled(scale))
     ) {
-        Text(
-            text = s.onboardingHowItWorksTitle,
-            fontSize = 21.sp.scaledSp(scale),
-            color = onboardingTextPrimary(),
-            fontWeight = FontWeight.ExtraBold,
-            fontFamily = Monocraft
+        OnboardingHeading(
+            title = s.onboardingHowItWorksTitle,
+            eyebrow = "THREE STEPS"
         )
 
         FlowDiagram()
 
-        DetailCard(
-            accent = onboardingAccentPurple(),
-            icon = Icons.Filled.Dns,
-            title = s.onboardingStep1Title,
-            body = s.onboardingStep1Body
-        )
-        DetailCard(
-            accent = onboardingAccentGold(),
-            icon = Icons.Filled.Public,
-            title = s.onboardingStep2Title,
-            body = s.onboardingStep2Body
-        )
-        DetailCard(
-            accent = onboardingAccentGreen(),
-            icon = Icons.Filled.Group,
-            title = s.onboardingStep3Title,
-            body = s.onboardingStep3Body
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp.scaled(scale))) {
+            DetailCard(
+                accent = onboardingAccent(),
+                icon = Icons.Filled.Dns,
+                title = s.onboardingStep1Title,
+                body = s.onboardingStep1Body
+            )
+            DetailCard(
+                accent = onboardingWarn(),
+                icon = Icons.Filled.Public,
+                title = s.onboardingStep2Title,
+                body = s.onboardingStep2Body
+            )
+            DetailCard(
+                accent = onboardingSuccess(),
+                icon = Icons.Filled.Group,
+                title = s.onboardingStep3Title,
+                body = s.onboardingStep3Body
+            )
+        }
     }
 }
 
@@ -1625,33 +1701,25 @@ private fun ImportScreen() {
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
+        verticalArrangement = Arrangement.spacedBy(14.dp.scaled(scale))
     ) {
-        HaloIconBox(
-            accent = onboardingAccentGold(),
-            icon = Icons.Filled.Upload
-        )
+        OnboardingIconTile(accent = onboardingWarn(), size = 64.dp.scaled(scale)) {
+            Icon(
+                imageVector = Icons.Filled.Upload,
+                contentDescription = null,
+                tint = onboardingWarn(),
+                modifier = Modifier.size(28.dp.scaled(scale))
+            )
+        }
 
-        Text(
-            text = s.onboardingImportTitle,
-            fontSize = 20.sp.scaledSp(scale),
-            color = onboardingTextPrimary(),
-            fontWeight = FontWeight.ExtraBold,
-            fontFamily = Monocraft,
-            textAlign = TextAlign.Center
-        )
-
-        Text(
-            text = s.onboardingImportSubtitle,
-            fontSize = 13.sp.scaledSp(scale),
-            lineHeight = 19.sp.scaledSp(scale),
-            color = onboardingTextSecondary(),
-            textAlign = TextAlign.Center,
-            maxLines = 3
+        OnboardingHeading(
+            title = s.onboardingImportTitle,
+            subtitle = s.onboardingImportSubtitle,
+            titleSize = 20.sp
         )
 
         FeatureListCard(
-            accent = onboardingAccentGold(),
+            accent = onboardingWarn(),
             entries = listOf(
                 s.onboardingImportWorldTitle to s.onboardingImportWorldBody,
                 s.onboardingImportPluginsTitle to s.onboardingImportPluginsBody,
@@ -1668,44 +1736,23 @@ private fun FeaturesScreen() {
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp.scaled(scale))
+        verticalArrangement = Arrangement.spacedBy(13.dp.scaled(scale))
     ) {
-        HaloIconBox(
-            accent = onboardingAccentGreen(),
-            icon = Icons.Filled.Extension
-        )
-
-        Text(
-            text = s.onboardingFeaturesTitle,
-            fontSize = 20.sp.scaledSp(scale),
-            color = onboardingTextPrimary(),
-            fontWeight = FontWeight.ExtraBold,
-            fontFamily = Monocraft,
-            textAlign = TextAlign.Center
-        )
-
-        Text(
-            text = s.onboardingFeaturesSubtitle,
-            fontSize = 13.sp.scaledSp(scale),
-            lineHeight = 18.sp.scaledSp(scale),
-            color = onboardingTextSecondary(),
-            textAlign = TextAlign.Center,
-            maxLines = 2
-        )
-
-        Surface(
-            color = onboardingAccentGreen().copy(alpha = 0.12f),
-            shape = RoundedCornerShape(999.dp)
-        ) {
-            Text(
-                text = s.onboardingFeaturesBanner,
-                modifier = Modifier.padding(horizontal = 12.dp.scaled(scale), vertical = 6.dp.scaled(scale)),
-                color = onboardingAccentPurpleDark(),
-                fontSize = 10.sp.scaledSp(scale),
-                fontWeight = FontWeight.Bold,
-                fontFamily = Monocraft
+        OnboardingIconTile(accent = onboardingAccent(), size = 64.dp.scaled(scale)) {
+            Icon(
+                imageVector = Icons.Filled.Extension,
+                contentDescription = null,
+                tint = onboardingAccent(),
+                modifier = Modifier.size(28.dp.scaled(scale))
             )
         }
+
+        OnboardingHeading(
+            title = s.onboardingFeaturesTitle,
+            subtitle = s.onboardingFeaturesSubtitle,
+            eyebrow = s.onboardingFeaturesBanner,
+            titleSize = 20.sp
+        )
 
         FeatureGrid(
             items = listOf(
@@ -1725,60 +1772,43 @@ private fun CrossPlayScreen() {
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
+        verticalArrangement = Arrangement.spacedBy(13.dp.scaled(scale))
     ) {
-        HaloIconBox(
-            accent = onboardingAccentGreen(),
-            icon = Icons.Filled.Public
-        )
-
-        Text(
-            text = s.onboardingCrossPlayTitle,
-            fontSize = 20.sp.scaledSp(scale),
-            color = onboardingTextPrimary(),
-            fontWeight = FontWeight.ExtraBold,
-            fontFamily = Monocraft,
-            textAlign = TextAlign.Center
-        )
-
-        Text(
-            text = s.onboardingCrossPlaySubtitle,
-            fontSize = 13.sp.scaledSp(scale),
-            lineHeight = 18.sp.scaledSp(scale),
-            color = onboardingTextSecondary(),
-            textAlign = TextAlign.Center,
-            maxLines = 3
-        )
-
-        DetailCard(
-            accent = onboardingAccentGreen(),
-            icon = Icons.Filled.PhoneAndroid,
-            title = s.onboardingCrossPlayJavaBedrock,
-            body = s.onboardingCrossPlayJavaBedrockBody
-        )
-
-        DetailCard(
-            accent = onboardingAccentPurple(),
-            icon = Icons.Filled.Extension,
-            title = s.onboardingCrossPlayNoExtraApp,
-            body = s.onboardingCrossPlayNoExtraAppBody
-        )
-
-        Surface(
-            color = onboardingAccentGold().copy(alpha = 0.12f),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = s.onboardingCrossPlayExperimental,
-                modifier = Modifier.padding(horizontal = 14.dp.scaled(scale), vertical = 12.dp.scaled(scale)),
-                color = onboardingTextPrimary(),
-                fontSize = 11.sp.scaledSp(scale),
-                lineHeight = 16.sp.scaledSp(scale),
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 5
+        OnboardingIconTile(accent = onboardingSuccess(), size = 64.dp.scaled(scale)) {
+            Icon(
+                imageVector = Icons.Filled.Public,
+                contentDescription = null,
+                tint = onboardingSuccess(),
+                modifier = Modifier.size(28.dp.scaled(scale))
             )
         }
+
+        OnboardingHeading(
+            title = s.onboardingCrossPlayTitle,
+            subtitle = s.onboardingCrossPlaySubtitle,
+            titleSize = 20.sp
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp.scaled(scale))) {
+            DetailCard(
+                accent = onboardingSuccess(),
+                icon = Icons.Filled.PhoneAndroid,
+                title = s.onboardingCrossPlayJavaBedrock,
+                body = s.onboardingCrossPlayJavaBedrockBody
+            )
+            DetailCard(
+                accent = onboardingAccent(),
+                icon = Icons.Filled.Extension,
+                title = s.onboardingCrossPlayNoExtraApp,
+                body = s.onboardingCrossPlayNoExtraAppBody
+            )
+        }
+
+        OnboardingNoticeStrip(
+            accent = onboardingWarn(),
+            icon = Icons.Filled.Shield,
+            text = s.onboardingCrossPlayExperimental
+        )
     }
 }
 
@@ -1798,6 +1828,7 @@ private fun PermissionsScreen(
     shakeConsumed: Boolean = false,
     onShakeConsumed: () -> Unit = {}
 ) {
+    val scale = onboardingCompactScale()
     val notificationsShakeOffset = remember { Animatable(0f) }
 
     fun shouldWarnNotifications(): Boolean = warningTick > 0 && !notificationsPermissionGranted
@@ -1818,53 +1849,36 @@ private fun PermissionsScreen(
         }
     }
 
+    val statusAccent = if (notificationsPermissionGranted) onboardingSuccess() else onboardingWarn()
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(13.dp.scaled(scale))
     ) {
-        Surface(
-            color = if (notificationsPermissionGranted) {
-                onboardingAccentGreen().copy(alpha = 0.14f)
-            } else {
-                onboardingAccentGold().copy(alpha = 0.14f)
-            },
-            shape = RoundedCornerShape(999.dp)
-        ) {
-            Text(
-                text = if (notificationsPermissionGranted) s.onboardingPermissionsComplete else s.onboardingPermissionsRequired,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                color = if (notificationsPermissionGranted) onboardingAccentGreen() else onboardingAccentPurpleDark(),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.ExtraBold,
-                fontFamily = Monocraft
+        OnboardingIconTile(accent = statusAccent, size = 64.dp.scaled(scale)) {
+            Icon(
+                imageVector = if (notificationsPermissionGranted) Icons.Filled.CheckCircle else Icons.Filled.Notifications,
+                contentDescription = null,
+                tint = statusAccent,
+                modifier = Modifier.size(28.dp.scaled(scale))
             )
         }
 
-        Text(
-            text = s.onboardingPermissionsTitle,
-            fontSize = 21.sp,
-            color = onboardingTextPrimary(),
-            fontWeight = FontWeight.ExtraBold,
-            fontFamily = Monocraft,
-            textAlign = TextAlign.Center
-        )
-
-        Text(
-            text = s.onboardingPermissionsSubtitle,
-            fontSize = 13.sp,
-            lineHeight = 19.sp,
-            color = onboardingTextSecondary(),
-            textAlign = TextAlign.Center,
-            maxLines = 3
+        OnboardingHeading(
+            title = s.onboardingPermissionsTitle,
+            subtitle = s.onboardingPermissionsSubtitle,
+            eyebrow = if (notificationsPermissionGranted) s.onboardingPermissionsComplete else s.onboardingPermissionsRequired,
+            eyebrowAccent = statusAccent
         )
 
         PermissionCard(
-            accent = onboardingAccentPurple(),
+            accent = onboardingAccent(),
             icon = Icons.Filled.Notifications,
             title = s.onboardingPermissionsCardTitle,
             body = s.onboardingPermissionsCardBody
         )
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1874,59 +1888,33 @@ private fun PermissionsScreen(
                 text = if (notificationsPermissionGranted) s.onboardingPermissionsButtonEnabled else s.onboardingPermissionsButtonAllow,
                 onClick = onAllowNotifications,
                 enabled = !notificationsPermissionGranted,
-                variant = if (notificationsPermissionGranted) DuoButtonVariant.Secondary else DuoButtonVariant.Primary,
+                icon = if (notificationsPermissionGranted) Icons.Filled.CheckCircle else null,
+                variant = DuoButtonVariant.Primary,
                 modifier = Modifier.fillMaxWidth(),
                 minHeight = 52.dp
             )
         }
 
-        Surface(
-            color = when {
-                notificationsPermissionGranted -> onboardingAccentGreen().copy(alpha = 0.1f)
-                shouldWarnNotifications() -> onboardingErrorSurfaceColor()
-                else -> onboardingSurfaceSoftColor()
+        OnboardingNoticeStrip(
+            accent = when {
+                notificationsPermissionGranted -> onboardingSuccess()
+                shouldWarnNotifications() -> MaterialTheme.colorScheme.error
+                else -> onboardingAccent()
             },
-            shape = RoundedCornerShape(14.dp),
-            border = BorderStroke(
-                1.dp,
-                when {
-                    notificationsPermissionGranted -> onboardingAccentGreen().copy(alpha = 0.35f)
-                    shouldWarnNotifications() -> onboardingErrorBorderColor()
-                    else -> onboardingBorderColor().copy(alpha = 0.8f)
-                }
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = when {
-                    notificationsPermissionGranted -> s.onboardingPermissionsStatusSet
-                    shouldWarnNotifications() -> s.onboardingPermissionsStatusWarn
-                    else -> s.onboardingPermissionsStatusTap
-                },
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                color = if (shouldWarnNotifications()) onboardingErrorTextColor() else onboardingTextPrimary(),
-                fontSize = 11.sp,
-                lineHeight = 16.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-        }
+            icon = when {
+                notificationsPermissionGranted -> Icons.Filled.CheckCircle
+                else -> Icons.Filled.Shield
+            },
+            text = when {
+                notificationsPermissionGranted -> s.onboardingPermissionsStatusSet
+                shouldWarnNotifications() -> s.onboardingPermissionsStatusWarn
+                else -> s.onboardingPermissionsStatusTap
+            },
+            emphasised = shouldWarnNotifications()
+        )
 
         if (errorText.isNotBlank()) {
-            Surface(
-                color = onboardingErrorSurfaceColor(),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, onboardingErrorBorderColor()),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = errorText,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    color = onboardingErrorTextColor(),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
+            OnboardingErrorStrip(text = errorText)
         }
     }
 }
@@ -1948,6 +1936,7 @@ private fun OnboardingSetupScreen(
     onShakeConsumed: () -> Unit = {}
 ) {
     val s = LocalAppStrings.current
+    val scale = onboardingCompactScale()
     val versionShakeOffset = remember { Animatable(0f) }
     LaunchedEffect(versionShakeTick) {
         // Same re-entry issue as PermissionsScreen's shake: versionShakeTick survives the
@@ -1965,14 +1954,13 @@ private fun OnboardingSetupScreen(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
     ) {
-        Text(
-            text = s.onboardingSetupTitle,
-            fontSize = 20.sp,
-            color = onboardingTextPrimary(),
-            fontWeight = FontWeight.ExtraBold,
-            fontFamily = Monocraft
+        OnboardingHeading(
+            title = s.onboardingSetupTitle,
+            eyebrow = "LAST STEP",
+            centered = false,
+            titleSize = 20.sp
         )
 
         OutlinedTextField(
@@ -1984,7 +1972,7 @@ private fun OnboardingSetupScreen(
                 Icon(
                     imageVector = Icons.Filled.Dns,
                     contentDescription = null,
-                    tint = onboardingAccentPurpleDark()
+                    tint = onboardingAccentStrong()
                 )
             },
             shape = duoTextFieldShape(),
@@ -2000,7 +1988,7 @@ private fun OnboardingSetupScreen(
                 Icon(
                     imageVector = Icons.Filled.Storage,
                     contentDescription = null,
-                    tint = onboardingAccentPurpleDark()
+                    tint = onboardingAccentStrong()
                 )
             },
             shape = duoTextFieldShape(),
@@ -2030,18 +2018,18 @@ private fun OnboardingSetupScreen(
                     Icon(
                         imageVector = Icons.Filled.Dns,
                         contentDescription = null,
-                        tint = onboardingAccentPurpleDark()
+                        tint = onboardingAccentStrong()
                     )
                 },
                 colors = OutlinedTextFieldDefaults.colors(
                     disabledTextColor = if (hasSelectedVersion) {
-                        MaterialTheme.colorScheme.onSurface
+                        onboardingTextPrimary()
                     } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                        onboardingTextSecondary()
                     },
-                    disabledBorderColor = if (showVersionError) Color(0xFFDB3A34) else onboardingBorderColor(),
-                    disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    disabledTrailingIconColor = onboardingAccentPurpleDark()
+                    disabledBorderColor = if (showVersionError) MaterialTheme.colorScheme.error else onboardingBorder(),
+                    disabledLabelColor = onboardingTextSecondary(),
+                    disabledTrailingIconColor = onboardingAccentStrong()
                 ),
                 shape = duoTextFieldShape(),
                 modifier = Modifier.fillMaxWidth()
@@ -2049,20 +2037,7 @@ private fun OnboardingSetupScreen(
         }
 
         if (showVersionError) {
-            Surface(
-                color = onboardingErrorSurfaceColor(),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, onboardingErrorBorderColor()),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = s.onboardingSetupVersionError,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    color = onboardingErrorTextColor(),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
+            OnboardingErrorStrip(text = s.onboardingSetupVersionError)
         }
 
         OutlinedTextField(
@@ -2074,7 +2049,7 @@ private fun OnboardingSetupScreen(
                 Icon(
                     imageVector = Icons.Filled.Forest,
                     contentDescription = null,
-                    tint = onboardingAccentPurpleDark()
+                    tint = onboardingAccentStrong()
                 )
             },
             shape = duoTextFieldShape(),
@@ -2082,71 +2057,88 @@ private fun OnboardingSetupScreen(
             colors = duoOutlinedTextFieldColors()
         )
 
-        Surface(
-            color = onboardingAccentGreen().copy(alpha = 0.12f),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.CheckCircle,
-                    contentDescription = null,
-                    tint = onboardingAccentGreen(),
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    text = s.onboardingSetupBackupNotice,
-                    color = onboardingTextPrimary(),
-                    fontSize = 12.sp,
-                    lineHeight = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = Monocraft
-                )
-            }
-        }
+        OnboardingNoticeStrip(
+            accent = onboardingSuccess(),
+            icon = Icons.Filled.CheckCircle,
+            text = s.onboardingSetupBackupNotice
+        )
     }
 }
 
+/**
+ * Inline status / notice line: tinted container, leading icon, one short body.
+ * Every "heads up" box in the tour uses this so they all read the same.
+ */
 @Composable
-private fun FloatingToolArt(modifier: Modifier, mirrored: Boolean = false, secondary: Boolean = false) {
-    val bob by animateFloatAsState(
-        targetValue = if (secondary) 1f else 0f,
-        animationSpec = tween(durationMillis = 2400)
-    )
-    val alpha = if (secondary) 0.45f else 0.72f
-    val tool = if (mirrored) R.drawable.ic_world_pixel else R.drawable.ic_launcher_foreground
- 
-    Box(
-        modifier = modifier
-            .alpha(alpha)
-            .padding(top = (bob * 10).dp)
+private fun OnboardingNoticeStrip(
+    accent: Color,
+    icon: ImageVector,
+    text: String,
+    emphasised: Boolean = false
+) {
+    val scale = onboardingCompactScale()
+    OnboardingCard(
+        modifier = Modifier.fillMaxWidth(),
+        corner = OnboardingTileCorner,
+        color = accent.copy(alpha = if (emphasised) 0.16f else 0.10f),
+        borderColor = accent.copy(alpha = if (emphasised) 0.75f else 0.45f),
+        depthColor = accent.copy(alpha = if (emphasised) 0.95f else 0.65f)
     ) {
-        Surface(
-            modifier = Modifier.card3d(elevation = 6.dp, cornerRadius = 24.dp),
-            color = if (pocketIsDarkTheme()) MaterialTheme.colorScheme.surface.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.74f),
-            shape = RoundedCornerShape(24.dp),
-            shadowElevation = 0.dp
+        Row(
+            modifier = Modifier.padding(horizontal = 13.dp.scaled(scale), vertical = 11.dp.scaled(scale)),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top
         ) {
-            Image(
-                painter = painterResource(id = tool),
+            Icon(
+                imageVector = icon,
                 contentDescription = null,
-                modifier = Modifier.size(64.dp),
-                contentScale = ContentScale.Fit
+                tint = accent,
+                modifier = Modifier
+                    .padding(top = 1.dp)
+                    .size(17.dp)
+            )
+            Text(
+                text = text,
+                color = onboardingTextPrimary(),
+                fontSize = 11.sp.scaledSp(scale),
+                lineHeight = 16.sp.scaledSp(scale),
+                fontWeight = FontWeight.Bold
             )
         }
     }
 }
 
 @Composable
+private fun OnboardingErrorStrip(text: String) {
+    val scale = onboardingCompactScale()
+    OnboardingCard(
+        modifier = Modifier.fillMaxWidth(),
+        corner = OnboardingChipCorner,
+        color = onboardingErrorSurface(),
+        borderColor = onboardingErrorBorder(),
+        depthColor = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp.scaled(scale)),
+            color = onboardingErrorText(),
+            fontSize = 11.sp.scaledSp(scale),
+            lineHeight = 16.sp.scaledSp(scale),
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+/**
+ * Phone → relay → friends. Three raised tiles joined by chevrons, matching the
+ * app's node styling rather than the flat outlined boxes it used before.
+ */
+@Composable
 private fun FlowDiagram() {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
         FlowNode(label = "Your\nphone", icon = Icons.Filled.PhoneAndroid)
         FlowArrow()
@@ -2158,43 +2150,39 @@ private fun FlowDiagram() {
 
 @Composable
 private fun FlowNode(label: String, emoji: String? = null, icon: ImageVector? = null, iconRes: Int? = null) {
+    val scale = onboardingCompactScale()
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(5.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Surface(
-            color = onboardingSurfaceSoftColor(),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier
-                .size(46.dp)
-                .border(1.dp, onboardingBorderColor(), RoundedCornerShape(14.dp))
+        OnboardingIconTile(
+            accent = onboardingAccent(),
+            size = 46.dp.scaled(scale),
+            corner = OnboardingChipCorner
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                if (emoji != null) {
-                    Text(text = emoji, fontSize = 18.sp)
-                } else if (iconRes != null) {
-                    Icon(
-                        painter = painterResource(id = iconRes),
-                        contentDescription = null,
-                        tint = onboardingAccentPurpleDark(),
-                        modifier = Modifier.size(22.dp)
-                    )
-                } else if (icon != null) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = onboardingAccentPurpleDark(),
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
+            when {
+                emoji != null -> Text(text = emoji, fontSize = 18.sp)
+                iconRes != null -> Icon(
+                    painter = painterResource(id = iconRes),
+                    contentDescription = null,
+                    tint = onboardingAccentStrong(),
+                    modifier = Modifier.size(22.dp.scaled(scale))
+                )
+                icon != null -> Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = onboardingAccentStrong(),
+                    modifier = Modifier.size(22.dp.scaled(scale))
+                )
             }
         }
         Text(
             text = label,
             textAlign = TextAlign.Center,
             color = onboardingTextSecondary(),
-            fontSize = 9.sp,
-            lineHeight = 11.sp
+            fontSize = 9.sp.scaledSp(scale),
+            lineHeight = 12.sp.scaledSp(scale),
+            fontWeight = FontWeight.SemiBold
         )
     }
 }
@@ -2204,135 +2192,37 @@ private fun FlowArrow() {
     Icon(
         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
         contentDescription = null,
-        tint = onboardingAccentPurpleDark(),
+        tint = onboardingBorder(),
         modifier = Modifier
-            .padding(horizontal = 6.dp)
+            .padding(horizontal = 6.dp, vertical = 14.dp)
             .size(16.dp)
     )
 }
 
+/** Row card carrying one idea: a tinted icon chip, a bold title and a short body. */
 @Composable
-private fun HaloIconBox(accent: Color, icon: ImageVector) {
-    Box(
-        modifier = Modifier
-            .size(76.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(onboardingSurfaceSoftColor())
-            .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(24.dp)),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(46.dp)
-                .clip(CircleShape)
-                .background(accent.copy(alpha = 0.16f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(imageVector = icon, contentDescription = null, tint = accent, modifier = Modifier.size(24.dp))
-        }
-    }
-}
-
-@Composable
-private fun HaloIconBox(accent: Color, drawableRes: Int) {
-    Box(
-        modifier = Modifier
-            .size(76.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(onboardingSurfaceSoftColor())
-            .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(24.dp)),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(46.dp)
-                .clip(CircleShape)
-                .background(accent.copy(alpha = 0.16f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                painter = painterResource(id = drawableRes),
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                contentScale = ContentScale.Fit
-            )
-        }
-    }
-}
-
-@Composable
-private fun FeaturePillRow(items: List<String>) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        items.forEach { label ->
-            Surface(
-                color = onboardingSurfaceSoftColor(),
-                shape = RoundedCornerShape(999.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = label,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                    textAlign = TextAlign.Center,
-                    color = onboardingTextPrimary(),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScreenCard(accent: Color, title: String, subtitle: String) {
+private fun DetailCard(
+    accent: Color,
+    title: String,
+    body: String,
+    icon: ImageVector? = null
+) {
     val scale = onboardingCompactScale()
-    Surface(
-        color = onboardingSurfaceColor(),
-        shape = RoundedCornerShape(18.dp.scaled(scale)),
-        shadowElevation = 0.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .card3d(elevation = 4.dp.scaled(scale), cornerRadius = 18.dp.scaled(scale))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp.scaled(scale)),
-            verticalArrangement = Arrangement.spacedBy(6.dp.scaled(scale))
-        ) {
-            Text(text = title, color = onboardingTextPrimary(), fontSize = 14.sp.scaledSp(scale), fontWeight = FontWeight.Bold, maxLines = 2)
-            Text(text = subtitle, color = onboardingTextSecondary(), fontSize = 12.sp.scaledSp(scale), lineHeight = 17.sp.scaledSp(scale), maxLines = 3)
-            Box(
-                modifier = Modifier
-                    .height(4.dp.scaled(scale))
-                    .fillMaxWidth(0.38f)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(accent)
-            )
-        }
-    }
-}
-
-@Composable
-private fun DetailCard(accent: Color, title: String, body: String, icon: ImageVector? = null) {
-    val scale = onboardingCompactScale()
-    Surface(
-        color = onboardingSurfaceColor(),
-        shape = RoundedCornerShape(16.dp.scaled(scale)),
-        shadowElevation = 0.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .card3d(elevation = 4.dp.scaled(scale), cornerRadius = 16.dp.scaled(scale))
+    OnboardingCard(
+        modifier = Modifier.fillMaxWidth(),
+        corner = OnboardingTileCorner
     ) {
         Row(
-            modifier = Modifier.padding(14.dp.scaled(scale)),
+            modifier = Modifier.padding(13.dp.scaled(scale)),
             horizontalArrangement = Arrangement.spacedBy(12.dp.scaled(scale)),
             verticalAlignment = Alignment.Top
         ) {
             Box(
                 modifier = Modifier
-                    .size(28.dp.scaled(scale))
+                    .size(30.dp.scaled(scale))
                     .clip(RoundedCornerShape(10.dp.scaled(scale)))
-                    .background(accent.copy(alpha = 0.18f)),
+                    .background(accent.copy(alpha = 0.18f))
+                    .border(1.dp, accent.copy(alpha = 0.40f), RoundedCornerShape(10.dp.scaled(scale))),
                 contentAlignment = Alignment.Center
             ) {
                 if (icon != null) {
@@ -2343,44 +2233,78 @@ private fun DetailCard(accent: Color, title: String, body: String, icon: ImageVe
                         modifier = Modifier.size(16.dp.scaled(scale))
                     )
                 } else {
-                    Text(text = "•", color = accent, fontSize = 20.sp.scaledSp(scale), fontWeight = FontWeight.Black)
+                    Text(
+                        text = "•",
+                        color = accent,
+                        fontSize = 20.sp.scaledSp(scale),
+                        fontWeight = FontWeight.Black
+                    )
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(3.dp.scaled(scale))) {
-                Text(text = title, color = onboardingTextPrimary(), fontSize = 13.sp.scaledSp(scale), fontWeight = FontWeight.Bold, maxLines = 2)
-                Text(text = body, color = onboardingTextSecondary(), fontSize = 11.sp.scaledSp(scale), lineHeight = 16.sp.scaledSp(scale), maxLines = 3)
+                Text(
+                    text = title,
+                    color = onboardingTextPrimary(),
+                    fontSize = 13.sp.scaledSp(scale),
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2
+                )
+                Text(
+                    text = body,
+                    color = onboardingTextSecondary(),
+                    fontSize = 11.sp.scaledSp(scale),
+                    lineHeight = 16.sp.scaledSp(scale),
+                    maxLines = 3
+                )
             }
         }
     }
 }
 
+/** Single card listing several title/body pairs, separated by hairlines. */
 @Composable
 private fun FeatureListCard(accent: Color, entries: List<Pair<String, String>>) {
     val scale = onboardingCompactScale()
-    Surface(
-        color = onboardingSurfaceColor(),
-        shape = RoundedCornerShape(18.dp.scaled(scale)),
-        shadowElevation = 0.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .card3d(elevation = 4.dp.scaled(scale), cornerRadius = 18.dp.scaled(scale))
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp.scaled(scale)),
-            verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
-        ) {
-            entries.forEach { (title, body) ->
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp.scaled(scale)), modifier = Modifier.fillMaxWidth()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp.scaled(scale)), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+    OnboardingCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(14.dp.scaled(scale))) {
+            entries.forEachIndexed { index, (title, body) ->
+                if (index > 0) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 11.dp.scaled(scale))
+                            .height(1.dp)
+                            .background(onboardingBorder().copy(alpha = 0.6f))
+                    )
+                }
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp.scaled(scale)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp.scaled(scale)),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Box(
                             modifier = Modifier
-                                .size(10.dp.scaled(scale))
-                                .clip(CircleShape)
+                                .size(9.dp.scaled(scale))
+                                .clip(RoundedCornerShape(3.dp))
                                 .background(accent)
                         )
-                        Text(text = title, color = onboardingTextPrimary(), fontSize = 12.sp.scaledSp(scale), fontWeight = FontWeight.Bold)
+                        Text(
+                            text = title,
+                            color = onboardingTextPrimary(),
+                            fontSize = 12.sp.scaledSp(scale),
+                            fontWeight = FontWeight.Bold
+                        )
                     }
-                    Text(text = body, color = onboardingTextSecondary(), fontSize = 11.sp.scaledSp(scale), lineHeight = 16.sp.scaledSp(scale))
+                    Text(
+                        text = body,
+                        color = onboardingTextSecondary(),
+                        fontSize = 11.sp.scaledSp(scale),
+                        lineHeight = 16.sp.scaledSp(scale)
+                    )
                 }
             }
         }
@@ -2389,48 +2313,48 @@ private fun FeatureListCard(accent: Color, entries: List<Pair<String, String>>) 
 
 @Composable
 private fun FeatureGrid(items: List<FeatureItem>) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    val scale = onboardingCompactScale()
+    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
         items.chunked(2).forEach { rowItems ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(9.dp), modifier = Modifier.fillMaxWidth()) {
                 rowItems.forEach { item ->
-                    Surface(
-                        color = onboardingSurfaceColor(),
-                        shape = RoundedCornerShape(18.dp),
-                        shadowElevation = 0.dp,
-                        modifier = Modifier
-                            .weight(1f)
-                            .card3d(elevation = 4.dp, cornerRadius = 18.dp)
+                    OnboardingCard(
+                        modifier = Modifier.weight(1f),
+                        corner = OnboardingTileCorner
                     ) {
                         Column(
-                            modifier = Modifier.padding(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp.scaled(scale)),
                             verticalArrangement = Arrangement.spacedBy(7.dp)
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(30.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(onboardingAccentGreen().copy(alpha = 0.16f)),
+                                    .size(28.dp)
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .background(onboardingAccent().copy(alpha = 0.18f))
+                                    .border(1.dp, onboardingAccent().copy(alpha = 0.40f), RoundedCornerShape(9.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = item.icon,
                                     contentDescription = null,
-                                    tint = onboardingAccentGreen(),
-                                    modifier = Modifier.size(17.dp)
+                                    tint = onboardingAccent(),
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
 
                             Text(
                                 text = item.title,
                                 color = onboardingTextPrimary(),
-                                fontSize = 12.sp,
+                                fontSize = 12.sp.scaledSp(scale),
                                 fontWeight = FontWeight.ExtraBold
                             )
                             Text(
                                 text = item.body,
                                 color = onboardingTextSecondary(),
-                                fontSize = 10.sp,
-                                lineHeight = 14.sp
+                                fontSize = 10.sp.scaledSp(scale),
+                                lineHeight = 14.sp.scaledSp(scale)
                             )
                         }
                     }
@@ -2445,60 +2369,39 @@ private fun FeatureGrid(items: List<FeatureItem>) {
 
 @Composable
 private fun PermissionCard(accent: Color, icon: ImageVector, title: String, body: String) {
-    Surface(
-        color = onboardingSurfaceColor(),
-        shape = RoundedCornerShape(16.dp),
-        shadowElevation = 0.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .card3d(elevation = 4.dp, cornerRadius = 16.dp)
-    ) {
+    val scale = onboardingCompactScale()
+    OnboardingCard(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(14.dp.scaled(scale)),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Top
         ) {
             Box(
                 modifier = Modifier
                     .size(34.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(accent.copy(alpha = 0.16f)),
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(accent.copy(alpha = 0.18f))
+                    .border(1.dp, accent.copy(alpha = 0.40f), RoundedCornerShape(11.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(imageVector = icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(text = title, color = onboardingTextPrimary(), fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-                Text(text = body, color = onboardingTextSecondary(), fontSize = 11.sp, lineHeight = 16.sp, maxLines = 3)
+                Text(
+                    text = title,
+                    color = onboardingTextPrimary(),
+                    fontSize = 13.sp.scaledSp(scale),
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2
+                )
+                Text(
+                    text = body,
+                    color = onboardingTextSecondary(),
+                    fontSize = 11.sp.scaledSp(scale),
+                    lineHeight = 16.sp.scaledSp(scale),
+                    maxLines = 3
+                )
             }
-        }
-    }
-}
-
-@Composable
-private fun StatsRow() {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        StatCard(modifier = Modifier.weight(1f), value = "Free", label = "to host", accent = onboardingAccentPurple())
-        StatCard(modifier = Modifier.weight(1f), value = "24/7", label = "while app runs", accent = onboardingAccentGreen())
-        StatCard(modifier = Modifier.weight(1f), value = "Sync", label = "backup ready", accent = onboardingAccentGold())
-    }
-}
-
-@Composable
-private fun StatCard(modifier: Modifier = Modifier, value: String, label: String, accent: Color) {
-    Surface(
-        color = onboardingAccentPurpleMuted(),
-        shape = RoundedCornerShape(14.dp),
-        shadowElevation = 0.dp,
-        modifier = modifier.card3d(elevation = 4.dp, cornerRadius = 14.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(vertical = 10.dp, horizontal = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(text = value, color = accent, fontSize = 18.sp, fontWeight = FontWeight.Black)
-            Text(text = label, color = onboardingTextSecondary(), fontSize = 10.sp, textAlign = TextAlign.Center, lineHeight = 12.sp, maxLines = 2)
         }
     }
 }
@@ -2515,26 +2418,38 @@ private fun PrimaryButton(modifier: Modifier = Modifier, text: String, enabled: 
     )
 }
 
+/**
+ * Quiet counterpart to [PrimaryButton]. DuoButton's Secondary variant is a fixed
+ * bright green, which both fights the primary action for attention and ignores
+ * the selected mob theme — Back is drawn here as a neutral raised surface
+ * instead, with the same press depth as the rest of the app's buttons.
+ */
 @Composable
 private fun OutlineButton(modifier: Modifier = Modifier, text: String, onClick: () -> Unit) {
-    DuoButton(
-        text = text,
-        onClick = onClick,
-        variant = DuoButtonVariant.Secondary,
-        minHeight = 56.dp,
-        modifier = modifier
-    )
-}
-
-@Composable
-private fun SkipButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
-    DuoButton(
-        text = "Skip",
-        onClick = onClick,
-        variant = DuoButtonVariant.Secondary,
-        minHeight = 56.dp,
-        modifier = modifier
-    )
+    Box(modifier = modifier.padding(bottom = 4.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .clip(RoundedCornerShape(50.dp))
+                .background(onboardingSurface())
+                .pill3d(
+                    elevation = 4.dp,
+                    borderColor = onboardingBorder(),
+                    depthColor = onboardingBorderDepth()
+                )
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                color = onboardingTextPrimary(),
+                fontSize = 15.sp,
+                fontFamily = Monocraft,
+                fontWeight = FontWeight.ExtraBold
+            )
+        }
+    }
 }
 
 private tailrec fun android.content.Context.findActivity(): Activity? = when (this) {
