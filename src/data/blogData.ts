@@ -9,6 +9,69 @@ export interface BlogPost {
 
 export const blogPosts: BlogPost[] = [
   {
+    id: "faster-cleaner-server-startup-update",
+    title: "PocketHost v1.2.3: Faster, Cleaner Server Startup & Performance Optimization",
+    date: "September 19, 2026",
+    category: "Release",
+    excerpt: "Experience lightning-fast server startup and rock-solid 20 TPS with our optimized runtime engine, instant launch reliability, and automated mod dependency resolution.",
+    content: `
+We are thrilled to release **PocketHost v1.2.3**, bringing massive engine speedups, cleaner memory footprints, and robust server lifecycle management to your pocket Minecraft server.
+
+Here is an overview of everything new in this release!
+
+---
+
+## 🚀 Optimized Server Engine & Cleaner Startup
+
+Running modern Minecraft (Paper 26.3, Fabric, Purpur, or Vanilla) on mobile hardware demands an engine that is lean, hyper-efficient, and cleanly tailored for Android devices.
+
+In v1.2.3, the server runtime engine has been deeply **optimized**:
+- **Faster Startup**: Server initialization and classloading times have been significantly streamlined, letting your world boot up and reach an active, joinable state noticeably faster.
+- **Cleaner Memory Footprint**: Heap allocation behavior and thread scheduling have been tuned to prevent background memory bloat, keeping your phone cooler and reducing thermal throttling during long gaming sessions.
+- **Rock-Solid 20 TPS**: Stress-tested across a wide range of devices from midrange phones up to flagship Snapdragon chips, sustaining a flawless 20 TPS even when multiple players are loading new chunks simultaneously.
+- **Clean Architecture**: Refined internal runtime structures for smooth, lightweight execution without unnecessary background overhead.
+
+---
+
+## ⚡ Instant & Reliable Server Boot (No More False Launch Failures)
+
+On fresh installations, downloading server jars like Paper or Fabric and bootstrapping the engine for the first time happen in parallel. Previously, a quick pre-launch check could trigger a false-alarm warning if the file took an extra second to unpack.
+
+In v1.2.3, we introduced **adaptive launch target polling (\`waitForLaunchTarget\`)**:
+- The server launcher gracefully waits up to 15 seconds for jars to finish unpacking, ensuring first-run launches boot smoothly without requiring manual retries.
+- Corrupted or interrupted network downloads are proactively identified before launch, giving you clear instructions to re-download rather than an obscure crash screen.
+
+---
+
+## 🧩 Automatic Mod Dependency Resolution via Modrinth
+
+Managing server mods manually on mobile used to mean tracking down half a dozen library jars. 
+
+PocketHost now handles that entirely for you:
+- **Automatic Dependency Fetching**: When adding mods from Modrinth, any missing hard dependencies are identified, resolved, and downloaded automatically before the server boots.
+- **Automatic Quarantine Restoration**: Quarantined mods (\`.jar.disabled\`) are safely re-enabled automatically as soon as their required companion dependencies arrive.
+
+---
+
+## 🌐 Streamlined Bedrock Crossplay Bridge
+
+We have streamlined our crossplay subsystem to focus exclusively on our high-throughput Geyser bridge. Bedrock players on iOS, Android, Xbox, PlayStation, and Nintendo Switch connect faster and experience smoother packet translation with reduced network jitter when playing alongside Java Edition friends.
+
+---
+
+## 🔄 In-App Updater & Seamless Process Recycling
+
+- **In-App Updater for APK Users**: If you installed PocketHost via direct APK download, the app now checks for updates directly against GitHub's global CDN and lets you upgrade in one tap without visiting a browser.
+- **Process Recycling on Android 12+**: Server restarts recycle the background worker cleanly, ensuring memory is completely wiped fresh between world switches.
+
+---
+
+## Download v1.2.3 Now
+
+PocketHost v1.2.3 is available immediately! Download the updated APK directly from our [Home Page](/) or check out our [GitHub Releases](https://github.com/AleemKanyu/PocketCraft/releases) page.
+    `,
+  },
+  {
     id: "pockethost-vs-aternos",
     title: "PocketHost vs Aternos & Cloud Hosts: Why We Stay 100% Free With Zero Queues",
     date: "September 15, 2026",
