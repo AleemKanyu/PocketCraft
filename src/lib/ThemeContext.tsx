@@ -16,9 +16,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("pockethost-theme") as Theme;
-      if (stored) return stored;
-      // Default to light mode as requested
-      return "light";
+      if (stored === "dark") return "light"; // override any stored dark mode
+      return stored || "light";
     }
     return "light";
   });

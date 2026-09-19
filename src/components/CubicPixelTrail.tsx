@@ -157,9 +157,7 @@ export const CubicPixelTrail: React.FC = () => {
       lastClientY = null;
     };
 
-    // Screen shake state & subtle blast particles (no huge shockwave)
-    let shakeMagnitude = 0;
-    let isShaking = false;
+    // Subtle blast particles on click
     const particles: Particle[] = [];
 
     const handlePointerDown = (e: PointerEvent) => {
@@ -172,10 +170,6 @@ export const CubicPixelTrail: React.FC = () => {
       const clickY = e.clientY + window.scrollY;
       const cx = clickX / H;
       const cy = clickY / H;
-
-      // Trigger tactile screen shake
-      shakeMagnitude = 4.5;
-      isShaking = true;
 
       // Spawn subtle localized mini blast sparks (8 small particles)
       const numParticles = 8;
@@ -216,30 +210,6 @@ export const CubicPixelTrail: React.FC = () => {
 
       const dt = Math.min(0.05, (time - lastFrameTime) / 1000);
       lastFrameTime = time;
-
-      // Apply tactile screen shake to page content siblings
-      if (shakeMagnitude > 0.25) {
-        shakeMagnitude *= Math.pow(0.001, dt);
-        const shakeX = (Math.random() * 2 - 1) * shakeMagnitude;
-        const shakeY = (Math.random() * 2 - 1) * shakeMagnitude;
-        if (canvas.parentElement) {
-          for (const child of Array.from(canvas.parentElement.children)) {
-            if (child !== canvas) {
-              (child as HTMLElement).style.transform = `translate(${shakeX.toFixed(1)}px, ${shakeY.toFixed(1)}px)`;
-            }
-          }
-        }
-      } else if (isShaking) {
-        isShaking = false;
-        shakeMagnitude = 0;
-        if (canvas.parentElement) {
-          for (const child of Array.from(canvas.parentElement.children)) {
-            if (child !== canvas) {
-              (child as HTMLElement).style.transform = "";
-            }
-          }
-        }
-      }
 
       if (activeMaxRow < activeMinRow && particles.length === 0) {
         return;
