@@ -74,8 +74,9 @@ export default function FAQ() {
   return (
     <div className={`min-h-screen section-transition ${theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"}`}>
       <SEO
-        title="Frequently Asked Questions - PocketHost"
-        description="Got questions about running a Minecraft server on Android? Find answers about Bedrock crossplay, port forwarding, performance, and plugins."
+        title="FAQ - Free Minecraft Server Hosting on Android | PocketHost"
+        description="Answers to common questions about PocketHost: 100% free Minecraft server hosting on Android, Bedrock crossplay, plugins, zero port forwarding, and performance."
+        keywords="free minecraft hosting faq, pockethost questions, free minecraft server android, how to host minecraft server on phone, aternos free alternative"
         path="/faq"
         schema={faqSchema}
       />

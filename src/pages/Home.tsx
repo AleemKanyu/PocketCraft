@@ -56,6 +56,19 @@ const Home = () => {
   const { theme } = useTheme();
   const isLowEnd = useLowEndDevice();
 
+  const homeFaqSchema = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: homeFaqs.map((faq) => ({
+      "@type": "Question",
+      name: faq.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: faq.answer,
+      },
+    })),
+  };
+
   return (
     <div
       className={`min-h-screen selection:bg-[#7FE620] selection:text-black font-sans section-transition ${
@@ -63,9 +76,11 @@ const Home = () => {
       }`}
     >
       <SEO
-        title="PocketHost - Free Minecraft Server Hosting on Android"
-        description="Host Minecraft Java & Bedrock Edition servers directly on your Android phone for free. Zero port forwarding, PaperMC plugins, and high-performance relay tunneling."
+        title="PocketHost - 100% Free Minecraft Server Hosting on Android (Java & Bedrock)"
+        description="PocketHost is 100% free Minecraft server hosting directly on your Android phone. Host 24/7 PaperMC Java & Bedrock crossplay servers with zero queues, zero port forwarding, and full plugin support."
+        keywords="free minecraft hosting, free minecraft server hosting, pockethost, pocket host, pocketcraft, free 24/7 minecraft server, host minecraft server android, papermc mobile hosting, geysermc crossplay, free aternos alternative"
         path="/"
+        schema={homeFaqSchema}
       />
       <Navbar />
       <ModernHero />

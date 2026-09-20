@@ -87,10 +87,19 @@
   Header set Referrer-Policy "strict-origin-when-cross-origin"
 </IfModule>
 
-# 5. SPA Rewrite Engine
+# 5. Canonical Redirection & SPA Rewrite Engine
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
+
+  # Force HTTPS
+  RewriteCond %{HTTPS} off
+  RewriteCond %{HTTP:X-Forwarded-Proto} !https
+  RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+  # Redirect www to non-www (canonical domain)
+  RewriteCond %{HTTP_HOST} ^www\.pockethost\.online$ [NC]
+  RewriteRule ^(.*)$ https://pockethost.online/$1 [L,R=301]
 
   # Serve sitemap.xml directly
   RewriteRule ^sitemap\.xml$ sitemap.xml [L]

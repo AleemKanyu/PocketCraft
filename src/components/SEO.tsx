@@ -3,22 +3,26 @@ import { useEffect } from "react";
 interface SEOProps {
   title?: string;
   description?: string;
+  keywords?: string;
   path?: string;
   image?: string;
   type?: string;
   schema?: Record<string, any> | Record<string, any>[];
 }
 
-const DEFAULT_TITLE = "PocketHost - Host Minecraft Java & Bedrock Servers on Android";
+const DEFAULT_TITLE = "PocketHost - 100% Free Minecraft Server Hosting (Java & Bedrock on Android)";
 const DEFAULT_DESCRIPTION =
-  "Host Minecraft Java & Bedrock Edition servers directly on your Android phone for free. Zero port forwarding, PaperMC plugins support, and high-performance relay networking.";
+  "PocketHost is 100% free Minecraft server hosting directly on your Android phone. Host 24/7 PaperMC Java & Bedrock crossplay servers with zero queues, zero port forwarding, and full plugin support.";
+const DEFAULT_KEYWORDS =
+  "free minecraft hosting, free minecraft server hosting, pockethost, pocket host, pocketcraft, free 24/7 minecraft server, host minecraft server android, papermc mobile hosting, geysermc crossplay, free aternos alternative";
 const SITE_URL = "https://pockethost.online";
 const DEFAULT_IMAGE = `${SITE_URL}/app-icon-circle-hd.png`;
 
 export function SEO({
   title = DEFAULT_TITLE,
   description = DEFAULT_DESCRIPTION,
-  path = "",
+  keywords = DEFAULT_KEYWORDS,
+  path = "/",
   image = DEFAULT_IMAGE,
   type = "website",
   schema,
@@ -40,9 +44,12 @@ export function SEO({
 
     // 2. Standard Meta
     setMeta("name", "description", description);
+    setMeta("name", "keywords", keywords);
 
     // 3. Canonical URL
-    const canonicalUrl = `${SITE_URL}${path.startsWith("/") ? path : `/${path}`}`.replace(/\/$/, path === "" || path === "/" ? "/" : "");
+    const cleanPath = path ? (path.startsWith("/") ? path : `/${path}`) : "/";
+    const canonicalUrl = cleanPath === "/" ? `${SITE_URL}/` : `${SITE_URL}${cleanPath.replace(/\/+$/, "")}`;
+
     let canonicalLink = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
     if (!canonicalLink) {
       canonicalLink = document.createElement("link");
@@ -50,6 +57,11 @@ export function SEO({
       document.head.appendChild(canonicalLink);
     }
     canonicalLink.setAttribute("href", canonicalUrl);
+
+    let alternateLink = document.querySelector('link[rel="alternate"][hreflang="x-default"]') as HTMLLinkElement | null;
+    if (alternateLink) {
+      alternateLink.setAttribute("href", canonicalUrl);
+    }
 
     // 4. Open Graph
     setMeta("property", "og:title", title);
