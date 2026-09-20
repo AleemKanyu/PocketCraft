@@ -45,10 +45,11 @@
   # HTML: Never cache so updates take effect immediately
   ExpiresByType text/html "access plus 0 seconds"
 
-  # Data & Manifests
+  # Data, Sitemaps & Manifests
+  ExpiresByType text/plain "access plus 0 seconds"
   ExpiresByType application/json "access plus 0 seconds"
-  ExpiresByType application/xml "access plus 1 hour"
-  ExpiresByType text/xml "access plus 1 hour"
+  ExpiresByType application/xml "access plus 0 seconds"
+  ExpiresByType text/xml "access plus 0 seconds"
   ExpiresByType application/manifest+json "access plus 1 week"
 
   # Static CSS & JS (Vite assets have cache-busting hashes)
@@ -76,8 +77,8 @@
     Header set Cache-Control "max-age=31536000, public, immutable"
   </FilesMatch>
 
-  # HTML must revalidate
-  <FilesMatch "\.(html|htm)$">
+  # HTML, robots.txt, and sitemap.xml must never be stale
+  <FilesMatch "(\.(html|htm)|robots\.txt|sitemap\.xml)$">
     Header set Cache-Control "no-cache, no-store, must-revalidate"
   </FilesMatch>
 
