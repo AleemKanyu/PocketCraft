@@ -9,6 +9,49 @@ export interface BlogPost {
 
 export const blogPosts: BlogPost[] = [
   {
+    id: "google-preferred-sources-guide",
+    title: "PocketHost is Now on Google Preferred Sources — Star Us for Instant Updates",
+    date: "September 21, 2026",
+    category: "Announcement",
+    excerpt: "Make PocketHost your preferred source on Google Search, Top Stories, and AI Overviews with a single click to always get the latest Minecraft hosting tutorials, performance fixes, and PaperMC guides.",
+    content: `
+Google recently rolled out **Preferred Sources**, an exciting new feature that gives searchers complete control over which websites they trust and want to prioritize across Google Search, Top Stories, AI Overviews, and AI Mode.
+
+We are proud to announce that **PocketHost** is now fully integrated with Google Preferred Sources! You can now star **pockethost.online** directly in your Google account so our free hosting guides, PaperMC plugins, and optimization tips appear prominently whenever you search.
+
+---
+
+## ⭐ Why Add PocketHost as a Preferred Source?
+
+When you mark PocketHost as a preferred source:
+- **Prioritized in Search & AI Overviews**: Whenever you ask Google about hosting Minecraft servers on mobile, fixing paper server lag, crossplay Geyser setups, or port forwarding workarounds, Google will highlight PocketHost's verified guides with a special **"Preferred" badge**.
+- **Top Stories & Release Alerts**: Immediate access to new PocketHost releases, performance updates, and community world drops as soon as they are published.
+- **Zero Hallucinations**: Direct links to authentic, tested instructions tailored specifically for running dedicated Java & Bedrock servers on Android devices.
+
+---
+
+## 🛠️ How to Star PocketHost in One Click
+
+We have made it seamless to add PocketHost to your preferences:
+
+### Method 1: The One-Click Button on PocketHost
+Click the **"Star on Google Search"** or **"Prefer on Google"** buttons featured on our blog, footer, and community pages. A Google verification prompt will appear, allowing you to confirm with one tap.
+
+### Method 2: Google Source Preferences Tool
+1. Visit [Google Source Preferences](https://www.google.com/preferences/source?q=pockethost.online).
+2. Search for **\`pockethost.online\`**.
+3. Click the **Star icon** next to PocketHost to add it to your preferred sources list.
+
+---
+
+## 💡 Stay Connected
+
+In addition to Google Preferred Sources, you can join over 5,000+ active server creators on our [Discord Community](https://discord.com/invite/nc7ceYWVfT) and follow [@pockethostmc on Instagram](https://www.instagram.com/pockethostmc).
+
+Thank you for choosing PocketHost as your trusted companion for 100% free mobile Minecraft server hosting!
+`,
+  },
+  {
     id: "faster-cleaner-server-startup-update",
     title: "PocketHost v1.2.3: Faster, Cleaner Server Startup & Performance Optimization",
     date: "September 19, 2026",

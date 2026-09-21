@@ -692,9 +692,9 @@ function DashboardPage({
               <p style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '4px', margin: 0 }}>Custom IP Subdomain</p>
               <p 
                 style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent-color)', fontFamily: 'var(--font-mono)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                title={status.subdomain ? `${status.subdomain}.pocketcraft.online` : 'None'}
+                title={status.subdomain ? `${status.subdomain}.mine.pockethost.online` : 'None'}
               >
-                {status.subdomain ? `${status.subdomain}.pocketcraft.online` : 'None'}
+                {status.subdomain ? `${status.subdomain}.mine.pockethost.online` : 'None'}
               </p>
             </div>
           </div>
@@ -1832,7 +1832,7 @@ function SubdomainCardComponent({
       ) : (
         <form onSubmit={handleSave} className="form-group">
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-            Customize your relay routing IP (e.g. `yourname.as.pocketcraft.online`).
+            Customize your relay routing IP (e.g. `yourname.mine.pockethost.online`).
           </p>
           <div style={{ display: 'flex', gap: '10px' }}>
             <input 
@@ -1854,7 +1854,7 @@ function SubdomainCardComponent({
           </div>
           <p className="helper-text">
             Current IP: <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-color)' }}>
-              {currentSubdomain ? `${currentSubdomain}.pocketcraft.online` : 'None'}
+              {currentSubdomain ? `${currentSubdomain}.mine.pockethost.online` : 'None'}
             </code>
           </p>
         </form>

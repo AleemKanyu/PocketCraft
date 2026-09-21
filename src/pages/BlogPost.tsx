@@ -8,6 +8,7 @@ import Navbar from "../components/Navbar";
 import { SEO } from "../components/SEO";
 import { blogPosts } from "../data/blogData";
 import { useTheme } from "../lib/ThemeContext";
+import GooglePreferredSource from "../components/GooglePreferredSource";
 
 const categoryColors: Record<string, string> = {
   Announcement: "#7FE620",
@@ -175,6 +176,8 @@ export default function BlogPost() {
               return null;
             })}
           </motion.article>
+
+          <GooglePreferredSource variant="card" className="mt-12 mb-4" />
         </div>
       </section>
 

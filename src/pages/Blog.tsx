@@ -5,6 +5,7 @@ import Navbar from "../components/Navbar";
 import { SEO } from "../components/SEO";
 import { blogPosts } from "../data/blogData";
 import { useTheme } from "../lib/ThemeContext";
+import GooglePreferredSource from "../components/GooglePreferredSource";
 
 const categoryColors: Record<string, string> = {
   Announcement: "#7FE620",
@@ -47,6 +48,7 @@ export default function Blog() {
       {/* Posts */}
       <section className="py-20 px-6">
         <div className="max-w-3xl mx-auto space-y-6">
+          <GooglePreferredSource variant="card" className="mb-8" />
           {blogPosts.map((post, index) => (
             <motion.div
               key={post.id}

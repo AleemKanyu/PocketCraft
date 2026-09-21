@@ -4,6 +4,7 @@ import { Github, Instagram, Download } from "lucide-react";
 import { MINECRAFT_ICONS } from "../lib/minecraft-icons";
 import { useTheme } from "../lib/ThemeContext";
 import { PlayStoreIcon } from "./ui/PlayStoreIcon";
+import GooglePreferredSource from "./GooglePreferredSource";
 
 const quickLinks = [
   { href: "/", label: "Home" },
@@ -204,6 +205,7 @@ export default function Footer() {
                 <Download className="w-4 h-4 flex-shrink-0" />
                 Download Direct APK
               </motion.a>
+              <GooglePreferredSource variant="button" className="w-full mt-1" />
             </div>
             <p className="text-white/20 text-[10px] mt-3 uppercase tracking-wider">
               Latest release • Android 8.0+

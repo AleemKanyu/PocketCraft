@@ -4,6 +4,7 @@ import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
 import { SEO } from "../components/SEO";
 import { useTheme } from "../lib/ThemeContext";
+import GooglePreferredSource from "../components/GooglePreferredSource";
 
 const communityLinks = [
   {
@@ -93,6 +94,10 @@ export default function Community() {
               </motion.a>
             );
           })}
+        </div>
+
+        <div className="max-w-4xl mx-auto mt-8">
+          <GooglePreferredSource variant="card" />
         </div>
       </section>
 

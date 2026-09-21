@@ -5,6 +5,7 @@ import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
 import { SEO } from "../components/SEO";
 import { useTheme } from "../lib/ThemeContext";
+import GooglePreferredSource from "../components/GooglePreferredSource";
 
 const faqs = [
   {
@@ -51,6 +52,11 @@ const faqs = [
     question: "Do I need port forwarding or router access?",
     answer:
       "No! PocketHost features built-in encrypted relay tunneling. Friends can connect from anywhere over Wi-Fi or mobile data with zero router configuration or port forwarding needed.",
+  },
+  {
+    question: "How do I make PocketHost my preferred source on Google Search?",
+    answer:
+      "Google now supports Preferred Sources across Google Search, Top Stories, and AI Overviews. Click the 'Star on Google Search' button on this page or search for pockethost.online in Google's Source Preferences tool (google.com/preferences/source). Whenever you search for Minecraft hosting, plugins, or server setups, Google will prioritize PocketHost's verified guides.",
   },
 ];
 
@@ -102,6 +108,7 @@ export default function FAQ() {
       {/* FAQs */}
       <section className="py-20 px-6">
         <div className="max-w-3xl mx-auto space-y-4">
+          <GooglePreferredSource variant="card" className="mb-8" />
           {faqs.map((faq, index) => {
             const isOpen = openIndex === index;
 

@@ -27,6 +27,14 @@
     <priority>0.9</priority>
   </url>
 
+  <!-- Google Preferred Sources Feature Guide -->
+  <url>
+    <loc>https://pockethost.online/blog/google-preferred-sources-guide</loc>
+    <lastmod>2026-09-21</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
   <!-- High-Ranking Comparison: PocketHost vs Aternos & Free Cloud Hosting -->
   <url>
     <loc>https://pockethost.online/blog/pockethost-vs-aternos</loc>
