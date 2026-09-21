@@ -15,6 +15,9 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.material.icons.filled.Add
+import com.pockethost.app.ui.theme.dropShadow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -43,6 +46,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -101,6 +106,8 @@ import androidx.compose.ui.unit.sp
 import com.pockethost.app.data.model.RelayRegion
 import com.pockethost.app.R
 import com.pockethost.app.ui.theme.PocketColors
+import com.pockethost.app.ui.tour.TourAnchor
+import com.pockethost.app.ui.tour.tourAnchor
 import com.pockethost.app.ui.theme.PocketMotion
 import com.pockethost.app.ui.theme.pocketGlassControlBrush
 import com.pockethost.app.ui.theme.pocketIsDarkTheme
@@ -159,12 +166,20 @@ fun PocketTab.selectedIcon() = when (this) {
     PocketTab.SETTINGS -> Icons.Filled.Settings
 }
 
+/** Which spotlight target a tab is, for the guided tour. Home has no tour step. */
+fun PocketTab.guidedTourAnchor(): TourAnchor? = when (this) {
+    PocketTab.PLAYERS -> TourAnchor.NAV_PLAYERS
+    PocketTab.STORAGE -> TourAnchor.NAV_STORAGE
+    PocketTab.MODS -> TourAnchor.NAV_MODS
+    PocketTab.SETTINGS -> TourAnchor.NAV_SETTINGS
+    PocketTab.HOME, PocketTab.CONSOLE -> null
+}
+
 val bottomNavTabs = listOf(
     PocketTab.HOME,
     PocketTab.PLAYERS,
     PocketTab.STORAGE,
-    PocketTab.MODS,
-    PocketTab.SETTINGS
+    PocketTab.MODS
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -172,13 +187,13 @@ val bottomNavTabs = listOf(
 fun PocketTopBar(
     relayHost: String,
     onRelayHostChange: (String) -> Unit,
-    currentMobTheme: MobTheme,
-    onMobThemeChange: (MobTheme) -> Unit,
+    currentMobTheme: MobTheme = MobTheme.SKELETON,
+    onMobThemeChange: (MobTheme) -> Unit = {},
     relayLocked: Boolean = false,
-    onPremiumUpgradeClick: () -> Unit = {}
+    onPremiumUpgradeClick: () -> Unit = {},
+    onSettingsClick: () -> Unit = {}
 ) {
     var relayMenuExpanded by remember { mutableStateOf(false) }
-    var themeMenuExpanded by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val billingManager = remember { BillingManager.getInstance(context) }
     val isPremium by billingManager.isPremium.collectAsState()
@@ -237,9 +252,7 @@ fun PocketTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Support & Donate button — shown randomly but frequently (~60% of sessions).
-                val showDonationButton = remember { (0..9).random() < 6 }
-                if (showDonationButton) {
+                // Support & Donate button with subtle heartbeat pulse and hollow colored outline
                 val heartTransition = rememberInfiniteTransition(label = "topbar_heart_pulse")
                 val heartPulseScale by heartTransition.animateFloat(
                     initialValue = 1f,
@@ -285,7 +298,6 @@ fun PocketTopBar(
                         tint = Color(0xFFFF4B72)
                     )
                 }
-                } // end showDonationButton
 
                 // Discord button
                 Box(
@@ -314,61 +326,7 @@ fun PocketTopBar(
                     )
                 }
 
-
-                Box {
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .raisedBorder(
-                                color = glassButtonBorder,
-                                depthColor = glassButtonDepth,
-                                cornerRadius = 17.dp,
-                                borderWidth = 1.dp,
-                                depthWidth = 2.5.dp
-                            )
-                            .clip(RoundedCornerShape(17.dp))
-                            .background(PocketColors.IconBtnBg)
-                            .clickable { themeMenuExpanded = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Palette,
-                            contentDescription = "Choose mob theme",
-                            modifier = Modifier.size(16.dp),
-                            tint = subduedIconTint.copy(alpha = 0.86f)
-                        )
-                    }
-                    PocketDropdownMenu(
-                        expanded = themeMenuExpanded,
-                        onDismissRequest = { themeMenuExpanded = false }
-                    ) {
-                        MobTheme.entries.forEach { theme ->
-                            val isLocked = theme == MobTheme.CUSTOM && !isPremium
-                            PremiumDropdownItem(
-                                title = theme.themeName,
-                                subtitle = if (isLocked) {
-                                    "Custom theme is a Pro feature"
-                                } else if (theme == currentMobTheme) {
-                                    "Currently active"
-                                } else {
-                                    "Apply this theme"
-                                },
-                                selected = theme == currentMobTheme,
-                                locked = isLocked,
-                                lockedLabel = if (theme == MobTheme.CUSTOM) "Pro" else "Soon",
-                                onClick = {
-                                    themeMenuExpanded = false
-                                    if (isLocked) {
-                                        onPremiumUpgradeClick()
-                                    } else {
-                                        onMobThemeChange(theme)
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-
+                // Relay Regions button
                 Box {
                     Box(
                         modifier = Modifier
@@ -431,6 +389,31 @@ fun PocketTopBar(
                             )
                         }
                     }
+                }
+
+                // Settings button at top right
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .raisedBorder(
+                            color = glassButtonBorder,
+                            depthColor = glassButtonDepth,
+                            cornerRadius = 17.dp,
+                            borderWidth = 1.dp,
+                            depthWidth = 2.5.dp
+                        )
+                        .clip(RoundedCornerShape(17.dp))
+                        .background(PocketColors.IconBtnBg)
+                        .clickable { onSettingsClick() }
+                        .tourAnchor(TourAnchor.TOPBAR_SETTINGS),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Settings,
+                        contentDescription = "Settings",
+                        modifier = Modifier.size(17.dp),
+                        tint = subduedIconTint.copy(alpha = 0.86f)
+                    )
                 }
             }
         },
@@ -564,7 +547,8 @@ private fun PremiumDropdownItem(
 @Composable
 fun PocketBottomNav(
     currentTab: PocketTab,
-    onTabSelected: (PocketTab) -> Unit
+    onTabSelected: (PocketTab) -> Unit,
+    onNewServerClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val navIndicatorShape by AppPreferencesStore.getNavIndicatorShapeFlow(context).collectAsState(initial = "PILL")
@@ -597,8 +581,6 @@ fun PocketBottomNav(
     val indicatorBorder = PocketColors.NavActivePillBorder
     val indicatorDepth = PocketColors.NavActivePillBorderBottom
 
-    var rowWidth by remember { mutableStateOf(0) }
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -611,116 +593,286 @@ fun PocketBottomNav(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(navRowHeight)
-                .padding(horizontal = 8.dp, vertical = 7.dp)
-                .onGloballyPositioned { coordinates ->
-                    rowWidth = coordinates.size.width
-                }
-                .pointerInput(rowWidth) {
-                    if (rowWidth <= 0) return@pointerInput
-                    awaitEachGesture {
-                        val down = awaitFirstDown()
-                        val initialIndex = ((down.position.x / rowWidth) * bottomNavTabs.size)
-                            .toInt()
-                            .coerceIn(0, bottomNavTabs.lastIndex)
-                        
-                        playTickHaptic(context)
-                        onTabSelected(bottomNavTabs[initialIndex])
-                        
-                        var lastIndex = initialIndex
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val anyDown = event.changes.any { it.pressed }
-                            if (!anyDown) break
-                            
-                            val change = event.changes.firstOrNull() ?: continue
-                            val index = ((change.position.x / rowWidth) * bottomNavTabs.size)
-                                .toInt()
-                                .coerceIn(0, bottomNavTabs.lastIndex)
-                            
-                            if (index != lastIndex) {
-                                lastIndex = index
-                                playTickHaptic(context)
-                                onTabSelected(bottomNavTabs[index])
-                            }
-                            change.consume()
-                        }
-                    }
-                },
+                .padding(horizontal = 8.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            bottomNavTabs.forEach { tab ->
-                val selected = currentTab == tab
-                val tabScale by animateFloatAsState(
-                    targetValue = if (selected) 1.03f else 1f,
-                    animationSpec = PocketMotion.gentleSpringFloat(stiffness = Spring.StiffnessMediumLow),
-                    label = "bottom_nav_tab_scale"
-                )
-                val tabOffset by animateDpAsState(
-                    targetValue = if (selected) (-2).dp else 0.dp,
-                    animationSpec = PocketMotion.gentleSpringDp(stiffness = Spring.StiffnessMediumLow),
-                    label = "bottom_nav_tab_offset"
-                )
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .height(navRowHeight),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (selected) {
-                        val indicatorModifier = when (navIndicatorShape) {
-                            "BLOCK" -> Modifier
-                                .fillMaxWidth()
-                                .height(navItemSlotHeight)
-                            "CIRCLE" -> Modifier.size(circleSizeDp)
-                            else -> Modifier
-                                .fillMaxWidth()
-                                .height(navItemSlotHeight)
-                                .padding(horizontal = 2.dp)
-                        }
-                        Box(
-                            modifier = indicatorModifier
-                                .raisedBorder(
-                                    color = indicatorBorder,
-                                    depthColor = indicatorDepth,
-                                    cornerRadius = animatedCornerRadius,
-                                    borderWidth = 1.dp,
-                                    depthWidth = 2.5.dp
-                                )
-                                .clip(indicatorShape)
-                                .background(brush = indicatorBrush, shape = indicatorShape)
-                        )
-                    }
-                    Column(
-                        modifier = Modifier
-                            .scale(tabScale)
-                            .offset(y = tabOffset),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = if (selected) tab.selectedIcon() else tab.icon(),
-                            contentDescription = tab.label(),
-                            modifier = Modifier.size(21.dp),
-                            tint = if (selected) selectedColor else unselectedColor
-                        )
-                        Text(
-                            text = tab.label(),
-                            modifier = Modifier.fillMaxWidth(),
-                            fontSize = 9.sp,
-                            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                            color = if (selected) selectedColor else unselectedColor,
-                            style = MaterialTheme.typography.labelSmall.copy(shadow = tabTextShadow),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            softWrap = false,
-                            textAlign = TextAlign.Center
-                        )
-                    }
+            // Left tabs: HOME, PLAYERS
+            NavTabItem(
+                tab = PocketTab.HOME,
+                selected = currentTab == PocketTab.HOME,
+                navIndicatorShape = navIndicatorShape,
+                circleSizeDp = circleSizeDp,
+                navItemSlotHeight = navItemSlotHeight,
+                navRowHeight = navRowHeight,
+                animatedCornerRadius = animatedCornerRadius,
+                indicatorBorder = indicatorBorder,
+                indicatorDepth = indicatorDepth,
+                indicatorShape = indicatorShape,
+                indicatorBrush = indicatorBrush,
+                selectedColor = selectedColor,
+                unselectedColor = unselectedColor,
+                tabTextShadow = tabTextShadow,
+                onClick = {
+                    playTickHaptic(context)
+                    onTabSelected(PocketTab.HOME)
                 }
-            }
+            )
+
+            NavTabItem(
+                tab = PocketTab.PLAYERS,
+                selected = currentTab == PocketTab.PLAYERS,
+                navIndicatorShape = navIndicatorShape,
+                circleSizeDp = circleSizeDp,
+                navItemSlotHeight = navItemSlotHeight,
+                navRowHeight = navRowHeight,
+                animatedCornerRadius = animatedCornerRadius,
+                indicatorBorder = indicatorBorder,
+                indicatorDepth = indicatorDepth,
+                indicatorShape = indicatorShape,
+                indicatorBrush = indicatorBrush,
+                selectedColor = selectedColor,
+                unselectedColor = unselectedColor,
+                tabTextShadow = tabTextShadow,
+                onClick = {
+                    playTickHaptic(context)
+                    onTabSelected(PocketTab.PLAYERS)
+                }
+            )
+
+            // Center Action Button: Clean, simple Duolingo 3D "+" Button
+            SimpleDuoAddButton(
+                onClick = onNewServerClick,
+                modifier = Modifier.weight(1f)
+            )
+
+            // Right tabs: STORAGE, MODS
+            NavTabItem(
+                tab = PocketTab.STORAGE,
+                selected = currentTab == PocketTab.STORAGE,
+                navIndicatorShape = navIndicatorShape,
+                circleSizeDp = circleSizeDp,
+                navItemSlotHeight = navItemSlotHeight,
+                navRowHeight = navRowHeight,
+                animatedCornerRadius = animatedCornerRadius,
+                indicatorBorder = indicatorBorder,
+                indicatorDepth = indicatorDepth,
+                indicatorShape = indicatorShape,
+                indicatorBrush = indicatorBrush,
+                selectedColor = selectedColor,
+                unselectedColor = unselectedColor,
+                tabTextShadow = tabTextShadow,
+                onClick = {
+                    playTickHaptic(context)
+                    onTabSelected(PocketTab.STORAGE)
+                }
+            )
+
+            NavTabItem(
+                tab = PocketTab.MODS,
+                selected = currentTab == PocketTab.MODS,
+                navIndicatorShape = navIndicatorShape,
+                circleSizeDp = circleSizeDp,
+                navItemSlotHeight = navItemSlotHeight,
+                navRowHeight = navRowHeight,
+                animatedCornerRadius = animatedCornerRadius,
+                indicatorBorder = indicatorBorder,
+                indicatorDepth = indicatorDepth,
+                indicatorShape = indicatorShape,
+                indicatorBrush = indicatorBrush,
+                selectedColor = selectedColor,
+                unselectedColor = unselectedColor,
+                tabTextShadow = tabTextShadow,
+                onClick = {
+                    playTickHaptic(context)
+                    onTabSelected(PocketTab.MODS)
+                }
+            )
         }
         Spacer(Modifier.height(navBottomInset))
+    }
+}
+
+@Composable
+private fun SimpleDuoAddButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val addInteractionSource = remember { MutableInteractionSource() }
+    val isAddPressed by addInteractionSource.collectIsPressedAsState()
+
+    // Duolingo 3D tactile press physics
+    val pressDepth = 2.dp
+    val pressOffset by animateDpAsState(
+        targetValue = if (isAddPressed) pressDepth else 0.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "simple_duo_add_offset"
+    )
+
+    val buttonShape = RoundedCornerShape(13.dp)
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(56.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(y = pressOffset)
+                .size(42.dp)
+                .clip(buttonShape)
+                .background(PocketColors.Primary, shape = buttonShape)
+                .raisedBorder(
+                    color = PocketColors.PrimaryBorder,
+                    depthColor = PocketColors.PrimaryBorderBottom,
+                    cornerRadius = 13.dp,
+                    borderWidth = 1.2.dp,
+                    depthWidth = if (isAddPressed) 1.dp else 3.dp
+                )
+                .clickable(
+                    interactionSource = addInteractionSource,
+                    indication = null
+                ) {
+                    playTickHaptic(context)
+                    onClick()
+                }
+                .tourAnchor(TourAnchor.NAV_NEW_SERVER),
+            contentAlignment = Alignment.Center
+        ) {
+            DuoVoxelPlus(
+                sizeDp = 18.dp,
+                strokeDp = 3.6.dp,
+                color = PocketColors.PrimaryText
+            )
+        }
+    }
+}
+
+@Composable
+private fun DuoVoxelPlus(
+    modifier: Modifier = Modifier,
+    sizeDp: Dp = 18.dp,
+    strokeDp: Dp = 3.6.dp,
+    color: Color = PocketColors.PrimaryText
+) {
+    Canvas(modifier = modifier.size(sizeDp)) {
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val halfArm = (sizeDp.toPx() - strokeDp.toPx()) / 2f * 0.85f
+        val strokeWidthPx = strokeDp.toPx()
+
+        // Crisp, bold Duolingo-style plus
+        drawLine(
+            color = color,
+            start = Offset(cx - halfArm, cy),
+            end = Offset(cx + halfArm, cy),
+            strokeWidth = strokeWidthPx,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = color,
+            start = Offset(cx, cy - halfArm),
+            end = Offset(cx, cy + halfArm),
+            strokeWidth = strokeWidthPx,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.NavTabItem(
+    tab: PocketTab,
+    selected: Boolean,
+    navIndicatorShape: String,
+    circleSizeDp: Dp,
+    navItemSlotHeight: Dp,
+    navRowHeight: Dp,
+    animatedCornerRadius: Dp,
+    indicatorBorder: Color,
+    indicatorDepth: Color,
+    indicatorShape: Shape,
+    indicatorBrush: Brush,
+    selectedColor: Color,
+    unselectedColor: Color,
+    tabTextShadow: Shadow,
+    onClick: () -> Unit
+) {
+    val tabScale by animateFloatAsState(
+        targetValue = if (selected) 1.03f else 1f,
+        animationSpec = PocketMotion.gentleSpringFloat(stiffness = Spring.StiffnessMediumLow),
+        label = "bottom_nav_tab_scale"
+    )
+    val tabOffset by animateDpAsState(
+        targetValue = if (selected) (-2).dp else 0.dp,
+        animationSpec = PocketMotion.gentleSpringDp(stiffness = Spring.StiffnessMediumLow),
+        label = "bottom_nav_tab_offset"
+    )
+    val tabTourAnchor = tab.guidedTourAnchor()
+    val tourAnchorModifier = if (tabTourAnchor != null) Modifier.tourAnchor(tabTourAnchor) else Modifier
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth()
+            .height(navRowHeight)
+            .then(tourAnchorModifier)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        if (selected) {
+            val indicatorModifier = when (navIndicatorShape) {
+                "BLOCK" -> Modifier
+                    .fillMaxWidth()
+                    .height(navItemSlotHeight)
+                "CIRCLE" -> Modifier.size(circleSizeDp)
+                else -> Modifier
+                    .fillMaxWidth()
+                    .height(navItemSlotHeight)
+                    .padding(horizontal = 2.dp)
+            }
+            Box(
+                modifier = indicatorModifier
+                    .raisedBorder(
+                        color = indicatorBorder,
+                        depthColor = indicatorDepth,
+                        cornerRadius = animatedCornerRadius,
+                        borderWidth = 1.dp,
+                        depthWidth = 2.5.dp
+                    )
+                    .clip(indicatorShape)
+                    .background(brush = indicatorBrush, shape = indicatorShape)
+            )
+        }
+        Column(
+            modifier = Modifier
+                .scale(tabScale)
+                .offset(y = tabOffset),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = if (selected) tab.selectedIcon() else tab.icon(),
+                contentDescription = tab.label(),
+                modifier = Modifier.size(21.dp),
+                tint = if (selected) selectedColor else unselectedColor
+            )
+            Text(
+                text = tab.label(),
+                modifier = Modifier.fillMaxWidth(),
+                fontSize = 9.sp,
+                fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                color = if (selected) selectedColor else unselectedColor,
+                style = MaterialTheme.typography.labelSmall.copy(shadow = tabTextShadow),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
 

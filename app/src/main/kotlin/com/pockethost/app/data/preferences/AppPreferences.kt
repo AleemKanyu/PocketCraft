@@ -342,6 +342,28 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean("eula_accepted", false)
         set(value) = prefs.edit().putBoolean("eula_accepted", value).apply()
 
+    /**
+     * Guided-tour bookkeeping. The "shown" flags are set the moment a tour starts,
+     * not when it ends, so a tour can never loop if the app is killed halfway
+     * through it. Replaying a tour from Settings clears them again.
+     */
+    var firstServerTourShown: Boolean
+        get() = prefs.getBoolean("first_server_tour_shown", false)
+        set(value) = prefs.edit().putBoolean("first_server_tour_shown", value).apply()
+
+    var serverLiveTourShown: Boolean
+        get() = prefs.getBoolean("server_live_tour_shown", false)
+        set(value) = prefs.edit().putBoolean("server_live_tour_shown", value).apply()
+
+    var createServerTourShown: Boolean
+        get() = prefs.getBoolean("create_server_tour_shown", false)
+        set(value) = prefs.edit().putBoolean("create_server_tour_shown", value).apply()
+
+    /** True once a server on this device has reached Online at least once. */
+    var hasServerEverStarted: Boolean
+        get() = prefs.getBoolean("has_server_ever_started", false)
+        set(value) = prefs.edit().putBoolean("has_server_ever_started", value).apply()
+
     var openWorldSetupNextLaunch: Boolean
         get() = prefs.getBoolean("open_world_setup_next_launch", false)
         set(value) = prefs.edit().putBoolean("open_world_setup_next_launch", value).apply()

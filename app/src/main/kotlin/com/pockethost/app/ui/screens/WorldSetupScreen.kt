@@ -20,15 +20,30 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Forest
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.NightlightRound
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.pockethost.app.ui.components.DuoButtonVariant
+import com.pockethost.app.ui.components.DuoToggle
+import com.pockethost.app.ui.theme.Monocraft
+import com.pockethost.app.ui.tour.LocalTourController
+import com.pockethost.app.ui.tour.PocketTours
+import com.pockethost.app.ui.tour.TourAnchor
+import com.pockethost.app.ui.tour.TourId
+import com.pockethost.app.ui.tour.tourAnchor
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +66,8 @@ import com.pockethost.app.data.preferences.AppPreferences
 import com.pockethost.app.data.preferences.AppPreferencesStore
 import com.pockethost.app.server.ServerJarManager
 import com.pockethost.app.service.ServerFileManager
+import android.widget.Toast
+import com.pockethost.app.server.ServerJarImporter
 import com.pockethost.app.ui.components.DuoButton
 import com.pockethost.app.ui.components.GameCard
 import com.pockethost.app.ui.components.IpManagerCard
@@ -115,7 +133,7 @@ fun WorldSetupScreen(
 
     var selectedVersion by remember(stateHolder.config.gameVersion) {
         mutableStateOf(
-            if (createMode) stateHolder.config.gameVersion.ifBlank { "1.21.4" }
+            if (createMode) ""
             else stateHolder.config.gameVersion.ifBlank { "1.21.4" }
         )
     }
@@ -125,11 +143,38 @@ fun WorldSetupScreen(
     var selectedCustomJarPath by remember(stateHolder.config.customJarPath) {
         mutableStateOf(stateHolder.config.customJarPath)
     }
-    var joinMessageText by remember(stateHolder.config.joinMessageText) {
-        mutableStateOf(stateHolder.config.joinMessageText)
+    var selectedGameMode by remember(stateHolder.config.gameMode) {
+        mutableStateOf(stateHolder.config.gameMode.ifBlank { "survival" }.lowercase())
     }
-    var joinMessageUrl by remember(stateHolder.config.joinMessageUrl) {
-        mutableStateOf(stateHolder.config.joinMessageUrl)
+    var selectedDifficulty by remember(stateHolder.config.difficulty) {
+        mutableStateOf(stateHolder.config.difficulty.ifBlank { "normal" }.lowercase())
+    }
+    var selectedLevelType by remember(stateHolder.config.levelType) {
+        mutableStateOf(stateHolder.config.levelType.ifBlank { "minecraft:normal" })
+    }
+    var pvpEnabled by remember(stateHolder.config.pvp) {
+        mutableStateOf(stateHolder.config.pvp)
+    }
+    var hardcoreEnabled by remember(stateHolder.config.hardcore) {
+        mutableStateOf(stateHolder.config.hardcore)
+    }
+    var allowFlightEnabled by remember(stateHolder.config.allowFlight) {
+        mutableStateOf(stateHolder.config.allowFlight)
+    }
+    var bedrockCrossplayEnabled by remember(stateHolder.bedrockBridgeEnabled) {
+        mutableStateOf(stateHolder.bedrockBridgeEnabled)
+    }
+
+    val tour = LocalTourController.current
+    val prefs = remember { AppPreferences(context) }
+
+    LaunchedEffect(createMode) {
+        if (createMode && !prefs.createServerTourShown) {
+            kotlinx.coroutines.delay(500)
+            tour?.start(TourId.CREATE_SERVER, PocketTours.createServer()) { _, _ ->
+                prefs.createServerTourShown = true
+            }
+        }
     }
     
     var showVersionDialog by remember { mutableStateOf(false) }
@@ -238,15 +283,41 @@ fun WorldSetupScreen(
             serverType = selectedServerType,
             customJarPath = selectedCustomJarPath,
             maxPlayers = maxPlayersValue.roundToInt(),
-            joinMessageText = if (isPremium) joinMessageText.trim() else stateHolder.config.joinMessageText,
-            joinMessageUrl = if (isPremium) joinMessageUrl.trim() else stateHolder.config.joinMessageUrl
+            gameMode = selectedGameMode,
+            difficulty = if (hardcoreEnabled) "hard" else selectedDifficulty,
+            levelType = selectedLevelType,
+            pvp = pvpEnabled,
+            hardcore = hardcoreEnabled,
+            allowFlight = allowFlightEnabled
         )
         stateHolder.saveSettings(updatedConfig, targetWorldName = targetWorld)
 
-        if (selectedServerType.supportsVersionSelect && versionId != stateHolder.config.gameVersion) {
+        if (selectedServerType != ServerType.VANILLA && selectedServerType != ServerType.MODPACK) {
+            if (bedrockCrossplayEnabled != stateHolder.bedrockBridgeEnabled) {
+                stateHolder.toggleBedrockBridge(bedrockCrossplayEnabled)
+            }
+        }
+
+        val isJarDownloaded = if (selectedServerType == ServerType.MODPACK) {
+            !selectedCustomJarPath.isNullOrBlank()
+        } else if (selectedServerType.supportsVersionSelect) {
+            ServerFileManager.isServerJarReady(context, versionId, selectedServerType)
+        } else {
+            true
+        }
+
+        if (!isJarDownloaded && selectedServerType.supportsVersionSelect) {
+            onMessage("Please download and select the server file for ${selectedServerType.displayName} $versionId first.")
+            showVersionDialog = true
+            return
+        }
+
+        if (selectedServerType.supportsVersionSelect && versionId != stateHolder.config.gameVersion && isJarDownloaded) {
             isDownloadingVersion = true
             val targetJar = ServerFileManager.getServerJarFile(context, versionId, updatedConfig.serverType)
-            ServerJarManager.resolveJar(updatedConfig.serverType, versionId, null, targetJar) { versionDownloadProgress = it.coerceIn(0, 100) }.collect { }
+            runCatching {
+                ServerJarManager.resolveJar(updatedConfig.serverType, versionId, null, targetJar) { versionDownloadProgress = it.coerceIn(0, 100) }.collect { }
+            }
             isDownloadingVersion = false
         }
 
@@ -255,6 +326,8 @@ fun WorldSetupScreen(
 
         AppPreferencesStore.setSelectedServerType(context, selectedServerType.name)
         AppPreferencesStore.setSelectedVersion(context, versionId)
+        AppPreferences(context).firstServerTourShown = true
+        AppPreferencesStore.setSetupComplete(context, true)
         stateHolder.markActiveWorldSetupCompleted()
         if (selectedServerType == ServerType.MODPACK || (selectedServerType.supportsVersionSelect && versionId != stateHolder.config.gameVersion)) {
             onVersionSelected(versionId)
@@ -267,14 +340,35 @@ fun WorldSetupScreen(
     Scaffold(
         topBar = {
             Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxWidth()) {
-                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
                     Text(
                         text = if (createMode) "Create Server" else "Server Settings",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.ExtraBold,
-                        color = if (isDarkTheme) PocketColors.PrimaryLight else PocketColors.PrimaryDark
+                        color = if (isDarkTheme) PocketColors.PrimaryLight else PocketColors.PrimaryDark,
+                        modifier = Modifier.weight(1f)
                     )
+                    if (createMode) {
+                        IconButton(
+                            onClick = {
+                                tour?.start(TourId.CREATE_SERVER, PocketTours.createServer())
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.HelpOutline,
+                                contentDescription = "Creation Guide",
+                                tint = PocketColors.Primary
+                            )
+                        }
+                    }
                 }
             }
         },
@@ -298,7 +392,9 @@ fun WorldSetupScreen(
                             }
                         },
                         enabled = isFormValid && !isSubmitting && !isImporting && !isDownloadingVersion,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .tourAnchor(TourAnchor.CREATE_SERVER_SUBMIT)
                     )
                 }
             }
@@ -323,26 +419,251 @@ fun WorldSetupScreen(
                     }
 
                     OutlinedTextField(
-                        value = serverName, onValueChange = { serverName = it }, singleLine = true,
-                        label = { Text("Server Name") }, placeholder = { Text("e.g. My Survival Server") },
-                        modifier = Modifier.fillMaxWidth(), shape = duoTextFieldShape(), colors = duoOutlinedTextFieldColors()
+                        value = serverName,
+                        onValueChange = { serverName = it },
+                        singleLine = true,
+                        label = { Text("Server Name") },
+                        placeholder = { Text("e.g. My Survival Server") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .tourAnchor(TourAnchor.CREATE_SERVER_NAME),
+                        shape = duoTextFieldShape(),
+                        colors = duoOutlinedTextFieldColors()
                     )
 
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(text = "Server Type", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        ServerType.entries.chunked(3).forEach { rowTypes ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .tourAnchor(TourAnchor.CREATE_SERVER_TYPE),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(text = "Server Type", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            ServerType.entries.chunked(3).forEach { rowTypes ->
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    rowTypes.forEach { type ->
+                                        val isSelected = selectedServerType == type
+                                        Box(
+                                            modifier = Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(12.dp))
+                                                .background(if (isSelected) PocketColors.primaryBg else PocketColors.InactiveBg)
+                                                .raisedBorder(color = if (isSelected) PocketColors.primaryBorder else PocketColors.InactiveBorder, depthColor = if (isSelected) PocketColors.primaryDepth else PocketColors.InactiveBorderBottom, cornerRadius = 12.dp, borderWidth = 1.5.dp, depthWidth = 2.5.dp)
+                                                .clickable {
+                                                    selectedServerType = type
+                                                    tour?.completeStep(PocketTours.STEP_CREATE_TYPE)
+                                                    showVersionDialog = true
+                                                }
+                                        ) {
+                                            Row(modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                                                if (isSelected) { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(13.dp), tint = PocketColors.PrimaryText); Spacer(modifier = Modifier.width(3.dp)) }
+                                                Text(text = type.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = if (isSelected) PocketColors.PrimaryText else PocketColors.InactiveText)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        val selectedRuntimeLabel = when {
+                            selectedServerType.supportsVersionSelect -> if (selectedVersion.isNotBlank()) "${selectedServerType.displayName} $selectedVersion" else "Select Version"
+                            selectedServerType == ServerType.MODPACK -> selectedCustomJarPath?.takeIf { it.isNotBlank() }?.let { "${selectedServerType.displayName} $it" } ?: "Choose Modpack"
+                            else -> "${selectedServerType.displayName} (Custom JAR)"
+                        }
+
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable {
+                                tour?.completeStep(PocketTours.STEP_CREATE_TYPE)
+                                showVersionDialog = true
+                            },
+                            shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), border = BorderStroke(1.dp, PocketColors.Primary.copy(alpha = 0.3f))
+                        ) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Icon(Icons.Filled.Dns, contentDescription = null, tint = PocketColors.Primary)
+                                    Column {
+                                        Text(text = "Game Version / Runtime", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(text = selectedRuntimeLabel, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                    }
+                                }
+                                Surface(shape = RoundedCornerShape(8.dp), color = PocketColors.Primary.copy(alpha = 0.15f)) {
+                                    Text(
+                                        text = if (selectedVersion.isNotBlank()) "Change" else "Select",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PocketColors.PrimaryDark,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // World & Gameplay Settings Card
+            GameCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Filled.SportsEsports, contentDescription = null, tint = PocketColors.Primary, modifier = Modifier.size(20.dp))
+                        Text(
+                            text = "World & Gameplay Settings",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isDarkTheme) PocketColors.PrimaryLight else PocketColors.PrimaryDark
+                        )
+                    }
+
+                    // --- Game Mode ---
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .tourAnchor(TourAnchor.CREATE_SERVER_GAMEMODE),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(text = "Game Mode", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val gameModes = listOf(
+                            "survival" to "Survival",
+                            "creative" to "Creative",
+                            "adventure" to "Adventure",
+                            "spectator" to "Spectator"
+                        )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            gameModes.forEach { (mode, label) ->
+                                val isSelected = selectedGameMode == mode
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(38.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(if (isSelected) PocketColors.primaryBg else PocketColors.InactiveBg)
+                                        .raisedBorder(
+                                            color = if (isSelected) PocketColors.primaryBorder else PocketColors.InactiveBorder,
+                                            depthColor = if (isSelected) PocketColors.primaryDepth else PocketColors.InactiveBorderBottom,
+                                            cornerRadius = 10.dp,
+                                            borderWidth = 1.2.dp,
+                                            depthWidth = 2.dp
+                                        )
+                                        .clickable { selectedGameMode = mode },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                        fontSize = 11.sp,
+                                        color = if (isSelected) PocketColors.PrimaryText else PocketColors.InactiveText
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // --- Difficulty & World Generation ---
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .tourAnchor(TourAnchor.CREATE_SERVER_DIFFICULTY),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        // Difficulty
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = "Difficulty", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (hardcoreEnabled) {
+                                    Text(text = "(Locked: Hardcore)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PocketColors.DangerText)
+                                }
+                            }
+                            val difficulties = listOf(
+                                "peaceful" to "Peaceful",
+                                "easy" to "Easy",
+                                "normal" to "Normal",
+                                "hard" to "Hard"
+                            )
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                rowTypes.forEach { type ->
-                                    val isSelected = selectedServerType == type
+                                difficulties.forEach { (diff, label) ->
+                                    val isSelected = (if (hardcoreEnabled) "hard" else selectedDifficulty) == diff
                                     Box(
-                                        modifier = Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(12.dp))
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(38.dp)
+                                            .clip(RoundedCornerShape(10.dp))
                                             .background(if (isSelected) PocketColors.primaryBg else PocketColors.InactiveBg)
-                                            .raisedBorder(color = if (isSelected) PocketColors.primaryBorder else PocketColors.InactiveBorder, depthColor = if (isSelected) PocketColors.primaryDepth else PocketColors.InactiveBorderBottom, cornerRadius = 12.dp, borderWidth = 1.5.dp, depthWidth = 2.5.dp)
-                                            .clickable { selectedServerType = type }
+                                            .raisedBorder(
+                                                color = if (isSelected) PocketColors.primaryBorder else PocketColors.InactiveBorder,
+                                                depthColor = if (isSelected) PocketColors.primaryDepth else PocketColors.InactiveBorderBottom,
+                                                cornerRadius = 10.dp,
+                                                borderWidth = 1.2.dp,
+                                                depthWidth = 2.dp
+                                            )
+                                            .clickable(enabled = !hardcoreEnabled) { selectedDifficulty = diff },
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Row(modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                                            if (isSelected) { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(13.dp), tint = PocketColors.PrimaryText); Spacer(modifier = Modifier.width(3.dp)) }
-                                            Text(text = type.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = if (isSelected) PocketColors.PrimaryText else PocketColors.InactiveText)
+                                        Text(
+                                            text = label,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                            fontSize = 11.sp,
+                                            color = if (isSelected) PocketColors.PrimaryText else PocketColors.InactiveText
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // World Generation Type
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(text = "World Generation Type", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val worldTypes = listOf(
+                                "minecraft:normal" to ("Default" to "Standard biomes"),
+                                "minecraft:flat" to ("Flat" to "Infinite flat world"),
+                                "minecraft:large_biomes" to ("Large Biomes" to "Vast terrain"),
+                                "minecraft:amplified" to ("Amplified" to "Massive mountains")
+                            )
+                            worldTypes.chunked(2).forEach { rowTypes ->
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    rowTypes.forEach { (typeVal, info) ->
+                                        val (title, sub) = info
+                                        val isSelected = selectedLevelType == typeVal
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(46.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(if (isSelected) PocketColors.primaryBg else PocketColors.InactiveBg)
+                                                .raisedBorder(
+                                                    color = if (isSelected) PocketColors.primaryBorder else PocketColors.InactiveBorder,
+                                                    depthColor = if (isSelected) PocketColors.primaryDepth else PocketColors.InactiveBorderBottom,
+                                                    cornerRadius = 12.dp,
+                                                    borderWidth = 1.2.dp,
+                                                    depthWidth = 2.dp
+                                                )
+                                                .clickable { selectedLevelType = typeVal }
+                                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                            contentAlignment = Alignment.CenterStart
+                                        ) {
+                                            Column {
+                                                Text(
+                                                    text = title,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 12.sp,
+                                                    color = if (isSelected) PocketColors.PrimaryText else MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Text(
+                                                    text = sub,
+                                                    fontSize = 9.sp,
+                                                    color = if (isSelected) PocketColors.PrimaryText.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -350,26 +671,87 @@ fun WorldSetupScreen(
                         }
                     }
 
-                    val selectedRuntimeLabel = when {
-                        selectedServerType.supportsVersionSelect -> if (selectedVersion.isNotBlank()) "${selectedServerType.displayName} $selectedVersion" else "Select Version"
-                        selectedServerType == ServerType.MODPACK -> selectedCustomJarPath?.takeIf { it.isNotBlank() }?.let { "${selectedServerType.displayName} $it" } ?: "Choose Modpack"
-                        else -> "${selectedServerType.displayName} (Custom JAR)"
-                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { showVersionDialog = true },
-                        shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), border = BorderStroke(1.dp, PocketColors.Primary.copy(alpha = 0.3f))
+                    // --- Gameplay Rules & Bedrock Crossplay ---
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .tourAnchor(TourAnchor.CREATE_SERVER_CROSSPLAY),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Icon(Icons.Filled.Dns, contentDescription = null, tint = PocketColors.Primary)
-                                Column {
-                                    Text(text = "Game Version / Runtime", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(text = selectedRuntimeLabel, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                }
+                        // PvP Combat
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = "PvP Combat", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(text = "Allow players to attack and fight each other", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            Surface(shape = RoundedCornerShape(8.dp), color = PocketColors.Primary.copy(alpha = 0.15f)) {
-                                Text(text = "Change", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PocketColors.PrimaryDark, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
+                            DuoToggle(checked = pvpEnabled, onCheckedChange = { pvpEnabled = it })
+                        }
+
+                        // Hardcore Mode
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = "Hardcore Mode", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(text = "One life only; difficulty locks to Hard, death is permanent", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            DuoToggle(
+                                checked = hardcoreEnabled,
+                                onCheckedChange = {
+                                    hardcoreEnabled = it
+                                    if (it) selectedDifficulty = "hard"
+                                }
+                            )
+                        }
+
+                        // Allow Player Flight
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = "Allow Player Flight", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(text = "Permits flight in survival mode without kicking", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            DuoToggle(checked = allowFlightEnabled, onCheckedChange = { allowFlightEnabled = it })
+                        }
+
+                        // Bedrock Crossplay (Geyser)
+                        if (selectedServerType != ServerType.VANILLA && selectedServerType != ServerType.MODPACK) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(Icons.Filled.Devices, contentDescription = null, tint = PocketColors.PrimaryDark, modifier = Modifier.size(20.dp))
+                                    Column {
+                                        Text(text = "Bedrock Crossplay (Geyser)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Text(
+                                            text = "Allow friends on Android, iOS, Xbox, PlayStation & Switch to join",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                DuoToggle(
+                                    checked = bedrockCrossplayEnabled,
+                                    onCheckedChange = { bedrockCrossplayEnabled = it }
+                                )
                             }
                         }
                     }
@@ -379,52 +761,175 @@ fun WorldSetupScreen(
             val chevronRotation by animateFloatAsState(targetValue = if (showAdvancedOptions) 180f else 0f, label = "advancedChevron")
             GameCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth().clickable { showAdvancedOptions = !showAdvancedOptions }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showAdvancedOptions = !showAdvancedOptions }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(Icons.Filled.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                            Text(text = "Advanced Options", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            Icon(Icons.Filled.Settings, contentDescription = null, tint = PocketColors.Primary, modifier = Modifier.size(20.dp))
+                            Column {
+                                Text(text = "Advanced Options", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                Text(text = "MOTD, seed, max players, custom IP & world import", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                         Icon(Icons.Filled.ExpandMore, contentDescription = if (showAdvancedOptions) "Collapse" else "Expand", modifier = Modifier.rotate(chevronRotation), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
 
                     AnimatedVisibility(visible = showAdvancedOptions, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-                        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                            ServerDescriptionField(description = serverDescription, onDescriptionChange = { serverDescription = it }, modifier = Modifier.fillMaxWidth())
-                            OutlinedTextField(value = worldSeed, onValueChange = { worldSeed = it }, singleLine = true, leadingIcon = { Icon(Icons.Filled.Forest, contentDescription = null, tint = PocketColors.PrimaryDark) }, label = { Text("World Seed (Optional)") }, modifier = Modifier.fillMaxWidth(), shape = duoTextFieldShape(), colors = duoOutlinedTextFieldColors())
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Max Players", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                    Text(text = "${maxPlayersValue.roundToInt()} players", fontWeight = FontWeight.Bold, color = PocketColors.PrimaryDark)
-                                }
-                                Slider(value = maxPlayersValue, onValueChange = { newValue -> maxPlayersValue = newValue }, valueRange = 1f..50f, steps = 48)
+
+                            // Server Profile & MOTD
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(
+                                    text = "Server Profile & Branding",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                ServerDescriptionField(
+                                    description = serverDescription,
+                                    onDescriptionChange = { serverDescription = it },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                ServerPhotoUpload(
+                                    photoUri = serverPhotoUri,
+                                    onPhotoSelected = { serverPhotoUri = it; photoChanged = true },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
-                            IpManagerCard(entitlement, true, true, onMessage, onNavigateToSignUp)
-                            ServerPhotoUpload(photoUri = serverPhotoUri, onPhotoSelected = { serverPhotoUri = it; photoChanged = true }, modifier = Modifier.fillMaxWidth())
-                            
-                            Text(text = "Import Existing World", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
-                            OutlinedButton(onClick = { pendingImportSlot = WorldImportSlot.MAIN; importLauncher.launch("application/zip") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), enabled = !isImporting) { Icon(Icons.Filled.UploadFile, null); Spacer(Modifier.padding(horizontal = 4.dp)); Text(if (mainWorldZipName.isBlank()) "Upload Main World ZIP" else "Main ZIP: $mainWorldZipName") }
-                            OutlinedButton(onClick = { pendingImportSlot = WorldImportSlot.NETHER; importLauncher.launch("application/zip") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), enabled = !isImporting) { Icon(Icons.Filled.UploadFile, null); Spacer(Modifier.padding(horizontal = 4.dp)); Text(if (netherZipName.isBlank()) "Upload Nether ZIP" else "Nether ZIP: $netherZipName") }
-                            OutlinedButton(onClick = { pendingImportSlot = WorldImportSlot.END; importLauncher.launch("application/zip") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), enabled = !isImporting) { Icon(Icons.Filled.UploadFile, null); Spacer(Modifier.padding(horizontal = 4.dp)); Text(if (endZipName.isBlank()) "Upload The End ZIP" else "End ZIP: $endZipName") }
-                            
-                            Box(modifier = Modifier.fillMaxWidth().background(if (isPremium) PocketColors.Primary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(16.dp)).border(1.dp, if (isPremium) PocketColors.Primary.copy(alpha = 0.25f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), RoundedCornerShape(16.dp)).padding(12.dp)) {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Icon(Icons.Filled.Campaign, contentDescription = null, tint = if (isPremium) PocketColors.PrimaryDark else MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text(text = "In-Game Join Announcement", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
-                                        Spacer(Modifier.weight(1f))
-                                        if (!isPremium) {
-                                            Surface(color = PocketColors.Primary.copy(alpha = 0.15f), shape = RoundedCornerShape(10.dp), modifier = Modifier.clickable { showPremiumBottomSheet = true }) {
-                                                Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                    Icon(Icons.Filled.Lock, null, tint = PocketColors.PrimaryDark, modifier = Modifier.size(12.dp))
-                                                    Text("PREMIUM", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = PocketColors.PrimaryDark)
-                                                }
+
+                            // World Generation & Capacity
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(
+                                    text = "World Seed & Capacity",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                OutlinedTextField(
+                                    value = worldSeed,
+                                    onValueChange = { worldSeed = it },
+                                    singleLine = true,
+                                    leadingIcon = { Icon(Icons.Filled.Forest, contentDescription = null, tint = PocketColors.PrimaryDark) },
+                                    label = { Text("World Seed (Optional)") },
+                                    placeholder = { Text("Leave blank for random") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = duoTextFieldShape(),
+                                    colors = duoOutlinedTextFieldColors()
+                                )
+
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Filled.Group,
+                                                    contentDescription = null,
+                                                    tint = PocketColors.Primary,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Text("Max Players", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            }
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = PocketColors.Primary.copy(alpha = 0.15f)
+                                            ) {
+                                                Text(
+                                                    text = "${maxPlayersValue.roundToInt()} Players",
+                                                    fontFamily = Monocraft,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 12.sp,
+                                                    color = PocketColors.PrimaryDark,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                )
                                             }
                                         }
+                                        Slider(
+                                            value = maxPlayersValue,
+                                            onValueChange = { newValue -> maxPlayersValue = newValue },
+                                            valueRange = 1f..50f,
+                                            steps = 48,
+                                            colors = SliderDefaults.colors(
+                                                thumbColor = PocketColors.Primary,
+                                                activeTrackColor = PocketColors.PrimaryDark,
+                                                inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                            ),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
                                     }
-                                    OutlinedTextField(value = joinMessageText, onValueChange = { if (isPremium) joinMessageText = it else showPremiumBottomSheet = true }, singleLine = true, readOnly = !isPremium, label = { Text("Announcement text") }, modifier = Modifier.fillMaxWidth(), shape = duoTextFieldShape(), colors = duoOutlinedTextFieldColors())
-                                    OutlinedTextField(value = joinMessageUrl, onValueChange = { if (isPremium) joinMessageUrl = it else showPremiumBottomSheet = true }, singleLine = true, readOnly = !isPremium, label = { Text("Discord / Website URL") }, modifier = Modifier.fillMaxWidth(), shape = duoTextFieldShape(), colors = duoOutlinedTextFieldColors())
                                 }
+                            }
+
+                            // Custom IP Card
+                            IpManagerCard(entitlement, true, true, onMessage, onNavigateToSignUp)
+
+                            // Import World Section
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Import Existing World (Optional)",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                DimensionImportSlotRow(
+                                    dimensionName = "Overworld",
+                                    dimensionSubtitle = "Upload overworld level data ZIP",
+                                    icon = Icons.Filled.Public,
+                                    iconTint = PocketColors.Primary,
+                                    selectedFileName = mainWorldZipName,
+                                    isLoading = isImporting,
+                                    onUploadClick = {
+                                        pendingImportSlot = WorldImportSlot.MAIN
+                                        importLauncher.launch("application/zip")
+                                    }
+                                )
+                                DimensionImportSlotRow(
+                                    dimensionName = "The Nether",
+                                    dimensionSubtitle = "DIM-1 Nether terrain ZIP",
+                                    icon = Icons.Filled.LocalFireDepartment,
+                                    iconTint = Color(0xFFE65100),
+                                    selectedFileName = netherZipName,
+                                    isLoading = isImporting,
+                                    onUploadClick = {
+                                        pendingImportSlot = WorldImportSlot.NETHER
+                                        importLauncher.launch("application/zip")
+                                    }
+                                )
+                                DimensionImportSlotRow(
+                                    dimensionName = "The End",
+                                    dimensionSubtitle = "DIM1 End dimension ZIP",
+                                    icon = Icons.Filled.NightlightRound,
+                                    iconTint = Color(0xFF7B1FA2),
+                                    selectedFileName = endZipName,
+                                    isLoading = isImporting,
+                                    onUploadClick = {
+                                        pendingImportSlot = WorldImportSlot.END
+                                        importLauncher.launch("application/zip")
+                                    }
+                                )
                             }
                         }
                     }
@@ -436,9 +941,39 @@ fun WorldSetupScreen(
 
     if (showVersionDialog) {
         val versionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(onDismissRequest = { scope.launch { versionSheetState.hide(); showVersionDialog = false } }, sheetState = versionSheetState, dragHandle = null, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                scope.launch {
+                    versionSheetState.hide()
+                    showVersionDialog = false
+                    if (tour?.currentStep?.key in listOf(
+                        PocketTours.STEP_SHEET_SERVER_TYPES,
+                        PocketTours.STEP_SHEET_VERSION,
+                        PocketTours.STEP_SHEET_CONFIRM
+                    )) {
+                        tour?.advanceTo(PocketTours.STEP_CREATE_TYPE)
+                    }
+                }
+            },
+            sheetState = versionSheetState,
+            dragHandle = null,
+            containerColor = if (isDarkTheme) PocketColors.SurfaceCardDark else MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
             ServerTypeVersionBottomSheet(
-                onDismissRequest = { scope.launch { versionSheetState.hide(); showVersionDialog = false } },
+                onDismissRequest = {
+                    scope.launch {
+                        versionSheetState.hide()
+                        showVersionDialog = false
+                        if (tour?.currentStep?.key in listOf(
+                            PocketTours.STEP_SHEET_SERVER_TYPES,
+                            PocketTours.STEP_SHEET_VERSION,
+                            PocketTours.STEP_SHEET_CONFIRM
+                        )) {
+                            tour?.advanceTo(PocketTours.STEP_CREATE_TYPE)
+                        }
+                    }
+                },
                 onConfirm = { type, version, customJar ->
                     scope.launch {
                         selectedServerType = type
@@ -450,6 +985,15 @@ fun WorldSetupScreen(
                         }
                         versionSheetState.hide()
                         showVersionDialog = false
+                        if (tour?.runningTour == TourId.CREATE_SERVER &&
+                            tour?.currentStep?.key in listOf(
+                                PocketTours.STEP_SHEET_SERVER_TYPES,
+                                PocketTours.STEP_SHEET_VERSION,
+                                PocketTours.STEP_SHEET_CONFIRM
+                            )
+                        ) {
+                            tour?.advanceTo(PocketTours.STEP_CREATE_GAMEMODE)
+                        }
                     }
                 },
                 currentServerType = selectedServerType,
@@ -471,5 +1015,77 @@ private fun parseCreatedWorldName(message: String): String? {
         message.startsWith(directPrefix) -> message.removePrefix(directPrefix).removeSuffix(".").trim().ifBlank { null }
         message.startsWith(renamedPrefix) -> message.removePrefix(renamedPrefix).substringBefore(" because").trim().ifBlank { null }
         else -> null
+    }
+}
+
+@Composable
+private fun DimensionImportSlotRow(
+    dimensionName: String,
+    dimensionSubtitle: String,
+    icon: ImageVector,
+    iconTint: Color,
+    selectedFileName: String,
+    isLoading: Boolean,
+    onUploadClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(iconTint.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = iconTint,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Column(modifier = Modifier.padding(end = 8.dp)) {
+                    Text(
+                        text = dimensionName,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (selectedFileName.isNotBlank()) selectedFileName else dimensionSubtitle,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = if (selectedFileName.isNotBlank()) PocketColors.PrimaryDark else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            DuoButton(
+                text = if (selectedFileName.isNotBlank()) "CHANGE" else "UPLOAD",
+                icon = if (selectedFileName.isNotBlank()) Icons.Filled.Check else Icons.Filled.UploadFile,
+                onClick = onUploadClick,
+                variant = if (selectedFileName.isNotBlank()) DuoButtonVariant.Secondary else DuoButtonVariant.Primary,
+                enabled = !isLoading,
+                fillMaxWidth = false,
+                minHeight = 36.dp
+            )
+        }
     }
 }

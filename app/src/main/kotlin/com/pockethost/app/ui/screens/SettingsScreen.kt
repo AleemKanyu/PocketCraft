@@ -71,6 +71,8 @@ import com.pockethost.app.ui.util.ThemePreference
 import com.pockethost.app.ui.util.ThemePreferenceStore
 import com.pockethost.app.ui.util.AppIcon
 import com.pockethost.app.ui.util.AppIconManager
+import com.pockethost.app.ui.tour.TourAnchor
+import com.pockethost.app.ui.tour.tourAnchor
 import androidx.compose.animation.animateContentSize
 import com.pockethost.app.ui.components.DuoButton
 import com.pockethost.app.ui.components.DuoButtonVariant
@@ -144,6 +146,7 @@ fun SettingsScreen(
     onMessage: (String) -> Unit,
     onOpenConfigEditor: () -> Unit = {},
     onOpenLegalPage: () -> Unit = {},
+    onReplayGuidedTour: () -> Unit = {},
     onDarkThemeChange: (Boolean) -> Unit = {},
     currentMobTheme: MobTheme = MobTheme.SKELETON,
     onMobThemeChange: (MobTheme) -> Unit = {},
@@ -572,6 +575,7 @@ fun SettingsScreen(
             ) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
+                        modifier = if (index == 0) Modifier.tourAnchor(TourAnchor.SETTINGS_SERVER_TAB) else Modifier,
                         selected = activeTab == index,
                         onClick = { playTabHaptic(); activeTab = index },
                         text = { Text(title, fontWeight = if (activeTab == index) FontWeight.ExtraBold else FontWeight.Bold, fontSize = 13.sp, maxLines = 1, softWrap = false) }
@@ -1932,6 +1936,12 @@ fun SettingsScreen(
                                         context.startActivity(intent)
                                     }.onFailure { onMessage("Could not open email app.") }
                                 }
+                            )
+                            SettingsLinkRow(
+                                icon = Icons.Default.School,
+                                label = "Replay the setup guide",
+                                description = "Walk through starting a server again",
+                                onClick = onReplayGuidedTour
                             )
                             SettingsLinkRow(icon = Icons.Default.Policy, label = activeS.legalCenter, description = activeS.legalCenterDesc, onClick = onOpenLegalPage)
                             SettingsLinkRow(icon = Icons.Default.BugReport, label = "Report a Bug", description = "Report on our Discord server", onClick = {

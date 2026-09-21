@@ -45,6 +45,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.pockethost.app.R
 import com.pockethost.app.ui.theme.ButtonFont
 import com.pockethost.app.ui.theme.PocketColors
+import com.pockethost.app.data.preferences.AppPreferences
 import kotlinx.coroutines.launch
 
 object AnnouncementDialog {
@@ -52,6 +53,9 @@ object AnnouncementDialog {
     private const val PREF_KEY = "announcement_v1_shown"
 
     fun shouldShow(context: Context): Boolean {
+        if (AppPreferences(context).appLaunchCount < 2) {
+            return false
+        }
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return !prefs.getBoolean(PREF_KEY, false)
     }

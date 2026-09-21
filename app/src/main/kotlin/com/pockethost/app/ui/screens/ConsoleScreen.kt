@@ -1,11 +1,18 @@
 package com.pockethost.app.ui.screens
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.text.KeyboardActions
@@ -63,6 +70,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
@@ -78,6 +86,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Public
 import com.pockethost.app.ui.components.IpBottomSheet
@@ -168,6 +177,11 @@ import com.pockethost.app.service.VersionCatalog
 import com.pockethost.app.ui.theme.tabularNums
 import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.ui.theme.PocketMotion
+import com.pockethost.app.ui.tour.LocalTourController
+import com.pockethost.app.ui.tour.PocketTours
+import com.pockethost.app.ui.tour.TourAnchor
+import com.pockethost.app.ui.tour.TourId
+import com.pockethost.app.ui.tour.tourAnchor
 import com.pockethost.app.feedback.FeedbackService
 import kotlin.math.roundToInt
 import com.pockethost.app.ui.theme.button3d
@@ -210,7 +224,9 @@ fun ConsoleScreen(
     onOpenWorldMap: () -> Unit = {},
     adContentAfterVersion: (@Composable () -> Unit)? = null,
     topContentBelowServerCard: (@Composable () -> Unit)? = null,
-    onNavigateToSignUp: () -> Unit = {}
+    onNavigateToSignUp: () -> Unit = {},
+    replayGuidedTourRequested: Boolean = false,
+    onGuidedTourReplayHandled: () -> Unit = {}
 ) {
     
     val logListState = rememberLazyListState()
@@ -257,6 +273,29 @@ fun ConsoleScreen(
         label = "startup_progress"
     )
     val uiState = stateHolder.serverUiState
+    val needsServerFilesDownload = !isVersionDownloaded && displayedRuntimeVersion.isNotBlank()
+    val tourController = LocalTourController.current
+    val checklistPrefs = remember { AppPreferences(context) }
+    var hasServerEverStarted by remember { mutableStateOf(checklistPrefs.hasServerEverStarted) }
+    var hasRequestedPostNotifications by rememberSaveable { mutableStateOf(false) }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { /* result handled by OS */ }
+
+    LaunchedEffect(uiState) {
+        if (uiState == ServerUiState.RUNNING && !hasRequestedPostNotifications) {
+            hasRequestedPostNotifications = true
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(stateHolder.status) {
+        if (stateHolder.status == ServerStatus.ONLINE) hasServerEverStarted = true
+    }
     val cardShadowColor = pocketCardShadowColor()
     val firstServerStartWarningDismissed by AppPreferencesStore.isFirstServerStartWarningDismissedFlow(context).collectAsState(initial = false)
 
@@ -372,7 +411,58 @@ fun ConsoleScreen(
         }
     }
 
-    // Chunk loading snackbar removed as per request
+    // ── Guided tour triggers ────────────────────────────────────────────────
+    // This screen is composed only while the home tab is showing with no sub-page
+    // over it, which is exactly when the tours' spotlight targets exist — so the
+    // trigger belongs here rather than one level up.
+    val blockingDialogOnScreen = stateHolder.showEulaDialog || stateHolder.showCrashDialog ||
+        stateHolder.showBatteryOptimizationDialog || stateHolder.showMissingModDependenciesDialog ||
+        showDownloadRequiredDialog || showSeedDialog || showBedrockHelpDialog
+
+    LaunchedEffect(
+        tourController?.runningTour,
+        uiState,
+        hasServerEverStarted,
+        blockingDialogOnScreen,
+        replayGuidedTourRequested
+    ) {
+        val controller = tourController ?: return@LaunchedEffect
+        if (controller.isRunning || blockingDialogOnScreen) return@LaunchedEffect
+        when {
+            replayGuidedTourRequested -> {
+                delay(250)
+                if (uiState == ServerUiState.RUNNING) {
+                    controller.start(TourId.SERVER_LIVE, PocketTours.serverLive())
+                } else {
+                    controller.start(
+                        TourId.FIRST_SERVER,
+                        PocketTours.firstServer()
+                    )
+                }
+                onGuidedTourReplayHandled()
+            }
+
+            !checklistPrefs.firstServerTourShown &&
+                !hasServerEverStarted &&
+                uiState == ServerUiState.IDLE -> {
+                delay(700) // let the home screen settle so every anchor has a position
+                checklistPrefs.firstServerTourShown = true
+                controller.start(
+                    TourId.FIRST_SERVER,
+                    PocketTours.firstServer()
+                ) { _, _ ->
+                    checklistPrefs.firstServerTourShown = true
+                }
+            }
+
+            !checklistPrefs.serverLiveTourShown && uiState == ServerUiState.RUNNING -> {
+                delay(1400) // the join address card slides in once the relay is ready
+                controller.start(TourId.SERVER_LIVE, PocketTours.serverLive()) { _, _ ->
+                    checklistPrefs.serverLiveTourShown = true
+                }
+            }
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -394,6 +484,8 @@ fun ConsoleScreen(
                 )
             }
         }
+
+
 
         if (com.pockethost.app.FeatureFlags.WORLD_MAP_ENABLED) {
             item(key = "world_map_card") {
@@ -580,6 +672,7 @@ fun ConsoleScreen(
                             onClick = {
                                 try {
                                     if (isVersionDownloaded) {
+                                        tourController?.completeStep(PocketTours.STEP_PRESS_START)
                                         stateHolder.startServer()
                                     } else if (effectiveServerType == ServerType.MODPACK) {
                                         onInstallCurrentVersion()
@@ -593,7 +686,9 @@ fun ConsoleScreen(
                             },
                             enabled = !stateHolder.isRestarting && !stateHolder.isStopping,
                             icon = if (stateHolder.isRestarting) Icons.Default.Refresh else Icons.Default.PlayArrow,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .tourAnchor(TourAnchor.START_BUTTON),
                             style = PremiumHomeButtonStyle.StartServer
                         )
                     }
@@ -720,15 +815,31 @@ fun ConsoleScreen(
         }
         item {
             AnimatedEntranceContainer(index = 9) {
-                VersionUpgradeCard(
-                    serverTypeName = effectiveServerType.displayName,
-                    currentVersion = displayedRuntimeVersion,
-                    availableVersions = availableVersions,
-                    onUpgrade = { onChangeVersion() },
-                    onInstallCurrent = onInstallCurrentVersion,
-                    serverIsRunning = stateHolder.isNavigationLocked,
-                    isVersionDownloaded = isVersionDownloaded
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .tourAnchor(TourAnchor.SERVER_TYPE_CARD)
+                ) {
+                    VersionUpgradeCard(
+                        serverTypeName = effectiveServerType.displayName,
+                        currentVersion = displayedRuntimeVersion,
+                        availableVersions = availableVersions,
+                        onUpgrade = {
+                            tourController?.completeStep(PocketTours.STEP_SERVER_TYPE_BUTTON)
+                            onChangeVersion()
+                        },
+                        onInstallCurrent = {
+                            if (tourController?.isActive == true) {
+                                tourController?.completeStep(PocketTours.STEP_SERVER_TYPE_BUTTON)
+                                onChangeVersion()
+                            } else {
+                                onInstallCurrentVersion()
+                            }
+                        },
+                        serverIsRunning = stateHolder.isNavigationLocked,
+                        isVersionDownloaded = isVersionDownloaded
+                    )
+                }
             }
         }
         adContentAfterVersion?.let { adContent ->
@@ -841,9 +952,9 @@ fun ConsoleScreen(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("No version downloaded", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                Text("Pick a version first", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                 Text(
-                    "Download a compatible game version from the Home screen before starting the server.",
+                    "Choose a server type and Minecraft version, and PocketHost will download it for you.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 TextButton(
@@ -856,7 +967,7 @@ fun ConsoleScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Download")
+                    Text("Choose a version")
                 }
                 TextButton(
                     onClick = {
@@ -1409,16 +1520,23 @@ private fun ServerIdentityCard(
             GameCard(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .tourAnchor(TourAnchor.SERVER_CARD)
                     .clickable { showWorldSheet = true }
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = LocalAppStrings.current.yourServer,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (isDarkTheme) PocketColors.PrimaryLight.copy(alpha = 0.78f) else PocketColors.TextSection,
-                        letterSpacing = 0.sp
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = LocalAppStrings.current.yourServer,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (isDarkTheme) PocketColors.PrimaryLight.copy(alpha = 0.78f) else PocketColors.TextSection,
+                            letterSpacing = 0.sp
+                        )
+                    }
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -1932,6 +2050,7 @@ private fun ServerIdentityCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .tourAnchor(TourAnchor.JOIN_CARD)
                     .card3d(elevation = 6.dp, cornerRadius = 18.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .background(if (pocketIsDarkTheme()) PocketColors.SurfaceCardDark else PocketColors.SurfaceCard)
@@ -3218,4 +3337,5 @@ private fun WorldMapBannerCard(
         }
     }
 }
+
 

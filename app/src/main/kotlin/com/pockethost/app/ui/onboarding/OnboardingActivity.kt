@@ -692,30 +692,6 @@ private fun OnboardingScreen(
                                 relayAutoSelectedByLatency = false
                             }
                         )
-                        6 -> PermissionsScreen(
-                            s = s,
-                            notificationsPermissionGranted = notificationsPermissionGranted,
-                            onAllowNotifications = {
-                                playHaptic()
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                    if (!isNotificationPermissionGranted(context)) {
-                                        try {
-                                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                        } catch (_: Exception) {
-                                            openAppNotificationSettings(context)
-                                        }
-                                    } else {
-                                        notificationsPermissionGranted = true
-                                    }
-                                } else {
-                                    notificationsPermissionGranted = true
-                                }
-                            },
-                            errorText = permissionStepError,
-                            warningTick = permissionWarningTick,
-                            shakeConsumed = permissionShakeConsumed,
-                            onShakeConsumed = { permissionShakeConsumed = true }
-                        )
                         else -> OnboardingSetupScreen(
                             serverName = setupServerName,
                             onServerNameChange = {
@@ -763,19 +739,11 @@ private fun OnboardingScreen(
                         )
                     }
 
-                    val missingPermissionStep = currentStep == 6 && !notificationsPermissionGranted
-
                     PrimaryButton(
                         modifier = Modifier.weight(1.25f),
-                        text = if (currentStep == steps.lastIndex) s.onboardingButtonFinish else if (currentStep == 7) s.onboardingButtonSkip else s.onboardingButtonNext,
+                        text = if (currentStep == steps.lastIndex) s.onboardingButtonFinish else s.onboardingButtonNext,
                         enabled = if (currentStep == 0) privacyAccepted else true,
                         onClick = {
-                            if (missingPermissionStep && permissionWarningTick == 0) {
-                                permissionStepError = s.onboardingPermissionsError
-                                permissionWarningTick++
-                                playHaptic(doublePulse = true)
-                                return@PrimaryButton
-                            }
                             if (currentStep == steps.lastIndex) {
                                 if (setupServerName.trim().isBlank()) {
                                     setupFormError = "Server name is required."
@@ -808,6 +776,9 @@ private fun OnboardingScreen(
                                     AppPreferencesStore.setSeedSetupShown(context, true)
                                     AppPreferencesStore.setInitialWorldSetupShown(context, true)
                                     AppPreferencesStore.setPendingAutoDownloadVersion(context, selectedVersion)
+                                    AppPreferencesStore.setLegalVersionAccepted(context, BuildConfig.LEGAL_POLICY_VERSION)
+                                    AppPreferencesStore.setCrashDiagnosticsConsent(context, true)
+                                    AppPreferencesStore.setAnalyticsConsent(context, true)
 
                                     runCatching {
                                         val repo = ServerConfigRepository(context.applicationContext)
@@ -921,7 +892,6 @@ private fun onboardingSteps(s: AppStrings): List<OnboardingStep> {
         OnboardingStep(s.onboardingStepFullControl),
         OnboardingStep(s.onboardingStepCrossPlay),
         OnboardingStep(s.onboardingStepPickRegion),
-        OnboardingStep(s.onboardingStepPermissions),
         OnboardingStep(s.onboardingStepSetup)
     )
 }

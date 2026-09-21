@@ -101,6 +101,9 @@ import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.ui.theme.PocketMotion
 import com.pockethost.app.ui.theme.card3d
 import com.pockethost.app.ui.theme.pocketPopupAccentContainerColor
+import com.pockethost.app.ui.tour.GuidedTourOverlay
+import com.pockethost.app.ui.tour.LocalTourController
+import com.pockethost.app.ui.tour.TourAnchor
 import com.pockethost.app.ui.util.MobTheme
 import com.pockethost.app.service.ModpackManager
 import com.pockethost.app.ui.components.ServerModpackPickerBottomSheet
@@ -1072,6 +1075,12 @@ fun PocketHostApp(
         }
     }
 
+    val tourController = LocalTourController.current
+
+    LaunchedEffect(screen) {
+        if (screen != Screen.SERVER && screen != Screen.LOADING) tourController?.cancel()
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         AnimatedContent(
             targetState = screen,
@@ -1189,6 +1198,20 @@ fun PocketHostApp(
 
                 Screen.VERSION_PICKER -> Unit
             }
+        }
+
+        // Last child of the root box, so the spotlight covers the top bar and the
+        // bottom navigation as well as the screen content.
+        tourController?.let {
+            GuidedTourOverlay(
+                controller = it,
+                stepPredicate = { step ->
+                    step.anchor != TourAnchor.SHEET_SERVER_TYPES &&
+                    step.anchor != TourAnchor.SHEET_VERSIONS &&
+                    step.anchor != TourAnchor.SHEET_CONFIRM_BUTTON &&
+                    step.anchor != TourAnchor.EULA_ACCEPT_BUTTON
+                }
+            )
         }
     }
 
@@ -1327,6 +1350,13 @@ fun PocketHostApp(
                     scope.launch {
                         versionPickerSheetState.hide()
                         showVersionPickerDialog = false
+                        if (tourController?.currentStep?.anchor in listOf(
+                            TourAnchor.SHEET_SERVER_TYPES,
+                            TourAnchor.SHEET_VERSIONS,
+                            TourAnchor.SHEET_CONFIRM_BUTTON
+                        )) {
+                            tourController?.cancel()
+                        }
                     }
                 },
                 onConfirm = { type, version, customJar ->

@@ -110,6 +110,11 @@ import com.pockethost.app.data.preferences.AppPreferencesStore
 import com.pockethost.app.service.ServerFileManager
 import com.pockethost.app.ui.components.ChunkyProgressBanner
 import com.pockethost.app.ui.navigation.PocketBottomNav
+import com.pockethost.app.ui.tour.LocalTourController
+import com.pockethost.app.ui.tour.PocketTours
+import com.pockethost.app.ui.tour.GuidedTourOverlay
+import com.pockethost.app.ui.tour.TourAnchor
+import com.pockethost.app.ui.tour.tourAnchor
 import com.pockethost.app.ui.navigation.ReverseCurvedFooterShape
 import com.pockethost.app.ui.navigation.PocketTab
 import com.pockethost.app.ui.navigation.PocketTopBar
@@ -257,6 +262,26 @@ fun ServerScreen(
 
     val showMessage: (String) -> Unit = { message ->
         scope.launch { snackbarHostState.showSnackbar(message) }
+    }
+
+    val tour = LocalTourController.current
+    val tourPrefs = remember { AppPreferences(context) }
+    var tourReplayRequested by remember { mutableStateOf(false) }
+
+    LaunchedEffect(stateHolder.status) {
+        if (stateHolder.status == ServerStatus.ONLINE && !tourPrefs.hasServerEverStarted) {
+            tourPrefs.hasServerEverStarted = true
+        }
+    }
+
+    LaunchedEffect(stateHolder.serverUiState) {
+        if (stateHolder.serverUiState == ServerUiState.STARTING && tour?.isRunning == true) {
+            tour.completeStep(PocketTours.STEP_PRESS_START)
+        }
+        if (stateHolder.serverUiState == ServerUiState.STARTING && tour?.isRunning == true) {
+            currentTab = PocketTab.SETTINGS
+            tour.advanceTo(PocketTours.STEP_SERVER_SETTINGS)
+        }
     }
 
     BackHandler {
@@ -431,6 +456,8 @@ fun ServerScreen(
                                         onPlayerSelected = { player ->
                                             selectedPlayer = player
                                         },
+                                        replayGuidedTourRequested = tourReplayRequested,
+                                        onGuidedTourReplayHandled = { tourReplayRequested = false },
                                         onOpenServerDetails = {
                                             showServerDetailsPage = true
                                             currentTab = PocketTab.HOME
@@ -490,6 +517,10 @@ fun ServerScreen(
                                         onOpenLegalPage = {
                                             showLegalPage = true
                                             selectedPlayer = null
+                                        },
+                                        onReplayGuidedTour = {
+                                            tourReplayRequested = true
+                                            navigateToTab(PocketTab.HOME)
                                         },
                                         onDarkThemeChange = onDarkThemeChange,
                                         currentMobTheme = currentMobTheme,
@@ -871,6 +902,10 @@ fun ServerScreen(
                                 showLegalPage = false
                             }
                             navigateToTab(tab)
+                        },
+                        onNewServerClick = {
+                            openWorldSetup(createMode = true)
+                            currentTab = PocketTab.HOME
                         }
                     )
                 }
@@ -1212,6 +1247,7 @@ fun MissingModDependenciesDialog(
 fun EulaDialog(onAccept: () -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val tour = LocalTourController.current
 
     ModalBottomSheet(
         onDismissRequest = { /* mandatory — cannot be dismissed */ },
@@ -1220,129 +1256,139 @@ fun EulaDialog(onAccept: () -> Unit, onDismiss: () -> Unit) {
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         dragHandle = null
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 28.dp)
-                .padding(top = 28.dp, bottom = 36.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            // Icon + title
+        Box(modifier = Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 28.dp)
+                    .padding(top = 28.dp, bottom = 36.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // Minecraft creeper logo badge
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .background(
-                            Brush.radialGradient(
-                                listOf(PocketColors.PrimaryMuted, Color.Transparent)
-                            ),
-                            CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Gavel,
-                        contentDescription = null,
-                        tint = PocketColors.Primary,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-                Text(
-                    text = "Game EULA",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = "You must accept Mojang's End User License Agreement to start this server.",
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 20.sp
-                )
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-            // Agreement box
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+                // Icon + title
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    // Minecraft creeper logo badge
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .background(
+                                Brush.radialGradient(
+                                    listOf(PocketColors.PrimaryMuted, Color.Transparent)
+                                ),
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Description,
+                            imageVector = Icons.Default.Gavel,
                             contentDescription = null,
                             tint = PocketColors.Primary,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(32.dp)
                         )
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = "By tapping Accept, you agree to:",
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 13.sp
+                    }
+                    Text(
+                        text = "Game EULA",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "You must accept Mojang's End User License Agreement to start this server.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 20.sp
+                    )
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                // Agreement box
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Description,
+                                contentDescription = null,
+                                tint = PocketColors.Primary,
+                                modifier = Modifier.size(20.dp)
                             )
-                            Text(
-                                text = "minecraft.net/eula",
-                                fontSize = 12.sp,
-                                color = PocketColors.Primary,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.clickable {
-                                    context.startActivity(
-                                        Intent(Intent.ACTION_VIEW, Uri.parse("https://www.minecraft.net/eula"))
-                                    )
-                                }
-                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "By tapping Accept, you agree to:",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.sp
+                                )
+                                Text(
+                                    text = "minecraft.net/eula",
+                                    fontSize = 12.sp,
+                                    color = PocketColors.Primary,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.clickable {
+                                        context.startActivity(
+                                            Intent(Intent.ACTION_VIEW, Uri.parse("https://www.minecraft.net/eula"))
+                                        )
+                                    }
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            // Accept button (gradient)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(PocketColors.Primary, Color(0xFF4CAF50))
+                // Accept button (gradient)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(PocketColors.Primary, Color(0xFF4CAF50))
+                            )
                         )
+                        .tourAnchor(TourAnchor.EULA_ACCEPT_BUTTON)
+                        .clickable {
+                            tour?.completeStep(PocketTours.STEP_EULA_ACCEPT)
+                            onAccept()
+                        }
+                        .padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Accept & Continue",
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp
                     )
-                    .clickable(onClick = onAccept)
-                    .padding(vertical = 16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Accept & Continue",
-                    color = Color.White,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 15.sp
-                )
+                }
+
+                // Decline link
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Decline",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
 
-            // Decline link
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = "Decline",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold
-                )
+            if (tour?.isRunning == true && tour.currentStep?.anchor == TourAnchor.EULA_ACCEPT_BUTTON) {
+                GuidedTourOverlay(controller = tour)
             }
         }
     }

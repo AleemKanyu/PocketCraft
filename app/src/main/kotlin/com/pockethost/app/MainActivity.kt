@@ -55,6 +55,8 @@ import com.pockethost.app.update.GitHubUpdateChecker
 import com.pockethost.app.update.GitHubRelease
 import com.pockethost.app.ui.components.UpdatePopup
 import com.pockethost.app.ui.components.GitHubUpdatePopup
+import com.pockethost.app.ui.tour.LocalTourController
+import com.pockethost.app.ui.tour.TourController
 import androidx.compose.runtime.CompositionLocalProvider
 import com.pockethost.app.util.LocalAppStrings
 import com.pockethost.app.util.appStringsFor
@@ -124,16 +126,6 @@ class MainActivity : ComponentActivity() {
 
         val onboardingCompleted = preferences.onboardingCompleted
         preferences.recordAppLaunch()
-
-        // Only ask for notifications once the user is actually inside the app. During onboarding
-        // the dedicated permissions step explains why the server needs a notification before
-        // asking; firing a bare system dialog over the welcome screen gives the user no context
-        // and burns the one prompt Android grants before it starts silently denying.
-        if (onboardingCompleted && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
 
         if (onboardingCompleted && preferences.alwaysAliveBackground && !com.pockethost.app.server.ServerHostService.isServiceRunning(this)) {
             val listenerIntent = Intent(this, com.pockethost.app.server.ServerHostService::class.java).apply {
@@ -286,7 +278,11 @@ class MainActivity : ComponentActivity() {
             }
 
             val appStrings = appStringsFor(this@MainActivity, AppPreferences(this@MainActivity).appLanguage)
-            CompositionLocalProvider(LocalAppStrings provides appStrings) {
+            val tourController = remember { TourController() }
+            CompositionLocalProvider(
+                LocalAppStrings provides appStrings,
+                LocalTourController provides tourController
+            ) {
             PocketHostTheme(darkTheme = darkTheme, mobTheme = mobTheme) {
                 var jreReady by remember { mutableStateOf(initialJreReady) }
                 var jreError by remember { mutableStateOf<String?>(null) }
