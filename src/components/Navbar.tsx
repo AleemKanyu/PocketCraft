@@ -12,6 +12,7 @@ export default function Navbar() {
   const links: { href: string; label: string; external?: boolean }[] = [
     { href: "/", label: "Home" },
     { href: "/#compare", label: "Compare" },
+    { href: "/#changelog", label: "Changelog" },
     { href: "/faq", label: "FAQ" },
     { href: "/blog", label: "Blog" },
     { href: "/roadmap", label: "Roadmap" },
@@ -77,7 +78,8 @@ export default function Navbar() {
               }
               const isCurrent =
                 location.pathname === link.href ||
-                (link.href === "/#compare" && location.pathname === "/" && location.hash === "#compare");
+                (link.href === "/#compare" && location.pathname === "/" && location.hash === "#compare") ||
+                (link.href === "/#changelog" && location.pathname === "/" && location.hash === "#changelog");
 
               return (
                 <Link
@@ -206,7 +208,8 @@ export default function Navbar() {
                       }}
                       className={`block font-bold uppercase tracking-wider text-sm transition-colors ${
                         (location.pathname === link.href ||
-                          (link.href === "/#compare" && location.pathname === "/" && location.hash === "#compare"))
+                          (link.href === "/#compare" && location.pathname === "/" && location.hash === "#compare") ||
+                          (link.href === "/#changelog" && location.pathname === "/" && location.hash === "#changelog"))
                           ? "text-[#7FE620]"
                           : theme === "dark"
                           ? "text-white/50 hover:text-white"

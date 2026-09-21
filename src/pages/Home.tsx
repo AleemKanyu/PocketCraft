@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "../lib/ThemeContext";
 import { useLowEndDevice } from "../hooks/useLowEndDevice";
 import { DownloadDropdown } from "../components/DownloadDropdown";
+import Changelog from "../components/Changelog";
 
 const DownloadIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -92,6 +93,8 @@ const Home = () => {
       <Screenshots />
 
       <ComparisonTable />
+
+      <Changelog />
 
       <section
         id="faq"
