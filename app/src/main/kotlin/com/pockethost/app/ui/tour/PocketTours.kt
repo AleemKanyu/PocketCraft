@@ -15,6 +15,8 @@ object PocketTours {
     const val STEP_SERVER_TYPE_BUTTON = "server_type_button"
     const val STEP_SHEET_SERVER_TYPES = "sheet_server_types"
     const val STEP_SHEET_VERSION = "sheet_version"
+    const val STEP_SHEET_DOWNLOAD = "sheet_download"
+    const val STEP_SHEET_DOWNLOADING = "sheet_downloading"
     const val STEP_SHEET_CONFIRM = "sheet_confirm"
     const val STEP_PRESS_START = "press_start"
     const val STEP_EULA_ACCEPT = "eula_accept"
@@ -64,16 +66,34 @@ object PocketTours {
             anchor = TourAnchor.SHEET_VERSIONS,
             title = "Pick a Version",
             body = "Choose any Minecraft version you and your friends want to join on.",
-            advance = TourAdvance.Button("Next"),
+            advance = TourAdvance.TapTarget("Tap a version"),
             spotlightPadding = 4.dp,
             spotlightCornerRadius = 14.dp
         ),
         TourStep(
-            key = STEP_SHEET_CONFIRM,
+            key = STEP_SHEET_DOWNLOAD,
             anchor = TourAnchor.SHEET_CONFIRM_BUTTON,
             title = "Download Server File",
             body = "Tap Download to fetch and verify the server JAR directly in the app.",
             advance = TourAdvance.TapTarget("Tap to Download"),
+            spotlightPadding = 6.dp,
+            spotlightCornerRadius = 14.dp
+        ),
+        TourStep(
+            key = STEP_SHEET_DOWNLOADING,
+            anchor = TourAnchor.DOWNLOAD_PROGRESS,
+            title = "Downloading Server Files",
+            body = "Fetching and verifying the server JAR in real-time. Please wait a moment...",
+            advance = TourAdvance.Info("Downloading…"),
+            spotlightPadding = 6.dp,
+            spotlightCornerRadius = 16.dp
+        ),
+        TourStep(
+            key = STEP_SHEET_CONFIRM,
+            anchor = TourAnchor.SHEET_CONFIRM_BUTTON,
+            title = "Confirm Selection",
+            body = "Your server files are ready! Tap Confirm to apply this server version.",
+            advance = TourAdvance.TapTarget("Tap to Confirm"),
             spotlightPadding = 6.dp,
             spotlightCornerRadius = 14.dp
         ),
@@ -179,11 +199,29 @@ object PocketTours {
             spotlightCornerRadius = 14.dp
         ),
         TourStep(
-            key = STEP_SHEET_CONFIRM,
+            key = STEP_SHEET_DOWNLOAD,
             anchor = TourAnchor.SHEET_CONFIRM_BUTTON,
-            title = "Confirm & Download",
+            title = "Download Server",
             body = "Tap Download to fetch and verify the server JAR directly in the app.",
             advance = TourAdvance.TapTarget("Tap to Download"),
+            spotlightPadding = 6.dp,
+            spotlightCornerRadius = 14.dp
+        ),
+        TourStep(
+            key = STEP_SHEET_DOWNLOADING,
+            anchor = TourAnchor.DOWNLOAD_PROGRESS,
+            title = "Downloading Server Files",
+            body = "Fetching and verifying the server JAR in real-time. Please wait a moment...",
+            advance = TourAdvance.Info("Downloading…"),
+            spotlightPadding = 6.dp,
+            spotlightCornerRadius = 16.dp
+        ),
+        TourStep(
+            key = STEP_SHEET_CONFIRM,
+            anchor = TourAnchor.SHEET_CONFIRM_BUTTON,
+            title = "Confirm Selection",
+            body = "Your server files are ready! Tap Confirm to apply this server version.",
+            advance = TourAdvance.TapTarget("Tap to Confirm"),
             spotlightPadding = 6.dp,
             spotlightCornerRadius = 14.dp
         ),

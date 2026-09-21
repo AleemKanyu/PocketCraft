@@ -1353,7 +1353,8 @@ fun PocketHostApp(
                         if (tourController?.currentStep?.anchor in listOf(
                             TourAnchor.SHEET_SERVER_TYPES,
                             TourAnchor.SHEET_VERSIONS,
-                            TourAnchor.SHEET_CONFIRM_BUTTON
+                            TourAnchor.SHEET_CONFIRM_BUTTON,
+                            TourAnchor.DOWNLOAD_PROGRESS
                         )) {
                             tourController?.cancel()
                         }

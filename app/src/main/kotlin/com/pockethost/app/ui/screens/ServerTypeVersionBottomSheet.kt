@@ -134,6 +134,9 @@ fun ServerTypeVersionBottomSheet(
         downloadSpeedInfo = ""
         downloadError = null
         viewModel.setSelectedVersion(version)
+        if (tour?.runningTour == TourId.CREATE_SERVER || tour?.runningTour == TourId.FIRST_SERVER) {
+            tour?.advanceTo(PocketTours.STEP_SHEET_DOWNLOADING)
+        }
         val appPrefs = AppPreferences(context)
         val relayHost = appPrefs.relayHost
         downloadJob = scope.launch {
@@ -235,20 +238,23 @@ fun ServerTypeVersionBottomSheet(
                 viewModel.onServerJarImported(version)
                 viewModel.setSelectedVersion(version)
                 Toast.makeText(context, "${selectedType.displayName} $version ready!", Toast.LENGTH_SHORT).show()
-                if (tour?.runningTour == TourId.CREATE_SERVER) {
-                    tour?.advanceTo(PocketTours.STEP_CREATE_GAMEMODE)
-                } else if (tour?.runningTour == TourId.FIRST_SERVER) {
-                    tour?.advanceTo(PocketTours.STEP_PRESS_START)
+                if (tour?.runningTour == TourId.CREATE_SERVER || tour?.runningTour == TourId.FIRST_SERVER) {
+                    tour?.advanceTo(PocketTours.STEP_SHEET_CONFIRM)
                 }
-                confirmSelection()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 downloadingVersion = null
                 downloadError = null
+                if (tour?.runningTour == TourId.CREATE_SERVER || tour?.runningTour == TourId.FIRST_SERVER) {
+                    tour?.advanceTo(PocketTours.STEP_SHEET_DOWNLOAD)
+                }
             } catch (e: Exception) {
                 downloadingVersion = null
                 val msg = e.localizedMessage ?: "Unknown download error"
                 downloadError = msg
                 Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                if (tour?.runningTour == TourId.CREATE_SERVER || tour?.runningTour == TourId.FIRST_SERVER) {
+                    tour?.advanceTo(PocketTours.STEP_SHEET_DOWNLOAD)
+                }
             } finally {
                 downloadJob = null
             }
@@ -384,8 +390,13 @@ fun ServerTypeVersionBottomSheet(
                             isDarkTheme = isDarkTheme,
                             onSelectVersion = { version ->
                                 viewModel.setSelectedVersion(version)
+                                val needsImport = !downloadedVersions.contains(version)
                                 if (tour?.runningTour == TourId.CREATE_SERVER || tour?.runningTour == TourId.FIRST_SERVER) {
-                                    tour?.advanceTo(PocketTours.STEP_SHEET_CONFIRM)
+                                    if (needsImport) {
+                                        tour?.advanceTo(PocketTours.STEP_SHEET_DOWNLOAD)
+                                    } else {
+                                        tour?.advanceTo(PocketTours.STEP_SHEET_CONFIRM)
+                                    }
                                 }
                             },
                             onDeleteVersion = { version ->
@@ -430,7 +441,8 @@ fun ServerTypeVersionBottomSheet(
                                 progressPercent = downloadProgressPercent,
                                 sizeInfo = downloadSizeInfo,
                                 speedInfo = downloadSpeedInfo,
-                                isDarkTheme = isDarkTheme
+                                isDarkTheme = isDarkTheme,
+                                modifier = Modifier.tourAnchor(TourAnchor.DOWNLOAD_PROGRESS)
                             )
                         }
                     }
@@ -507,7 +519,8 @@ fun ServerTypeVersionBottomSheet(
                 stepPredicate = { step ->
                     step.anchor == TourAnchor.SHEET_SERVER_TYPES ||
                     step.anchor == TourAnchor.SHEET_VERSIONS ||
-                    step.anchor == TourAnchor.SHEET_CONFIRM_BUTTON
+                    step.anchor == TourAnchor.SHEET_CONFIRM_BUTTON ||
+                    step.anchor == TourAnchor.DOWNLOAD_PROGRESS
                 }
             )
         }
@@ -817,7 +830,8 @@ private fun InlineDownloadCard(
     progressPercent: Int,
     sizeInfo: String,
     speedInfo: String,
-    isDarkTheme: Boolean
+    isDarkTheme: Boolean,
+    modifier: Modifier = Modifier
 ) {
     val animatedProgress by animateFloatAsState(
         targetValue = progressFraction,
@@ -826,7 +840,7 @@ private fun InlineDownloadCard(
     )
 
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(bottom = 12.dp),
         color = if (isDarkTheme) PocketColors.Primary.copy(alpha = 0.12f) else PocketColors.Primary.copy(alpha = 0.08f),

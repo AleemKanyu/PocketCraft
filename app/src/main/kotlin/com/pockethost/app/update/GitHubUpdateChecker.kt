@@ -114,15 +114,21 @@ object GitHubUpdateChecker {
         val versionName = normalizeVersionName(tagName)
 
         val assets: JSONArray = json.optJSONArray("assets") ?: JSONArray()
-        var apkUrl: String? = null
+        var preferredApkUrl: String? = null
+        var fallbackApkUrl: String? = null
         for (i in 0 until assets.length()) {
             val asset = assets.getJSONObject(i)
             val name = asset.optString("name", "")
             if (name.endsWith(".apk", ignoreCase = true)) {
-                apkUrl = asset.optString("browser_download_url", "")
-                break
+                if (name.contains("external", ignoreCase = true)) {
+                    preferredApkUrl = asset.optString("browser_download_url", "")
+                    break
+                } else if (fallbackApkUrl == null) {
+                    fallbackApkUrl = asset.optString("browser_download_url", "")
+                }
             }
         }
+        val apkUrl = preferredApkUrl ?: fallbackApkUrl
 
         if (apkUrl.isNullOrBlank()) {
             Log.w(TAG, "No APK asset found in release $tagName")

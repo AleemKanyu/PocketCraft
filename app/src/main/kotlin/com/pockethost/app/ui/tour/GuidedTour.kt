@@ -55,7 +55,8 @@ enum class TourAnchor {
     CREATE_SERVER_GAMEMODE,
     CREATE_SERVER_DIFFICULTY,
     CREATE_SERVER_CROSSPLAY,
-    CREATE_SERVER_SUBMIT
+    CREATE_SERVER_SUBMIT,
+    DOWNLOAD_PROGRESS
 }
 
 /** The tours the app can run. Used to persist "already seen" state per tour. */
@@ -72,6 +73,9 @@ sealed interface TourAdvance {
      * [TourController.completeStep] once the user has actually done the thing.
      */
     data class TapTarget(val hint: String) : TourAdvance
+
+    /** Displays an informational progress/status state without manual advancement. */
+    data class Info(val message: String) : TourAdvance
 }
 
 data class TourStep(

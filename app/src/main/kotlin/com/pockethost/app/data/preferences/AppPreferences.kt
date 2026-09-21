@@ -461,6 +461,14 @@ class AppPreferences(context: Context) {
         return next
     }
 
+    var lastUpdatePromptVersion: String
+        get() = prefs.getString("last_update_prompt_version", "").orEmpty()
+        set(value) = prefs.edit().putString("last_update_prompt_version", value).apply()
+
+    var lastUpdatePromptLaunchCount: Int
+        get() = prefs.getInt("last_update_prompt_launch_count", 0)
+        set(value) = prefs.edit().putInt("last_update_prompt_launch_count", value).apply()
+
     fun getLastUpdateCheckTime(): Long {
         return prefs.getLong("last_update_check_time", 0)
     }

@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -219,6 +220,7 @@ fun GuidedTourOverlay(
                     val spaceBelow = bottomLimit - (holeRect.bottom.roundToInt() + gap)
                     when {
                         step.anchor == TourAnchor.JAR_DOWNLOAD_BUTTON && above >= topLimit -> above
+                        step.anchor == TourAnchor.DOWNLOAD_PROGRESS && above >= topLimit -> above
                         spaceAbove >= card.height && spaceAbove > spaceBelow -> above
                         below <= bottomLimit -> below
                         above >= topLimit -> above
@@ -398,6 +400,24 @@ private fun TourTooltipCard(
                         color = if (accent.luminance() > 0.5f) Color(0xFF0C120C) else Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.ExtraBold
+                    )
+                }
+
+                is TourAdvance.Info -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = accent
+                    )
+                    Text(
+                        text = advance.message,
+                        color = accent,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }

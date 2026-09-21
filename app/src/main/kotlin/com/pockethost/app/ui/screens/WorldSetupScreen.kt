@@ -968,6 +968,8 @@ fun WorldSetupScreen(
                         if (tour?.currentStep?.key in listOf(
                             PocketTours.STEP_SHEET_SERVER_TYPES,
                             PocketTours.STEP_SHEET_VERSION,
+                            PocketTours.STEP_SHEET_DOWNLOAD,
+                            PocketTours.STEP_SHEET_DOWNLOADING,
                             PocketTours.STEP_SHEET_CONFIRM
                         )) {
                             tour?.advanceTo(PocketTours.STEP_CREATE_TYPE)

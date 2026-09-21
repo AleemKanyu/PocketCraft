@@ -279,6 +279,38 @@ class MainActivity : ComponentActivity() {
 
             val appStrings = appStringsFor(this@MainActivity, AppPreferences(this@MainActivity).appLanguage)
             val tourController = remember { TourController() }
+
+            // Automatic GitHub update check for external APK with 3-open cadence
+            LaunchedEffect(onboardingCompleted, tourController.isRunning) {
+                if (!onboardingCompleted || tourController.isRunning) return@LaunchedEffect
+                if (gitHubReleaseForUpdate != null) return@LaunchedEffect
+
+                // Slight delay so the initial screen finishes drawing smoothly
+                kotlinx.coroutines.delay(2000)
+                try {
+                    val release = GitHubUpdateChecker.checkForUpdate()
+                    if (release != null) {
+                        val lastPromptedVersion = preferences.lastUpdatePromptVersion
+                        val lastPromptedLaunch = preferences.lastUpdatePromptLaunchCount
+                        val currentLaunch = preferences.appLaunchCount
+
+                        val isNewVersion = lastPromptedVersion != release.versionName
+                        val isEvery3Opens = (currentLaunch - lastPromptedLaunch) >= 3
+
+                        if (isNewVersion || isEvery3Opens) {
+                            Log.d("MainActivity", "Showing GitHub update popup: ${release.versionName} (currentLaunch=$currentLaunch, lastPromptedLaunch=$lastPromptedLaunch)")
+                            preferences.lastUpdatePromptVersion = release.versionName
+                            preferences.lastUpdatePromptLaunchCount = currentLaunch
+                            gitHubReleaseForUpdate = release
+                        } else {
+                            Log.d("MainActivity", "GitHub update ${release.versionName} available, but skipped: only ${currentLaunch - lastPromptedLaunch} opens since last prompt (needs 3).")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("MainActivity", "Automatic update check failed: ${e.message}")
+                }
+            }
+
             CompositionLocalProvider(
                 LocalAppStrings provides appStrings,
                 LocalTourController provides tourController
@@ -334,8 +366,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                LaunchedEffect(jreReady, onboardingCompleted, updateConfig, playStoreRatingPromptEnabled) {
-                    if (playStoreRatingPromptEnabled && jreReady && onboardingCompleted && updateConfig == null) {
+                LaunchedEffect(jreReady, onboardingCompleted, updateConfig, gitHubReleaseForUpdate, playStoreRatingPromptEnabled) {
+                    if (playStoreRatingPromptEnabled && jreReady && onboardingCompleted && updateConfig == null && gitHubReleaseForUpdate == null) {
                         maybeRequestPlayStoreRating(preferences)
                     }
                 }
@@ -385,9 +417,36 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                finalUpdateConfig?.let { config ->
-                    // Auto-fetch GitHub release when Firestore says update is available
-                    LaunchedEffect(config) {
+                if (gitHubReleaseForUpdate != null) {
+                    // Show GitHub download popup for direct APK install
+                    GitHubUpdatePopup(
+                        release = gitHubReleaseForUpdate!!,
+                        onDismiss = {
+                            Log.d("MainActivity", "GitHub update popup dismissed by user.")
+                            preferences.lastUpdatePromptVersion = gitHubReleaseForUpdate!!.versionName
+                            preferences.lastUpdatePromptLaunchCount = preferences.appLaunchCount
+                            gitHubReleaseForUpdate = null
+                            if (finalUpdateConfig != null) {
+                                if (finalUpdateConfig == rcUpdateConfig) {
+                                    dismissedRcUpdateKey = finalUpdateConfig.dismissKey
+                                    rcUpdateConfig = null
+                                } else {
+                                    dismissedUpdateShowFlag = true
+                                    dismissedUpdateKey = finalUpdateConfig.dismissKey
+                                    updateConfig = null
+                                }
+                            }
+                        },
+                        onInstallStarted = {
+                            Log.d("MainActivity", "APK install started from GitHub update popup.")
+                            preferences.lastUpdatePromptVersion = gitHubReleaseForUpdate!!.versionName
+                            preferences.lastUpdatePromptLaunchCount = preferences.appLaunchCount
+                            gitHubReleaseForUpdate = null
+                        }
+                    )
+                } else if (finalUpdateConfig != null) {
+                    // Auto-fetch GitHub release when Firestore/RemoteConfig says update is available
+                    LaunchedEffect(finalUpdateConfig) {
                         if (gitHubReleaseForUpdate == null) {
                             val release = GitHubUpdateChecker.fetchLatestRelease()
                             if (release != null) {
@@ -396,59 +455,36 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    if (gitHubReleaseForUpdate != null) {
-                        // Show GitHub download popup for direct APK install
-                        GitHubUpdatePopup(
-                            release = gitHubReleaseForUpdate!!,
-                            onDismiss = {
-                                Log.d("MainActivity", "GitHub update popup dismissed by user.")
-                                gitHubReleaseForUpdate = null
-                                if (config == rcUpdateConfig) {
-                                    dismissedRcUpdateKey = config.dismissKey
-                                    rcUpdateConfig = null
-                                } else {
-                                    dismissedUpdateShowFlag = true
-                                    dismissedUpdateKey = config.dismissKey
-                                    updateConfig = null
-                                }
-                            },
-                            onInstallStarted = {
-                                Log.d("MainActivity", "APK install started from GitHub update popup.")
-                                gitHubReleaseForUpdate = null
+                    // Fallback: show original popup while GitHub release loads or if fetch fails
+                    UpdatePopup(
+                        config = finalUpdateConfig,
+                        onUpdateNow = {
+                            // Fallback: open GitHub releases page in browser
+                            runCatching {
+                                val owner = BuildConfig.GITHUB_REPO_OWNER
+                                val repo = BuildConfig.GITHUB_REPO_NAME
+                                val fallbackUrl = "https://github.com/$owner/$repo/releases/latest"
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl))
+                                startActivity(intent)
                             }
-                        )
-                    } else {
-                        // Fallback: show original popup while GitHub release loads or if fetch fails
-                        UpdatePopup(
-                            config = config,
-                            onUpdateNow = {
-                                // Fallback: open GitHub releases page in browser
-                                runCatching {
-                                    val owner = BuildConfig.GITHUB_REPO_OWNER
-                                    val repo = BuildConfig.GITHUB_REPO_NAME
-                                    val fallbackUrl = "https://github.com/$owner/$repo/releases/latest"
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl))
-                                    startActivity(intent)
-                                }
-                            },
-                            onDismiss = {
-                                Log.d("MainActivity", "Update popup dismissed by user.")
-                                if (config == rcUpdateConfig) {
-                                    dismissedRcUpdateKey = config.dismissKey
-                                    rcUpdateConfig = null
-                                } else {
-                                    dismissedUpdateShowFlag = true
-                                    dismissedUpdateKey = config.dismissKey
-                                    updateConfig = null
-                                }
+                        },
+                        onDismiss = {
+                            Log.d("MainActivity", "Update popup dismissed by user.")
+                            if (finalUpdateConfig == rcUpdateConfig) {
+                                dismissedRcUpdateKey = finalUpdateConfig.dismissKey
+                                rcUpdateConfig = null
+                            } else {
+                                dismissedUpdateShowFlag = true
+                                dismissedUpdateKey = finalUpdateConfig.dismissKey
+                                updateConfig = null
                             }
-                        )
-                    }
+                        }
+                    )
+                }
             }
         }
     }
 }
-    }
 
     private fun maybeRequestPlayStoreRating(preferences: AppPreferences) {
         val currentVersion = com.pockethost.app.BuildConfig.VERSION_CODE.toString()
