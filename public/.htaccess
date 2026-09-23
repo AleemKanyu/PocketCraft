@@ -93,14 +93,14 @@
   RewriteEngine On
   RewriteBase /
 
-  # Force HTTPS
-  RewriteCond %{HTTPS} off
-  RewriteCond %{HTTP:X-Forwarded-Proto} !https
-  RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-
-  # Redirect www to non-www (canonical domain)
+  # 1. Canonical Redirect: www to non-www (single-hop directly to HTTPS)
   RewriteCond %{HTTP_HOST} ^www\.pockethost\.online$ [NC]
   RewriteRule ^(.*)$ https://pockethost.online/$1 [L,R=301]
+
+  # 2. Force HTTPS
+  RewriteCond %{HTTPS} off
+  RewriteCond %{HTTP:X-Forwarded-Proto} !https
+  RewriteRule ^(.*)$ https://pockethost.online%{REQUEST_URI} [L,R=301]
 
   # Serve sitemap.xml directly
   RewriteRule ^sitemap\.xml$ sitemap.xml [L]
