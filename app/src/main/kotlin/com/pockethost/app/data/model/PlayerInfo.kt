@@ -20,7 +20,7 @@ data class PlayerInfo(
     val isWifiPlayer: Boolean get() = ip.isNotBlank() && !isLoopbackIp(ip)
 
     fun pingText(unavailable: String = "Ping unavailable"): String {
-        val rawPing = pingMs.takeIf { it >= 0 } ?: return unavailable
+        val rawPing = pingMs.takeIf { it > 0 } ?: return unavailable
         if (isWifiPlayer && rawPing > MAX_REALISTIC_WIFI_PING_MS) {
             return "Ping unavailable"
         }

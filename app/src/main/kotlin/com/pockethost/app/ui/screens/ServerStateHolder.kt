@@ -1671,6 +1671,31 @@ class ServerStateHolder(
                     player
                 }
             }
+            // If the companion plugin reports a player who is NOT yet in onlinePlayers
+            // (e.g., their join log line arrived before isRunning became true and was
+            // silently dropped), upsert them now. The [PocketCraftPing] telemetry is
+            // authoritative proof that the player is live on the server.
+            for ((pingName, pingData) in pings) {
+                val alreadyOnline = onlinePlayers.any { canonicalPlayerName(it.name) == canonicalPlayerName(pingName) }
+                if (!alreadyOnline) {
+                    upsertOnlinePlayer(name = pingName, uuid = pingData.uuid)
+                    // Also update their ping/ip/location right away instead of waiting for next cycle
+                    onlinePlayers.replaceAll { p ->
+                        if (canonicalPlayerName(p.name) == canonicalPlayerName(pingName)) {
+                            val nextIp = pingData.ip.ifBlank { p.ip }
+                            p.copy(
+                                pingMs = sanitizeWifiPingSample(p, pingData, nextIp),
+                                ip = nextIp,
+                                uuid = pingData.uuid.ifBlank { p.uuid },
+                                x = pingData.x ?: p.x,
+                                y = pingData.y ?: p.y,
+                                z = pingData.z ?: p.z,
+                                worldName = pingData.world.ifBlank { p.worldName }
+                            )
+                        } else p
+                    }
+                }
+            }
         }
 
         ConsoleParser.parseTps(cleanLine)?.let { parsedTps ->
@@ -1932,7 +1957,7 @@ class ServerStateHolder(
                 canonicalPlayerName(it.name) == canonicalName
         }
         val existingPlayer = onlinePlayers.getOrNull(existingIndex)
-        val initialPing = existingPlayer?.pingMs ?: 0
+        val initialPing = existingPlayer?.pingMs?.takeIf { it >= 0 } ?: -1
         val mergedPlayer = PlayerInfo(
             name = normalizedName,
             uuid = normalizedUuid.ifBlank { existingPlayer?.uuid.orEmpty() },
