@@ -12,6 +12,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.luminance
 import androidx.core.content.ContextCompat
@@ -28,6 +35,7 @@ import com.pockethost.app.ui.onboarding.OnboardingActivity
 import com.pockethost.app.ui.screens.ErrorScreen
 import com.pockethost.app.ui.screens.PocketHostApp
 import com.pockethost.app.ui.theme.PocketColors
+import com.pockethost.app.ui.screens.SplashIntroOverlay
 import com.pockethost.app.ui.screens.SplashScreen
 import com.pockethost.app.ui.theme.PocketHostTheme
 import com.pockethost.app.ui.util.ThemePreference
@@ -320,9 +328,19 @@ class MainActivity : ComponentActivity() {
                 var jreError by remember { mutableStateOf<String?>(null) }
                 var jreProgress by remember { mutableStateOf(0) }
                 var jreStatus by remember { mutableStateOf("Preparing Minecraft Runtime...") }
+                // The launch intro plays once per launch, not again when the activity is recreated.
+                var showIntro by rememberSaveable { mutableStateOf(true) }
+                var introSettled by rememberSaveable { mutableStateOf(false) }
+                var appRevealed by rememberSaveable { mutableStateOf(false) }
+                // The app grows into place as the intro's backdrop breaks away.
+                val appScale by animateFloatAsState(
+                    targetValue = if (appRevealed) 1f else 0.95f,
+                    animationSpec = spring(dampingRatio = 0.86f, stiffness = 170f),
+                    label = "app_reveal"
+                )
 
                 SideEffect {
-                    val onSplash = jreError == null && !jreReady
+                    val onSplash = showIntro || (jreError == null && !jreReady)
                     val statusBarColor = PocketColors.BgApp.toArgb()
                     val navBarColor = if (onSplash) {
                         PocketColors.BgApp.toArgb()
@@ -372,6 +390,15 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                Box(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = appScale
+                            scaleY = appScale
+                        }
+                ) {
                 when {
                     jreError != null -> ErrorScreen(
                         message = "Failed to prepare runtime:\n$jreError",
@@ -386,9 +413,13 @@ class MainActivity : ComponentActivity() {
                             progress = 1f,
                             status = "Opening onboarding..."
                         )
-                        LaunchedEffect(Unit) {
-                            OnboardingActivity.start(this@MainActivity)
-                            finish()
+                        // Let the intro finish building the logo before handing over.
+                        val canOpenOnboarding = introSettled || !showIntro
+                        LaunchedEffect(canOpenOnboarding) {
+                            if (canOpenOnboarding) {
+                                OnboardingActivity.start(this@MainActivity)
+                                finish()
+                            }
                         }
                     }
                     else -> PocketHostApp(
@@ -416,8 +447,22 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
+                }
 
-                if (gitHubReleaseForUpdate != null) {
+                if (showIntro) {
+                    SplashIntroOverlay(
+                        appReady = jreError != null || (jreReady && onboardingCompleted),
+                        progress = if (jreReady) 1f else jreProgress / 100f,
+                        status = if (jreReady && !onboardingCompleted) "Opening onboarding..." else jreStatus,
+                        onIntroSettled = { introSettled = true },
+                        onReveal = { appRevealed = true },
+                        onFinished = { showIntro = false }
+                    )
+                }
+                }
+
+                // Update prompts wait until the intro has handed over to the app.
+                if (!showIntro && gitHubReleaseForUpdate != null) {
                     // Show GitHub download popup for direct APK install
                     GitHubUpdatePopup(
                         release = gitHubReleaseForUpdate!!,
@@ -444,7 +489,7 @@ class MainActivity : ComponentActivity() {
                             gitHubReleaseForUpdate = null
                         }
                     )
-                } else if (finalUpdateConfig != null) {
+                } else if (!showIntro && finalUpdateConfig != null) {
                     // Auto-fetch GitHub release when Firestore/RemoteConfig says update is available
                     LaunchedEffect(finalUpdateConfig) {
                         if (gitHubReleaseForUpdate == null) {

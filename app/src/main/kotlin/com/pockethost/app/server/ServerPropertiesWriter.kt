@@ -114,7 +114,7 @@ object ServerPropertiesWriter {
         props["max-tick-time"] = "60000"
         props["enable-rcon"] = "true"
         props["rcon.port"] = "25575"
-        props["rcon.password"] = "pocketcraft-internal-rcon"
+        props["rcon.password"] = com.pockethost.app.network.RconSecret.current()
         props["broadcast-rcon-to-ops"] = "false"
         val existingServerType = props.getProperty("pocketcraft-server-type").orEmpty()
         val preserveModpackMetadata = existingServerType.equals("MODPACK", ignoreCase = true) &&

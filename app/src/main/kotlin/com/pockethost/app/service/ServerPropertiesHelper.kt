@@ -105,10 +105,12 @@ object ServerPropertiesHelper {
         }
         if (props.getProperty("enable-rcon") != "true" || 
             props.getProperty("rcon.port") != "25575" || 
-            props.getProperty("rcon.password") != "pocketcraft-internal-rcon") {
+            props.getProperty("rcon.password") != com.pockethost.app.network.RconSecret.current()) {
             props["enable-rcon"] = "true"
             props["rcon.port"] = "25575"
-            props["rcon.password"] = "pocketcraft-internal-rcon"
+            // Replaces the old shared password too, so existing servers move to the
+            // per-install secret on their next start.
+            props["rcon.password"] = com.pockethost.app.network.RconSecret.current()
             needsPersist = true
         }
         if (syncDesiredChunkDistances(props)) {

@@ -39,6 +39,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.rememberScrollState
@@ -129,6 +130,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -381,18 +385,33 @@ fun ConsoleScreen(
     // pairs a removeAt(0) with an add(), so size stops changing entirely and a size-keyed
     // effect would silently stop firing for the rest of the session right when the cap is
     // first reached.
-    LaunchedEffect(stateHolder.logAppendSeq) {
-        if (stateHolder.logs.isNotEmpty()) {
-            // Only auto-scroll if the user was already at (or near) the bottom before this
-            // line arrived. Otherwise a burst of log lines during startup/active play would
-            // yank someone who scrolled up to read an earlier line straight back down,
-            // sometimes before they can even finish reading it.
-            val layoutInfo = logListState.layoutInfo
-            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()
-            val wasNearBottom = lastVisible == null || lastVisible.index >= layoutInfo.totalItemsCount - 2
-            if (wasNearBottom) {
-                logListState.animateScrollToItem(stateHolder.logs.lastIndex)
+    // Follow the newest line until the user scrolls up; scrolling back to the end resumes
+    // following. Deciding "near the bottom" per line broke during startup bursts: each new
+    // line cancelled the previous scroll animation, the view fell a few lines behind and
+    // then never followed again, leaving the console parked on old output.
+    //
+    // Only a finger drag may turn following off. Reading canScrollForward whenever any
+    // scroll stopped also fired on the list's first layout, which starts at the top of a
+    // log that is already long, and switched following off before the first jump.
+    var followLog by remember { mutableStateOf(true) }
+    LaunchedEffect(logListState) {
+        logListState.interactionSource.interactions
+            .filterIsInstance<DragInteraction>()
+            .collectLatest { interaction ->
+                if (interaction is DragInteraction.Start) {
+                    followLog = false
+                } else {
+                    // Let a fling settle, then follow again only if it ended at the newest line.
+                    androidx.compose.runtime.snapshotFlow { logListState.isScrollInProgress }
+                        .first { !it }
+                    followLog = !logListState.canScrollForward
+                }
             }
+    }
+    LaunchedEffect(stateHolder.logAppendSeq, followLog) {
+        if (followLog && stateHolder.logs.isNotEmpty()) {
+            // Jump instead of animating so a fast burst can't outrun the scroll.
+            logListState.scrollToItem(stateHolder.logs.lastIndex)
         }
     }
 

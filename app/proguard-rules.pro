@@ -123,3 +123,9 @@
 # AppStrings keep rule for Gson translation mapping
 -keep class com.pockethost.app.util.AppStrings { *; }
 
+# Prevent R8 from mis-optimizing ServerTypeVersionBottomSheet causing VerifyError on Android 13
+-keepclassmembers class com.pockethost.app.ui.screens.ServerTypeVersionBottomSheetKt {
+    *** ServerTypeVersionBottomSheet(...);
+}
+
+

@@ -10,7 +10,6 @@ import java.nio.charset.StandardCharsets
 object RconClient {
     private const val TAG = "RconClient"
     private const val DEFAULT_PORT = 25575
-    private const val DEFAULT_PASSWORD = "pocketcraft-internal-rcon"
     private const val DEFAULT_TIMEOUT_MS = 2500
 
     private const val SERVERDATA_AUTH = 3
@@ -27,10 +26,29 @@ object RconClient {
     /** Guards against a bogus length header making us allocate an absurd buffer. */
     private const val MAX_PAYLOAD_BYTES = 4 * 1024 * 1024
 
+    /**
+     * Builds a whole RCON packet so it goes out in a single write. The vanilla/Paper RCON
+     * server parses each packet from one socket read and drops the client when that read
+     * returns fewer than 10 bytes; writing the header byte by byte let TCP split it, so
+     * commands failed at random with "Broken pipe".
+     */
+    private fun encodePacket(id: Int, type: Int, payload: String): ByteArray {
+        val payloadBytes = payload.toByteArray(StandardCharsets.UTF_8)
+        return java.nio.ByteBuffer.allocate(4 + 4 + 4 + payloadBytes.size + 2)
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            .putInt(4 + 4 + payloadBytes.size + 2)
+            .putInt(id)
+            .putInt(type)
+            .put(payloadBytes)
+            .put(0.toByte())
+            .put(0.toByte())
+            .array()
+    }
+
     fun sendCommand(
         command: String,
         port: Int = DEFAULT_PORT,
-        password: String = DEFAULT_PASSWORD,
+        password: String = RconSecret.current(),
         timeoutMs: Int = DEFAULT_TIMEOUT_MS
     ): String {
         val trimmedCommand = command.trim().removePrefix("/")
@@ -43,12 +61,6 @@ object RconClient {
                 val out = DataOutputStream(socket.getOutputStream())
                 val inp = DataInputStream(socket.getInputStream())
 
-                fun writeIntLE(value: Int) {
-                    out.write(value and 0xFF)
-                    out.write((value shr 8) and 0xFF)
-                    out.write((value shr 16) and 0xFF)
-                    out.write((value shr 24) and 0xFF)
-                }
 
                 fun readIntLE(): Int {
                     val b0 = inp.read()
@@ -60,14 +72,7 @@ object RconClient {
                 }
 
                 fun sendPacket(id: Int, type: Int, payload: String) {
-                    val payloadBytes = payload.toByteArray(StandardCharsets.UTF_8)
-                    val packetLength = 4 + 4 + payloadBytes.size + 2
-                    writeIntLE(packetLength)
-                    writeIntLE(id)
-                    writeIntLE(type)
-                    out.write(payloadBytes)
-                    out.write(0)
-                    out.write(0)
+                    out.write(encodePacket(id, type, payload))
                     out.flush()
                 }
 
@@ -133,7 +138,7 @@ object RconClient {
     fun sendCommands(
         commands: List<String>,
         port: Int = DEFAULT_PORT,
-        password: String = DEFAULT_PASSWORD,
+        password: String = RconSecret.current(),
         timeoutMs: Int = DEFAULT_TIMEOUT_MS
     ): List<String> {
         if (commands.isEmpty()) return emptyList()
@@ -147,10 +152,6 @@ object RconClient {
                 val out = DataOutputStream(socket.getOutputStream())
                 val inp = DataInputStream(socket.getInputStream())
 
-                fun writeIntLE(v: Int) {
-                    out.write(v and 0xFF); out.write((v shr 8) and 0xFF)
-                    out.write((v shr 16) and 0xFF); out.write((v shr 24) and 0xFF)
-                }
                 fun readIntLE(): Int {
                     val b0 = inp.read(); val b1 = inp.read()
                     val b2 = inp.read(); val b3 = inp.read()
@@ -158,9 +159,7 @@ object RconClient {
                     return (b0 and 0xFF) or ((b1 and 0xFF) shl 8) or ((b2 and 0xFF) shl 16) or ((b3 and 0xFF) shl 24)
                 }
                 fun sendPacket(id: Int, type: Int, payload: String) {
-                    val bytes = payload.toByteArray(StandardCharsets.UTF_8)
-                    writeIntLE(4 + 4 + bytes.size + 2); writeIntLE(id); writeIntLE(type)
-                    out.write(bytes); out.write(0); out.write(0); out.flush()
+                    out.write(encodePacket(id, type, payload)); out.flush()
                 }
                 fun readPacket(): Triple<Int, Int, String> {
                     val len = readIntLE()

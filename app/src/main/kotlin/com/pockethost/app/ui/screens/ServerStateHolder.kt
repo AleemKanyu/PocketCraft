@@ -174,7 +174,10 @@ class ServerStateHolder(
         get() = ServerFileManager.getServerDir(appContext, activeWorld.ifBlank { "world" })
     private val serverPhotosDir: File
         get() = File(serverDir, "server_photos").also { it.mkdirs() }
-    private val backupsDir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "PocketHost Server Backups").also { it.mkdirs() }
+    private val backupsDir: File
+        get() = (appContext.getExternalFilesDir("backups") ?: File(appContext.filesDir, "backups")).also { it.mkdirs() }
+    private val legacyBackupsDir: File
+        get() = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "PocketHost Server Backups")
     private val logsQueue = ArrayDeque<String>(2000)
     private var warnedCrossplayIncompatible = false
     private var receiverRegistered = false
@@ -1528,6 +1531,13 @@ class ServerStateHolder(
             return
         }
 
+        // The app polls the server over RCON on loopback every few seconds (player list, pings),
+        // and each poll logs a "started"/"shutting down" pair. Connections from anywhere else
+        // stay visible, since those are someone else talking to the server.
+        if (cleanLine.contains("Thread RCON Client /127.0.0.1 ")) {
+            return
+        }
+
         // Geyser/Floodgate refusing to enable is a stack trace the player can do nothing about,
         // and it is not a fault in their server. Say what actually happened, once per run.
         if (!warnedCrossplayIncompatible && ConsoleParser.isCrossplayPluginIncompatible(cleanLine)) {
@@ -1683,7 +1693,7 @@ class ServerStateHolder(
                     onlinePlayers.replaceAll { p ->
                         if (canonicalPlayerName(p.name) == canonicalPlayerName(pingName)) {
                             val nextIp = pingData.ip.ifBlank { p.ip }
-                            p.copy(
+                            val updated = p.copy(
                                 pingMs = sanitizeWifiPingSample(p, pingData, nextIp),
                                 ip = nextIp,
                                 uuid = pingData.uuid.ifBlank { p.uuid },
@@ -1692,6 +1702,11 @@ class ServerStateHolder(
                                 z = pingData.z ?: p.z,
                                 worldName = pingData.world.ifBlank { p.worldName }
                             )
+                            val sessionIdx = sessionPlayers.indexOfFirst { canonicalPlayerName(it.name) == canonicalPlayerName(p.name) }
+                            if (sessionIdx >= 0) {
+                                sessionPlayers[sessionIdx] = updated
+                            }
+                            updated
                         } else p
                     }
                 }
@@ -3081,10 +3096,15 @@ class ServerStateHolder(
                 backupProgressPercent = 98
                 backupStatusMessage = "Saving to Downloads..."
             }
-            saveToPersistentBackups(backupFile, backupName, activeWorld)
+            val savedToDownloads = saveToPersistentBackups(backupFile, backupName, activeWorld)
 
-            // Determine and display save location
-            val saveLocation = "Downloads/PocketCraftWorldBackups/$activeWorld"
+            // Determine and display save location. App storage is wiped on uninstall, so
+            // never claim Downloads when that copy failed.
+            val saveLocation = if (savedToDownloads) {
+                "Downloads/PocketCraftWorldBackups/$activeWorld"
+            } else {
+                "App storage only (deleted if the app is uninstalled)"
+            }
 
             val includedItems = listOf("Worlds", "Plugins", "Mods", "Resource packs", "Configs", "Server files")
             val includedText = includedItems.joinToString(", ")
@@ -3100,7 +3120,11 @@ class ServerStateHolder(
             kotlinx.coroutines.delay(500)
             FirebaseAnalyticsManager.logBackupCreated(activeWorld, backupFile.length())
 
-            return@withContext "Backup created: $backupName\nIncluded: $includedText\nSaved to Downloads folder"
+            return@withContext if (savedToDownloads) {
+                "Backup created: $backupName\nIncluded: $includedText\nSaved to Downloads folder"
+            } else {
+                "Backup created: $backupName\nIncluded: $includedText\nCould not copy it to Downloads, so it is only in app storage and will be deleted if you uninstall the app. Use Download on the backup to try again."
+            }
         } catch (e: Exception) {
             android.util.Log.e("ServerBackup", "Backup failed", e)
             val isCancelled = e is kotlinx.coroutines.CancellationException
@@ -3860,7 +3884,7 @@ class ServerStateHolder(
                 downloadBackupStatusMessage = "Copying ${entry.name} to Downloads..."
             }
 
-            saveToPersistentBackups(
+            val copied = saveToPersistentBackups(
                 source = entry.file,
                 displayName = entry.file.name,
                 worldName = activeWorld,
@@ -3871,6 +3895,7 @@ class ServerStateHolder(
                     }
                 }
             )
+            if (!copied) throw java.io.IOException("Android did not allow writing to the Downloads folder")
 
             withContext(Dispatchers.Main) {
                 downloadBackupProgressPercent = 100
@@ -3947,28 +3972,69 @@ class ServerStateHolder(
     }
 
 
+    /** Copies a backup into Downloads/PocketCraftWorldBackups. Returns false if no copy landed there. */
     private suspend fun saveToPersistentBackups(
         source: File,
         displayName: String,
         worldName: String,
         onProgress: suspend (Int) -> Unit = {}
-    ) {
+    ): Boolean {
         val safeWorldName = sanitizeWorldName(worldName)
+        val totalBytes = source.length().coerceAtLeast(1L)
+
+        // 1. On Android 10+ (Q+), attempt MediaStore insertion first
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val resolver = appContext.contentResolver
-            val values = android.content.ContentValues().apply {
-                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, displayName)
-                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "application/zip")
-                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "Download/PocketCraftWorldBackups/$safeWorldName/")
-                put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+            val mediaStoreSuccess = runCatching {
+                val resolver = appContext.contentResolver
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "application/zip")
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "Download/PocketCraftWorldBackups/$safeWorldName/")
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+
+                val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    ?: throw IllegalStateException("MediaStore insert returned null")
+
+                resolver.openOutputStream(uri)?.use { output ->
+                    FileInputStream(source).use { input ->
+                        val buffer = ByteArray(16 * 1024)
+                        var copied = 0L
+                        var lastPercent = -1
+                        var bytes = input.read(buffer)
+                        while (bytes != -1) {
+                            output.write(buffer, 0, bytes)
+                            copied += bytes
+                            val percent = ((copied * 100L) / totalBytes).toInt().coerceIn(0, 100)
+                            if (percent != lastPercent) {
+                                lastPercent = percent
+                                onProgress(percent)
+                            }
+                            bytes = input.read(buffer)
+                        }
+                    }
+                } ?: throw IllegalStateException("Unable to open MediaStore output stream")
+
+                val publish = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                }
+                resolver.update(uri, publish, null, null)
+                true
+            }.getOrElse { error ->
+                android.util.Log.w("ServerStateHolder", "MediaStore export failed on Android ${Build.VERSION.SDK_INT}: ${error.message}, falling back to direct Downloads file copy")
+                false
             }
 
-            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                ?: throw IllegalStateException("Unable to create MediaStore entry")
+            if (mediaStoreSuccess) return true
+        }
 
-            val totalBytes = source.length().coerceAtLeast(1L)
-            resolver.openOutputStream(uri)?.use { output ->
-                FileInputStream(source).use { input ->
+        // 2. Direct File export to Downloads/PocketCraftWorldBackups/ (works on Android < 10, and on Android 10 with requestLegacyExternalStorage)
+        return runCatching {
+            val downloads = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val targetDir = File(downloads, "PocketCraftWorldBackups/$safeWorldName").also { it.mkdirs() }
+            val targetFile = File(targetDir, displayName)
+            FileInputStream(source).use { input ->
+                FileOutputStream(targetFile).use { output ->
                     val buffer = ByteArray(16 * 1024)
                     var copied = 0L
                     var lastPercent = -1
@@ -3984,36 +4050,11 @@ class ServerStateHolder(
                         bytes = input.read(buffer)
                     }
                 }
-            } ?: throw IllegalStateException("Unable to open backup output stream")
-
-            val publish = android.content.ContentValues().apply {
-                put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
             }
-            resolver.update(uri, publish, null, null)
-            return
-        }
-
-        val downloads = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-        val targetDir = File(downloads, "PocketCraftWorldBackups/$safeWorldName").also { it.mkdirs() }
-        val targetFile = File(targetDir, displayName)
-        val totalBytes = source.length().coerceAtLeast(1L)
-        FileInputStream(source).use { input ->
-            FileOutputStream(targetFile).use { output ->
-                val buffer = ByteArray(16 * 1024)
-                var copied = 0L
-                var lastPercent = -1
-                var bytes = input.read(buffer)
-                while (bytes != -1) {
-                    output.write(buffer, 0, bytes)
-                    copied += bytes
-                    val percent = ((copied * 100L) / totalBytes).toInt().coerceIn(0, 100)
-                    if (percent != lastPercent) {
-                        lastPercent = percent
-                        onProgress(percent)
-                    }
-                    bytes = input.read(buffer)
-                }
-            }
+            true
+        }.getOrElse { error ->
+            android.util.Log.w("ServerStateHolder", "Direct Downloads copy failed: ${error.message}. Archive is only in app storage.")
+            false
         }
     }
 
@@ -4368,7 +4409,7 @@ class ServerStateHolder(
         return when {
             cleanDescription.isNotBlank() -> cleanDescription
             cleanName.isNotBlank() -> cleanName
-            else -> "A PocketCraft Server"
+            else -> "A PocketHost Server"
         }.take(120)
     }
 
@@ -4709,9 +4750,10 @@ class ServerStateHolder(
         uuid: String,
         transform: (PlayerInfo) -> PlayerInfo
     ) {
+        val canonicalTarget = canonicalPlayerName(normalizedName)
         for (index in indices) {
             val player = this[index]
-            val nameMatches = player.name.equals(normalizedName, ignoreCase = true)
+            val nameMatches = canonicalPlayerName(player.name).equals(canonicalTarget, ignoreCase = true)
             val uuidMatches = uuid.isNotBlank() && player.uuid == uuid
             if (nameMatches || uuidMatches) {
                 this[index] = transform(player)
@@ -5518,45 +5560,38 @@ class ServerStateHolder(
     private fun listBackupsForWorld(worldName: String): List<BackupEntry> {
         val formatter = SimpleDateFormat("MMM d, yyyy • h:mm a", Locale.getDefault())
         val downloads = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-        val filesList = mutableListOf<File>()
-        
-        fun scanDir(dir: File, depth: Int) {
-            if (depth > 3 || !dir.exists() || !dir.isDirectory) return
-            val children = dir.listFiles() ?: return
-            for (child in children) {
-                if (child.isDirectory) {
-                    scanDir(child, depth + 1)
-                } else if (child.isFile && child.extension.equals("zip", ignoreCase = true)) {
-                    val nameLower = child.name.lowercase(Locale.getDefault())
-                    val parentName = child.parentFile?.name?.lowercase(Locale.getDefault()) ?: ""
-                    val parentParentName = child.parentFile?.parentFile?.name?.lowercase(Locale.getDefault()) ?: ""
-                    
-                    val isPCFolder = parentName.contains("pocketcraft") || parentParentName.contains("pocketcraft") ||
-                                     parentName == "world" || parentName == "main_world" || parentName == "modded" ||
-                                     parentName == "alrigth" || parentName == "fabric_26_1_2" || parentName == "wwww"
-                                     
-                    val isPCFile = nameLower.contains("backup") || nameLower.contains("nether") || nameLower.contains("end") ||
-                                   nameLower.contains("world") || nameLower.matches(Regex(".*\\d{8}-\\d{6}.*"))
-                                   
-                    if (isPCFolder || isPCFile) {
-                        filesList.add(child)
-                    }
-                }
-            }
-        }
-        
-        val extFiles = appContext.getExternalFilesDir(null)
-        val privateFiles = appContext.filesDir
+        val folderNames = listOf(worldName.trim(), sanitizeWorldName(worldName))
+            .filter { it.isNotBlank() }
+            .distinct()
+        // Every place a backup of this world has been written: the per-world folder in app
+        // storage, the exported copy in Downloads, and the older Downloads folders. Backups
+        // live in a folder named after the world, or flat as "<world>-<timestamp>.zip".
+        // Only this world's backups are listed, so a restore never picks up another world.
+        val roots = listOf(
+            backupsDir,
+            legacyBackupsDir,
+            File(downloads, "PocketCraftWorldBackups"),
+            File(downloads, "PocketHostWorldBackups")
+        )
+        val flatPrefixes = folderNames.map { "${it.lowercase(Locale.ROOT)}-" }
+        fun zipsIn(dir: File): List<File> =
+            dir.listFiles()?.filter { it.isFile && it.extension.equals("zip", ignoreCase = true) }.orEmpty()
 
-        scanDir(downloads, 0)
-        scanDir(backupsDir, 0)
-        if (extFiles != null) {
-            scanDir(extFiles, 0)
+        val filesList = roots.flatMap { root ->
+            val inWorldFolders = folderNames.flatMap { name -> zipsIn(File(root, name)) }
+            val flat = zipsIn(root).filter { file ->
+                val lower = file.name.lowercase(Locale.ROOT)
+                flatPrefixes.any { lower.startsWith(it) }
+            }
+            inWorldFolders + flat
         }
-        scanDir(privateFiles, 0)
-        
+
         return filesList
             .distinctBy { runCatching { it.canonicalPath }.getOrDefault(it.absolutePath) }
+            // Each backup is saved in app storage and copied to Downloads under the same
+            // name; list it once (roots are scanned app storage first, so that copy wins).
+            // deleteBackup removes every copy by name.
+            .distinctBy { it.name.lowercase(Locale.ROOT) }
             .sortedByDescending { it.lastModified() }
             .map { file ->
                 BackupEntry(
@@ -6116,6 +6151,9 @@ class ServerStateHolder(
                 val finalPing = parsedPing
                 withContext(Dispatchers.Main) {
                     onlinePlayers.replaceAllMatching(player.name, player.uuid) { p ->
+                        p.copy(pingMs = finalPing)
+                    }
+                    sessionPlayers.replaceAllMatching(player.name, player.uuid) { p ->
                         p.copy(pingMs = finalPing)
                     }
                 }

@@ -224,7 +224,9 @@ fun Modifier.tourAnchor(anchor: TourAnchor): Modifier {
     return this
         .bringIntoViewRequester(requester)
         .onGloballyPositioned { coordinates ->
-            controller.register(anchor, coordinates.boundsInRoot(), requester)
+            if (coordinates.isAttached) {
+                controller.register(anchor, coordinates.boundsInRoot(), requester)
+            }
         }
 }
 

@@ -131,6 +131,8 @@ import com.pockethost.app.data.preferences.AppPreferences
 import com.pockethost.app.data.preferences.AppPreferencesStore
 import com.pockethost.app.data.model.ServerType
 import com.pockethost.app.data.repository.ServerConfigRepository
+import com.pockethost.app.service.ServerFileManager
+import com.pockethost.app.service.ServerPropertiesHelper
 import com.pockethost.app.integrations.AccountManager
 import com.pockethost.app.R
 import com.pockethost.app.ui.screens.ServerTypeVersionBottomSheet
@@ -152,8 +154,10 @@ import com.pockethost.app.ui.util.MobTheme
 import com.pockethost.app.util.AppStrings
 import com.pockethost.app.util.LocalAppStrings
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Onboarding design tokens
@@ -783,13 +787,32 @@ private fun OnboardingScreen(
                                     runCatching {
                                         val repo = ServerConfigRepository(context.applicationContext)
                                         val current = repo.loadConfig()
+                                        val displayName = setupServerName.trim()
+                                        val description = setupWorldDescription.trim()
                                         repo.saveConfig(
                                             current.copy(
                                                 gameVersion = selectedVersion,
                                                 serverType = setupServerType,
-                                                customJarPath = setupCustomJarPath
+                                                customJarPath = setupCustomJarPath,
+                                                motd = description.ifBlank { displayName }.take(120)
                                             )
                                         )
+                                        // The name and description typed here used to be dropped.
+                                        // Store them under the same keys the Home "edit details"
+                                        // dialog writes (ServerStateHolder.updateWorldServerDetails).
+                                        withContext(Dispatchers.IO) {
+                                            val worldKey = current.worldName.ifBlank { "world" }
+                                            val serverDir = ServerFileManager.getServerDir(
+                                                context,
+                                                AppPreferences(context).selectedWorld.ifBlank { "world" }
+                                            )
+                                            val props = ServerPropertiesHelper.readProperties(serverDir)
+                                            props["pocketcraft-world-display.$worldKey"] = displayName
+                                            if (description.isNotEmpty()) {
+                                                props["pocketcraft-world-description.$worldKey"] = description
+                                            }
+                                            ServerPropertiesHelper.saveProperties(serverDir, props)
+                                        }
                                     }
                                     preferences.openWorldSetupNextLaunch = false
                                     onComplete()

@@ -188,6 +188,12 @@ private fun createFeedbackLogDump(context: Context, serverVersion: String): Feed
     val serverLogText = runCatching {
         if (serverLogFile.exists()) serverLogFile.readText() else "No server log file found at ${serverLogFile.absolutePath}"
     }.getOrDefault("Could not read latest.log")
+    // The service moves the previous run's log here on each start, so a crash that
+    // happened before the user restarted is still in the report.
+    val previousLogFile = File(context.filesDir, "servers/worlds/$activeWorld/logs/previous-session.log")
+    val previousLogText = runCatching {
+        if (previousLogFile.exists()) previousLogFile.readText() else null
+    }.getOrNull()
 
     val report = buildString {
         appendLine("PocketHost Feedback Log Dump")
@@ -200,6 +206,13 @@ private fun createFeedbackLogDump(context: Context, serverVersion: String): Feed
         appendLine("androidSdk=${Build.VERSION.SDK_INT}")
         appendLine("fingerprint=${Build.FINGERPRINT}")
         appendLine()
+        // Previous session first: the excerpt below is taken from the end of the dump,
+        // so the current latest.log must stay last.
+        if (!previousLogText.isNullOrBlank()) {
+            appendLine("---- previous-session.log ----")
+            appendLine(previousLogText.takeLast(120_000))
+            appendLine()
+        }
         appendLine("---- latest.log ----")
         appendLine(serverLogText.takeLast(220_000))
     }

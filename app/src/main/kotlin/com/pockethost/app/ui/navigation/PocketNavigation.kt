@@ -345,7 +345,7 @@ fun PocketTopBar(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Public,
-                            contentDescription = null,
+                            contentDescription = "Relay region",
                             modifier = Modifier.size(16.dp),
                             tint = accentTint.copy(alpha = 0.86f)
                         )

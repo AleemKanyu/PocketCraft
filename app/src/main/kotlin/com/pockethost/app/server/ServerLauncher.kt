@@ -2087,23 +2087,38 @@ class ServerLauncher(private val context: Context) {
         // Return cached result if available.
         noexecCacheResult?.let { return it }
 
-        val spec = runtime ?: JreExtractor.defaultRuntimeForDevice()
+        val spec = runtime ?: JreExtractor.findExtractedRuntime(context) ?: JreExtractor.defaultRuntimeForDevice()
         val result = runCatching {
             val javaBin = JreExtractor.getJavaBinary(context, spec)
             if (javaBin.exists()) {
-                android.system.Os.chmod(javaBin.absolutePath, 0x1ED)
+                runCatching { android.system.Os.chmod(javaBin.absolutePath, 0x1ED) }
                 val jreLibDir = File(javaBin.parentFile?.parentFile, "lib")
                 val pb = ProcessBuilder(javaBin.absolutePath, "-version").redirectErrorStream(true)
                 val nativeLibDir = context.applicationInfo.nativeLibraryDir
                 pb.environment()["LD_LIBRARY_PATH"] = "$nativeLibDir:$jreLibDir/server:$jreLibDir:$jreLibDir/jli"
                 val p = pb.start()
+                val out = p.inputStream.bufferedReader().readText()
                 val finished = p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
                 if (!finished) p.destroyForcibly()
-                !finished || p.exitValue() != 0
+                val failed = !finished || (p.exitValue() != 0 && !out.contains("version", ignoreCase = true))
+                if (failed) {
+                    android.util.Log.w("ServerLauncher", "isFilesdirNoexec probe failed for ${spec.id}: exit=${if (finished) p.exitValue() else "timeout"}, out=$out")
+                }
+                failed
             } else {
-                true
+                false
             }
-        }.getOrDefault(true)
+        }.getOrElse { error ->
+            // exec() refused with EACCES is exactly what a noexec mount (or Android's
+            // W^X rule for app data) looks like, so it must count as noexec. Only other
+            // failures, which say nothing about exec permission, fall back to "exec-safe".
+            val execDenied = generateSequence(error) { it.cause }.any { cause ->
+                val message = cause.message.orEmpty()
+                message.contains("error=13") || message.contains("Permission denied", ignoreCase = true)
+            }
+            android.util.Log.e("ServerLauncher", "isFilesdirNoexec exception (execDenied=$execDenied): ${error.message}", error)
+            execDenied
+        }
 
         noexecCacheResult = result
         android.util.Log.w("ServerLauncher",
@@ -2143,8 +2158,10 @@ class ServerLauncher(private val context: Context) {
         // 2. If the canonical path exists, probe it directly.
         if (canonical.exists()) {
             val isSafe = runCatching {
-                canonical.parentFile?.parentFile?.walkTopDown()?.forEach { file ->
-                    android.system.Os.chmod(file.absolutePath, 0x1ED)
+                runCatching {
+                    canonical.parentFile?.parentFile?.walkTopDown()?.forEach { file ->
+                        runCatching { android.system.Os.chmod(file.absolutePath, 0x1ED) }
+                    }
                 }
                 val jreHomeDir = canonical.parentFile?.parentFile
                 val jreLibDir = File(jreHomeDir, "lib")
@@ -2157,7 +2174,13 @@ class ServerLauncher(private val context: Context) {
                 val out = p.inputStream.bufferedReader().readText()
                 val finished = p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
                 if (!finished) p.destroyForcibly()
-                finished && (p.exitValue() == 0 || out.contains("version", ignoreCase = true))
+                val ok = finished && (p.exitValue() == 0 || out.contains("version", ignoreCase = true))
+                if (!ok) {
+                    android.util.Log.w("ServerLauncher", "Canonical probe failed: exit=${if (finished) p.exitValue() else "timeout"}, out=$out")
+                }
+                ok
+            }.onFailure {
+                android.util.Log.e("ServerLauncher", "Canonical probe exception: ${it.message}", it)
             }.getOrDefault(false)
 
             if (isSafe) {
@@ -2170,7 +2193,7 @@ class ServerLauncher(private val context: Context) {
         } else {
             // If the canonical path doesn't exist yet, we check the general noexec status.
             // If the files directory is generally exec-safe, we assume canonical will be safe once extracted.
-            if (!isFilesdirNoexec()) {
+            if (!isFilesdirNoexec(runtime)) {
                 allStorageNoexecDetected = false
                 return canonical
             }
@@ -2247,7 +2270,7 @@ class ServerLauncher(private val context: Context) {
         // All candidate locations are noexec — device has full Knox storage lockdown.
         allStorageNoexecDetected = true
         android.util.Log.e("ServerLauncher",
-            "ALL storage locations are noexec — Samsung Knox total lockdown detected. Cannot exec java binary.")
+            "ALL storage locations are noexec (Android W^X for app data, or a Knox-style noexec mount). Cannot exec the java binary; using the in-process JVM.")
         return canonical // Return canonical so error surfaces from the actual exec attempt
     }
 

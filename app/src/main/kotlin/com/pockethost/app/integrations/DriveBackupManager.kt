@@ -280,17 +280,31 @@ object DriveBackupManager {
         } while (nextPageToken != null)
     }
 
-    fun latestBackupFile(worldName: String): File? {
+    fun latestBackupFile(worldName: String, context: Context? = null): File? {
+        val sanitized = sanitizeWorldName(worldName)
+        val candidateDirs = mutableListOf<File>()
+
+        if (context != null) {
+            context.getExternalFilesDir("backups")?.let { candidateDirs.add(it) }
+            candidateDirs.add(File(context.filesDir, "backups"))
+            context.getExternalFilesDir("backups")?.let { base ->
+                candidateDirs.add(File(base, worldName))
+                candidateDirs.add(File(base, sanitized))
+            }
+            candidateDirs.add(File(context.filesDir, "backups/$worldName"))
+            candidateDirs.add(File(context.filesDir, "backups/$sanitized"))
+        }
+
         val downloads = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-        val candidates = listOf(
+        candidateDirs.addAll(listOf(
             File(downloads, "$LEGACY_BACKUP_FOLDER/$worldName"),
             File(downloads, "$EXPORTED_BACKUP_FOLDER/$worldName"),
             File(downloads, "PocketCraftWorldBackups/$worldName"),
-            File(downloads, "$LEGACY_BACKUP_FOLDER/${sanitizeWorldName(worldName)}"),
-            File(downloads, "$EXPORTED_BACKUP_FOLDER/${sanitizeWorldName(worldName)}"),
-            File(downloads, "PocketCraftWorldBackups/${sanitizeWorldName(worldName)}")
-        )
-        return candidates
+            File(downloads, "$LEGACY_BACKUP_FOLDER/$sanitized"),
+            File(downloads, "$EXPORTED_BACKUP_FOLDER/$sanitized"),
+            File(downloads, "PocketCraftWorldBackups/$sanitized")
+        ))
+        return candidateDirs
             .flatMap { dir ->
                 dir.listFiles()
                     ?.filter { it.isFile && it.extension.equals("zip", ignoreCase = true) }
@@ -318,7 +332,7 @@ object DriveBackupManager {
                 tempFile.delete()
             }
         }
-        return latestBackupFile(worldName)?.takeIf { it.exists() && it.canRead() }
+        return latestBackupFile(worldName, context)?.takeIf { it.exists() && it.canRead() }
     }
 
     private fun queryBackupUriForPath(context: Context, relativePathPattern: String): android.net.Uri? {

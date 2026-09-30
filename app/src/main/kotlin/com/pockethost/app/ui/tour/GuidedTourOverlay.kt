@@ -197,16 +197,25 @@ fun GuidedTourOverlay(
                 )
             }
         ) { measurables, constraints ->
+            val firstMeasurable = measurables.firstOrNull() ?: return@Layout layout(0, 0) {}
             val margin = 16.dp.roundToPx()
             val gap = 18.dp.roundToPx()
-            val card = measurables.first().measure(
-                Constraints(
-                    minWidth = 0,
-                    maxWidth = (constraints.maxWidth - margin * 2).coerceAtLeast(0),
-                    minHeight = 0,
-                    maxHeight = constraints.maxHeight
+            val card = try {
+                firstMeasurable.measure(
+                    Constraints(
+                        minWidth = 0,
+                        maxWidth = (constraints.maxWidth - margin * 2).coerceAtLeast(0),
+                        minHeight = 0,
+                        maxHeight = constraints.maxHeight
+                    )
                 )
-            )
+            } catch (e: IllegalArgumentException) {
+                if (e.message?.contains("deactivated node", ignoreCase = true) == true) {
+                    return@Layout layout(0, 0) {}
+                } else {
+                    throw e
+                }
+            }
             layout(constraints.maxWidth, constraints.maxHeight) {
                 val effectiveTopInset = if (constraints.maxHeight < 2000 && holeRect.top < constraints.maxHeight * 0.7f) 0 else topInsetPx
                 val topLimit = effectiveTopInset + margin

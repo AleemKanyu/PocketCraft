@@ -34,6 +34,7 @@ open class PocketHostApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         AppPreferences.init(this)
+        com.pockethost.app.network.RconSecret.init(this)
 
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->

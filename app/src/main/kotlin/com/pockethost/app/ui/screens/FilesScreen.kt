@@ -97,7 +97,7 @@ fun FilesScreen(
             cloudBackupProgress = 0
             cloudBackupStatus = "Preparing Google Cloud backup..."
             try {
-                val existingBackup = DriveBackupManager.latestBackupFile(stateHolder.activeWorld)
+                val existingBackup = DriveBackupManager.latestBackupFile(stateHolder.activeWorld, context)
                 if (existingBackup == null || !existingBackup.exists()) {
                     cloudBackupStatus = "Creating fresh world backup..."
                     stateHolder.startCreateBackup { statusMsg ->

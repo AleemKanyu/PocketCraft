@@ -138,9 +138,11 @@ fun PlayerDetailScreen(
     var delAdv by remember { mutableStateOf(false) }
     var confirmDeleteData by remember { mutableStateOf(false) }
 
-    val commandTarget = remember(player.name) { playerCommandTarget(player.name) }
+    val onlinePlayer = stateHolder.onlinePlayers.firstOrNull { canonicalPlayerName(it.name) == canonicalPlayerName(player.name) }
+    val isPlayerOnline = onlinePlayer != null
+    val targetPlayerName = onlinePlayer?.name ?: player.name
+    val commandTarget = remember(targetPlayerName) { playerCommandTarget(targetPlayerName) }
     val latestLogLine = stateHolder.logs.lastOrNull()
-    val isPlayerOnline = stateHolder.onlinePlayers.any { it.name.equals(player.name, ignoreCase = true) }
 
     fun syncModerationFlags() {
         scope.launch {
@@ -207,9 +209,17 @@ fun PlayerDetailScreen(
         }
     }
 
+    LaunchedEffect(onlinePlayer?.x, onlinePlayer?.y, onlinePlayer?.z, onlinePlayer?.worldName) {
+        val op = onlinePlayer ?: return@LaunchedEffect
+        if (op.x != null && op.y != null && op.z != null) {
+            val dim = if (op.worldName.isBlank()) "minecraft:overworld" else op.worldName
+            currentPos = PlayerLocation(op.x.toDouble(), op.y.toDouble(), op.z.toDouble(), NBTParser.parseDimension(dim))
+        }
+    }
+
     // Polling loop for live data
-    LaunchedEffect(player.name, isPlayerOnline, stateHolder.status, refreshTrigger) {
-        if (!isPlayerOnline || stateHolder.status != ServerStatus.ONLINE) return@LaunchedEffect
+    LaunchedEffect(targetPlayerName, isPlayerOnline, stateHolder.isRunning, refreshTrigger) {
+        if (!isPlayerOnline || !stateHolder.isRunning) return@LaunchedEffect
         while (isActive) {
             withContext(Dispatchers.IO) {
                 try {
@@ -270,8 +280,8 @@ fun PlayerDetailScreen(
         }
     }
 
-    LaunchedEffect(player.name, latestLogLine, isPlayerOnline, stateHolder.status) {
-        if (!isPlayerOnline || stateHolder.status != ServerStatus.ONLINE) return@LaunchedEffect
+    LaunchedEffect(targetPlayerName, latestLogLine, isPlayerOnline, stateHolder.isRunning) {
+        if (!isPlayerOnline || !stateHolder.isRunning) return@LaunchedEffect
         val latest = latestLogLine.orEmpty().lowercase()
         val normalizedName = canonicalPlayerName(player.name)
         val mentionsPlayer = latest.contains(player.name.lowercase()) || latest.contains(normalizedName)

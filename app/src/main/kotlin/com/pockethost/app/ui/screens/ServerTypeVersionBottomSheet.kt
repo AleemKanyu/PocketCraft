@@ -530,7 +530,7 @@ fun ServerTypeVersionBottomSheet(
         AlertDialog(
             onDismissRequest = { versionToDelete = null },
             title = { Text("Delete Version", fontWeight = FontWeight.Bold) },
-            text = { Text("Are you sure you want to delete the imported files for $versionToDelete? This will free up storage, but you will need to import the server JAR again to use it.") },
+            text = { Text("Are you sure you want to delete the downloaded files for $versionToDelete? This will free up storage, but you will need to download it again to use it.") },
             confirmButton = {
                 TextButton(onClick = {
                     versionToDelete?.let { viewModel.deleteDownloadedVersion(it) }
@@ -801,7 +801,7 @@ private fun VersionListItemRow(
                     )
                 } else if (isDownloaded) {
                     Text(
-                        text = "Imported",
+                        text = "Downloaded",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold,
                         color = itemSubtext

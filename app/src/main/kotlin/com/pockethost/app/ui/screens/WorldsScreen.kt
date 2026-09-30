@@ -950,14 +950,14 @@ private fun BackupsManagementCard(
             cloudBackupStatus = "Preparing Google Cloud backup..."
             try {
                 var targetFile = stateHolder.backups.firstOrNull()?.file
-                    ?: DriveBackupManager.latestBackupFile(stateHolder.activeWorld)
+                    ?: DriveBackupManager.latestBackupFile(stateHolder.activeWorld, context)
 
                 if (targetFile == null || !targetFile.exists()) {
                     if (stateHolder.status == ServerStatus.OFFLINE) {
                         cloudBackupStatus = "Creating local backup before upload..."
                         stateHolder.createBackup()
                         targetFile = stateHolder.backups.firstOrNull()?.file
-                            ?: DriveBackupManager.latestBackupFile(stateHolder.activeWorld)
+                            ?: DriveBackupManager.latestBackupFile(stateHolder.activeWorld, context)
                     } else {
                         val msg = "No local backup found. Stop the server to create a backup."
                         cloudBackupStatus = msg

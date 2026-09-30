@@ -119,6 +119,9 @@ class ServerHostService : Service() {
         get() = com.pockethost.app.data.preferences.AppPreferences(applicationContext).alwaysAliveBackground || keepListenerRunningManual
     private val logBuffer = ArrayDeque<String>(1000)
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val localPortCheckExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "local-port-check").apply { isDaemon = true }
+    }
     @Volatile private var relayJob: Job? = null
     private var relayReconnectJob: Job? = null
     private var currentServerPort: Int = 25565
@@ -137,6 +140,7 @@ class ServerHostService : Service() {
     private var serverStartTimeMillis: Long = 0L
     @Volatile private var serviceLaunchRealtimeMs: Long = 0L
     @Volatile private var hasSeenServerStarting = false
+    @Volatile private var bedrockBridgeFailureReported = false
 
     private var pendingRestartVersionId: String? = null
     private var pendingRestartWorldName: String? = null
@@ -379,6 +383,9 @@ class ServerHostService : Service() {
         }
 
         isLaunching = true
+        serviceLaunchRealtimeMs = SystemClock.elapsedRealtime()
+        bedrockBridgeFailureReported = false
+        hasSeenServerStarting = false
         currentVersionId = versionId
         currentWorldName = worldName
         stopReason = "unknown"
@@ -426,15 +433,33 @@ class ServerHostService : Service() {
 
 
 
+        val serverDir = com.pockethost.app.service.ServerFileManager.getServerDir(applicationContext, worldName)
+        isNewWorld = !resolveLevelDir(serverDir).exists()
+
+        runCatching {
+            val nukkitLog = File(serverDir, "logs/server.log")
+            if (nukkitLog.exists()) nukkitLog.delete()
+            val latestLog = File(serverDir, "logs/latest.log")
+            if (latestLog.exists()) {
+                // Start the tail on an empty log so an old "Done" line can't mark this launch
+                // ready, but keep the last session (often the crash being reported) around.
+                val previousLog = File(serverDir, "logs/previous-session.log")
+                if (!latestLog.renameTo(previousLog)) {
+                    runCatching { latestLog.copyTo(previousLog, overwrite = true) }
+                    latestLog.delete()
+                }
+                if (latestLog.exists()) {
+                    runCatching { java.io.FileOutputStream(latestLog).close() }
+                }
+            }
+        }
+
         startServerLogTail(versionId, worldName)
         val serverPort = resolveServerPort(worldName)
         currentServerPort = serverPort
         startPortProbe(versionId, serverPort)
         scheduleServerReadyFallback(versionId)
         acquireWakeLock()
-
-        val serverDir = com.pockethost.app.service.ServerFileManager.getServerDir(applicationContext, worldName)
-        isNewWorld = !resolveLevelDir(serverDir).exists()
 
 
 
@@ -632,6 +657,7 @@ class ServerHostService : Service() {
         relayReconnectJob = null
         widgetUpdateJob?.cancel()
         widgetUpdateJob = null
+        localPortCheckExecutor.shutdownNow()
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (_: Exception) {}
@@ -899,6 +925,7 @@ class ServerHostService : Service() {
         }
         serviceScope.launch { AppPreferencesStore.setServerStartedAtMillis(applicationContext, 0L) }
         serverStartTimeMillis = 0L
+        serviceLaunchRealtimeMs = 0L
         pushWidgetUpdate("stopping")
     }
 
@@ -925,6 +952,7 @@ class ServerHostService : Service() {
         }
         serviceScope.launch { AppPreferencesStore.setServerStartedAtMillis(applicationContext, 0L) }
         serverStartTimeMillis = 0L
+        serviceLaunchRealtimeMs = 0L
         pushWidgetUpdate("stopping")
     }
 
@@ -974,7 +1002,7 @@ class ServerHostService : Service() {
                 serverDir = serverDir,
                 onProgress = { pct ->
                     updateNotification("${ServerStage.DOWNLOADING_SERVER.notificationText} $pct%", force = false)
-                    sendEvent(versionId, EVENT_OUTPUT, "Checking imported server JAR: $pct%")
+                    sendEvent(versionId, EVENT_OUTPUT, "Checking server JAR: $pct%")
                 }
             ).collect { resolvedJar = it }
             resolvedJar ?: throw IllegalStateException("Server JAR could not be resolved")
@@ -987,10 +1015,35 @@ class ServerHostService : Service() {
         jar
     }
 
+    /**
+     * Most callers run on [serviceScope], which is the main thread, and Android throws
+     * NetworkOnMainThreadException for any socket there. runCatching used to turn that
+     * into "port closed", so readiness was never promoted from the port probe or the
+     * fallback poll and the internet relay only opened after a manual retry. Hop off
+     * the main thread for the probe; a loopback connect answers in milliseconds.
+     */
     private fun isLocalServerPortOpen(port: Int): Boolean {
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            return probeLocalServerPort(port)
+        }
         return runCatching {
+            localPortCheckExecutor.submit<Boolean> { probeLocalServerPort(port) }
+                .get(1_500L, java.util.concurrent.TimeUnit.MILLISECONDS)
+        }.getOrDefault(false)
+    }
+
+    private fun probeLocalServerPort(port: Int): Boolean {
+        val ipv4Ok = runCatching {
             Socket().use { socket ->
                 socket.connect(InetSocketAddress("127.0.0.1", port), 250)
+                true
+            }
+        }.getOrDefault(false)
+        if (ipv4Ok) return true
+
+        return runCatching {
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress("::1", port), 250)
                 true
             }
         }.getOrDefault(false)
@@ -1409,6 +1462,7 @@ class ServerHostService : Service() {
 
         logTailThread = Thread {
             var offset = initialOffset
+            var effectiveTailStart = tailStartLength
             while (logTailRunning.get() && !Thread.currentThread().isInterrupted) {
                 try {
                     if (!latestLog.exists()) {
@@ -1418,6 +1472,7 @@ class ServerHostService : Service() {
 
                     if (latestLog.length() < offset) {
                         offset = 0L
+                        effectiveTailStart = 0L
                     }
 
                     RandomAccessFile(latestLog, "r").use { raf ->
@@ -1433,7 +1488,7 @@ class ServerHostService : Service() {
                                 .orEmpty()
 
                             if (line.isBlank()) continue
-                            val isBacklog = currentOffset <= tailStartLength
+                            val isBacklog = currentOffset <= effectiveTailStart
                             handleObservedOutputLine(versionId, line, isBacklog)
                         }
                         offset = raf.filePointer
@@ -1466,24 +1521,39 @@ class ServerHostService : Service() {
             try {
                 while (portProbeRunning.get() && !Thread.currentThread().isInterrupted) {
                     try {
-                        Socket().use { socket ->
-                            socket.connect(InetSocketAddress("127.0.0.1", port), 350)
+                        val connected = runCatching {
+                            Socket().use { socket ->
+                                socket.connect(InetSocketAddress("127.0.0.1", port), 350)
+                                true
+                            }
+                        }.getOrElse {
+                            runCatching {
+                                Socket().use { socket ->
+                                    socket.connect(InetSocketAddress("::1", port), 350)
+                                    true
+                                }
+                            }.getOrDefault(false)
                         }
+                        if (!connected) throw java.io.IOException("Port $port not open yet")
                         val line = "[PocketHost] Server port $port is open. Finalizing startup..."
                         sendEvent(versionId, EVENT_OUTPUT, line)
                         updateNotification("Finalizing server startup...", force = true)
                         hasSeenServerStarting = true
 
                         // If the log tail missed the "Done!" line or logcat bridge is inactive,
-                        // promote readiness after a short grace period once the port is open and listening.
+                        // promote readiness once the port is open and listening. Paper binds the
+                        // port long before the world finishes loading, so give "Done" a chance
+                        // first; promoting right away showed ONLINE while joins still failed.
                         serviceScope.launch {
-                            delay(10_000L)
-                            if (currentVersionId == versionId && !serverReadyHandled.get()) {
-                                val stillOpen = isLocalServerPortOpen(port)
-                                if (stillOpen) {
+                            delay(PORT_ONLY_READY_GRACE_MS)
+                            val deadline = SystemClock.elapsedRealtime() + 300_000L
+                            while (!serverReadyHandled.get() && currentVersionId == versionId && SystemClock.elapsedRealtime() < deadline) {
+                                if (isLocalServerPortOpen(port)) {
                                     android.util.Log.i("ServerHostService", "Port $port verified open; promoting server readiness via port probe watchdog.")
                                     onServerReady()
+                                    break
                                 }
+                                delay(3_000L)
                             }
                         }
                         break
@@ -1533,7 +1603,6 @@ class ServerHostService : Service() {
 
     @Keep
     private fun looksLikeServerReady(line: String): Boolean {
-        if (!hasSeenServerStarting) return false
         return ConsoleParser.isDone(line)
     }
 
@@ -1543,7 +1612,14 @@ class ServerHostService : Service() {
         portProbeThread = null
     }
 
-    private fun onRelayReadyToStart(versionId: String) {
+    /**
+     * @param clearStaleSession drop any session the relay still holds for this phone
+     *   before registering. A crash, process recycle or network change can leave the
+     *   old tunnel alive on the relay with dead phone sockets filling its pool, and
+     *   /register then hands that tunnel back. The manual retry already unregisters
+     *   first ([reconnectRelay]), which is why only retrying used to work.
+     */
+    private fun onRelayReadyToStart(versionId: String, clearStaleSession: Boolean = true) {
         if (relayJob?.isActive == true) {
             android.util.Log.d("ServerHostService", "onRelayReadyToStart: Tunnel already running, skipping.")
             return
@@ -1559,6 +1635,16 @@ class ServerHostService : Service() {
             try {
                 var registrationAttempts = 0
                 val maxRegistrationAttempts = 5
+                var reportedUnavailable = false
+                if (clearStaleSession) {
+                    runCatching {
+                        kotlinx.coroutines.withTimeout(5_000L) {
+                            relayManager.unregister()
+                        }
+                    }.onFailure { error ->
+                        android.util.Log.w("ServerHostService", "Clearing stale relay session failed: ${error.message}")
+                    }
+                }
                 relayManager.disconnect()
                 relayManager.startBedrockBridge()
 
@@ -1568,11 +1654,13 @@ class ServerHostService : Service() {
 
                         registrationAttempts++
                         android.util.Log.i("ServerHostService", "Relay registration attempt $registrationAttempts/$maxRegistrationAttempts")
-                        sendEvent(
-                            versionId,
-                            EVENT_OUTPUT,
-                            "[PocketHost] Relay attempt $registrationAttempts/$maxRegistrationAttempts..."
-                        )
+                        if (!reportedUnavailable) {
+                            sendEvent(
+                                versionId,
+                                EVENT_OUTPUT,
+                                "[PocketHost] Relay attempt $registrationAttempts/$maxRegistrationAttempts..."
+                            )
+                        }
 
                         val address = relayManager.register()
                         sendEvent(
@@ -1612,8 +1700,10 @@ class ServerHostService : Service() {
                         sendBroadcast(intent)
                         publishRelayStatus(versionId)
                         startRelayStatusHeartbeat(versionId)
-
-
+                        if (reportedUnavailable) {
+                            reportedUnavailable = false
+                            updateNotification(ServerStage.RUNNING.notificationText, force = true)
+                        }
 
                         while (isActive) {
                             delay(60_000)
@@ -1622,29 +1712,42 @@ class ServerHostService : Service() {
                         if (!isActive) break
 
                         android.util.Log.e("ServerHostService", "Relay Error (attempt $registrationAttempts): ${e.message}")
-                        sendEvent(
-                            versionId,
-                            EVENT_OUTPUT,
-                            "[PocketHost] Relay attempt $registrationAttempts failed: ${e.message ?: "unknown error"}"
-                        )
+                        if (!reportedUnavailable) {
+                            sendEvent(
+                                versionId,
+                                EVENT_OUTPUT,
+                                "[PocketHost] Relay attempt $registrationAttempts failed: ${e.message ?: "unknown error"}"
+                            )
+                        }
                         relayStatusJob?.cancel()
                         relayStatusJob = null
 
-                        // Ensure failed attempts do not keep stale sockets around.
+                        // Ensure failed attempts do not keep stale sockets around, here or on the relay.
+                        runCatching {
+                            kotlinx.coroutines.withTimeout(5_000L) {
+                                relayManager.unregister()
+                            }
+                        }
                         relayManager.disconnect()
                         relayManager.startBedrockBridge()
 
                         if (registrationAttempts >= maxRegistrationAttempts) {
-                            android.util.Log.e("ServerHostService", "Max registration attempts reached. Stopping retry loop.")
-                            currentVersionId?.let {
-                                sendEvent(
-                                    it,
-                                    EVENT_TUNNEL_FAILED,
-                                    "Internet relay is unavailable right now. Players on the same Wi-Fi can still join with the LAN address."
-                                )
+                            if (!reportedUnavailable) {
+                                reportedUnavailable = true
+                                android.util.Log.e("ServerHostService", "Max registration attempts reached. Retrying in the background.")
+                                currentVersionId?.let {
+                                    sendEvent(
+                                        it,
+                                        EVENT_TUNNEL_FAILED,
+                                        "Internet relay is unavailable right now. Players on the same Wi-Fi can still join with the LAN address."
+                                    )
+                                }
+                                updateNotification("LAN only: internet relay unavailable", force = true)
                             }
-                            updateNotification("LAN only: internet relay unavailable", force = true)
-                            break
+                            // Keep trying quietly so the relay comes back on its own once the
+                            // network or the relay recovers, instead of waiting for a manual retry.
+                            delay(30_000L)
+                            continue
                         }
 
                         delay(5000)
@@ -1693,7 +1796,8 @@ class ServerHostService : Service() {
             }
             delay(500)
             if (!isActive || currentVersionId != versionId || stopInProgress.get()) return@launch
-            onRelayReadyToStart(versionId)
+            // Already unregistered above (or deliberately skipped for a region switch).
+            onRelayReadyToStart(versionId, clearStaleSession = false)
         }
     }
 
@@ -1704,7 +1808,7 @@ class ServerHostService : Service() {
             return
         }
 
-        currentVersionId?.let(::onRelayReadyToStart)
+        currentVersionId?.let { onRelayReadyToStart(it) }
         setServerReadyState(true)
         serverReadyFallbackJob?.cancel()
         serverReadyFallbackJob = null
@@ -1850,6 +1954,7 @@ class ServerHostService : Service() {
         serverReadyFallbackJob?.cancel()
         serverReadyFallbackJob = serviceScope.launch {
             val deadline = SystemClock.elapsedRealtime() + 600_000L
+            var portOpenSinceMs = 0L
             while (isActive && SystemClock.elapsedRealtime() < deadline) {
                 delay(5_000L)
                 if (currentVersionId == versionId && !serverReadyHandled.get()) {
@@ -1857,7 +1962,16 @@ class ServerHostService : Service() {
                     val hasProc = serverProcess?.isAlive == true ||
                         ServerLauncher.hasActiveExternalProcess() ||
                         NativeLauncher.hasInProcessJvmRunInThisProcess
-                    if (portOpen && hasProc) {
+                    // Only fall back to "port is open" once it has stayed open for a while;
+                    // the "Done" log line is the real ready signal and usually lands first.
+                    portOpenSinceMs = if (portOpen && hasProc) {
+                        portOpenSinceMs.takeIf { it > 0L } ?: SystemClock.elapsedRealtime()
+                    } else {
+                        0L
+                    }
+                    val openLongEnough = portOpenSinceMs > 0L &&
+                        SystemClock.elapsedRealtime() - portOpenSinceMs >= PORT_ONLY_READY_GRACE_MS
+                    if (openLongEnough) {
                         android.util.Log.w(
                             "ServerHostService",
                             "Port $currentServerPort verified open during fallback poll for $versionId. Promoting readiness."
@@ -1872,6 +1986,7 @@ class ServerHostService : Service() {
                 !serverReadyHandled.get() &&
                 (serverProcess?.isAlive == true ||
                     ServerLauncher.hasActiveExternalProcess() ||
+                    NativeLauncher.hasInProcessJvmRunInThisProcess ||
                     isLocalServerPortOpen(currentServerPort))
             if (shouldPromote) {
                 android.util.Log.w(
@@ -2033,6 +2148,9 @@ class ServerHostService : Service() {
         reason: String
     ): Int {
         isLaunching = true
+        serviceLaunchRealtimeMs = SystemClock.elapsedRealtime()
+        bedrockBridgeFailureReported = false
+        hasSeenServerStarting = true
         currentVersionId = versionId
         currentWorldName = worldName
         currentServerPort = serverPort
@@ -2136,6 +2254,7 @@ class ServerHostService : Service() {
 
         isLaunching = true
         serviceLaunchRealtimeMs = SystemClock.elapsedRealtime()
+        bedrockBridgeFailureReported = false
         hasSeenServerStarting = false
         currentVersionId = versionId
         currentWorldName = worldName
@@ -2145,7 +2264,13 @@ class ServerHostService : Service() {
             if (nukkitLog.exists()) nukkitLog.delete()
             val latestLog = File(serverDir, "logs/latest.log")
             if (latestLog.exists()) {
-                latestLog.delete()
+                // Start the tail on an empty log so an old "Done" line can't mark this launch
+                // ready, but keep the last session (often the crash being reported) around.
+                val previousLog = File(serverDir, "logs/previous-session.log")
+                if (!latestLog.renameTo(previousLog)) {
+                    runCatching { latestLog.copyTo(previousLog, overwrite = true) }
+                    latestLog.delete()
+                }
                 if (latestLog.exists()) {
                     runCatching { java.io.FileOutputStream(latestLog).close() }
                 }
@@ -2423,9 +2548,34 @@ class ServerHostService : Service() {
             hasSeenServerStarting = true
         }
 
+        val elapsedSinceLaunch = if (serviceLaunchRealtimeMs > 0L) {
+            SystemClock.elapsedRealtime() - serviceLaunchRealtimeMs
+        } else {
+            3000L
+        }
+        if (elapsedSinceLaunch >= 2000L || hasSeenServerStarting) {
+            if (looksLikeServerReady(line)) {
+                android.util.Log.i("ServerHostService", "Server ready signal detected on log line (isBacklog=$isBacklog): $line")
+                onServerReady()
+            }
+        }
+
         addLogLine(line)
         sendEvent(versionId, EVENT_OUTPUT, line)
         if (isBacklog) return
+        // Geyser sometimes lags behind brand-new Paper builds and refuses to enable. The
+        // crossplay toggle still reads ENABLED then, so say plainly that Bedrock is down.
+        if (!bedrockBridgeFailureReported &&
+            line.contains("Error occurred while enabling Geyser", ignoreCase = true)
+        ) {
+            bedrockBridgeFailureReported = true
+            sendEvent(
+                versionId,
+                EVENT_OUTPUT,
+                "[PocketHost] Bedrock crossplay could not start: Geyser does not support this Minecraft version yet. " +
+                    "Java players can still join. For Bedrock players, switch to an older version such as 1.21.x."
+            )
+        }
         ConsoleParser.parseTps(line)?.let { parsedTps ->
             currentServerTps = parsedTps
             triggerDashboardStatusUpdate()
@@ -2486,14 +2636,6 @@ class ServerHostService : Service() {
 
                 val msg = "[PocketHost] Server RAM: ${used}MB used of ${max}MB max"
                 ServerLauncher.sendCommand("tellraw $name {\"text\":\"$msg\",\"color\":\"green\"}")
-            }
-        }
-
-        val elapsedSinceLaunch = SystemClock.elapsedRealtime() - serviceLaunchRealtimeMs
-        if (serviceLaunchRealtimeMs > 0L && elapsedSinceLaunch >= 3000L && !isBacklog) {
-            if (looksLikeServerReady(line)) {
-                android.util.Log.i("ServerHostService", "Server ready signal detected on log line (isBacklog=$isBacklog): $line")
-                onServerReady()
             }
         }
 
@@ -2674,31 +2816,12 @@ class ServerHostService : Service() {
     }
 
     private fun sendRconStop() {
-        try {
-            val password = "pocketcraft-internal-rcon"
-            java.net.Socket().use { socket ->
-                socket.connect(java.net.InetSocketAddress("127.0.0.1", 25575), 2000)
-                socket.soTimeout = 3000
-                val out = java.io.DataOutputStream(socket.getOutputStream())
-                val inp = java.io.DataInputStream(socket.getInputStream())
-
-                fun writeIntLE(v: Int) { out.write(v and 0xFF); out.write((v shr 8) and 0xFF); out.write((v shr 16) and 0xFF); out.write((v shr 24) and 0xFF) }
-                fun readIntLE(): Int { val b0=inp.read();val b1=inp.read();val b2=inp.read();val b3=inp.read(); return (b0 and 0xFF) or ((b1 and 0xFF) shl 8) or ((b2 and 0xFF) shl 16) or ((b3 and 0xFF) shl 24) }
-                fun sendPkt(id: Int, type: Int, payload: String) {
-                    val pb = payload.toByteArray(Charsets.UTF_8)
-                    writeIntLE(4 + 4 + pb.size + 2); writeIntLE(id); writeIntLE(type); out.write(pb); out.write(0); out.write(0); out.flush()
-                }
-                fun readPkt(): Int { val len=readIntLE(); val id=readIntLE(); readIntLE(); val payLen=(len-10).coerceAtLeast(0); if(payLen>0) inp.skipBytes(payLen); inp.read(); inp.read(); return id }
-
-                sendPkt(1, 3, password)
-                val authId = readPkt()
-                if (authId != -1) {
-                    sendPkt(2, 2, "stop")
-                    readPkt()
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("ServerHostService", "RCON stop failed: ${e.message}")
+        // Shares RconClient's framing (whole packets per write) and the per-install
+        // password. The server often closes the socket before answering "stop", so an
+        // empty reply here does not mean the stop was lost.
+        val reply = com.pockethost.app.network.RconClient.sendCommand("stop", timeoutMs = 3000)
+        if (reply.isEmpty()) {
+            android.util.Log.w("ServerHostService", "RCON stop sent without a reply (server may already be shutting down)")
         }
     }
 
@@ -3032,6 +3155,8 @@ class ServerHostService : Service() {
         private const val NOTIFICATION_UPDATE_INTERVAL_MS = 2500L
         private const val IMPORTANT_NOTIFICATION_UPDATE_INTERVAL_MS = 750L
         private const val STOP_GRACE_PERIOD_MS = 15_000L
+        /** How long the game port must stay open before it alone counts as "ready". */
+        private const val PORT_ONLY_READY_GRACE_MS = 60_000L
 
         const val ACTION_START = "com.pockethost.app.action.START"
         const val ACTION_START_LISTENER = "com.pockethost.app.action.START_LISTENER"

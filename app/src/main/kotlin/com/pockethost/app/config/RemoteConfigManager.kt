@@ -46,9 +46,12 @@ object RemoteConfigManager {
 
             val defaultRelayRegionsJson = serializeRelayRegions(RelayServers.defaultRegions())
 
-            // Set in-app defaults
-            remoteConfig.setDefaultsAsync(com.pockethost.app.R.xml.remote_config_defaults).await()
-            remoteConfig.setDefaultsAsync(mapOf("relay_servers" to defaultRelayRegionsJson)).await()
+            // Set in-app defaults in ONE call: each setDefaultsAsync replaces the whole
+            // default set, so the old second call (relay_servers only) wiped every XML
+            // default and unpublished keys such as review_prompt_enabled read as false.
+            remoteConfig.setDefaultsAsync(
+                xmlDefaults(context) + ("relay_servers" to defaultRelayRegionsJson)
+            ).await()
 
             // Fetch and activate remote config
             remoteConfig.fetchAndActivate().await()
@@ -66,6 +69,46 @@ object RemoteConfigManager {
             hydrateRelayRegionsFromCache(context)
             isInitialized = true
         }
+    }
+
+    /**
+     * Reads res/xml/remote_config_defaults.xml into a map so it can be merged with
+     * code-built defaults. Unlike Firebase's own XML loader this keeps entries with an
+     * empty <value/> (relay_region_disabled_list) as "" instead of dropping them.
+     */
+    private fun xmlDefaults(context: Context): Map<String, Any> {
+        val defaults = mutableMapOf<String, Any>()
+        val parser = context.resources.getXml(com.pockethost.app.R.xml.remote_config_defaults)
+        try {
+            var tag: String? = null
+            var key: String? = null
+            var value: String? = null
+            while (parser.eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                when (parser.eventType) {
+                    org.xmlpull.v1.XmlPullParser.START_TAG -> {
+                        tag = parser.name
+                        if (tag == "entry") {
+                            key = null
+                            value = null
+                        }
+                    }
+                    org.xmlpull.v1.XmlPullParser.TEXT -> when (tag) {
+                        "key" -> key = parser.text.trim()
+                        "value" -> value = parser.text.trim()
+                    }
+                    org.xmlpull.v1.XmlPullParser.END_TAG -> {
+                        if (parser.name == "entry") {
+                            key?.takeIf { it.isNotEmpty() }?.let { defaults[it] = value.orEmpty() }
+                        }
+                        tag = null
+                    }
+                }
+                parser.next()
+            }
+        } finally {
+            parser.close()
+        }
+        return defaults
     }
 
     suspend fun refreshConfig(context: Context) {

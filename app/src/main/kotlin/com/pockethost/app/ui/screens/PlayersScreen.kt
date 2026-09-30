@@ -295,7 +295,7 @@ fun PlayersOnlineTab(
     var prefilledAfkZ by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
-    val players = stateHolder.sessionPlayers
+    val players = (stateHolder.onlinePlayers + stateHolder.sessionPlayers)
         .distinctBy { canonicalPlayerName(it.name) }
     val filtered = players.filter { it.name.contains(searchQuery, ignoreCase = true) }
 
@@ -414,23 +414,25 @@ fun PlayersOnlineTab(
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             itemsIndexed(filtered.take(visibleCount), key = { _, player -> player.name }) { idx, player ->
-                val isOnline = stateHolder.onlinePlayers.any { canonicalPlayerName(it.name) == canonicalPlayerName(player.name) }
+                val onlinePlayer = stateHolder.onlinePlayers.firstOrNull { canonicalPlayerName(it.name) == canonicalPlayerName(player.name) }
+                val isOnline = onlinePlayer != null
+                val displayPlayer = onlinePlayer ?: player
                 AnimatedEntranceContainer(index = minOf(idx, 8)) {
                     PlayerOnlineCard(
-                        player = player,
+                        player = displayPlayer,
                         isOnline = isOnline,
                         isServerRunning = stateHolder.isRunning,
-                        onOpenDetails = { onPlayerSelected(player) },
-                        onKick = { stateHolder.kickPlayer(player.name) },
-                        onBan = { stateHolder.banPlayer(player.name) },
+                        onOpenDetails = { onPlayerSelected(displayPlayer) },
+                        onKick = { stateHolder.kickPlayer(displayPlayer.name) },
+                        onBan = { stateHolder.banPlayer(displayPlayer.name) },
                         onOp = {
-                            if (player.isOp) stateHolder.removeOp(player.name) else stateHolder.opPlayer(player.name)
+                            if (displayPlayer.isOp) stateHolder.removeOp(displayPlayer.name) else stateHolder.opPlayer(displayPlayer.name)
                         },
                         onAddAfkHelper = {
                             Toast.makeText(context, "Fetching player location...", Toast.LENGTH_SHORT).show()
                             scope.launch {
-                                val location = stateHolder.suggestAfkFarmLocation(player.name)
-                                prefilledAfkName = "${player.name}'s Farm"
+                                val location = stateHolder.suggestAfkFarmLocation(displayPlayer.name)
+                                prefilledAfkName = "${displayPlayer.name}'s Farm"
                                 if (location != null) {
                                     prefilledAfkX = location.first.toString()
                                     prefilledAfkY = location.second.toString()
@@ -1633,7 +1635,11 @@ fun WhitelistTab(
 ) {
     var query by remember { mutableStateOf("") }
     val addedNames = remember { mutableStateListOf<String>() }
-    val searchResults = remember(players, stateHolder.knownPlayers, query) {
+    // Computed on every recomposition on purpose: `players` and knownPlayers are the same
+    // snapshot-list instances as they change, so remember(players, ...) never saw a new
+    // key and kept an empty result after adding someone ("Whitelist (1)" over an empty list).
+    // Reading them here subscribes to their changes; the lists are small.
+    val searchResults = run {
         val trimmedQuery = query.trim()
         if (trimmedQuery.isBlank()) {
             players.map { WhitelistSearchResult(it, isWhitelisted = true) }

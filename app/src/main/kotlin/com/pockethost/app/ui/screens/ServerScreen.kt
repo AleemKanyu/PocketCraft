@@ -223,6 +223,27 @@ fun ServerScreen(
         settingsInitialAuthTab = null
     }
 
+    // What a bottom-bar tap does: close any full-screen page first, then switch tab.
+    // The top-bar Settings gear uses it too so it also works from those pages.
+    fun selectTab(tab: PocketTab) {
+        showConfigEditor = false
+        showFileEditor = false
+        showServerDetailsPage = false
+        showWorldMapPage = false
+        if (showSetupLoading) {
+            showSetupLoading = false
+            setupLoadingProgress = 0f
+        }
+        if (showWorldSetupPage) {
+            showWorldSetupPage = false
+            worldSetupCreateMode = false
+        }
+        if (showLegalPage) {
+            showLegalPage = false
+        }
+        navigateToTab(tab)
+    }
+
     fun openWorldSetup(createMode: Boolean) {
         worldSetupCreateMode = createMode
         showWorldSetupPage = false
@@ -336,6 +357,11 @@ fun ServerScreen(
                 },
                 onPremiumUpgradeClick = {
                     showPremiumBottomSheet = true
+                },
+                // Settings left the bottom bar for the top-bar gear; without this the
+                // gear used PocketTopBar's no-op default and did nothing.
+                onSettingsClick = {
+                    selectTab(PocketTab.SETTINGS)
                 }
             )
         },
@@ -885,24 +911,7 @@ fun ServerScreen(
                 ) {
                     PocketBottomNav(
                         currentTab = currentTab,
-                        onTabSelected = { tab ->
-                            showConfigEditor = false
-                            showFileEditor = false
-                            showServerDetailsPage = false
-                            showWorldMapPage = false
-                            if (showSetupLoading) {
-                                showSetupLoading = false
-                                setupLoadingProgress = 0f
-                            }
-                            if (showWorldSetupPage) {
-                                showWorldSetupPage = false
-                                worldSetupCreateMode = false
-                            }
-                            if (showLegalPage) {
-                                showLegalPage = false
-                            }
-                            navigateToTab(tab)
-                        },
+                        onTabSelected = { tab -> selectTab(tab) },
                         onNewServerClick = {
                             openWorldSetup(createMode = true)
                             currentTab = PocketTab.HOME

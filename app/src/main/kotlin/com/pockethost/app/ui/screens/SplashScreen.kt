@@ -72,7 +72,7 @@ private val splashMascots = listOf(
 )
 
 @Composable
-private fun SplashMascotBackground() {
+internal fun SplashMascotBackground() {
     val isDark = com.pockethost.app.ui.theme.pocketIsDarkTheme()
     val cubeRes = R.drawable.cube_logo_light
     val mascots = remember(cubeRes) {
@@ -287,6 +287,8 @@ fun SplashScreen(
                 Image(
                     painter = painterResource(id = logoRes),
                     contentDescription = null,
+                    // Tint with the theme's text colour so the black cube stays visible on dark themes.
+                    colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(titleColor),
                     modifier = Modifier
                         .size(72.dp)
                         .graphicsLayer {

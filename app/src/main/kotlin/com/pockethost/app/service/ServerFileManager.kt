@@ -150,7 +150,7 @@ object ServerFileManager {
         // Ensure RCON is enabled for in-app console commands
         props.setProperty("enable-rcon", "true")
         props.setProperty("rcon.port", "25575")
-        props.setProperty("rcon.password", "pocketcraft-internal-rcon")
+        props.setProperty("rcon.password", com.pockethost.app.network.RconSecret.current())
         props.setProperty("broadcast-rcon-to-ops", "false")
         props.setProperty("resource-pack-prompt", "§b[PocketHost]§r\\nThis server recommends a resource pack.\\nWould you like to download it?")
 
