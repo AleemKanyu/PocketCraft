@@ -145,3 +145,24 @@ Discord Icon
 License: Flaticon Free License (with attribution)
 URL: https://www.flaticon.com/free-icons/discord
 Attribution: Discord icons created by Aldo Cervantes - Flaticon
+
+---
+
+GeyserReversion (Geyser extension for older Bedrock clients)
+Bundled at: assets/geyser_extensions/GeyserReversion.jar, installed into
+plugins/Geyser-Spigot/extensions/ of each world with Bedrock crossplay.
+Source: https://github.com/AnarchadiaMC/GeyserReversion
+Exact source built: commit 512e6c147934ead8ef89cd7bc0413e7cd8d489af
+https://github.com/AnarchadiaMC/GeyserReversion/tree/512e6c147934ead8ef89cd7bc0413e7cd8d489af
+License: GPL-3.0-only (https://www.gnu.org/licenses/gpl-3.0.html)
+It contains the Ouranos Bedrock protocol translation engine
+(https://github.com/Blackjack200/Ouranos, as adapted in
+https://github.com/oryxel1/Ouranos), which is licensed AGPL-3.0
+(https://www.gnu.org/licenses/agpl-3.0.html).
+PocketHost builds this extension unmodified from the source above with
+scripts/build_geyser_reversion.sh. The complete corresponding source for the
+bundled build is available at the links above; on request PocketHost will also
+provide the matching corresponding-source archive.
+Credit: oryxel1 (original GeyserReversion and Ouranos adaptation),
+Blackjack200 (Ouranos), and the AnarchadiaMC / siberanka maintainers of the
+September 2026 compatibility update.

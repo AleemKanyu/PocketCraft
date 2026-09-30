@@ -1,0 +1,7 @@
+GeyserReversion (Geyser extension)
+source: https://github.com/AnarchadiaMC/GeyserReversion.git
+commit: 512e6c147934ead8ef89cd7bc0413e7cd8d489af
+built-jar: GeyserReversion-1.1.0-all.jar
+sha256: d8abb9cd9aaa0a293eb53e35e68ebaa13dd13333982fb816ad552aa00886bb20
+corresponding-source: third_party_sources/GeyserReversion-1.1.0-corresponding-source.zip
+license: GPL-3.0-only (extension), AGPL-3.0 (bundled Ouranos translation engine)

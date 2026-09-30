@@ -119,7 +119,8 @@ private enum class ContentTab(
 
 private enum class ContentFilter(val displayName: String) {
     NONE("None"),
-    DOWNLOADS("Downloads"),
+    // Shows the plugins installed on this server, not a sort by download count.
+    DOWNLOADS("Installed"),
     UPDATED("Updated"),
     NEWEST("Newest")
 }
@@ -162,6 +163,8 @@ fun PluginsHubScreen(
     var discoverPage by remember { mutableIntStateOf(0) }
     var detailCard by remember { mutableStateOf<ContentDetailCard?>(null) }
     var pendingRemoteInstall by remember { mutableStateOf<PluginManager.RemoteCatalogItem?>(null) }
+    // Installed jar that the pending install is updating; removed once the new jar is in place.
+    var pendingUpdateReplaces by remember { mutableStateOf<Plugin?>(null) }
     var dependenciesList by remember { mutableStateOf<List<PluginManager.ModDependency>>(emptyList()) }
     var isLoadingDependencies by remember { mutableStateOf(false) }
     var isDependencyAutoInstalling by remember { mutableStateOf(false) }
@@ -528,8 +531,26 @@ fun PluginsHubScreen(
                                         packIcon = resourcePackIcons[plugin.fileName]
                                     )
                                 },
-                                onUpdateClick = { remote ->
-                                    pendingRemoteInstall = remote
+                                worldName = stateHolder.activeWorld,
+                                onUpdateClick = { update ->
+                                    val catalogItem = update.catalogItem
+                                    if (update.bridgeProjectId != null) {
+                                        scope.launch {
+                                            isDownloading = true
+                                            onMessage("Updating ${plugin.name}…")
+                                            val result = PluginManager.updateGeyserBridgePlugin(
+                                                context = context,
+                                                worldName = stateHolder.activeWorld,
+                                                plugin = plugin
+                                            )
+                                            isDownloading = false
+                                            onMessage(result.getOrElse { "Could not update ${plugin.name}: ${it.message}" })
+                                            refreshDownloadedItems()
+                                        }
+                                    } else if (catalogItem != null) {
+                                        pendingUpdateReplaces = plugin
+                                        pendingRemoteInstall = catalogItem
+                                    }
                                 }
                             )
                         }
@@ -821,7 +842,13 @@ fun PluginsHubScreen(
         isDownloading = false
         downloadingCatalogKey = null
         pendingRemoteInstall = null
-        result.onSuccess {
+        val replacedPlugin = pendingUpdateReplaces
+        pendingUpdateReplaces = null
+        result.onSuccess { newFile ->
+            if (replacedPlugin != null) {
+                PluginManager.removeReplacedJar(context, stateHolder.activeWorld, itemType, replacedPlugin, newFile)
+                refreshDownloadedItems()
+            }
             onMessage(
                 if (installedDependencies.isEmpty()) {
                     "Installed ${item.title} successfully!"
@@ -1004,54 +1031,15 @@ private fun ContentRow(
     onToggle: () -> Unit,
     onDelete: () -> Unit,
     onShowDetails: () -> Unit,
-    onUpdateClick: (PluginManager.RemoteCatalogItem) -> Unit
+    worldName: String,
+    onUpdateClick: (PluginManager.InstalledUpdate) -> Unit
 ) {
     val isPreinstalled = remember(item) { PluginManager.isPreinstalledPlugin(item) }
     val context = androidx.compose.ui.platform.LocalContext.current
-    var resolvedCatalogItem by remember { mutableStateOf<PluginManager.RemoteCatalogItem?>(null) }
-    var latestVersion by remember { mutableStateOf<String?>(null) }
+    var availableUpdate by remember { mutableStateOf<PluginManager.InstalledUpdate?>(null) }
 
-    LaunchedEffect(item) {
-        if (isPreinstalled) {
-            val projectId = when {
-                item.name.lowercase().contains("geyser") -> "geyser"
-                item.name.lowercase().contains("floodgate") -> "floodgate"
-                else -> "viaversion"
-            }
-            val title = when {
-                item.name.lowercase().contains("geyser") -> "Geyser-Spigot"
-                item.name.lowercase().contains("floodgate") -> "Floodgate"
-                else -> "ViaVersion"
-            }
-            val description = when {
-                item.name.lowercase().contains("geyser") -> "Bedrock bridge for Java servers"
-                item.name.lowercase().contains("floodgate") -> "Allows Bedrock players to join without Java accounts"
-                else -> "Allows newer clients to connect to older server versions"
-            }
-            val catalogItem = PluginManager.RemoteCatalogItem(
-                source = if (projectId == "geyser" || projectId == "floodgate") "modrinth" else "hangar",
-                projectId = projectId,
-                title = title,
-                slug = projectId,
-                iconUrl = null,
-                description = description,
-                downloads = 0,
-                owner = if (projectId == "viaversion") "ViaVersion" else null
-            )
-            resolvedCatalogItem = catalogItem
-            latestVersion = PluginManager.getLatestVersionFromModrinth(context, projectId)
-        } else {
-            // For custom mods/plugins/packs
-            val resolved = PluginManager.resolveModrinthProjectByName(context, item.name, tab.type)
-            if (resolved != null) {
-                resolvedCatalogItem = resolved
-                latestVersion = PluginManager.getLatestVersionFromModrinth(context, resolved.projectId)
-            }
-        }
-    }
-
-    val updateAvailable = remember(item.version, latestVersion) {
-        latestVersion?.let { remote -> PluginManager.isUpdateAvailable(item.version, remote) } ?: false
+    LaunchedEffect(item, worldName) {
+        availableUpdate = PluginManager.findInstalledUpdate(context, worldName, tab.type, item)
     }
 
     PocketHostCard(
@@ -1110,9 +1098,9 @@ private fun ContentRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            if (resolvedCatalogItem != null && updateAvailable) {
+            availableUpdate?.let { update ->
                 Button(
-                    onClick = { onUpdateClick(resolvedCatalogItem!!) },
+                    onClick = { onUpdateClick(update) },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = PocketColors.Success,
                         contentColor = Color.White

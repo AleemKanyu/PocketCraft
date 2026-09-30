@@ -17,6 +17,10 @@ out/
 *.tar.gz
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
+!app/src/main/assets/default_plugins/PocketCraftCompanion.jar
+!app/src/main/assets/plugins/DummyPlayers.jar
+# Built from source by scripts/build_geyser_reversion.sh; see its provenance file.
+!app/src/main/assets/geyser_extensions/GeyserReversion.jar
 
 # IDE & Editor
 .idea/

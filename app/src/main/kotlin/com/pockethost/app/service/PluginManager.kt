@@ -23,7 +23,9 @@ import kotlinx.coroutines.withContext
 import okhttp3.Cache
 import okhttp3.CacheControl
 import okhttp3.OkHttpClient
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +40,12 @@ object PluginManager {
     private const val MEMORY_CACHE_TTL_MS = 3 * 60 * 1000L
     private const val HTTP_CACHE_BYTES = 12L * 1024L * 1024L
     private const val MODRINTH_PROVIDER = "modrinth"
+
+    /** Geyser-Spigot loads extensions from here and ignores files that do not end in .jar. */
+    private const val GEYSER_EXTENSIONS_SUBDIR = "Geyser-Spigot/extensions"
+    private const val GEYSER_REVERSION_FILE_NAME = "GeyserReversion.jar"
+    private const val GEYSER_REVERSION_ASSET_PATH = "geyser_extensions/GeyserReversion.jar"
+    private const val GEYSERMC_DOWNLOAD_API = "https://download.geysermc.org/v2/projects"
     private const val HANGAR_PROVIDER = "hangar"
     private val builtInBridgeProjectIds = setOf("geyser", "viaversion", "chunky")
     private val builtInBridgeKeywords = setOf("geyser", "viaversion", "chunky")
@@ -226,7 +234,8 @@ object PluginManager {
     }
 
     fun listPlugins(context: Context, worldName: String): List<Plugin> {
-        return getPluginsDir(context, worldName)
+        val pluginsDir = getPluginsDir(context, worldName)
+        val plugins = pluginsDir
             .listFiles { file -> file.extension == "jar" || file.name.endsWith(".jar.disabled") }
             ?.map { file ->
                 val metadata = readArchiveMetadata(file)
@@ -240,8 +249,217 @@ object PluginManager {
             }
             ?.filterNot(::isManagedBridgePlugin)
             ?.filterNot(::isHiddenPocketCraftPlugin)
-            ?.sortedByDescending { it.sizeMb }
             ?: emptyList()
+        return (plugins + listGeyserExtensions(pluginsDir)).sortedByDescending { it.sizeMb }
+    }
+
+    /**
+     * Geyser extensions live in Geyser-Spigot/extensions rather than plugins/. They are listed
+     * with a path relative to plugins/ so the existing toggle (rename to .disabled) works on them.
+     */
+    private fun listGeyserExtensions(pluginsDir: File): List<Plugin> {
+        val extensionsDir = File(pluginsDir, GEYSER_EXTENSIONS_SUBDIR)
+        return extensionsDir
+            .listFiles { file -> file.isFile && (file.name.endsWith(".jar") || file.name.endsWith(".jar.disabled")) }
+            ?.map { file ->
+                val descriptor = runCatching {
+                    java.util.zip.ZipFile(file).use { zip ->
+                        zip.getEntry("extension.yml")?.let { entry ->
+                            zip.getInputStream(entry).bufferedReader().use { it.readText() }
+                        }
+                    }
+                }.getOrNull().orEmpty()
+                Plugin(
+                    name = readYamlValue(descriptor, "name") ?: file.name.removeSuffix(".disabled").removeSuffix(".jar"),
+                    fileName = "$GEYSER_EXTENSIONS_SUBDIR/${file.name}",
+                    sizeMb = file.length() / (1024f * 1024f),
+                    enabled = !file.name.endsWith(".disabled"),
+                    version = readYamlValue(descriptor, "version").orEmpty()
+                )
+            }
+            ?: emptyList()
+    }
+
+    /** True for jars PocketHost ships inside the APK; they are updated by app updates only. */
+    fun isAppBundledExtension(plugin: Plugin): Boolean =
+        plugin.fileName.startsWith("$GEYSER_EXTENSIONS_SUBDIR/")
+
+    /**
+     * A newer build of an installed jar that fits this server. [bridgeProjectId] is set for
+     * Geyser and Floodgate, which update from GeyserMC's own build server; everything else
+     * updates through [catalogItem] on Modrinth.
+     */
+    data class InstalledUpdate(
+        val latestVersion: String,
+        val catalogItem: RemoteCatalogItem? = null,
+        val bridgeProjectId: String? = null
+    )
+
+    /**
+     * Returns the update for an installed jar, or null when it is current or cannot be matched.
+     *
+     * The jar is identified by its hash instead of comparing version strings. The old check
+     * took Modrinth's newest version for any game version and loader and compared the digits,
+     * so "2.11.3-SNAPSHOT" against "2.11.3-b1247" read as an update, nearly every plugin showed
+     * one, and following it could install a build made for a different Minecraft version.
+     */
+    suspend fun findInstalledUpdate(
+        context: Context,
+        worldName: String,
+        type: ContentType,
+        plugin: Plugin
+    ): InstalledUpdate? = withContext(Dispatchers.IO) {
+        if (isAppBundledExtension(plugin)) return@withContext null
+        val file = File(getContentDir(context, worldName, type), plugin.fileName)
+        if (!file.isFile) return@withContext null
+
+        geyserBridgeProjectFor(plugin)?.let { projectId ->
+            return@withContext runCatching { findGeyserBridgeUpdate(context, projectId, file) }
+                .onFailure { Log.w("PluginManager", "Update check for $projectId failed: ${it.message}") }
+                .getOrNull()
+        }
+
+        runCatching { findModrinthUpdate(context, worldName, type, plugin, file) }
+            .onFailure { Log.w("PluginManager", "Update check for ${plugin.name} failed: ${it.message}") }
+            .getOrNull()
+    }
+
+    private fun geyserBridgeProjectFor(plugin: Plugin): String? {
+        val name = plugin.fileName.lowercase(Locale.ROOT)
+        return when {
+            name.contains("geyser") -> "geyser"
+            name.contains("floodgate") -> "floodgate"
+            else -> null
+        }
+    }
+
+    private fun latestGeyserBuild(context: Context, projectId: String): JSONObject? {
+        val request = Request.Builder()
+            .url("$GEYSERMC_DOWNLOAD_API/$projectId/versions/latest/builds/latest")
+            .header("User-Agent", userAgent())
+            .build()
+        return getHttpClient(context).newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return null
+            JSONObject(response.body?.string().orEmpty())
+        }
+    }
+
+    private fun findGeyserBridgeUpdate(context: Context, projectId: String, file: File): InstalledUpdate? {
+        val build = latestGeyserBuild(context, projectId) ?: return null
+        val latestHash = build.optJSONObject("downloads")?.optJSONObject("spigot")?.optString("sha256")
+            ?.lowercase(Locale.ROOT)
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+        if (file.inputStream().use { sha256Hex(it) } == latestHash) return null
+        return InstalledUpdate(
+            latestVersion = "${build.optString("version")} build ${build.optInt("build")}",
+            bridgeProjectId = projectId
+        )
+    }
+
+    private suspend fun findModrinthUpdate(
+        context: Context,
+        worldName: String,
+        type: ContentType,
+        plugin: Plugin,
+        file: File
+    ): InstalledUpdate? {
+        val sha1 = file.inputStream().use { hashHex(it, "SHA-1") }
+        val client = getHttpClient(context)
+        val current = client.newCall(
+            Request.Builder()
+                .url("$MODRINTH_BASE_URL/version_file/$sha1?algorithm=sha1")
+                .header("User-Agent", userAgent())
+                .build()
+        ).execute().use { response ->
+            if (!response.isSuccessful) return null
+            JSONObject(response.body?.string().orEmpty())
+        }
+
+        val loaders = when (type) {
+            ContentType.PLUGINS -> paperCompatibleLoaders.toList()
+            ContentType.RESOURCE_PACKS -> listOf("minecraft")
+            ContentType.MODS -> compatibleModLoadersForRuntime(getRuntimeKeyForWorld(context, worldName))
+        }
+        if (loaders.isEmpty()) return null
+        val gameVersion = com.pockethost.app.data.repository.ServerConfigRepository(context)
+            .apply { setWorldNameOverride(worldName) }
+            .loadConfig()
+            .gameVersion
+        if (gameVersion.isBlank()) return null
+        val body = JSONObject()
+            .put("loaders", JSONArray(loaders))
+            .put("game_versions", JSONArray(listOf(gameVersion)))
+            .toString()
+            .toRequestBody("application/json".toMediaType())
+        val latest = client.newCall(
+            Request.Builder()
+                .url("$MODRINTH_BASE_URL/version_file/$sha1/update?algorithm=sha1")
+                .header("User-Agent", userAgent())
+                .post(body)
+                .build()
+        ).execute().use { response ->
+            if (!response.isSuccessful) return null
+            JSONObject(response.body?.string().orEmpty())
+        }
+
+        if (latest.optString("id") == current.optString("id")) return null
+        // ISO-8601 timestamps from the same API compare correctly as strings. This also keeps a
+        // jar newer than anything published for this game version from showing a "downgrade".
+        if (latest.optString("date_published") <= current.optString("date_published")) return null
+
+        val projectId = latest.optString("project_id").ifBlank { return null }
+        return InstalledUpdate(
+            latestVersion = latest.optString("version_number"),
+            catalogItem = RemoteCatalogItem(
+                source = MODRINTH_PROVIDER,
+                projectId = projectId,
+                title = plugin.name,
+                slug = projectId,
+                iconUrl = null,
+                description = "",
+                downloads = 0
+            )
+        )
+    }
+
+    /**
+     * Replaces an installed Geyser or Floodgate jar with GeyserMC's latest build, in place.
+     *
+     * Only the jar is swapped: the file keeps its name (and its .disabled state), and the
+     * plugin's data folder — config, Floodgate key and extensions — is left alone. PocketHost's
+     * own settings are written again by [enforceBedrockBridgeLocalConfig] on the next start.
+     */
+    suspend fun updateGeyserBridgePlugin(
+        context: Context,
+        worldName: String,
+        plugin: Plugin
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val projectId = geyserBridgeProjectFor(plugin)
+                ?: error("${plugin.name} is not a Geyser plugin")
+            val target = File(getPluginsDir(context, worldName), plugin.fileName)
+            val build = latestGeyserBuild(context, projectId) ?: error("GeyserMC did not answer")
+            val expectedHash = build.optJSONObject("downloads")?.optJSONObject("spigot")
+                ?.optString("sha256")?.lowercase(Locale.ROOT)
+                ?.takeIf { it.isNotBlank() }
+                ?: error("GeyserMC listed no Spigot download")
+            val url = "$GEYSERMC_DOWNLOAD_API/$projectId/versions/${build.optString("version")}" +
+                "/builds/${build.optInt("build")}/downloads/spigot"
+            val installed = withWorldPluginLock(context, worldName) {
+                downloadJarAtomically(context, url, target, minBytes = 500_000L, expectedSha256 = expectedHash)
+            }
+            if (!installed) error("the download failed or did not match GeyserMC's checksum")
+            "${plugin.name} updated to ${build.optString("version")} build ${build.optInt("build")}. Restart the server to apply."
+        }
+    }
+
+    /** After an update installed [newFile], removes the jar it replaced so both never load. */
+    fun removeReplacedJar(context: Context, worldName: String, type: ContentType, oldPlugin: Plugin, newFile: File) {
+        val oldFile = File(getContentDir(context, worldName, type), oldPlugin.fileName)
+        if (oldFile.isFile && oldFile.canonicalPath != newFile.canonicalPath) {
+            oldFile.delete()
+        }
     }
 
     private fun isHiddenPocketCraftPlugin(plugin: Plugin): Boolean {
@@ -364,6 +582,30 @@ object PluginManager {
 
     fun enforceBedrockBridgeLocalConfig(context: Context, worldName: String) {
         if (!supportsBundledBedrockBridge(context, worldName)) return
+        withWorldPluginLock(context, worldName) {
+            enforceBedrockBridgeLocalConfigLocked(context, worldName)
+        }
+    }
+
+    private val worldPluginLocks = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+    /**
+     * Runs [block] while holding this world's plugin-setup lock. Setup is started from several
+     * places around a server start, in both the UI and :server processes; two runs at once
+     * downloaded the same jars side by side. The monitor keeps threads of one process apart and
+     * the file lock keeps the two processes apart.
+     */
+    private inline fun <T> withWorldPluginLock(context: Context, worldName: String, block: () -> T): T {
+        val monitor = worldPluginLocks.getOrPut(worldName) { Any() }
+        synchronized(monitor) {
+            val lockFile = File(getPluginsDir(context, worldName), ".pockethost-setup.lock")
+            return java.io.RandomAccessFile(lockFile, "rw").use { raf ->
+                raf.channel.lock().use { block() }
+            }
+        }
+    }
+
+    private fun enforceBedrockBridgeLocalConfigLocked(context: Context, worldName: String) {
         val crossplayPlugins = listOf("geyser", "floodgate", "viaversion", "viabackwards", "geyserreversion")
         crossplayPlugins.forEach { ensureManagedPluginEnabled(context, worldName, it) }
         ensureLatestGeyserSpigotPlugin(context, worldName)
@@ -463,9 +705,17 @@ object PluginManager {
         } else {
             ""
         }
-        var floodgateUpdated = floodgateOriginal
+        // Before Floodgate's first start there is no config yet. Starting from Floodgate's own
+        // complete default keeps its first load from rewriting a partial file with defaults that
+        // turned account linking back on (and logged "Failed to find a database implementation").
+        var floodgateUpdated = floodgateOriginal.ifBlank { floodgateDefaultConfig(pluginsDir) }
         floodgateUpdated = ensureTopLevelYamlValue(floodgateUpdated, "send-floodgate-data", "true")
         floodgateUpdated = ensureTopLevelYamlValue(floodgateUpdated, "username-prefix", ".")
+        // The embedded JVM reports its locale as "en_" (no country), which Floodgate rejects
+        // with a warning on every start. Give it a valid fallback, but keep one the user set.
+        if (floodgateUpdated.lines().none { it.startsWith("default-locale:") }) {
+            floodgateUpdated = ensureTopLevelYamlValue(floodgateUpdated, "default-locale", "en_US")
+        }
         // Android cannot load Floodgate's optional database implementation. Account
         // linking is not required for Floodgate authentication, so leave it disabled.
         floodgateUpdated = ensureYamlSectionValue(floodgateUpdated, "player-link", "enabled", "false")
@@ -685,126 +935,194 @@ object PluginManager {
 
     fun ensureCrossVersionPlugins(context: Context, worldName: String) {
         val pluginsDir = getPluginsDir(context, worldName)
-        val viaVersionFile = File(pluginsDir, "ViaVersion.jar")
-        val viaBackwardsFile = File(pluginsDir, "ViaBackwards.jar")
-
-        if (!viaVersionFile.exists() || viaVersionFile.length() < 500_000L) {
-            val dlUrl = fetchModrinthPluginDownloadUrl(context, "viaversion")
-                ?: "https://api.spiget.org/v2/resources/19254/download"
+        listOf(
+            File(pluginsDir, "ViaVersion.jar") to "viaversion",
+            File(pluginsDir, "ViaBackwards.jar") to "viabackwards"
+        ).forEach { (jar, projectId) ->
+            dropCorruptJar(jar)
+            if (jar.exists() && jar.length() >= 500_000L) return@forEach
+            val fallbackUrl = "https://api.spiget.org/v2/resources/19254/download".takeIf { projectId == "viaversion" }
+            val url = fetchModrinthPluginDownloadUrl(context, projectId) ?: fallbackUrl ?: return@forEach
             runCatching {
-                val req = Request.Builder().url(dlUrl).header("User-Agent", userAgent()).build()
-                getHttpClient(context).newCall(req).execute().use { resp ->
-                    if (resp.isSuccessful && resp.body != null) {
-                        val tmp = File(pluginsDir, "ViaVersion.tmp")
-                        resp.body!!.byteStream().use { input -> tmp.outputStream().use { output -> input.copyTo(output) } }
-                        if (tmp.length() > 500_000L) {
-                            tmp.copyTo(viaVersionFile, overwrite = true)
-                            Log.i("PluginManager", "Successfully downloaded ViaVersion.jar")
-                        }
-                        tmp.delete()
-                    }
+                if (downloadJarAtomically(context, url, jar, minBytes = 500_000L)) {
+                    Log.i("PluginManager", "Downloaded ${jar.name}")
                 }
-            }.onFailure { e -> Log.w("PluginManager", "Download ViaVersion.jar failed: ${e.message}") }
-        }
-
-        if (!viaBackwardsFile.exists() || viaBackwardsFile.length() < 500_000L) {
-            val dlUrl = fetchModrinthPluginDownloadUrl(context, "viabackwards")
-            if (dlUrl != null) {
-                runCatching {
-                    val req = Request.Builder().url(dlUrl).header("User-Agent", userAgent()).build()
-                    getHttpClient(context).newCall(req).execute().use { resp ->
-                        if (resp.isSuccessful && resp.body != null) {
-                            val tmp = File(pluginsDir, "ViaBackwards.tmp")
-                            resp.body!!.byteStream().use { input -> tmp.outputStream().use { output -> input.copyTo(output) } }
-                            if (tmp.length() > 500_000L) {
-                                tmp.copyTo(viaBackwardsFile, overwrite = true)
-                                Log.i("PluginManager", "Successfully downloaded ViaBackwards.jar")
-                            }
-                            tmp.delete()
-                        }
-                    }
-                }.onFailure { e -> Log.w("PluginManager", "Download ViaBackwards.jar failed: ${e.message}") }
-            }
+            }.onFailure { e -> Log.w("PluginManager", "Download ${jar.name} failed: ${e.message}") }
         }
     }
 
+    /**
+     * Installs the GeyserReversion extension that ships inside the APK, so Bedrock clients
+     * older than the bundled Geyser's native range can still join.
+     *
+     * The jar is built from source by scripts/build_geyser_reversion.sh. It used to be fetched
+     * from Modrinth at runtime and never replaced once present, which left worlds on a build that
+     * failed against newer Geyser with NoSuchMethodError, so old clients were refused. A copy the
+     * user switched off in the plugin list (.jar.disabled) stays off but is still refreshed.
+     */
     fun ensureGeyserReversionExtension(context: Context, worldName: String) {
         val pluginsDir = getPluginsDir(context, worldName)
-        val extDir1 = File(pluginsDir, "Geyser-Spigot/extensions").also { it.mkdirs() }
-        val extDir2 = File(pluginsDir, "Geyser/extensions").also { it.mkdirs() }
+        val extensionsDir = File(pluginsDir, GEYSER_EXTENSIONS_SUBDIR).also { it.mkdirs() }
+        val enabledFile = File(extensionsDir, GEYSER_REVERSION_FILE_NAME)
+        val disabledFile = File(extensionsDir, "$GEYSER_REVERSION_FILE_NAME.disabled")
 
-        val target1 = File(extDir1, "GeyserReversion.jar")
-        val target2 = File(extDir2, "GeyserReversion.jar")
-
-        if (target1.exists() && target1.length() > 500_000L) {
-            if (!target2.exists() || target2.length() != target1.length()) {
-                runCatching { target1.copyTo(target2, overwrite = true) }
+        // Drop copies under other names (older Modrinth downloads) so Geyser never loads two.
+        extensionsDir.listFiles()?.forEach { file ->
+            if (file.name.lowercase(Locale.ROOT).startsWith("geyserreversion") &&
+                file.name != enabledFile.name && file.name != disabledFile.name
+            ) {
+                file.delete()
             }
-            return
         }
+        // Geyser-Spigot only reads extensions from its own data folder, so this copy never loaded.
+        File(pluginsDir, "Geyser/extensions/$GEYSER_REVERSION_FILE_NAME").delete()
+        if (enabledFile.exists() && disabledFile.exists()) disabledFile.delete()
 
+        val target = if (disabledFile.exists()) disabledFile else enabledFile
         runCatching {
-            val downloadUrl = fetchModrinthPluginDownloadUrl(context, "geyserreversion")
-            if (!downloadUrl.isNullOrBlank()) {
-                val dlReq = Request.Builder().url(downloadUrl).header("User-Agent", userAgent()).build()
-                getHttpClient(context).newCall(dlReq).execute().use { dlResp ->
-                    if (dlResp.isSuccessful && dlResp.body != null) {
-                        dlResp.body!!.byteStream().use { input ->
-                            target1.outputStream().use { output -> input.copyTo(output) }
-                        }
-                        runCatching { target1.copyTo(target2, overwrite = true) }
-                        Log.i("PluginManager", "Successfully downloaded and installed GeyserReversion extension for older Bedrock client support!")
-                    }
-                }
+            val bundledHash = context.assets.open(GEYSER_REVERSION_ASSET_PATH).use { sha256Hex(it) }
+            if (target.isFile && target.inputStream().use { sha256Hex(it) } == bundledHash) return
+            val tmp = File(extensionsDir, "$GEYSER_REVERSION_FILE_NAME.tmp")
+            context.assets.open(GEYSER_REVERSION_ASSET_PATH).use { input ->
+                tmp.outputStream().use { output -> input.copyTo(output) }
             }
+            if (!tmp.renameTo(target)) {
+                tmp.copyTo(target, overwrite = true)
+                tmp.delete()
+            }
+            Log.i("PluginManager", "Installed bundled GeyserReversion extension (${target.name})")
         }.onFailure { e ->
-            Log.w("PluginManager", "Could not auto-download GeyserReversion extension: ${e.message}")
+            Log.w("PluginManager", "Could not install bundled GeyserReversion extension: ${e.message}")
         }
+    }
+
+    /** Floodgate's bundled config.yml with its metrics UUID filled in, or "" if the jar is missing. */
+    private fun floodgateDefaultConfig(pluginsDir: File): String {
+        val jar = pluginsDir.listFiles()
+            ?.firstOrNull { it.name.lowercase(Locale.ROOT).startsWith("floodgate") && it.name.endsWith(".jar") }
+            ?: return ""
+        return runCatching {
+            java.util.zip.ZipFile(jar).use { zip ->
+                val entry = zip.getEntry("config.yml") ?: return ""
+                zip.getInputStream(entry).bufferedReader().use { it.readText() }
+            }
+        }.getOrDefault("").replace("\${metrics.uuid}", java.util.UUID.randomUUID().toString())
+    }
+
+    private fun sha256Hex(input: java.io.InputStream): String = hashHex(input, "SHA-256")
+
+    private fun hashHex(input: java.io.InputStream, algorithm: String): String {
+        val digest = java.security.MessageDigest.getInstance(algorithm)
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            digest.update(buffer, 0, read)
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     fun ensureLatestGeyserSpigotPlugin(context: Context, worldName: String) {
         val pluginsDir = getPluginsDir(context, worldName)
-        val geyserFile = File(pluginsDir, "Geyser-Spigot.jar")
-        val floodgateFile = File(pluginsDir, "floodgate-spigot.jar")
-
-        if (!geyserFile.exists() || geyserFile.length() < 1_000_000L) {
+        listOf(
+            File(pluginsDir, "Geyser-Spigot.jar") to "geyser",
+            File(pluginsDir, "floodgate-spigot.jar") to "floodgate"
+        ).forEach { (jar, projectId) ->
+            dropCorruptJar(jar)
+            if (jar.exists() || File(pluginsDir, "${jar.name}.disabled").exists()) return@forEach
             runCatching {
-                val url = "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot"
-                val request = Request.Builder().url(url).header("User-Agent", userAgent()).build()
-                getHttpClient(context).newCall(request).execute().use { response ->
-                    if (response.isSuccessful && response.body != null) {
-                        val tempFile = File(pluginsDir, "Geyser-Spigot.tmp")
-                        response.body!!.byteStream().use { input ->
-                            tempFile.outputStream().use { output -> input.copyTo(output) }
-                        }
-                        if (tempFile.length() > 5_000_000L) {
-                            tempFile.copyTo(geyserFile, overwrite = true)
-                            Log.i("PluginManager", "Successfully downloaded Geyser-Spigot.jar")
-                        }
-                        tempFile.delete()
-                    }
+                val build = latestGeyserBuild(context, projectId) ?: error("GeyserMC did not answer")
+                val expectedHash = build.optJSONObject("downloads")?.optJSONObject("spigot")
+                    ?.optString("sha256")?.lowercase(Locale.ROOT)?.takeIf { it.isNotBlank() }
+                val url = "$GEYSERMC_DOWNLOAD_API/$projectId/versions/${build.optString("version")}" +
+                    "/builds/${build.optInt("build")}/downloads/spigot"
+                if (downloadJarAtomically(context, url, jar, minBytes = 500_000L, expectedSha256 = expectedHash)) {
+                    Log.i("PluginManager", "Downloaded ${jar.name} (${build.optString("version")} build ${build.optInt("build")})")
                 }
-            }.onFailure { e -> Log.w("PluginManager", "Download Geyser-Spigot.jar failed: ${e.message}") }
+            }.onFailure { e -> Log.w("PluginManager", "Download ${jar.name} failed: ${e.message}") }
         }
+    }
 
-        if (!floodgateFile.exists() || floodgateFile.length() < 500_000L) {
-            runCatching {
-                val url = "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
-                val request = Request.Builder().url(url).header("User-Agent", userAgent()).build()
-                getHttpClient(context).newCall(request).execute().use { response ->
-                    if (response.isSuccessful && response.body != null) {
-                        val tempFile = File(pluginsDir, "floodgate-spigot.tmp")
-                        response.body!!.byteStream().use { input ->
-                            tempFile.outputStream().use { output -> input.copyTo(output) }
-                        }
-                        if (tempFile.length() > 500_000L) {
-                            tempFile.copyTo(floodgateFile, overwrite = true)
-                            Log.i("PluginManager", "Successfully downloaded floodgate-spigot.jar")
-                        }
-                        tempFile.delete()
+    /**
+     * Downloads [url] into [target] through a temp file of its own. Two callers used to stream
+     * into one shared ".tmp", which left Geyser-Spigot.jar the right size but with a megabyte of
+     * zeros inside. The file only replaces [target] once it reads back as an intact jar and, when
+     * [expectedSha256] is known, matches it.
+     */
+    private fun downloadJarAtomically(
+        context: Context,
+        url: String,
+        target: File,
+        minBytes: Long,
+        expectedSha256: String? = null
+    ): Boolean {
+        val tmp = File.createTempFile("${target.name}.", ".part", target.parentFile)
+        try {
+            val request = Request.Builder().url(url).header("User-Agent", userAgent()).build()
+            getHttpClient(context).newCall(request).execute().use { response ->
+                val body = response.body
+                if (!response.isSuccessful || body == null) return false
+                body.byteStream().use { input -> tmp.outputStream().use { input.copyTo(it) } }
+            }
+            if (tmp.length() < minBytes) return false
+            if (expectedSha256 != null && tmp.inputStream().use { sha256Hex(it) } != expectedSha256) {
+                Log.w("PluginManager", "${target.name} download did not match its published checksum")
+                return false
+            }
+            if (!isJarIntact(tmp)) {
+                Log.w("PluginManager", "${target.name} download is not a readable jar")
+                return false
+            }
+            if (!tmp.renameTo(target)) {
+                tmp.copyTo(target, overwrite = true)
+            }
+            markJarVerified(target)
+            return true
+        } finally {
+            tmp.delete()
+        }
+    }
+
+    /** Reads every entry and checks its CRC, which catches zeroed ranges a size check misses. */
+    private fun isJarIntact(file: File): Boolean = runCatching {
+        java.util.zip.ZipFile(file).use { zip ->
+            val buffer = ByteArray(64 * 1024)
+            for (entry in zip.entries()) {
+                if (entry.isDirectory) continue
+                val crc = java.util.zip.CRC32()
+                zip.getInputStream(entry).use { input ->
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        crc.update(buffer, 0, read)
                     }
                 }
-            }.onFailure { e -> Log.w("PluginManager", "Download floodgate-spigot.jar failed: ${e.message}") }
+                if (entry.crc != -1L && crc.value != entry.crc) return@runCatching false
+            }
+            true
+        }
+    }.getOrDefault(false)
+
+    private fun verifiedMarker(jar: File) = File(jar.parentFile, ".${jar.name}.verified")
+
+    private fun markJarVerified(jar: File) {
+        runCatching { verifiedMarker(jar).writeText("${jar.length()}:${jar.lastModified()}") }
+    }
+
+    /**
+     * Deletes an auto-downloaded jar that is damaged so the next setup fetches it again. The full
+     * check runs once per file; afterwards a marker with its size and timestamp stands in for it.
+     */
+    private fun dropCorruptJar(jar: File) {
+        if (!jar.isFile) return
+        val marker = verifiedMarker(jar)
+        if (runCatching { marker.readText() }.getOrNull() == "${jar.length()}:${jar.lastModified()}") return
+        if (isJarIntact(jar)) {
+            markJarVerified(jar)
+        } else {
+            Log.w("PluginManager", "${jar.name} is damaged; removing it so it is downloaded again")
+            jar.delete()
+            marker.delete()
         }
     }
 
@@ -2636,119 +2954,6 @@ object PluginManager {
     fun isPreinstalledPlugin(plugin: Plugin): Boolean {
         val normalized = plugin.name.lowercase(Locale.US)
         return normalized.contains("geyser") || normalized.contains("viaversion") || normalized.contains("floodgate")
-    }
-
-    private val resolvedProjectCache = java.util.concurrent.ConcurrentHashMap<String, RemoteCatalogItem>()
-
-    suspend fun resolveModrinthProjectByName(
-        context: Context,
-        name: String,
-        type: ContentType
-    ): RemoteCatalogItem? = withContext(Dispatchers.IO) {
-        val cacheKey = "${type.name}|$name"
-        resolvedProjectCache[cacheKey]?.let { return@withContext it }
-
-        // Clean up the name (remove file extensions, version numbers, brackets, etc.)
-        var cleanName = name.replace(Regex("\\.jar$", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("[-_]?[0-9\\.]+(-SNAPSHOT)?[-_]?.*$", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("[\\[\\(].*?[\\]\\)]"), "")
-            .trim()
-        if (cleanName.isBlank()) cleanName = name
-
-        try {
-            val facets = buildModrinthFacets(type)
-            val encodedQuery = java.net.URLEncoder.encode(cleanName, "UTF-8")
-            val encodedFacets = java.net.URLEncoder.encode(facets, "UTF-8")
-            val url = "$MODRINTH_BASE_URL/search?query=$encodedQuery&limit=1&index=relevance&facets=$encodedFacets"
-
-            val request = Request.Builder()
-                .url(url)
-                .header("User-Agent", userAgent())
-                .build()
-
-            getHttpClient(context).newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext null
-                val payload = response.body?.string().orEmpty()
-                if (payload.isBlank()) return@withContext null
-
-                val root = org.json.JSONObject(payload)
-                val hits = root.optJSONArray("hits") ?: return@withContext null
-                if (hits.length() > 0) {
-                    val hit = hits.getJSONObject(0)
-                    val projectId = hit.optString("project_id").ifBlank { hit.optString("projectId") }
-                    val slug = hit.optString("slug").ifBlank { projectId }
-                    val title = hit.optString("title").ifBlank { slug }
-                    val description = hit.optString("description")
-                    val iconUrl = hit.optString("icon_url")
-                    
-                    if (projectId.isNotBlank()) {
-                        val catalogItem = RemoteCatalogItem(
-                            source = "modrinth",
-                            projectId = projectId,
-                            title = title,
-                            slug = slug,
-                            iconUrl = iconUrl,
-                            description = description,
-                            downloads = hit.optLong("downloads"),
-                            owner = hit.optString("author")
-                        )
-                        resolvedProjectCache[cacheKey] = catalogItem
-                        return@withContext catalogItem
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("PluginManager", "Failed to resolve Modrinth project for $name: ${e.message}")
-        }
-        null
-    }
-
-    private val latestVersionsCache = java.util.concurrent.ConcurrentHashMap<String, String>()
-
-    suspend fun getLatestVersionFromModrinth(context: Context, projectId: String): String? = withContext(Dispatchers.IO) {
-        val cached = latestVersionsCache[projectId]
-        if (cached != null) return@withContext cached
-
-        try {
-            val url = "https://api.modrinth.com/v2/project/$projectId/version"
-            val request = Request.Builder()
-                .url(url)
-                .header("User-Agent", userAgent())
-                .build()
-
-            getHttpClient(context).newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext null
-                val payload = response.body?.string().orEmpty()
-                if (payload.isBlank()) return@withContext null
-
-                val array = JSONArray(payload)
-                if (array.length() > 0) {
-                    val latestVersion = array.getJSONObject(0).optString("version_number")
-                    if (latestVersion.isNotBlank()) {
-                        latestVersionsCache[projectId] = latestVersion
-                        return@withContext latestVersion
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("PluginManager", "Failed to fetch latest version for $projectId: ${e.message}")
-        }
-        null
-    }
-
-    fun isUpdateAvailable(localVersion: String, remoteVersion: String): Boolean {
-        if (localVersion.isBlank() || remoteVersion.isBlank()) return false
-        if (localVersion == remoteVersion) return false
-        
-        val localParts = localVersion.split(Regex("[^0-9]+")).filter { it.isNotEmpty() }.mapNotNull { it.toIntOrNull() }
-        val remoteParts = remoteVersion.split(Regex("[^0-9]+")).filter { it.isNotEmpty() }.mapNotNull { it.toIntOrNull() }
-        
-        val minSize = minOf(localParts.size, remoteParts.size)
-        for (i in 0 until minSize) {
-            if (remoteParts[i] > localParts[i]) return true
-            if (remoteParts[i] < localParts[i]) return false
-        }
-        return remoteParts.size > localParts.size
     }
 
     private fun isManagedBridgePlugin(plugin: Plugin): Boolean {
