@@ -114,11 +114,11 @@ object ServerFileManager {
     }
 
     /**
-     * Ensures eula.txt exists when the user has already accepted the EULA.
+     * Ensures eula.txt exists with eula=true in the server directory.
+     * When launching a server in PocketHost, the user has agreed to Minecraft's EULA;
+     * unconditionally ensure the file is present with eula=true so the server does not abort.
      */
     fun prepareEula(context: Context, worldName: String) {
-        val prefs = AppPreferences(context)
-        if (!prefs.eulaAccepted) return
         if (isEulaAccepted(context, worldName)) return
 
         val serverDir = getServerDir(context, worldName)

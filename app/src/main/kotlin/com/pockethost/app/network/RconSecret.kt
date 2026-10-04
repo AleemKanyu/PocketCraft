@@ -19,7 +19,7 @@ object RconSecret {
     private const val FILE_NAME = "rcon_secret"
 
     /** What older builds wrote into server.properties; only used if [init] never ran. */
-    private const val LEGACY_PASSWORD = "pocketcraft-internal-rcon"
+    const val LEGACY_PASSWORD = "pocketcraft-internal-rcon"
 
     @Volatile
     private var cached: String? = null

@@ -45,28 +45,28 @@ object RconClient {
             .array()
     }
 
-    fun sendCommand(
-        command: String,
-        port: Int = DEFAULT_PORT,
-        password: String = RconSecret.current(),
-        timeoutMs: Int = DEFAULT_TIMEOUT_MS
-    ): String {
-        val trimmedCommand = command.trim().removePrefix("/")
-        if (trimmedCommand.isBlank()) return ""
+    private sealed class AttemptResult {
+        data class Success(val response: String) : AttemptResult()
+        object AuthFailed : AttemptResult()
+        data class ConnectionFailed(val message: String) : AttemptResult()
+    }
 
-        return runCatching {
+    private fun attemptCommand(
+        trimmedCommand: String,
+        port: Int,
+        pass: String,
+        timeoutMs: Int
+    ): AttemptResult {
+        return try {
             Socket().use { socket ->
                 socket.connect(InetSocketAddress("127.0.0.1", port), timeoutMs)
                 socket.soTimeout = timeoutMs
                 val out = DataOutputStream(socket.getOutputStream())
                 val inp = DataInputStream(socket.getInputStream())
 
-
                 fun readIntLE(): Int {
-                    val b0 = inp.read()
-                    val b1 = inp.read()
-                    val b2 = inp.read()
-                    val b3 = inp.read()
+                    val b0 = inp.read(); val b1 = inp.read()
+                    val b2 = inp.read(); val b3 = inp.read()
                     if (b0 < 0 || b1 < 0 || b2 < 0 || b3 < 0) return -1
                     return (b0 and 0xFF) or ((b1 and 0xFF) shl 8) or ((b2 and 0xFF) shl 16) or ((b3 and 0xFF) shl 24)
                 }
@@ -88,20 +88,14 @@ object RconClient {
                 }
 
                 // 1. Send Authentication packet (type 3)
-                sendPacket(1, SERVERDATA_AUTH, password)
-                
-                // Read until we get SERVERDATA_AUTH_RESPONSE (type 2) or failure (id == -1).
-                // Some server implementations emit an empty SERVERDATA_RESPONSE_VALUE before the
-                // auth response, so tolerate a few leading packets -- but stop reading the moment
-                // auth succeeds. Reading past it blocks until soTimeout and fails the whole call.
+                sendPacket(1, SERVERDATA_AUTH, pass)
                 var authenticated = false
                 var authAttempts = 0
                 while (!authenticated && authAttempts < MAX_AUTH_PACKETS) {
                     authAttempts++
                     val (authId, authType, _) = readPacket()
                     if (authId == -1) {
-                        Log.w(TAG, "RCON authentication failed (invalid password).")
-                        return ""
+                        return AttemptResult.AuthFailed
                     }
                     if (authType == SERVERDATA_AUTH_RESPONSE && authId == 1) {
                         authenticated = true
@@ -109,19 +103,47 @@ object RconClient {
                 }
 
                 if (!authenticated) {
-                    Log.w(TAG, "RCON authentication timeout or invalid response.")
-                    return ""
+                    return AttemptResult.AuthFailed
                 }
 
                 // 2. Send Command packet (type 2)
                 sendPacket(2, SERVERDATA_EXECCOMMAND, trimmedCommand)
                 val (_, _, responseText) = readPacket()
-                if (responseText.isBlank()) "[OK]" else responseText
+                val finalResponse = if (responseText.isBlank()) "[OK]" else responseText
+                AttemptResult.Success(finalResponse)
             }
-        }.getOrElse { error ->
-            Log.d(TAG, "RCON command connection failed for '$trimmedCommand': ${error.message}")
-            ""
+        } catch (e: Exception) {
+            AttemptResult.ConnectionFailed(e.message ?: "Unknown error")
         }
+    }
+
+    fun sendCommand(
+        command: String,
+        port: Int = DEFAULT_PORT,
+        password: String = RconSecret.current(),
+        timeoutMs: Int = DEFAULT_TIMEOUT_MS
+    ): String {
+        val trimmedCommand = command.trim().removePrefix("/")
+        if (trimmedCommand.isBlank()) return ""
+
+        val passwordsToTry = mutableListOf(password)
+        if (password != RconSecret.LEGACY_PASSWORD) {
+            passwordsToTry.add(RconSecret.LEGACY_PASSWORD)
+        }
+
+        for (pass in passwordsToTry) {
+            when (val res = attemptCommand(trimmedCommand, port, pass, timeoutMs)) {
+                is AttemptResult.Success -> return res.response
+                is AttemptResult.AuthFailed -> {
+                    Log.w(TAG, "RCON authentication failed with password, attempting fallback if available...")
+                }
+                is AttemptResult.ConnectionFailed -> {
+                    Log.d(TAG, "RCON command connection failed for '$trimmedCommand': ${res.message}")
+                    return ""
+                }
+            }
+        }
+        return ""
     }
 
     /**
@@ -145,68 +167,78 @@ object RconClient {
         val nonBlank = commands.map { it.trim().removePrefix("/") }.filter { it.isNotBlank() }
         if (nonBlank.isEmpty()) return emptyList()
 
-        return runCatching {
-            Socket().use { socket ->
-                socket.connect(InetSocketAddress("127.0.0.1", port), timeoutMs)
-                socket.soTimeout = timeoutMs
-                val out = DataOutputStream(socket.getOutputStream())
-                val inp = DataInputStream(socket.getInputStream())
-
-                fun readIntLE(): Int {
-                    val b0 = inp.read(); val b1 = inp.read()
-                    val b2 = inp.read(); val b3 = inp.read()
-                    if (b0 < 0 || b1 < 0 || b2 < 0 || b3 < 0) return -1
-                    return (b0 and 0xFF) or ((b1 and 0xFF) shl 8) or ((b2 and 0xFF) shl 16) or ((b3 and 0xFF) shl 24)
-                }
-                fun sendPacket(id: Int, type: Int, payload: String) {
-                    out.write(encodePacket(id, type, payload)); out.flush()
-                }
-                fun readPacket(): Triple<Int, Int, String> {
-                    val len = readIntLE()
-                    if (len < 10 || len > MAX_PAYLOAD_BYTES) return Triple(-1, -1, "")
-                    val id = readIntLE(); val type = readIntLE()
-                    val payloadSize = (len - 10).coerceAtLeast(0)
-                    val bytes = if (payloadSize > 0) ByteArray(payloadSize).also { inp.readFully(it) } else ByteArray(0)
-                    inp.read(); inp.read() // null terminators
-                    return Triple(id, type, String(bytes, StandardCharsets.UTF_8).trim())
-                }
-
-                // Authenticate once
-                sendPacket(1, SERVERDATA_AUTH, password)
-                var authenticated = false
-                var authAttempts = 0
-                while (!authenticated && authAttempts < MAX_AUTH_PACKETS) {
-                    authAttempts++
-                    val (authId, authType, _) = readPacket()
-                    if (authId == -1) {
-                        Log.w(TAG, "RCON batch auth failed")
-                        return@use commands.map { "" }
-                    }
-                    if (authType == SERVERDATA_AUTH_RESPONSE && authId == 1) {
-                        authenticated = true
-                    }
-                }
-                if (!authenticated) {
-                    Log.w(TAG, "RCON batch auth timeout or invalid response")
-                    return@use commands.map { "" }
-                }
-
-                // Send all commands over the same authenticated connection.
-                // The result is positionally aligned with `commands` (not `nonBlank`) because
-                // callers read responses back by the index of the command they passed in.
-                var requestId = 2
-                commands.map { original ->
-                    val cmd = original.trim().removePrefix("/")
-                    if (cmd.isBlank()) return@map ""
-                    sendPacket(requestId++, SERVERDATA_EXECCOMMAND, cmd)
-                    val (_, _, response) = readPacket()
-                    if (response.isBlank()) "[OK]" else response
-                }
-            }
-        }.getOrElse { error ->
-            Log.d(TAG, "RCON batch connection failed: ${error.message}")
-            commands.map { "" }
+        val passwordsToTry = mutableListOf(password)
+        if (password != RconSecret.LEGACY_PASSWORD) {
+            passwordsToTry.add(RconSecret.LEGACY_PASSWORD)
         }
+
+        for (pass in passwordsToTry) {
+            val result = runCatching {
+                Socket().use { socket ->
+                    socket.connect(InetSocketAddress("127.0.0.1", port), timeoutMs)
+                    socket.soTimeout = timeoutMs
+                    val out = DataOutputStream(socket.getOutputStream())
+                    val inp = DataInputStream(socket.getInputStream())
+
+                    fun readIntLE(): Int {
+                        val b0 = inp.read(); val b1 = inp.read()
+                        val b2 = inp.read(); val b3 = inp.read()
+                        if (b0 < 0 || b1 < 0 || b2 < 0 || b3 < 0) return -1
+                        return (b0 and 0xFF) or ((b1 and 0xFF) shl 8) or ((b2 and 0xFF) shl 16) or ((b3 and 0xFF) shl 24)
+                    }
+                    fun sendPacket(id: Int, type: Int, payload: String) {
+                        out.write(encodePacket(id, type, payload)); out.flush()
+                    }
+                    fun readPacket(): Triple<Int, Int, String> {
+                        val len = readIntLE()
+                        if (len < 10 || len > MAX_PAYLOAD_BYTES) return Triple(-1, -1, "")
+                        val id = readIntLE(); val type = readIntLE()
+                        val payloadSize = (len - 10).coerceAtLeast(0)
+                        val bytes = if (payloadSize > 0) ByteArray(payloadSize).also { inp.readFully(it) } else ByteArray(0)
+                        inp.read(); inp.read() // null terminators
+                        return Triple(id, type, String(bytes, StandardCharsets.UTF_8).trim())
+                    }
+
+                    // Authenticate once
+                    sendPacket(1, SERVERDATA_AUTH, pass)
+                    var authenticated = false
+                    var authAttempts = 0
+                    while (!authenticated && authAttempts < MAX_AUTH_PACKETS) {
+                        authAttempts++
+                        val (authId, authType, _) = readPacket()
+                        if (authId == -1) {
+                            Log.w(TAG, "RCON batch auth failed")
+                            return@use null
+                        }
+                        if (authType == SERVERDATA_AUTH_RESPONSE && authId == 1) {
+                            authenticated = true
+                        }
+                    }
+                    if (!authenticated) {
+                        Log.w(TAG, "RCON batch auth timeout or invalid response")
+                        return@use null
+                    }
+
+                    // Send all commands over the same authenticated connection.
+                    var requestId = 2
+                    commands.map { original ->
+                        val cmd = original.trim().removePrefix("/")
+                        if (cmd.isBlank()) return@map ""
+                        sendPacket(requestId++, SERVERDATA_EXECCOMMAND, cmd)
+                        val (_, _, response) = readPacket()
+                        if (response.isBlank()) "[OK]" else response
+                    }
+                }
+            }.getOrElse { error ->
+                Log.d(TAG, "RCON batch connection failed: ${error.message}")
+                return commands.map { "" }
+            }
+
+            if (result != null) {
+                return result
+            }
+        }
+        return commands.map { "" }
     }
 }
 

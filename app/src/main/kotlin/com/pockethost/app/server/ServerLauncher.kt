@@ -470,12 +470,14 @@ class ServerLauncher(private val context: Context) {
                             if (serverType == com.pockethost.app.data.model.ServerType.PAPER || serverType == com.pockethost.app.data.model.ServerType.PURPUR) {
                                 append("-DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true ")
                                 append("-DPurpur.IgnoreJavaVersion=true -Dpurpur.ignoreJavaVersion=true -Dpurpur.bypass-java-check=true -Dpurpur.ignore-java-version=true ")
-                                append("-Dpaper.oshi.disabled=true -Dpaper.disable-hardware-info=true -Doshi.os.disabled=true -Dpurpur.oshi.disabled=true -Dpurpur.disable-hardware-info=true")
+                                append("-Dpaper.oshi.disabled=true -Dpaper.disable-hardware-info=true -Doshi.os.disabled=true -Dpurpur.oshi.disabled=true -Dpurpur.disable-hardware-info=true -Djava.awt.headless=true")
                                 if (resolvedRuntime.id == "java25" || resolvedRuntime.id == "java26") {
                                     append(" -Djava.specification.version=26 -Djava.version=26.0.0")
                                 }
                             } else if (serverType == com.pockethost.app.data.model.ServerType.FABRIC) {
-                                append("-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Doshi.os.linux.procfs.logwarning=false")
+                                append("-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Doshi.os.linux.procfs.logwarning=false -Djava.awt.headless=true")
+                            } else if (serverType == com.pockethost.app.data.model.ServerType.VANILLA) {
+                                append("-Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Doshi.os.linux.procfs.logwarning=false -Djava.awt.headless=true")
                             }
                         }
                         if (bypassFlags.isNotEmpty()) {
@@ -508,12 +510,14 @@ class ServerLauncher(private val context: Context) {
                             if (serverType == com.pockethost.app.data.model.ServerType.PAPER || serverType == com.pockethost.app.data.model.ServerType.PURPUR) {
                                 append("-DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true ")
                                 append("-DPurpur.IgnoreJavaVersion=true -Dpurpur.ignoreJavaVersion=true -Dpurpur.bypass-java-check=true -Dpurpur.ignore-java-version=true ")
-                                append("-Dpaper.oshi.disabled=true -Dpaper.disable-hardware-info=true -Doshi.os.disabled=true -Dpurpur.oshi.disabled=true -Dpurpur.disable-hardware-info=true")
+                                append("-Dpaper.oshi.disabled=true -Dpaper.disable-hardware-info=true -Doshi.os.disabled=true -Dpurpur.oshi.disabled=true -Dpurpur.disable-hardware-info=true -Djava.awt.headless=true")
                                 if (resolvedRuntime.id == "java25" || resolvedRuntime.id == "java26") {
                                     append(" -Djava.specification.version=26 -Djava.version=26.0.0")
                                 }
                             } else if (serverType == com.pockethost.app.data.model.ServerType.FABRIC) {
-                                append("-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Doshi.os.linux.procfs.logwarning=false")
+                                append("-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Doshi.os.linux.procfs.logwarning=false -Djava.awt.headless=true")
+                            } else if (serverType == com.pockethost.app.data.model.ServerType.VANILLA) {
+                                append("-Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Doshi.os.linux.procfs.logwarning=false -Djava.awt.headless=true")
                             }
                         }
                         if (bypassFlags.isNotEmpty()) {
@@ -1002,6 +1006,7 @@ class ServerLauncher(private val context: Context) {
                 ServerFileManager.LaunchMode.JAR -> {
                     add("-jar")
                     add(launchTargetPath)
+                    add("--nogui")
                     add("nogui")
                     if (serverType != com.pockethost.app.data.model.ServerType.FABRIC) {
                         add("--port")
@@ -1013,6 +1018,7 @@ class ServerLauncher(private val context: Context) {
                     // file, so double-prefixing silently turns the launch into a missing-main-class
                     // crash. Accept a path that already carries the marker.
                     add(if (launchTargetPath.startsWith("@")) launchTargetPath else "@$launchTargetPath")
+                    add("--nogui")
                     add("nogui")
                 }
             }

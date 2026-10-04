@@ -287,7 +287,19 @@ class ServerHostService : Service() {
         if (intent?.action == ACTION_CONSOLE_COMMAND) {
             val command = intent.getStringExtra(EXTRA_CONSOLE_COMMAND).orEmpty().trim()
             if (command.isNotBlank()) {
-                ServerLauncher.sendCommand(command)
+                if (ServerLauncher.hasActiveExternalProcess()) {
+                    ServerLauncher.sendCommand(command)
+                } else {
+                    val targetVersion = currentVersionId?.takeIf { it.isNotBlank() } ?: getPersistedActiveVersion(applicationContext)
+                    serviceScope.launch {
+                        val resp = sendRconCommandSuspended(command)
+                        if (resp.isNotBlank() && resp != "[OK]") {
+                            sendEvent(targetVersion, EVENT_OUTPUT, resp)
+                        } else if (resp == "[OK]") {
+                            sendEvent(targetVersion, EVENT_OUTPUT, "[Server] Command executed.")
+                        }
+                    }
+                }
             }
             return START_STICKY
         }
@@ -1501,7 +1513,7 @@ class ServerHostService : Service() {
         val message = raw.substringAfter("): ", "").trimEnd()
         if (message.isBlank()) return null
         return when (tag) {
-            JVM_STDOUT_LOG_TAG -> message.takeUnless { LOG4J_CONSOLE_LINE.containsMatchIn(it) }
+            JVM_STDOUT_LOG_TAG -> if (!latestLogHasOutput) message else message.takeUnless { LOG4J_CONSOLE_LINE.containsMatchIn(it) }
             NATIVE_LAUNCHER_LOG_TAG -> {
                 val isProblem = raw.startsWith("E/") || raw.startsWith("W/")
                 val isLaunchStep = EARLY_LAUNCHER_MILESTONES.any { message.startsWith(it) }

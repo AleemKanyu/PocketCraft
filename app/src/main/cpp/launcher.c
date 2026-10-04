@@ -79,6 +79,8 @@ static void install_shutdown_signal_handlers(void) {
 #include <sys/mman.h>
 
 static void apply_exit_plt_hooks(void);
+static volatile int jvm_exit_status = 0;
+static volatile int jvm_exit_intercepted = 0;
 
 JNIEXPORT void JNICALL Java_com_pockethost_app_NativeLauncher_notifyShutdownStarted(JNIEnv *env, jobject thiz) {
     (void)env;
@@ -90,23 +92,29 @@ JNIEXPORT void JNICALL Java_com_pockethost_app_NativeLauncher_notifyShutdownStar
 
 _Noreturn void exit(int status) {
     LOGI("Intercepted exit(%d) from in-process JVM runtime.", status);
+    jvm_exit_status = status;
+    jvm_exit_intercepted = 1;
     jvm_is_shutting_down = 1;
     install_shutdown_signal_handlers();
-    pthread_exit(NULL);
+    pthread_exit((void *)(intptr_t)status);
 }
 
 _Noreturn void _exit(int status) {
     LOGI("Intercepted _exit(%d) from in-process JVM runtime.", status);
+    jvm_exit_status = status;
+    jvm_exit_intercepted = 1;
     jvm_is_shutting_down = 1;
     install_shutdown_signal_handlers();
-    pthread_exit(NULL);
+    pthread_exit((void *)(intptr_t)status);
 }
 
 _Noreturn void quick_exit(int status) {
     LOGI("Intercepted quick_exit(%d) from in-process JVM runtime.", status);
+    jvm_exit_status = status;
+    jvm_exit_intercepted = 1;
     jvm_is_shutting_down = 1;
     install_shutdown_signal_handlers();
-    pthread_exit(NULL);
+    pthread_exit((void *)(intptr_t)status);
 }
 
 #if defined(__LP64__) || defined(__aarch64__) || defined(__x86_64__)
@@ -401,6 +409,27 @@ static void detect_runtime_paths(const char *jre_path, char *runtime_lib_dir,
   }
 }
 
+struct JvmLaunchContext {
+  JLI_Launch_fn *launch;
+  int argc;
+  char **argv;
+  const char *full_version;
+  const char *dot_version;
+  int result;
+};
+
+static void *jvm_runner_thread(void *arg) {
+  struct JvmLaunchContext *ctx = (struct JvmLaunchContext *)arg;
+  LOGI("JVM runner thread started, invoking JLI_Launch...");
+  int res = ctx->launch(ctx->argc, ctx->argv, 0, NULL, 0, NULL,
+                        ctx->full_version, ctx->dot_version,
+                        ctx->argv[0], ctx->argv[0],
+                        JNI_FALSE, JNI_TRUE, JNI_FALSE, 0);
+  LOGI("JLI_Launch returned normally: %d", res);
+  ctx->result = res;
+  return (void *)(intptr_t)res;
+}
+
 JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
     JNIEnv *env, jobject thiz, jstring jJrePath, jstring jJarPath,
     jstring jServerDir, jstring jTmpDir, jstring jNativeLibDir,
@@ -419,11 +448,14 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
   const char *server_type = (*env)->GetStringUTFChars(env, jServerType, NULL);
 
   if (server_type && (strcmp(server_type, "PAPER") == 0 || strcmp(server_type, "PURPUR") == 0)) {
-    setenv("JAVA_TOOL_OPTIONS", "-Djava.specification.version=26 -Djava.version=26.0.0 -DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true", 0);
-    setenv("_JAVA_OPTIONS", "-Djava.specification.version=26 -Djava.version=26.0.0 -DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true", 0);
+    setenv("JAVA_TOOL_OPTIONS", "-Djava.specification.version=26 -Djava.version=26.0.0 -DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Djava.awt.headless=true", 0);
+    setenv("_JAVA_OPTIONS", "-Djava.specification.version=26 -Djava.version=26.0.0 -DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Djava.awt.headless=true", 0);
   } else if (server_type && strcmp(server_type, "FABRIC") == 0) {
-    setenv("JAVA_TOOL_OPTIONS", "-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true", 0);
-    setenv("_JAVA_OPTIONS", "-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true", 0);
+    setenv("JAVA_TOOL_OPTIONS", "-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Djava.awt.headless=true", 0);
+    setenv("_JAVA_OPTIONS", "-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Djava.awt.headless=true", 0);
+  } else if (server_type && strcmp(server_type, "VANILLA") == 0) {
+    setenv("JAVA_TOOL_OPTIONS", "-Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Doshi.os.linux.procfs.logwarning=false -Djava.awt.headless=true", 0);
+    setenv("_JAVA_OPTIONS", "-Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Doshi.os.linux.procfs.logwarning=false -Djava.awt.headless=true", 0);
   }
 
   char runtime_lib_dir[512];
@@ -736,9 +768,10 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
     // No --port: PowerNukkitX ignores it and binds whatever pnx.yml says, which the app has
     // already written from the world's settings.
   } else {
+    argv[a++] = "--nogui";
     argv[a++] = "nogui";
 
-    if (server_type && (strcmp(server_type, "PAPER") == 0 || strcmp(server_type, "PURPUR") == 0)) {
+    if (port_str[0] != '\0' && strcmp(port_str, "0") != 0) {
       argv[a++] = "--port";
       argv[a++] = port_str;
     }
@@ -760,11 +793,44 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
                             ((strstr(jre_path, "17") != NULL) ? "17" : DOT_VERSION));
 
   LOGI("Calling JLI_Launch with version=%s (dot=%s)...", full_version, dot_version);
-  result = launch(argc, argv, 0, NULL, 0, NULL, full_version, dot_version,
-                  argv[0], argv[0], JNI_FALSE, JNI_TRUE, JNI_FALSE, 0);
+
+  jvm_exit_intercepted = 0;
+  jvm_exit_status = 0;
+
+  struct JvmLaunchContext launch_ctx = {
+      .launch = launch,
+      .argc = argc,
+      .argv = argv,
+      .full_version = full_version,
+      .dot_version = dot_version,
+      .result = -1
+  };
+
+  pthread_t jvm_thread;
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
+  pthread_attr_setstacksize(&attr, 4 * 1024 * 1024);
+
+  LOGI("Spawning dedicated JVM runner thread (stack=4MB)...");
+  if (pthread_create(&jvm_thread, &attr, jvm_runner_thread, &launch_ctx) == 0) {
+      void *thread_ret = NULL;
+      pthread_join(jvm_thread, &thread_ret);
+      if (jvm_exit_intercepted) {
+          result = jvm_exit_status;
+          LOGI("Captured exit status %d from intercepted exit() call.", result);
+      } else {
+          result = (int)(intptr_t)thread_ret;
+          LOGI("Captured exit status %d from runner thread completion.", result);
+      }
+  } else {
+      LOGE("Failed to create JVM runner thread: %s", strerror(errno));
+      result = -5;
+  }
+  pthread_attr_destroy(&attr);
+
   jvm_is_shutting_down = 1;
   install_shutdown_signal_handlers();
-  LOGI("JLI_Launch returned: %d", result);
+  LOGI("JLI_Launch completed with exit code: %d", result);
 
 
 

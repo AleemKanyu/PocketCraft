@@ -1955,12 +1955,22 @@ class ServerStateHolder(
             return
         }
         appendLog("> $clean")
-        com.pockethost.app.server.ServerLauncher.sendCommand(clean)
         scope.launch(Dispatchers.IO) {
-            runCatching {
-                val response = RconClient.sendCommand(clean, port = config.rconPort)
-                if (response.isNotBlank() && response != "[OK]") {
-                    withContext(Dispatchers.Main) { appendLog(response) }
+            val targetPort = if (config.rconPort > 0) config.rconPort else 25575
+            val response = runCatching {
+                RconClient.sendCommand(clean, port = targetPort)
+            }.getOrDefault("")
+
+            withContext(Dispatchers.Main) {
+                if (response.isNotBlank()) {
+                    if (response == "[OK]") {
+                        appendLog("[Server] Command executed.")
+                    } else {
+                        appendLog(response)
+                    }
+                } else {
+                    // RCON socket unreachable or no response; forward to ServerHostService
+                    com.pockethost.app.server.ServerHostService.sendConsoleCommand(appContext, clean)
                 }
             }
         }
@@ -1969,17 +1979,19 @@ class ServerStateHolder(
     // Source RCON client (RFC-compliant packet framing over TCP socket 25575)
     fun sendRconCommand(command: String): String {
         val clean = command.trim().removePrefix("/")
-        val rconResponse = RconClient.sendCommand(clean, port = config.rconPort)
+        val targetPort = if (config.rconPort > 0) config.rconPort else 25575
+        val rconResponse = RconClient.sendCommand(clean, port = targetPort)
         if (rconResponse.isNotBlank()) {
             return rconResponse
         }
-        com.pockethost.app.server.ServerLauncher.sendCommand(clean)
+        com.pockethost.app.server.ServerHostService.sendConsoleCommand(appContext, clean)
         return "[OK]"
     }
 
     fun sendRconCommands(commands: List<String>): List<String> {
         if (commands.isEmpty()) return emptyList()
-        return RconClient.sendCommands(commands, port = config.rconPort)
+        val targetPort = if (config.rconPort > 0) config.rconPort else 25575
+        return RconClient.sendCommands(commands, port = targetPort)
     }
 
     // Little-endian helpers for RCON protocol
