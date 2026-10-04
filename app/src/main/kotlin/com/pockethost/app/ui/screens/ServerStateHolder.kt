@@ -127,6 +127,12 @@ class ServerStateHolder(
         private const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/7xw3Rd2vs2"
         private const val MAX_REALISTIC_WIFI_PING_MS = 5_000
 
+        /** Startup is abandoned after this long with no new line from the server itself. */
+        private const val STARTUP_SILENCE_TIMEOUT_MS = 12 * 60_000L
+
+        /** Startup is abandoned after this long in total, even while output keeps arriving. */
+        private const val STARTUP_HARD_TIMEOUT_MS = 40 * 60_000L
+
         val applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
         
         val isBackingUpState = mutableStateOf(false)
@@ -184,6 +190,13 @@ class ServerStateHolder(
     private var startedAtRealtime: Long? = null
     @Volatile private var startupStartedAtRealtime: Long? = null
     @Volatile private var targetStartupProgressPercent = 1
+
+    /**
+     * When the server last printed a line of its own (anything not tagged [PocketHost]). The
+     * startup watchdog measures silence from here, so a slow boot that is still visibly working
+     * (a world upgrade, a large modpack, Paper patching its jar) is not killed part-way through.
+     */
+    @Volatile private var lastServerOutputAtRealtime: Long? = null
 
     /**
      * Percentages the boot milestones map onto, in order. The animation uses this to find
@@ -425,6 +438,20 @@ class ServerStateHolder(
     var downloadBackupStatusMessage: String
         get() = downloadBackupStatusMessageState.value
         private set(value) { downloadBackupStatusMessageState.value = value }
+
+    /**
+     * Clears a backup/restore/download busy flag from a `finally` block, however the work ended.
+     *
+     * The flags live in the companion, so they outlive any one screen, and startServer() refuses
+     * to run while one is set: a flag left behind blocks the server until the app is killed.
+     * The catch blocks cannot be trusted with the reset on their own. The Worlds screen launches
+     * restores and imports from a composition-bound scope, and once leaving the screen cancels
+     * that scope, the catch block's own withContext(Dispatchers.Main) throws again before it
+     * reaches the reset. An Error such as OutOfMemoryError skips `catch (e: Exception)` entirely.
+     */
+    private suspend fun clearBusyFlag(clear: () -> Unit) {
+        withContext(NonCancellable + Dispatchers.Main) { clear() }
+    }
 
     fun startCreateBackup(onResult: (String) -> Unit = {}) {
         applicationScope.launch {
@@ -721,7 +748,12 @@ class ServerStateHolder(
                         areSpawnChunksLoaded = true
                         attemptTransitionToOnline()
                     }
-                    ServerHostService.EVENT_OUTPUT -> appendLog(line)
+                    ServerHostService.EVENT_OUTPUT -> {
+                        if (!line.startsWith("[PocketHost]")) {
+                            lastServerOutputAtRealtime = SystemClock.elapsedRealtime()
+                        }
+                        appendLog(line)
+                    }
                     ServerHostService.EVENT_TUNNEL_CONNECTING -> {
                         tunnelConnecting = true
                         tunnelError = null
@@ -1231,9 +1263,18 @@ class ServerStateHolder(
 
     fun startServer(isRestart: Boolean = false, bypassModDependencyCheck: Boolean = false) {
         if (isBackingUp || isRestoringBackup || isDownloadingBackup) {
-            val msg = "Cannot start server while a backup, restore, or download is in progress."
-            appendLog("[ERROR] $msg")
-            recordServerFailure(msg, duringStartup = true)
+            // Waiting for a backup is not a server failure, so it gets a plain message rather
+            // than the crash dialog, whose only real offer is to file a support ticket.
+            val busyWith = when {
+                isBackingUp -> "a backup"
+                isRestoringBackup -> "a restore"
+                else -> "a backup download"
+            }
+            val msg = "Can't start the server while $busyWith is still running. Try again when it finishes."
+            appendLog("[PocketHost] $msg")
+            scope.launch(Dispatchers.Main) {
+                android.widget.Toast.makeText(appContext, msg, android.widget.Toast.LENGTH_LONG).show()
+            }
             return
         }
         if (versionId.isBlank()) {
@@ -1302,6 +1343,7 @@ class ServerStateHolder(
         tps = 4f
         startedAtRealtime = SystemClock.elapsedRealtime()
         startupStartedAtRealtime = SystemClock.elapsedRealtime()
+        lastServerOutputAtRealtime = null
         warnedCrossplayIncompatible = false
         jvmStartedTracking = false
         publicAddress = null
@@ -3135,6 +3177,8 @@ class ServerStateHolder(
                 isBackingUp = false
             }
             return@withContext if (isCancelled) "Backup cancelled." else "Backup failed: ${e.message ?: e.javaClass.simpleName}"
+        } finally {
+            clearBusyFlag { isBackingUp = false }
         }
     }
 
@@ -3274,6 +3318,7 @@ class ServerStateHolder(
             return@withContext "Backup import failed: ${e.message ?: e.javaClass.simpleName}"
         } finally {
             if (tempFile.exists()) tempFile.delete()
+            clearBusyFlag { isRestoringBackup = false }
         }
     }
 
@@ -3377,6 +3422,8 @@ class ServerStateHolder(
                 restoreStatusMessage = ""
             }
             return@withContext "Restore failed: ${e.message ?: e.javaClass.simpleName}"
+        } finally {
+            clearBusyFlag { isRestoringBackup = false }
         }
     }
 
@@ -3661,6 +3708,7 @@ class ServerStateHolder(
             return@withContext "Dimension restore failed: ${e.message ?: e.javaClass.simpleName}"
         } finally {
             tempDir.deleteRecursively()
+            clearBusyFlag { isRestoringBackup = false }
         }
     }
 
@@ -3802,6 +3850,7 @@ class ServerStateHolder(
             return@withContext "Overworld restore failed: ${e.message ?: e.javaClass.simpleName}"
         } finally {
             tempDir.deleteRecursively()
+            clearBusyFlag { isRestoringBackup = false }
         }
     }
 
@@ -3915,6 +3964,8 @@ class ServerStateHolder(
                 downloadBackupStatusMessage = ""
             }
             "Download failed: ${e.message ?: e.javaClass.simpleName}"
+        } finally {
+            clearBusyFlag { isDownloadingBackup = false }
         }
     }
 
@@ -4212,11 +4263,23 @@ class ServerStateHolder(
 
             while ((isStarting || isRunning) && !isJavaServerDone && !serverJoinable) {
                 if (!isStopping) {
-                    val elapsedMs = (SystemClock.elapsedRealtime() - (startupStartedAtRealtime ?: SystemClock.elapsedRealtime())).coerceAtLeast(0L)
-                    if (elapsedMs > 720_000L) {
-                        appendLog("[ERROR] Server startup timed out (exceeded 12 minutes).")
+                    val now = SystemClock.elapsedRealtime()
+                    val startedAt = startupStartedAtRealtime ?: now
+                    val elapsedMs = (now - startedAt).coerceAtLeast(0L)
+                    // An output time from an earlier run is older than this start, so it falls
+                    // back to measuring silence from the start itself.
+                    val quietMs = (now - maxOf(startedAt, lastServerOutputAtRealtime ?: startedAt)).coerceAtLeast(0L)
+                    val timeoutReason = when {
+                        quietMs > STARTUP_SILENCE_TIMEOUT_MS ->
+                            "Server startup timed out (no new server output for ${STARTUP_SILENCE_TIMEOUT_MS / 60_000} minutes)."
+                        elapsedMs > STARTUP_HARD_TIMEOUT_MS ->
+                            "Server startup timed out (still not ready after ${STARTUP_HARD_TIMEOUT_MS / 60_000} minutes)."
+                        else -> null
+                    }
+                    if (timeoutReason != null) {
+                        appendLog("[ERROR] $timeoutReason")
                         stopServer()
-                        recordServerFailure("Server startup timed out (exceeded 12 minutes). Please verify your JRE settings or check the console log for errors.", duringStartup = true)
+                        recordServerFailure("$timeoutReason Please verify your JRE settings or check the console log for errors.", duringStartup = true)
                         break
                     }
 

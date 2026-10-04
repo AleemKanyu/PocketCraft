@@ -3030,7 +3030,8 @@ private fun ConsoleCard(
                                     context = context,
                                     message = bugReportNote.trim().ifBlank { "Bug report from console log" },
                                     serverVersion = stateHolder.config.gameVersion.ifBlank { "unknown" },
-                                    source = "console_bug_report"
+                                    source = "console_bug_report",
+                                    consoleLines = stateHolder.logs.toList()
                                 )
                                 bugReportSubmitting = false
                                 result

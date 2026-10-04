@@ -109,6 +109,9 @@ class ServerHostService : Service() {
     private var portProbeThread: Thread? = null
     private val logcatRunning = AtomicBoolean(false)
     private val logcatGeneration = java.util.concurrent.atomic.AtomicInteger(0)
+    // Set once the latest.log tail has delivered a line: the server's logger is up, so the
+    // early logcat bridge hands the console over to the tail.
+    @Volatile private var latestLogHasOutput = false
     private val logTailRunning = AtomicBoolean(false)
     private val portProbeRunning = AtomicBoolean(false)
     private val tunnelStarted = AtomicBoolean(false)
@@ -423,12 +426,14 @@ class ServerHostService : Service() {
         }
         // On Android 12+ the JVM runs in-process via JNI (NativeLauncher).
         // launcher.c pipes JVM stdout/stderr into logcat at full native speed.
-        // startLogcatBridge() would re-broadcast every one of those lines on the
-        // main thread, causing a broadcast flood (~100s of events/sec).
-        // startServerLogTail() already tails logs/latest.log and handles all output,
-        // so the logcat bridge is redundant on this path.
+        // A full startLogcatBridge() would re-broadcast every one of those lines on the
+        // main thread, causing a broadcast flood (~100s of events/sec), and
+        // startServerLogTail() delivers the server's output once its logger is writing
+        // logs/latest.log. The early bridge covers only the gap before that.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             startLogcatBridge(versionId)
+        } else {
+            startLogcatBridge(versionId, earlyStartupOnly = true)
         }
 
 
@@ -1388,19 +1393,38 @@ class ServerHostService : Service() {
         firestoreLogQueue.clear()
     }
 
-    private fun startLogcatBridge(versionId: String) {
+    /**
+     * Forwards this process's logcat output into the console.
+     *
+     * With [earlyStartupOnly] (Android 12+, where the JVM runs in-process) only launcher.c's two
+     * tags are read, and only until the server's own logs/latest.log starts producing lines or
+     * the server is ready. Everything the JVM prints before its logger is up reaches logcat and
+     * nowhere else: Paperclip downloading and patching, the vanilla bundler, "Error occurred
+     * during initialization of VM". Without this a launch that stalls there leaves the console
+     * silent until the startup watchdog gives up, and the support ticket shows nothing past
+     * "Launching in-process JVM". Log4j console lines are skipped because the latest.log tail
+     * delivers them, and stopping at the handover keeps the full-volume stream off this path.
+     */
+    private fun startLogcatBridge(versionId: String, earlyStartupOnly: Boolean = false) {
         if (logcatRunning.getAndSet(true)) return
         val bridgeStartTime = SystemClock.elapsedRealtime()
         val generation = logcatGeneration.incrementAndGet()
+        if (earlyStartupOnly) latestLogHasOutput = false
         logcatThread = Thread {
+            val filterSpecs = if (earlyStartupOnly) {
+                listOf("$NATIVE_LAUNCHER_LOG_TAG:I", "$JVM_STDOUT_LOG_TAG:V", "*:S")
+            } else {
+                listOf("*:V")
+            }
             val process = try {
                 ProcessBuilder(
-                    "logcat",
-                    "-T", "1",
-                    "--pid=${Process.myPid()}",
-                    "-v",
-                    "brief",
-                    "*:V"
+                    listOf(
+                        "logcat",
+                        "-T", "1",
+                        "--pid=${Process.myPid()}",
+                        "-v",
+                        "brief"
+                    ) + filterSpecs
                 ).redirectErrorStream(true).start()
             } catch (e: Exception) {
                 android.util.Log.e("ServerHostService", "Failed to start logcat bridge: ${e.message}")
@@ -1409,12 +1433,23 @@ class ServerHostService : Service() {
                 return@Thread
             }
             logcatProcess = process
+            var endedAtHandover = false
 
             try {
                 process.inputStream.bufferedReader().useLines { lines ->
                     for (raw in lines) {
                         // A retired generation must stop forwarding even if its stream is still open.
                         if (!logcatRunning.get() || logcatGeneration.get() != generation) break
+                        if (earlyStartupOnly) {
+                            if (latestLogHasOutput || serverReadyHandled.get()) {
+                                endedAtHandover = true
+                                break
+                            }
+                            val earlyLine = earlyStartupConsoleLine(raw) ?: continue
+                            val isBacklog = (SystemClock.elapsedRealtime() - bridgeStartTime) < 3000L
+                            handleObservedOutputLine(versionId, earlyLine, isBacklog)
+                            continue
+                        }
                         val line = raw.substringAfter(": ", raw).trim()
                         if (line.isBlank()) continue
                         if (line.startsWith("JAR:") ||
@@ -1442,12 +1477,37 @@ class ServerHostService : Service() {
                 runCatching { process.destroy() }
                 if (logcatGeneration.get() == generation) {
                     logcatProcess = null
+                    // The early bridge ends itself at the handover with the latch still held;
+                    // release it so a later start (a service resume) can open a bridge again.
+                    // No newer bridge can have started while the latch was held.
+                    if (endedAtHandover) logcatRunning.set(false)
                 }
             }
         }.apply {
             name = "server-logcat-bridge"
             isDaemon = true
             start()
+        }
+    }
+
+    /**
+     * Turns one `-v brief` logcat line from the early bridge into a console line, or null to
+     * drop it. JVM output passes through except log4j lines; launcher.c output is limited to
+     * its launch steps and its warnings and errors.
+     */
+    private fun earlyStartupConsoleLine(raw: String): String? {
+        // brief format: "I/PocketCraftJVM( 1234): message"
+        val tag = raw.substringAfter('/', "").substringBefore('(').trim()
+        val message = raw.substringAfter("): ", "").trimEnd()
+        if (message.isBlank()) return null
+        return when (tag) {
+            JVM_STDOUT_LOG_TAG -> message.takeUnless { LOG4J_CONSOLE_LINE.containsMatchIn(it) }
+            NATIVE_LAUNCHER_LOG_TAG -> {
+                val isProblem = raw.startsWith("E/") || raw.startsWith("W/")
+                val isLaunchStep = EARLY_LAUNCHER_MILESTONES.any { message.startsWith(it) }
+                if (isProblem || isLaunchStep) "[Launcher] $message" else null
+            }
+            else -> null
         }
     }
 
@@ -1489,6 +1549,7 @@ class ServerHostService : Service() {
 
                             if (line.isBlank()) continue
                             val isBacklog = currentOffset <= effectiveTailStart
+                            if (!isBacklog) latestLogHasOutput = true
                             handleObservedOutputLine(versionId, line, isBacklog)
                         }
                         offset = raf.filePointer
@@ -3157,6 +3218,26 @@ class ServerHostService : Service() {
         private const val STOP_GRACE_PERIOD_MS = 15_000L
         /** How long the game port must stay open before it alone counts as "ready". */
         private const val PORT_ONLY_READY_GRACE_MS = 60_000L
+
+        /** logcat tag of launcher.c's own messages (its TAG define). */
+        private const val NATIVE_LAUNCHER_LOG_TAG = "PocketCraft"
+        /** logcat tag launcher.c writes the in-process JVM's stdout/stderr under (jvm_log_tag). */
+        private const val JVM_STDOUT_LOG_TAG = "PocketCraftJVM"
+        /**
+         * launcher.c messages worth showing in the console: one per launch step, so a stalled
+         * launch shows the last step it reached. The rest (argv, PLT hooks, every preloaded
+         * library) is noise to a player.
+         */
+        private val EARLY_LAUNCHER_MILESTONES = listOf(
+            "NativeLauncher starting",
+            "libjli.so loaded",
+            "libjvm.so loaded",
+            "Calling JLI_Launch",
+            "JLI_Launch returned",
+            "Intercepted"
+        )
+        /** Log4j console lines start with a [HH:MM:SS timestamp; latest.log delivers those. */
+        private val LOG4J_CONSOLE_LINE = Regex("^\\[\\d{2}:\\d{2}:\\d{2}")
 
         const val ACTION_START = "com.pockethost.app.action.START"
         const val ACTION_START_LISTENER = "com.pockethost.app.action.START_LISTENER"
