@@ -157,19 +157,35 @@ fun WorldsScreen(
     var showImportGuide by remember { mutableStateOf(false) }
     var importDimension by remember { mutableStateOf("overworld") }
     val worldPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
         uri?.let {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
             val activeWorld = stateHolder.activeWorld.ifBlank { "world" }
-            val importFolder = activeWorld
+            val importFolder = when (importDimension) {
+                "nether" -> "${activeWorld}_nether"
+                "end" -> "${activeWorld}_the_end"
+                else -> activeWorld
+            }
             stateHolder.importWorldDimension(it, importFolder)
         }
     }
     var aternosExpanded by remember { mutableStateOf(false) }
     val backupZipPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
         uri?.let {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
             scope.launch {
                 val msg = stateHolder.importBackup(it)
                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
@@ -342,7 +358,7 @@ fun WorldsScreen(
                                 } else {
                                     DuoButton(
                                         text = "UPLOAD WORLD ZIP",
-                                        onClick = { backupZipPickerLauncher.launch("application/zip") },
+                                        onClick = { backupZipPickerLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*")) },
                                         enabled = stateHolder.status == ServerStatus.OFFLINE,
                                         minHeight = 36.dp,
                                         modifier = Modifier.fillMaxWidth()
@@ -377,7 +393,7 @@ fun WorldsScreen(
                                         enabled = stateHolder.status == ServerStatus.OFFLINE,
                                         onUpload = {
                                             importDimension = "overworld"
-                                            worldPickerLauncher.launch("application/zip")
+                                            worldPickerLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*"))
                                         }
                                     )
                                     DimensionRow(
@@ -388,7 +404,7 @@ fun WorldsScreen(
                                         enabled = stateHolder.status == ServerStatus.OFFLINE,
                                         onUpload = {
                                             importDimension = "nether"
-                                            worldPickerLauncher.launch("application/zip")
+                                            worldPickerLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*"))
                                         }
                                     )
                                     DimensionRow(
@@ -399,7 +415,7 @@ fun WorldsScreen(
                                         enabled = stateHolder.status == ServerStatus.OFFLINE,
                                         onUpload = {
                                             importDimension = "end"
-                                            worldPickerLauncher.launch("application/zip")
+                                            worldPickerLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*"))
                                         }
                                     )
                                 }

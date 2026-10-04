@@ -3,6 +3,8 @@ package com.pockethost.app.ui.screens
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
@@ -79,10 +81,17 @@ fun BackupsScreen(
         animationSpec = tween(durationMillis = 500),
         label = "restore_progress"
     )
+    val context = androidx.compose.ui.platform.LocalContext.current
     val backupImportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
+    ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
         stateHolder.startImportBackup(uri) { onMessage(it) }
     }
 
@@ -223,7 +232,7 @@ fun BackupsScreen(
             DuoButton(
                 text = "UPLOAD BACKUP ZIP",
                 icon = Icons.Filled.CloudUpload,
-                onClick = { backupImportLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed")) },
+                onClick = { backupImportLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*")) },
                 enabled = !stateHolder.isBackingUp && !stateHolder.isRestoringBackup && !stateHolder.isDownloadingBackup,
                 modifier = Modifier.fillMaxWidth()
             )

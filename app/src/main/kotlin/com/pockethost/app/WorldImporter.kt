@@ -168,13 +168,18 @@ object WorldImporter {
         }
 
     private fun queryContentLength(context: Context, uri: Uri): Long {
-        context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
-            if (descriptor.length > 0L) return descriptor.length
+        runCatching {
+            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
+                if (descriptor.length > 0L) return descriptor.length
+            }
         }
-        context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
-            val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-            if (sizeIndex >= 0 && cursor.moveToFirst()) {
-                return cursor.getLong(sizeIndex).takeIf { it > 0L } ?: -1L
+        runCatching {
+            context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (sizeIndex >= 0 && cursor.moveToFirst()) {
+                    val size = cursor.getLong(sizeIndex)
+                    if (size > 0L) return size
+                }
             }
         }
         return -1L
@@ -202,7 +207,16 @@ object WorldImporter {
         // 1. Locate level.dat to find the overworld directory
         val levelDat = serverDir.walkTopDown().maxDepth(6).firstOrNull { it.isFile && it.name.lowercase() == "level.dat" }
         if (levelDat == null) {
-            android.util.Log.e("WorldImporter", "No level.dat found in extracted backup.")
+            // Check if this is a dimension-only import (e.g. Aternos Nether or End export with no level.dat)
+            val hasRegionFiles = serverDir.walkTopDown().maxDepth(6).any { 
+                it.isFile && it.extension.lowercase() == "mca" 
+            }
+            if (hasRegionFiles) {
+                android.util.Log.i("WorldImporter", "No level.dat found, but region files detected. Processing as dimension/region import for $targetWorld.")
+                normalizeDimensionOnlyImport(serverDir, targetWorld)
+                return
+            }
+            android.util.Log.e("WorldImporter", "No level.dat or region files found in extracted backup.")
             return
         }
         val overworldDir = levelDat.parentFile ?: serverDir
@@ -338,6 +352,62 @@ object WorldImporter {
         }
 
         ensureRestoredServerProperties(serverDir, targetWorld)
+    }
+
+    private fun normalizeDimensionOnlyImport(serverDir: File, targetWorld: String) {
+        val targetRoot = File(serverDir, targetWorld)
+        if (!targetRoot.exists()) targetRoot.mkdirs()
+
+        val isNether = targetWorld.endsWith("_nether", ignoreCase = true) || targetWorld.equals("dim-1", ignoreCase = true)
+        val isEnd = targetWorld.endsWith("_the_end", ignoreCase = true) || targetWorld.equals("dim1", ignoreCase = true)
+
+        val destinationDir = when {
+            isNether -> File(serverDir, if (targetWorld.contains("_nether")) targetWorld else "${targetWorld}_nether").also { it.mkdirs() }
+            isEnd -> File(serverDir, if (targetWorld.contains("_the_end")) targetWorld else "${targetWorld}_the_end").also { it.mkdirs() }
+            else -> targetRoot
+        }
+
+        // Find if DIM-1 or DIM1 folder exists anywhere in the extracted tree
+        val dimensionSubdir = serverDir.walkTopDown().maxDepth(4).firstOrNull { 
+            it.isDirectory && (it.name.equals("DIM-1", ignoreCase = true) || it.name.equals("DIM1", ignoreCase = true)) &&
+            it.absolutePath != destinationDir.absolutePath
+        }
+
+        if (dimensionSubdir != null) {
+            mergeDirectoryContents(dimensionSubdir, destinationDir)
+            dimensionSubdir.deleteRecursively()
+        }
+
+        // Also check if region folder exists directly anywhere in the extracted tree
+        val regionFolder = serverDir.walkTopDown().maxDepth(4).firstOrNull { 
+            it.isDirectory && it.name.equals("region", ignoreCase = true) &&
+            it.parentFile?.absolutePath != destinationDir.absolutePath
+        }
+        if (regionFolder != null) {
+            val targetRegion = File(destinationDir, "region")
+            mergeDirectoryContents(regionFolder, targetRegion)
+            regionFolder.deleteRecursively()
+        }
+
+        // Also check for entities/ and poi/ folders if present
+        listOf("entities", "poi").forEach { folderName ->
+            val folder = serverDir.walkTopDown().maxDepth(4).firstOrNull { 
+                it.isDirectory && it.name.equals(folderName, ignoreCase = true) &&
+                it.parentFile?.absolutePath != destinationDir.absolutePath
+            }
+            if (folder != null) {
+                val targetFolder = File(destinationDir, folderName)
+                mergeDirectoryContents(folder, targetFolder)
+                folder.deleteRecursively()
+            }
+        }
+
+        // Clean up empty directories
+        serverDir.listFiles()?.filter { it.isDirectory && it.listFiles().isNullOrEmpty() }?.forEach {
+            it.deleteRecursively()
+        }
+
+        ensureRestoredServerProperties(serverDir, targetWorld.substringBefore("_nether").substringBefore("_the_end"))
     }
 
     private fun mapImportedDimensionName(sourceName: String, importedBaseWorldName: String, targetBaseWorldName: String, serverType: com.pockethost.app.data.model.ServerType): String {

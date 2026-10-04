@@ -77,10 +77,16 @@ object UpdateManager {
         val latestVersion = latestVersionRaw?.toString()?.trim()?.takeIf { it.isNotBlank() }
         val latestVersionCode = latestVersionCodeRaw.toFirestoreIntOrNull()
 
-        Log.d(TAG, "Fetched app_config/update values: showUpdatePopupRaw=$showUpdatePopupRaw, isForcedRaw=$isForcedRaw, playStoreUrlRaw=$playStoreUrlRaw, versionCodeRaw=$versionCodeRaw, enablePlayStoreRatingPromptRaw=$enablePlayStoreRatingPromptRaw, excludeVersionCodeRaw=$excludeVersionCodeRaw, latestVersionRaw=$latestVersionRaw, latestVersionCodeRaw=$latestVersionCodeRaw")
+        val showPlayStoreUpdatePopup = (document.get("showPlayStoreUpdatePopup") ?: false).toBooleanOrNull() ?: false
+        val isExternal = com.pockethost.app.BuildConfig.IS_EXTERNAL_BUILD
+        val shouldShow = if (isExternal) {
+            showUpdatePopup
+        } else {
+            showPlayStoreUpdatePopup
+        }
 
-        if (!showUpdatePopup) {
-            Log.d(TAG, "Update config parsed: showUpdatePopup is false/null. Skipping update popup.")
+        if (!shouldShow) {
+            Log.d(TAG, "Update config parsed: shouldShow is false (isExternal=$isExternal, showUpdatePopup=$showUpdatePopup, showPlayStoreUpdatePopup=$showPlayStoreUpdatePopup). Skipping update popup.")
             return UpdateConfig(enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt)
         }
 
@@ -114,6 +120,11 @@ object UpdateManager {
         if (playStoreUrl.isBlank()) {
             // Treat blank URL as invalid data and skip, or use a default
             Log.w(TAG, "Update config parsed: playStoreUrl is empty/blank (invalid data). Skipping update popup.")
+            return UpdateConfig(enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt)
+        }
+
+        if (!isExternal && !playStoreUrl.contains("play.google.com")) {
+            Log.w(TAG, "Play Store build received non-Play Store URL: $playStoreUrl. Skipping update popup.")
             return UpdateConfig(enablePlayStoreRatingPrompt = enablePlayStoreRatingPrompt)
         }
 

@@ -1,6 +1,8 @@
 package com.pockethost.app.ui.screens
 
+import android.content.Intent
 import android.net.Uri
+import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -195,14 +197,31 @@ fun WorldSetupScreen(
     var isDownloadingVersion by remember { mutableStateOf(false) }
 
     val importLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
         if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
             val fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "world_backup.zip"
+            // Cache immediately to local file in cacheDir so deferred setup never suffers from transient SAF permission drops
+            val cachedFile = File(context.cacheDir, "setup_import_${pendingImportSlot.name.lowercase()}_${System.currentTimeMillis()}.zip")
+            runCatching {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    cachedFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+            val effectiveUri = if (cachedFile.exists() && cachedFile.length() > 0L) Uri.fromFile(cachedFile) else uri
+
             when (pendingImportSlot) {
-                WorldImportSlot.MAIN -> { mainWorldZipUri = uri; mainWorldZipName = fileName }
-                WorldImportSlot.NETHER -> { netherZipUri = uri; netherZipName = fileName }
-                WorldImportSlot.END -> { endZipUri = uri; endZipName = fileName }
+                WorldImportSlot.MAIN -> { mainWorldZipUri = effectiveUri; mainWorldZipName = fileName }
+                WorldImportSlot.NETHER -> { netherZipUri = effectiveUri; netherZipName = fileName }
+                WorldImportSlot.END -> { endZipUri = effectiveUri; endZipName = fileName }
             }
         }
     }
@@ -903,7 +922,7 @@ fun WorldSetupScreen(
                                     isLoading = isImporting,
                                     onUploadClick = {
                                         pendingImportSlot = WorldImportSlot.MAIN
-                                        importLauncher.launch("application/zip")
+                                        importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*"))
                                     }
                                 )
                                 DimensionImportSlotRow(
@@ -915,7 +934,7 @@ fun WorldSetupScreen(
                                     isLoading = isImporting,
                                     onUploadClick = {
                                         pendingImportSlot = WorldImportSlot.NETHER
-                                        importLauncher.launch("application/zip")
+                                        importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*"))
                                     }
                                 )
                                 DimensionImportSlotRow(
@@ -927,7 +946,7 @@ fun WorldSetupScreen(
                                     isLoading = isImporting,
                                     onUploadClick = {
                                         pendingImportSlot = WorldImportSlot.END
-                                        importLauncher.launch("application/zip")
+                                        importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*"))
                                     }
                                 )
                             }

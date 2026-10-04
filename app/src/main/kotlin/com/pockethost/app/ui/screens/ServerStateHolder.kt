@@ -5566,6 +5566,7 @@ class ServerStateHolder(
                     android.util.Log.e("ServerStateHolder", "Failed to import dimension", e)
                     withContext(Dispatchers.Main) {
                         importProgressMessage = "Import failed: ${e.message ?: "unknown error"}"
+                        android.widget.Toast.makeText(appContext, "Import failed: ${e.message ?: "unknown error"}", android.widget.Toast.LENGTH_LONG).show()
                     }
                 }
                 if (result.isSuccess) {
@@ -5579,9 +5580,15 @@ class ServerStateHolder(
                     flattenWorldStructure(targetWorld)
                     DimensionMigrator.syncDimensionsForServerType(appContext, targetWorld, config.serverType)
                     refreshAll()
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(appContext, "World imported successfully!", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("ServerStateHolder", "Failed to import dimension", e)
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(appContext, "Import failed: ${e.message ?: "unknown error"}", android.widget.Toast.LENGTH_LONG).show()
+                }
             } finally {
                 isImportingWorld = false
                 importProgressPercent = 0f
@@ -5806,8 +5813,10 @@ class ServerStateHolder(
     }
 
     private fun queryContentLength(uri: Uri): Long {
-        appContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
-            if (descriptor.length > 0L) return descriptor.length
+        runCatching {
+            appContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
+                if (descriptor.length > 0L) return descriptor.length
+            }
         }
         val projection = arrayOf(OpenableColumns.SIZE)
         return runCatching {
