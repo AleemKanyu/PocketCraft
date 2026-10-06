@@ -3,6 +3,7 @@ package com.pockethost.app.ui.screens
 import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -82,7 +83,10 @@ private val EaseInOut = CubicBezierEasing(0.65f, 0f, 0.35f, 1f)
 /** Speeds up the whole way down, like a block of sand letting go. */
 private val Gravity = CubicBezierEasing(0.55f, 0.085f, 0.68f, 0.53f)
 /** Settles past the mark and back, so each letter rocks as it stands up. */
-private val Pop = CubicBezierEasing(0.34f, 1.56f, 0.64f, 1f)
+private val PopCurve = CubicBezierEasing(0.34f, 1.56f, 0.64f, 1f)
+// An overshooting curve has no solution for fractions a rounding error short of 1 and Compose
+// throws there, so the end of the range is pinned instead of evaluated.
+private val Pop = Easing { fraction -> if (fraction >= 0.999f) 1f else PopCurve.transform(fraction) }
 
 private const val WORDMARK = "PocketHost"
 private val LogoSize = 96.dp

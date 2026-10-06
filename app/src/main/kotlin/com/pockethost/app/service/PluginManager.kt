@@ -1729,10 +1729,17 @@ object PluginManager {
         val resolvedVersion = minecraftVersion 
             ?: com.pockethost.app.data.repository.ServerConfigRepository(context).loadConfig().gameVersion.ifBlank { "1.20.4" }
 
-        val candidate = when (item.source) {
-            MODRINTH_PROVIDER -> resolveModrinthDownload(context, item, type, resolvedVersion, runtimeKey)
-            HANGAR_PROVIDER -> resolveHangarDownload(context, item, worldName)
-            else -> null
+        // The lookup is a network call: a timeout or a dead connection has to come back as a
+        // failed Result like every other install error, not escape and crash the caller.
+        val candidate = try {
+            when (item.source) {
+                MODRINTH_PROVIDER -> resolveModrinthDownload(context, item, type, resolvedVersion, runtimeKey)
+                HANGAR_PROVIDER -> resolveHangarDownload(context, item, worldName)
+                else -> null
+            }
+        } catch (error: IOException) {
+            Log.w("PluginManager", "Download lookup for ${item.title} failed: ${error.message}")
+            return@withContext Result.failure(Exception("Could not reach the download server. Check your internet connection and try again."))
         } ?: return@withContext Result.failure(Exception("Could not find a compatible download for ${item.title}."))
 
         val installed = installFromUrl(

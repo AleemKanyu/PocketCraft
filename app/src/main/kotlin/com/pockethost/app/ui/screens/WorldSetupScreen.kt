@@ -2,6 +2,7 @@ package com.pockethost.app.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -193,6 +194,7 @@ fun WorldSetupScreen(
 
     var importProgress by remember { mutableStateOf(0f) }
     var isImporting by remember { mutableStateOf(false) }
+    var isPreparingImport by remember { mutableStateOf(false) }
     var versionDownloadProgress by remember { mutableStateOf(0) }
     var isDownloadingVersion by remember { mutableStateOf(false) }
 
@@ -206,23 +208,55 @@ fun WorldSetupScreen(
                     Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             }
-            val fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "world_backup.zip"
-            // Cache immediately to local file in cacheDir so deferred setup never suffers from transient SAF permission drops
-            val cachedFile = File(context.cacheDir, "setup_import_${pendingImportSlot.name.lowercase()}_${System.currentTimeMillis()}.zip")
-            runCatching {
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    cachedFile.outputStream().use { output ->
-                        input.copyTo(output)
+            val slot = pendingImportSlot
+            isPreparingImport = true
+            scope.launch {
+                try {
+                    // Cache to a local file in cacheDir so deferred setup never suffers from transient SAF permission drops.
+                    // World zips run to hundreds of MB, so this must stay off the main thread.
+                    val (fileName, effectiveUri) = withContext(Dispatchers.IO) {
+                        val displayName = runCatching {
+                            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                                if (cursor.moveToFirst()) cursor.getString(0) else null
+                            }
+                        }.getOrNull()?.takeIf { it.isNotBlank() }
+                            ?: uri.lastPathSegment?.substringAfterLast('/')
+                            ?: "world_backup.zip"
+                        val cachedFile = File(context.cacheDir, "setup_import_${slot.name.lowercase()}_${System.currentTimeMillis()}.zip")
+                        var cached = false
+                        try {
+                            context.contentResolver.openInputStream(uri)?.use { input ->
+                                cachedFile.outputStream().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            cached = cachedFile.length() > 0L
+                        } catch (e: java.io.IOException) {
+                            android.util.Log.w("WorldSetupScreen", "Could not cache picked world zip", e)
+                        } catch (e: SecurityException) {
+                            android.util.Log.w("WorldSetupScreen", "Could not cache picked world zip", e)
+                        } finally {
+                            if (!cached) cachedFile.delete()
+                        }
+                        displayName to (if (cached) Uri.fromFile(cachedFile) else uri)
                     }
+                    when (slot) {
+                        WorldImportSlot.MAIN -> { deleteCachedImport(mainWorldZipUri); mainWorldZipUri = effectiveUri; mainWorldZipName = fileName }
+                        WorldImportSlot.NETHER -> { deleteCachedImport(netherZipUri); netherZipUri = effectiveUri; netherZipName = fileName }
+                        WorldImportSlot.END -> { deleteCachedImport(endZipUri); endZipUri = effectiveUri; endZipName = fileName }
+                    }
+                } finally {
+                    isPreparingImport = false
                 }
             }
-            val effectiveUri = if (cachedFile.exists() && cachedFile.length() > 0L) Uri.fromFile(cachedFile) else uri
+        }
+    }
 
-            when (pendingImportSlot) {
-                WorldImportSlot.MAIN -> { mainWorldZipUri = effectiveUri; mainWorldZipName = fileName }
-                WorldImportSlot.NETHER -> { netherZipUri = effectiveUri; netherZipName = fileName }
-                WorldImportSlot.END -> { endZipUri = effectiveUri; endZipName = fileName }
-            }
+    DisposableEffect(Unit) {
+        onDispose {
+            deleteCachedImport(mainWorldZipUri)
+            deleteCachedImport(netherZipUri)
+            deleteCachedImport(endZipUri)
         }
     }
 
@@ -277,7 +311,7 @@ fun WorldSetupScreen(
 
         if (netherZipUri != null) {
             isImporting = true
-            val importResult = WorldImporter.importWorld(context, netherZipUri!!, selectedServerType, stateHolder.versionLabel, targetWorld) { p, _ -> importProgress = p }
+            val importResult = WorldImporter.importWorld(context, netherZipUri!!, selectedServerType, stateHolder.versionLabel, targetWorld, WorldImporter.ImportDimension.NETHER) { p, _ -> importProgress = p }
             isImporting = false
             if (importResult.isFailure) {
                 onMessage("Nether import failed: ${importResult.exceptionOrNull()?.message ?: "error"}")
@@ -287,7 +321,7 @@ fun WorldSetupScreen(
 
         if (endZipUri != null) {
             isImporting = true
-            val importResult = WorldImporter.importWorld(context, endZipUri!!, selectedServerType, stateHolder.versionLabel, targetWorld) { p, _ -> importProgress = p }
+            val importResult = WorldImporter.importWorld(context, endZipUri!!, selectedServerType, stateHolder.versionLabel, targetWorld, WorldImporter.ImportDimension.END) { p, _ -> importProgress = p }
             isImporting = false
             if (importResult.isFailure) {
                 onMessage("End import failed: ${importResult.exceptionOrNull()?.message ?: "error"}")
@@ -410,7 +444,7 @@ fun WorldSetupScreen(
                                 }
                             }
                         },
-                        enabled = isFormValid && !isSubmitting && !isImporting && !isDownloadingVersion,
+                        enabled = isFormValid && !isSubmitting && !isImporting && !isPreparingImport && !isDownloadingVersion,
                         modifier = Modifier
                             .fillMaxWidth()
                             .tourAnchor(TourAnchor.CREATE_SERVER_SUBMIT)
@@ -919,7 +953,7 @@ fun WorldSetupScreen(
                                     icon = Icons.Filled.Public,
                                     iconTint = PocketColors.Primary,
                                     selectedFileName = mainWorldZipName,
-                                    isLoading = isImporting,
+                                    isLoading = isImporting || isPreparingImport,
                                     onUploadClick = {
                                         pendingImportSlot = WorldImportSlot.MAIN
                                         importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*"))
@@ -931,7 +965,7 @@ fun WorldSetupScreen(
                                     icon = Icons.Filled.LocalFireDepartment,
                                     iconTint = Color(0xFFE65100),
                                     selectedFileName = netherZipName,
-                                    isLoading = isImporting,
+                                    isLoading = isImporting || isPreparingImport,
                                     onUploadClick = {
                                         pendingImportSlot = WorldImportSlot.NETHER
                                         importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*"))
@@ -943,7 +977,7 @@ fun WorldSetupScreen(
                                     icon = Icons.Filled.NightlightRound,
                                     iconTint = Color(0xFF7B1FA2),
                                     selectedFileName = endZipName,
-                                    isLoading = isImporting,
+                                    isLoading = isImporting || isPreparingImport,
                                     onUploadClick = {
                                         pendingImportSlot = WorldImportSlot.END
                                         importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*"))
@@ -1037,6 +1071,10 @@ private fun parseCreatedWorldName(message: String): String? {
         message.startsWith(renamedPrefix) -> message.removePrefix(renamedPrefix).substringBefore(" because").trim().ifBlank { null }
         else -> null
     }
+}
+
+private fun deleteCachedImport(uri: Uri?) {
+    if (uri?.scheme == "file") uri.path?.let { File(it).delete() }
 }
 
 @Composable

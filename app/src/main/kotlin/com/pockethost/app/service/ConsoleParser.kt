@@ -62,6 +62,8 @@ object ConsoleParser {
     )
 
     // e.g. "[17:30:06 INFO]: Steve issued server command: /ram"
+    private val LEAVE_PHRASES = listOf(" lost connection", " left the game", " was kicked", " disconnected")
+
     private val COMMAND_REGEX = Regex("""(\S+) issued server command: (.+)""", RegexOption.IGNORE_CASE)
 
     // e.g. "[17:31:00 INFO]: TPS from last 1m, 5m, 15m: 19.98, 19.99, 20.0"
@@ -145,11 +147,18 @@ object ConsoleParser {
     fun parseEvent(line: String): ServerEvent? =
         if (isDone(line)) ServerEvent.ServerFullyReady else null
 
-    fun parseTps(line: String): Float? =
-        TPS_REGEX.find(line)?.groupValues?.get(1)?.toFloatOrNull()
+    // Every console line passes through these parsers on the main thread, and an unanchored
+    // case-insensitive regex re-scans the line from each start position. The literal
+    // contains() checks below reject almost every line before a regex runs, which is what
+    // keeps a chatty server (or one very long line) from stalling the UI.
+    fun parseTps(line: String): Float? {
+        if (!line.contains("TPS from last")) return null
+        return TPS_REGEX.find(line)?.groupValues?.get(1)?.toFloatOrNull()
+    }
 
     /** Returns (name, uuid) if a player joined. */
     fun parseJoin(line: String): Pair<String, String>? {
+        if (!line.contains(" joined the game", ignoreCase = true)) return null
         JOINED_GAME_REGEX.find(line)?.let { match ->
             return match.groupValues[1] to ""
         }
@@ -157,11 +166,14 @@ object ConsoleParser {
     }
 
     /** Returns player name if a player left. */
-    fun parseLeave(line: String): String? =
-        LEAVE_REGEX.find(line)?.groupValues?.get(1)
+    fun parseLeave(line: String): String? {
+        if (LEAVE_PHRASES.none { line.contains(it, ignoreCase = true) }) return null
+        return LEAVE_REGEX.find(line)?.groupValues?.get(1)
+    }
 
     /** Returns (player, command) if a player issued a command. */
     fun parseCommand(line: String): Pair<String, String>? {
+        if (!line.contains(" issued server command: ", ignoreCase = true)) return null
         COMMAND_REGEX.find(line)?.let { match ->
             return match.groupValues[1] to match.groupValues[2]
         }
@@ -171,6 +183,7 @@ object ConsoleParser {
     fun isPreparingStartRegion(line: String): Boolean = PREPARING_START_REGION_REGEX.containsMatchIn(line)
 
     fun parseChunkyProgress(line: String): ChunkyProgress? {
+        if (!line.contains("[Chunky] Task ")) return null
         CHUNKY_PROGRESS_REGEX.find(line)?.let { match ->
             return ChunkyProgress(
                 current = match.groupValues[1].toLong(),
@@ -188,15 +201,25 @@ object ConsoleParser {
     // Paper: "Steve has a ping of 42ms"  (RCON response, may contain §-color codes)
     private val PAPER_PING_REGEX = Regex("""(.+?)\s+has a ping of\s+(\d+)\s*ms""", RegexOption.IGNORE_CASE)
 
+    private val CARPET_PING_REGEX = Regex("""^(.+?)(?:'s ping is|'s latency is|'s ping:)\s*(\d+)\s*(?:ms)?""", RegexOption.IGNORE_CASE)
+    private val GENERIC_PING_REGEX = Regex("""^(\S+)\s+(?:has the following entity data:|has a ping of|has ping|latency is)\s*:?\s*(\d+)""", RegexOption.IGNORE_CASE)
+    private val ENTITY_LATENCY_REGEX = Regex("""(?:has the following entity data:|entity data:)\s*(\d+)""", RegexOption.IGNORE_CASE)
+    private val MINECRAFT_COLOR_REGEX = Regex("§[0-9a-fk-orA-FK-OR]")
+    private val ANSI_REGEX = Regex("\u001B\\[[;\\d]*m")
+
+    // A single-player ping reply is one short line; anything longer is not one, and the
+    // lazy (.+?) patterns below cost quadratic time on it.
+    private const val MAX_PING_REPLY_LENGTH = 512
+
     /** Strip Minecraft legacy color/format codes (§X). */
     private fun stripMinecraftColors(text: String): String =
-        text.replace(Regex("§[0-9a-fk-orA-FK-OR]"), "")
+        if (text.indexOf('§') < 0) text else text.replace(MINECRAFT_COLOR_REGEX, "")
 
     fun parsePing(line: String): Map<String, ParsedPlayerPing> {
         // Strip Minecraft color codes first so all patterns work against clean text.
         val cleanLine = stripMinecraftColors(line)
 
-        val match = PING_REGEX.find(cleanLine)
+        val match = if (cleanLine.contains("[PocketCraftPing]")) PING_REGEX.find(cleanLine) else null
         if (match != null) {
             val data = match.groupValues[1].trim()
             val pings = mutableMapOf<String, ParsedPlayerPing>()
@@ -244,6 +267,14 @@ object ConsoleParser {
             return pings
         }
 
+        if (cleanLine.length > MAX_PING_REPLY_LENGTH ||
+            !(cleanLine.contains("ping", ignoreCase = true) ||
+                cleanLine.contains("latency", ignoreCase = true) ||
+                cleanLine.contains("entity data", ignoreCase = true))
+        ) {
+            return emptyMap()
+        }
+
         // Paper RCON response: "<player> has a ping of <N>ms"
         val paperMatch = PAPER_PING_REGEX.find(cleanLine)
         if (paperMatch != null) {
@@ -265,7 +296,7 @@ object ConsoleParser {
         }
 
         // Carpet / Fabric / Geyser mod ping responses:
-        val carpetMatch = Regex("""^(.+?)(?:'s ping is|'s latency is|'s ping:)\s*(\d+)\s*(?:ms)?""", RegexOption.IGNORE_CASE).find(cleanLine)
+        val carpetMatch = CARPET_PING_REGEX.find(cleanLine)
         if (carpetMatch != null) {
             val name = carpetMatch.groupValues[1].trim()
             val ping = carpetMatch.groupValues[2].toIntOrNull() ?: -1
@@ -276,7 +307,7 @@ object ConsoleParser {
 
         // Generic / Fabric / Vanilla entity data response:
         // e.g. "Steve has the following entity data: 42" or "Steve: 42"
-        val genericMatch = Regex("""^(\S+)\s+(?:has the following entity data:|has a ping of|has ping|latency is)\s*:?\s*(\d+)""", RegexOption.IGNORE_CASE).find(cleanLine)
+        val genericMatch = GENERIC_PING_REGEX.find(cleanLine)
         if (genericMatch != null) {
             val name = genericMatch.groupValues[1].trim()
             val ping = genericMatch.groupValues[2].toIntOrNull() ?: -1
@@ -296,7 +327,7 @@ object ConsoleParser {
     fun parseFabricEntityLatency(rconResponse: String): Int {
         val clean = stripMinecraftColors(rconResponse).trim()
         // "has the following entity data: 37"
-        val bareMatch = Regex("""(?:has the following entity data:|entity data:)\s*(\d+)""", RegexOption.IGNORE_CASE).find(clean)
+        val bareMatch = ENTITY_LATENCY_REGEX.find(clean)
         if (bareMatch != null) {
             return bareMatch.groupValues[1].toIntOrNull() ?: -1
         }
@@ -328,7 +359,7 @@ object ConsoleParser {
 
     /** Returns the cleaned console text, stripping ANSI color codes. */
     fun stripAnsi(text: String): String =
-        text.replace(Regex("\u001B\\[[;\\d]*m"), "")
+        if (text.indexOf('\u001B') < 0) text else text.replace(ANSI_REGEX, "")
 
     private fun stripLogDecorations(text: String): String =
         text.trim()

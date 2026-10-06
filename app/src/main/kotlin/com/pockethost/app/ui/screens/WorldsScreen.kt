@@ -167,12 +167,12 @@ fun WorldsScreen(
                 )
             }
             val activeWorld = stateHolder.activeWorld.ifBlank { "world" }
-            val importFolder = when (importDimension) {
-                "nether" -> "${activeWorld}_nether"
-                "end" -> "${activeWorld}_the_end"
-                else -> activeWorld
+            val dimension = when (importDimension) {
+                "nether" -> WorldImporter.ImportDimension.NETHER
+                "end" -> WorldImporter.ImportDimension.END
+                else -> WorldImporter.ImportDimension.OVERWORLD
             }
-            stateHolder.importWorldDimension(it, importFolder)
+            stateHolder.importWorldDimension(it, activeWorld, dimension)
         }
     }
     var aternosExpanded by remember { mutableStateOf(false) }

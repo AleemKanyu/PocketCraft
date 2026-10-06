@@ -342,7 +342,8 @@ class ServerLauncher(private val context: Context) {
         if (serverType == com.pockethost.app.data.model.ServerType.PURPUR) {
             applyRelayReadyPurpurConfig(serverDirFile, onOutput)
         }
-        applyRelayReadyFabricConfig(serverDirFile, serverType, versionId, onOutput)
+        val previousServerType = recordWorldServerType(serverDirFile, serverType.name)
+        applyRelayReadyFabricConfig(serverDirFile, serverType, versionId, previousServerType, onOutput)
 
         // Dynamic JVM heap allocation based on per-world UI settings in server.properties
         val worldProps = ServerPropertiesHelper.readProperties(serverDirFile)
@@ -1706,6 +1707,7 @@ class ServerLauncher(private val context: Context) {
         serverDir: File,
         serverType: com.pockethost.app.data.model.ServerType,
         versionId: String,
+        previousServerType: String?,
         onOutput: (String) -> Unit
     ) {
         if (serverType != com.pockethost.app.data.model.ServerType.FABRIC) return
@@ -1780,14 +1782,21 @@ class ServerLauncher(private val context: Context) {
             onOutput("[PocketHost] Fabric/Vanilla relay server.properties tuned (sync-chunk-writes, compression, rate-limit, op-level).")
         }
 
-        // Clean stale Paper datapack caches that crash Fabric/Vanilla worldgen
+        // Generator settings written by Paper/Purpur crash Fabric worldgen, so they are dropped
+        // when a world first moves over to Fabric. On Minecraft 26.1+ this file also holds the
+        // world seed: it is carried into server.properties first, and the file is left alone
+        // on every later start so Fabric's own settings survive.
         val worldDir = File(serverDir, "world")
-        if (worldDir.exists()) {
-            val staleGen = File(worldDir, "data/minecraft/world_gen_settings.dat")
-            if (staleGen.exists()) {
-                staleGen.delete()
-                onOutput("[PocketHost] Cleaned incompatible datapack generator cache.")
+        val staleGen = File(worldDir, "data/minecraft/world_gen_settings.dat")
+        if (staleGen.exists() && cameFromBukkitServer(previousServerType, File(worldDir, "level.dat"))) {
+            val seed = readWorldGenSeed(staleGen)
+            if (seed != null && props.getProperty("level-seed").isNullOrBlank()) {
+                props["level-seed"] = seed.toString()
+                ServerPropertiesHelper.saveProperties(serverDir, props)
+                onOutput("[PocketHost] Kept world seed $seed for the move to Fabric.")
             }
+            staleGen.delete()
+            onOutput("[PocketHost] Cleaned incompatible datapack generator cache.")
         }
 
         // --- Fabric API -------------------------------------------------------
@@ -2640,6 +2649,9 @@ class ServerLauncher(private val context: Context) {
     private fun removeLegacyPlayersDir(worldDir: File, onOutput: (String) -> Unit) {
         val playersDir = File(worldDir, "players")
         if (!playersDir.exists() || !playersDir.isDirectory) return
+        // Minecraft 26.1+ stores every player's inventory, stats and advancements under
+        // players/. Treating that as the pre-1.7.6 leftover wiped player progress on each start.
+        if (usesSplitWorldLayout(worldDir) || File(playersDir, "data").isDirectory) return
 
         val datFiles = playersDir.walkTopDown().filter { it.isFile && it.extension == "dat" }.toList()
         if (datFiles.isEmpty()) {
@@ -2664,33 +2676,14 @@ class ServerLauncher(private val context: Context) {
             return
         }
 
-        fun isValidLevelDat(file: File): Boolean {
-            if (!file.exists() || file.length() < 50L) return false
-            return try {
-                val bytes = java.util.zip.GZIPInputStream(file.inputStream()).use { gzip ->
-                    gzip.readBytes()
-                }
-                // A minimal valid modern level.dat (Paper 1.17+) is typically 3KB+ uncompressed.
-                // Files under 1000 bytes uncompressed are stub/legacy files missing WorldGenSettings.
-                if (bytes.size < 1000) return false
-                val contentStr = String(bytes, Charsets.ISO_8859_1)
-                // Must contain the root Data compound AND the modern world generator settings.
-                // Paper 1.17+ requires WorldGenSettings; older level.dat without it causes:
-                // "No key dimensions in MapLike[{}]; No key seed in MapLike[{}]"
-                contentStr.contains("Data") && contentStr.contains("WorldGenSettings")
-            } catch (e: Exception) {
-                false
-            }
-        }
-
-        if (isValidLevelDat(levelDat)) {
+        if (isValidLevelDat(levelDat, worldDir)) {
             return
         }
 
         val levelDatSizeKb = levelDat.length() / 1024
         onOutput("[PocketHost] ALERT: level.dat is invalid or missing WorldGenSettings (${levelDat.length()} bytes, ${levelDatSizeKb}KB). Recovering...")
 
-        if (isValidLevelDat(levelDatOld)) {
+        if (isValidLevelDat(levelDatOld, worldDir)) {
             onOutput("[PocketHost] Attempting to restore level.dat from level.dat_old...")
             try {
                 val corruptBackup = File(worldDir, "level.dat.corrupt_${System.currentTimeMillis()}")
@@ -2717,3 +2710,75 @@ class ServerLauncher(private val context: Context) {
         }
     }
 }
+
+/**
+ * Minecraft 26.1 split the world save: generator settings left level.dat for
+ * data/minecraft/world_gen_settings.dat, dimensions moved under dimensions/ and player
+ * files under players/. A level.dat from those versions is a few hundred bytes and has no
+ * WorldGenSettings, and that is correct.
+ */
+internal fun usesSplitWorldLayout(worldDir: File): Boolean =
+    File(worldDir, "data/minecraft/world_gen_settings.dat").isFile ||
+        File(worldDir, "dimensions").isDirectory
+
+internal fun isValidLevelDat(file: File, worldDir: File): Boolean {
+    if (!file.exists() || file.length() < 50L) return false
+    return try {
+        val bytes = java.util.zip.GZIPInputStream(file.inputStream()).use { gzip ->
+            gzip.readBytes()
+        }
+        val contentStr = String(bytes, Charsets.ISO_8859_1)
+        if (usesSplitWorldLayout(worldDir)) {
+            return contentStr.contains("Data") && contentStr.contains("DataVersion")
+        }
+        // A minimal valid level.dat for 1.17 - 1.21 is typically 3KB+ uncompressed.
+        // Files under 1000 bytes uncompressed are stub/legacy files missing WorldGenSettings.
+        if (bytes.size < 1000) return false
+        // Must contain the root Data compound AND the world generator settings.
+        // Paper 1.17 - 1.21 requires WorldGenSettings; a level.dat without it causes:
+        // "No key dimensions in MapLike[{}]; No key seed in MapLike[{}]"
+        contentStr.contains("Data") && contentStr.contains("WorldGenSettings")
+    } catch (e: Exception) {
+        false
+    }
+}
+
+private const val WORLD_SERVER_TYPE_MARKER = ".pockethost-last-server-type"
+
+/**
+ * Remembers which server type last ran in [serverDir] and returns the one before it, or null
+ * when this is the first launch that keeps the record.
+ */
+internal fun recordWorldServerType(serverDir: File, serverTypeName: String): String? {
+    val marker = File(serverDir, WORLD_SERVER_TYPE_MARKER)
+    val previous = runCatching { marker.readText().trim() }.getOrNull()?.takeIf { it.isNotEmpty() }
+    if (previous != serverTypeName) {
+        runCatching { marker.writeText(serverTypeName) }
+    }
+    return previous
+}
+
+/**
+ * True when the world was last run by Paper or Purpur. Without a record (installs from before
+ * the marker existed) the server brands Minecraft keeps in level.dat decide.
+ */
+internal fun cameFromBukkitServer(previousServerType: String?, levelDat: File): Boolean {
+    if (previousServerType != null) {
+        return previousServerType.equals("PAPER", ignoreCase = true) ||
+            previousServerType.equals("PURPUR", ignoreCase = true)
+    }
+    val content = runCatching {
+        java.util.zip.GZIPInputStream(levelDat.inputStream()).use { String(it.readBytes(), Charsets.ISO_8859_1) }
+    }.getOrNull() ?: return false
+    return listOf("Paper", "Purpur", "Spigot").any { content.contains(it) }
+}
+
+/** Reads the `seed` long out of a gzipped world_gen_settings.dat, or null if it is not there. */
+internal fun readWorldGenSeed(file: File): Long? = runCatching {
+    val bytes = java.util.zip.GZIPInputStream(file.inputStream()).use { it.readBytes() }
+    // NBT: tag type 4 (long), name length 4, "seed", then eight big-endian bytes.
+    val tag = byteArrayOf(4, 0, 4) + "seed".toByteArray(Charsets.US_ASCII)
+    val start = (0..bytes.size - tag.size - 8).firstOrNull { i -> tag.indices.all { bytes[i + it] == tag[it] } }
+        ?: return@runCatching null
+    java.nio.ByteBuffer.wrap(bytes, start + tag.size, 8).long
+}.getOrNull()

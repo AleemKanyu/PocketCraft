@@ -320,7 +320,7 @@ fun ConsoleScreen(
     }
     val totalRamMb = remember { RamUtils.getTotalRamMb(context) }
     var ramMode by remember(stateHolder.config.ramMode) { mutableStateOf(stateHolder.config.ramMode) }
-    var manualRamMb by remember(stateHolder.config.maxRamMb) { mutableStateOf(stateHolder.config.maxRamMb.coerceIn(512, totalRamMb)) }
+    var manualRamMb by remember(stateHolder.config.maxRamMb) { mutableStateOf(stateHolder.config.maxRamMb.coerceIn(512, totalRamMb.coerceAtLeast(512))) }
     var usedRamMb by remember { mutableStateOf(0) }
 
     var availableVersions by remember { mutableStateOf(listOf(

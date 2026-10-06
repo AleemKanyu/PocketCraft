@@ -57,6 +57,8 @@ import com.pockethost.app.service.ServerFileManager
 import java.io.File
 import java.util.Properties
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 private object ServerWidgetStateKeys {
     val status = stringPreferencesKey("status")
@@ -515,7 +517,40 @@ private fun uptimeLabel(status: String, startedAtMillis: Long): String {
 }
 
 object ServerWidgetUpdater {
+    private val pushMutex = Mutex()
+
+    private fun isMainProcess(context: Context): Boolean {
+        val processName = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            android.app.Application.getProcessName()
+        } else {
+            runCatching { File("/proc/self/cmdline").readText().trim('\u0000').trim() }.getOrNull()
+        }
+        return processName == null || processName == context.packageName
+    }
+
+    /**
+     * Writes the current server state into every widget and redraws them.
+     *
+     * Glance keeps each widget's state in a DataStore file that tolerates exactly one open
+     * instance, so all writes go through the main process, one at a time. The server runs in
+     * its own ":server" process; from there the update is handed to [ServerWidgetReceiver].
+     */
     suspend fun push(context: Context, statusOverride: String? = null) {
+        if (!isMainProcess(context)) {
+            runCatching {
+                context.sendBroadcast(
+                    Intent(context, ServerWidgetReceiver::class.java).apply {
+                        action = ServerWidgetReceiver.ACTION_TRIGGER_WIDGET_UPDATE
+                        statusOverride?.let { putExtra("status_override", it) }
+                    }
+                )
+            }
+            return
+        }
+        pushMutex.withLock { pushLocked(context, statusOverride) }
+    }
+
+    private suspend fun pushLocked(context: Context, statusOverride: String?) {
         val manager = GlanceAppWidgetManager(context)
         val ids = manager.getGlanceIds(ServerWidget::class.java)
         if (ids.isEmpty()) return
@@ -541,16 +576,9 @@ object ServerWidgetUpdater {
                 }
             }
         }
+        // No APPWIDGET_UPDATE broadcast here: the receiver's onUpdate() calls push() again,
+        // so sending one made every update trigger the next, forever.
         ServerWidget().updateAll(context)
-        runCatching {
-            val intent = Intent(context, ServerWidgetReceiver::class.java).apply {
-                action = android.appwidget.AppWidgetManager.ACTION_APPWIDGET_UPDATE
-                val componentName = android.content.ComponentName(context, ServerWidgetReceiver::class.java)
-                val appWidgetIds = android.appwidget.AppWidgetManager.getInstance(context).getAppWidgetIds(componentName)
-                putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_IDS, appWidgetIds)
-            }
-            context.sendBroadcast(intent)
-        }
     }
 
     suspend fun buildSnapshot(context: Context, statusOverride: String? = null): ServerWidgetSnapshot {

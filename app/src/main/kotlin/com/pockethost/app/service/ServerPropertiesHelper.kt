@@ -36,7 +36,21 @@ object ServerPropertiesHelper {
             }
         }
         if (file.exists()) {
-            file.inputStream().use { props.load(it) }
+            try {
+                file.inputStream().use { props.load(it) }
+            } catch (error: IllegalArgumentException) {
+                // Properties.load rejects the whole file over one bad \uXXXX escape (a hand-edited
+                // MOTD is the usual cause). Keep every line that can still be read as key=value.
+                android.util.Log.w("ServerPropertiesHelper", "Malformed server.properties, reading line by line", error)
+                props.clear()
+                file.useLines { lines ->
+                    lines.filter { it.contains('=') && !it.trimStart().startsWith("#") }.forEach { line ->
+                        val idx = line.indexOf('=')
+                        val key = line.substring(0, idx).trim()
+                        if (key.isNotEmpty()) props[key] = line.substring(idx + 1).trim()
+                    }
+                }
+            }
         } else {
             // Default properties for a new server
             props["server-port"] = "25565"

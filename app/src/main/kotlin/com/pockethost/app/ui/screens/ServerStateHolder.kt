@@ -3248,7 +3248,7 @@ class ServerStateHolder(
                 restoreStatusMessage = "Preparing to extract world backup..."
             }
 
-            ZipFile(tempFile).use { zip ->
+            WorldImporter.openZip(tempFile).use { zip ->
                 val totalEntries = zip.size()
                 if (totalEntries == 0) {
                     withContext(Dispatchers.Main) {
@@ -5541,7 +5541,11 @@ class ServerStateHolder(
         syncRegistriesAcrossAllWorlds(extraWorlds = worldNames)
     }
 
-    fun importWorldDimension(uri: Uri, targetWorld: String) {
+    fun importWorldDimension(
+        uri: Uri,
+        targetWorld: String,
+        dimension: WorldImporter.ImportDimension = WorldImporter.ImportDimension.OVERWORLD
+    ) {
         if (isImportingWorld || isRunning || isStarting) return
         isImportingWorld = true
         importProgressPercent = 0f
@@ -5555,6 +5559,7 @@ class ServerStateHolder(
                     serverType = config.serverType,
                     serverVersionId = versionId,
                     folderName = targetWorld,
+                    dimension = dimension,
                     onProgress = { progress, message ->
                         launch(Dispatchers.Main) {
                             importProgressPercent = (progress * 100).coerceIn(0f, 100f)
@@ -5570,13 +5575,8 @@ class ServerStateHolder(
                     }
                 }
                 if (result.isSuccess) {
-                    // A Nether/End dimension zip commonly nests its .mca region files under a
-                    // world_nether/DIM-1 (or world_the_end/DIM1) style path, but importWorld()
-                    // always extracts flat into the world's own root directory rather than
-                    // routing dimension-specific content to its proper unified-world location —
-                    // without this, importing "Nether" or "End" can silently land region files
-                    // in the same folder as the Overworld's own region/ data. Reuse the same
-                    // post-import normalization already applied after a backup restore.
+                    // importWorld() leaves a Nether/End import in the Bukkit sibling layout;
+                    // the sync below moves it to where this server type reads the dimension.
                     flattenWorldStructure(targetWorld)
                     DimensionMigrator.syncDimensionsForServerType(appContext, targetWorld, config.serverType)
                     refreshAll()
@@ -6027,7 +6027,7 @@ class ServerStateHolder(
         val rawName = entry.name
         val normalizedName = rawName
             .replace('\\', '/')
-            .removePrefix("/")
+            .trimStart('/')
             .removePrefix("./")
             .trim()
         if (normalizedName.isBlank()) return
@@ -6035,7 +6035,8 @@ class ServerStateHolder(
         if (normalizedName.endsWith(".DS_Store")) return
 
         val target = File(targetRoot, normalizedName).canonicalFile
-        if (!target.path.startsWith(targetRoot.canonicalPath)) return
+        val rootPath = targetRoot.canonicalPath
+        if (target.path != rootPath && !target.path.startsWith(rootPath + File.separator)) return
 
         if (entry.isDirectory) {
             target.mkdirs()
@@ -6264,68 +6265,78 @@ class ServerStateHolder(
         }
 
         worldsToFix.forEach { worldName ->
-            val worldDir = File(serverDir, sanitizeWorldName(worldName))
-            if (!worldDir.exists() || !worldDir.isDirectory) return@forEach
+            // Runs on every refresh. A file vanishing mid-move (a nested DIM1/DIM1 folder did
+            // this) must leave that world as it is, not take the whole app down.
+            try {
+                flattenWorld(worldName)
+            } catch (error: java.io.IOException) {
+                android.util.Log.w("PocketHost", "Could not flatten world $worldName", error)
+            }
+        }
+    }
 
-            // Find level.dat up to 3 levels deep (e.g. world/world/level.dat)
-            val levelDat = worldDir.walkTopDown().maxDepth(4).find { it.name == "level.dat" } ?: return@forEach
-            val realRoot = levelDat.parentFile ?: return@forEach
+    private fun flattenWorld(worldName: String) {
+        val worldDir = File(serverDir, sanitizeWorldName(worldName))
+        if (!worldDir.exists() || !worldDir.isDirectory) return
 
-            if (realRoot.absolutePath != worldDir.absolutePath) {
-                // Guard: if the worldDir root already has its own level.dat the structure is
-                // already correct — skip flattening to avoid overwriting good restored content.
-                if (File(worldDir, "level.dat").exists()) {
-                    android.util.Log.i("PocketHost", "Skipping flatten for $worldName — root level.dat already present")
-                    return@forEach
-                }
+        // Find level.dat up to 3 levels deep (e.g. world/world/level.dat)
+        val levelDat = worldDir.walkTopDown().maxDepth(4).find { it.name == "level.dat" } ?: return
+        val realRoot = levelDat.parentFile ?: return
 
-                android.util.Log.i("PocketHost", "Auto-flattening nested world: ${realRoot.absolutePath} -> ${worldDir.absolutePath}")
-                
-                // 1. Move all contents up
-                realRoot.listFiles()?.forEach { file ->
-                    val target = File(worldDir, file.name)
-                    if (target.exists()) target.deleteRecursively()
-                    if (!file.renameTo(target)) {
-                        // copyTo on a directory creates an empty one and copies nothing, so the
-                        // deleteRecursively below would have thrown away playerdata/, stats/ and
-                        // advancements/ whenever the rename failed.
-                        if (file.isDirectory) {
-                            file.copyRecursively(target, overwrite = true)
-                        } else {
-                            file.copyTo(target, overwrite = true)
-                        }
-                        file.deleteRecursively()
+        if (realRoot.absolutePath != worldDir.absolutePath) {
+            // Guard: if the worldDir root already has its own level.dat the structure is
+            // already correct — skip flattening to avoid overwriting good restored content.
+            if (File(worldDir, "level.dat").exists()) {
+                android.util.Log.i("PocketHost", "Skipping flatten for $worldName — root level.dat already present")
+                return
+            }
+
+            android.util.Log.i("PocketHost", "Auto-flattening nested world: ${realRoot.absolutePath} -> ${worldDir.absolutePath}")
+            
+            // 1. Move all contents up
+            realRoot.listFiles()?.forEach { file ->
+                val target = File(worldDir, file.name)
+                if (target.exists()) target.deleteRecursively()
+                if (!file.renameTo(target)) {
+                    // copyTo on a directory creates an empty one and copies nothing, so the
+                    // deleteRecursively below would have thrown away playerdata/, stats/ and
+                    // advancements/ whenever the rename failed.
+                    if (file.isDirectory) {
+                        file.copyRecursively(target, overwrite = true)
+                    } else {
+                        file.copyTo(target, overwrite = true)
                     }
+                    file.deleteRecursively()
                 }
+            }
 
-                // 2. Check for dimension siblings (e.g. world/world_nether)
-                val parent = realRoot.parentFile
-                if (parent != null && parent.absolutePath != worldDir.absolutePath && parent.absolutePath != serverDir.absolutePath) {
-                    parent.listFiles()?.forEach { sibling ->
-                        if (sibling.isDirectory && sibling != realRoot) {
-                            // Check both flat (region/) and Paper-nested (DIM-1/, DIM1/) structures
-                            if (File(sibling, "level.dat").exists() ||
-                                File(sibling, "region").isDirectory ||
-                                File(sibling, "DIM-1").isDirectory ||
-                                File(sibling, "DIM1").isDirectory) {
-                                val target = File(serverDir, sibling.name)
-                                if (!target.exists()) {
-                                    android.util.Log.i("PocketHost", "Auto-migrating nested dimension: ${sibling.name}")
-                                    sibling.renameTo(target)
-                                }
+            // 2. Check for dimension siblings (e.g. world/world_nether)
+            val parent = realRoot.parentFile
+            if (parent != null && parent.absolutePath != worldDir.absolutePath && parent.absolutePath != serverDir.absolutePath) {
+                parent.listFiles()?.forEach { sibling ->
+                    if (sibling.isDirectory && sibling != realRoot) {
+                        // Check both flat (region/) and Paper-nested (DIM-1/, DIM1/) structures
+                        if (File(sibling, "level.dat").exists() ||
+                            File(sibling, "region").isDirectory ||
+                            File(sibling, "DIM-1").isDirectory ||
+                            File(sibling, "DIM1").isDirectory) {
+                            val target = File(serverDir, sibling.name)
+                            if (!target.exists()) {
+                                android.util.Log.i("PocketHost", "Auto-migrating nested dimension: ${sibling.name}")
+                                sibling.renameTo(target)
                             }
                         }
                     }
                 }
+            }
 
-                // 3. Cleanup
-                realRoot.delete()
-                var current = realRoot.parentFile
-                while (current != null && current.absolutePath != worldDir.absolutePath && current.listFiles()?.isEmpty() == true) {
-                    val toDelete = current
-                    current = current.parentFile
-                    toDelete.delete()
-                }
+            // 3. Cleanup
+            realRoot.delete()
+            var current = realRoot.parentFile
+            while (current != null && current.absolutePath != worldDir.absolutePath && current.listFiles()?.isEmpty() == true) {
+                val toDelete = current
+                current = current.parentFile
+                toDelete.delete()
             }
         }
     }

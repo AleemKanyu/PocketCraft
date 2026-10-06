@@ -314,7 +314,8 @@ fun PocketTopBar(
                         .background(PocketColors.IconBtnBg)
                         .clickable {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(context.getString(R.string.discord_invite_url)))
-                            context.startActivity(intent)
+                            // Some devices have no browser or Discord app to take the link.
+                            runCatching { context.startActivity(intent) }
                         },
                     contentAlignment = Alignment.Center
                 ) {

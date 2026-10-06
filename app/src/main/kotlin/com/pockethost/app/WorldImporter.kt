@@ -2,15 +2,31 @@ package com.pockethost.app
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.provider.OpenableColumns
 import com.pockethost.app.service.PlayerDataManager
 import com.pockethost.app.service.ServerFileManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import dalvik.system.ZipPathValidator
 import java.io.File
+import java.util.zip.ZipException
 import java.util.zip.ZipFile
 
 object WorldImporter {
+
+    enum class ImportDimension(
+        val label: String,
+        internal val bukkitSuffix: String,
+        internal val vanillaFolder: String,
+        internal val namespacedFolder: String,
+        internal val folderNames: Set<String>,
+        internal val folderSuffixes: Set<String>
+    ) {
+        OVERWORLD("Overworld", "", "", "overworld", emptySet(), emptySet()),
+        NETHER("Nether", "_nether", "DIM-1", "the_nether", setOf("dim-1", "the_nether"), setOf("_nether", "nether")),
+        END("End", "_the_end", "DIM1", "the_end", setOf("dim1", "the_end"), setOf("_the_end", "_end", "end"))
+    }
 
     suspend fun importWorld(
         context: Context,
@@ -18,9 +34,11 @@ object WorldImporter {
         serverType: com.pockethost.app.data.model.ServerType,
         serverVersionId: String,
         folderName: String = "world",
+        dimension: ImportDimension = ImportDimension.OVERWORLD,
         onProgress: (Float, String) -> Unit = { _, _ -> }
     ): Result<Unit> =
         withContext(Dispatchers.IO) {
+            val stagingDir = File(context.cacheDir, "import_staging_${System.currentTimeMillis()}")
             val tempFile = File(context.cacheDir, "import_temp_${System.currentTimeMillis()}.zip")
             try {
                 // Step 1: Copy to local temp file to avoid ContentResolver stream instabilities
@@ -55,77 +73,21 @@ object WorldImporter {
                 onProgress(0.35f, "Preparing to extract world files...")
 
                 val serverDir = ServerFileManager.getServerDir(context, folderName)
+
+                if (dimension != ImportDimension.OVERWORLD) {
+                    // A Nether/End zip is extracted away from the server directory first. Its
+                    // region/ folder would otherwise be indistinguishable from the Overworld's
+                    // once both sit in the same tree.
+                    extractZip(tempFile, stagingDir, onProgress)
+                    onProgress(0.97f, "Installing ${dimension.label} files...")
+                    installDimensionFromStaging(stagingDir, serverDir, folderName, dimension)
+                    onProgress(1f, "World import complete!")
+                    return@withContext Result.success(Unit)
+                }
+
                 // Extract directly into serverDir, NOT a subfolder named after the world.
                 // This prevents the 'world/world/world' deep nesting issue.
-                val extractRoot = serverDir
-
-                // Step 2: Extract from local file using ZipFile (more robust than ZipInputStream)
-                android.util.Log.i("WorldImporter", "Extracting world zip: ${tempFile.length()} bytes")
-                ZipFile(tempFile).use { zip ->
-                    val totalEntries = zip.size().toFloat().coerceAtLeast(1f)
-                    var processed = 0
-                    var lastPercent = -1
-                    val entries = zip.entries()
-                    while (entries.hasMoreElements()) {
-                        val entry = entries.nextElement()
-                        val rawName = entry.name
-                        val normalizedName = rawName
-                            .replace('\\', '/')
-                            .removePrefix("/")
-                            .removePrefix("./")
-                            .trim()
-                        if (normalizedName.isBlank()) {
-                            processed++
-                            val currentPercent = (processed * 100 / totalEntries.toInt()).coerceIn(0, 100)
-                            if (currentPercent != lastPercent) {
-                                lastPercent = currentPercent
-                                val progress = 0.35f + ((processed / totalEntries) * 0.60f)
-                                onProgress(progress.coerceIn(0.35f, 0.95f), "Extracting world files...")
-                            }
-                            continue
-                        }
-                        if (normalizedName.startsWith("__MACOSX/") || normalizedName.endsWith(".DS_Store")) {
-                            processed++
-                            val currentPercent = (processed * 100 / totalEntries.toInt()).coerceIn(0, 100)
-                            if (currentPercent != lastPercent) {
-                                lastPercent = currentPercent
-                                val progress = 0.35f + ((processed / totalEntries) * 0.60f)
-                                onProgress(progress.coerceIn(0.35f, 0.95f), "Extracting world files...")
-                            }
-                            continue
-                        }
-
-                        val entryFile = File(extractRoot, normalizedName)
-
-                        // Prevent zip slip attack. The separator is part of the comparison so a
-                        // crafted "../worldsomething/x" entry cannot land in a sibling server
-                        // directory whose name merely starts with the extraction root's name.
-                        val entryPath = entryFile.canonicalPath
-                        val rootPath = extractRoot.canonicalPath
-                        if (entryPath != rootPath && !entryPath.startsWith(rootPath + File.separator)) {
-                            android.util.Log.e("WorldImporter", "Zip slip detected: ${entry.name}")
-                            continue
-                        }
-
-                        if (entry.isDirectory) {
-                            entryFile.mkdirs()
-                        } else {
-                            entryFile.parentFile?.mkdirs()
-                            zip.getInputStream(entry).use { input ->
-                                entryFile.outputStream().use { output ->
-                                    input.copyTo(output)
-                                }
-                            }
-                        }
-                        processed++
-                        val currentPercent = (processed * 100 / totalEntries.toInt()).coerceIn(0, 100)
-                        if (currentPercent != lastPercent) {
-                            lastPercent = currentPercent
-                            val progress = 0.35f + ((processed / totalEntries) * 0.60f)
-                            onProgress(progress.coerceIn(0.35f, 0.95f), "Extracting world files...")
-                        }
-                    }
-                }
+                extractZip(tempFile, serverDir, onProgress)
 
                 android.util.Log.i("WorldImporter", "Extraction complete. Checking structure...")
 
@@ -164,8 +126,154 @@ object WorldImporter {
                 Result.failure(e)
             } finally {
                 if (tempFile.exists()) tempFile.delete()
+                if (stagingDir.exists()) stagingDir.deleteRecursively()
             }
         }
+
+    /**
+     * Opens a zip the way the importers need it: archives written by some desktop and
+     * hosting-panel tools store entries as "/world/level.dat", which Android 14+ refuses to
+     * even open for apps targeting SDK 34+. Every caller normalizes entry names and does its
+     * own zip-slip check, so the platform check is lifted for the open and then put back.
+     */
+    internal fun openZip(file: File): ZipFile {
+        val firstFailure = try {
+            return ZipFile(file)
+        } catch (e: ZipException) {
+            e
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) throw notAZip(firstFailure)
+        ZipPathValidator.clearCallback()
+        try {
+            return ZipFile(file)
+        } catch (e: ZipException) {
+            throw notAZip(e)
+        } finally {
+            ZipPathValidator.setCallback(object : ZipPathValidator.Callback {
+                override fun onZipEntryAccess(path: String) {
+                    if (path.startsWith("/") || path.split('/').any { it == ".." }) {
+                        throw ZipException("Invalid zip entry path: $path")
+                    }
+                }
+            })
+        }
+    }
+
+    private fun notAZip(cause: ZipException) =
+        java.io.IOException("The selected file is not a valid ZIP archive. Pick the world's .zip file.", cause)
+
+    internal fun extractZip(zipFile: File, extractRoot: File, onProgress: (Float, String) -> Unit) {
+        android.util.Log.i("WorldImporter", "Extracting world zip: ${zipFile.length()} bytes")
+        extractRoot.mkdirs()
+        val rootPath = extractRoot.canonicalPath
+        openZip(zipFile).use { zip ->
+            val totalEntries = zip.size().coerceAtLeast(1)
+            var processed = 0
+            var lastPercent = -1
+            val entries = zip.entries()
+            while (entries.hasMoreElements()) {
+                val entry = entries.nextElement()
+                val normalizedName = entry.name
+                    .replace('\\', '/')
+                    .trimStart('/')
+                    .removePrefix("./")
+                    .trim()
+                val skip = normalizedName.isBlank() ||
+                    normalizedName.startsWith("__MACOSX/") ||
+                    normalizedName.endsWith(".DS_Store")
+                if (!skip) {
+                    val entryFile = File(extractRoot, normalizedName)
+
+                    // Prevent zip slip attack. The separator is part of the comparison so a
+                    // crafted "../worldsomething/x" entry cannot land in a sibling server
+                    // directory whose name merely starts with the extraction root's name.
+                    val entryPath = entryFile.canonicalPath
+                    if (entryPath != rootPath && !entryPath.startsWith(rootPath + File.separator)) {
+                        android.util.Log.e("WorldImporter", "Zip slip detected: ${entry.name}")
+                    } else if (entry.isDirectory) {
+                        entryFile.mkdirs()
+                    } else {
+                        entryFile.parentFile?.mkdirs()
+                        zip.getInputStream(entry).use { input ->
+                            entryFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                    }
+                }
+                processed++
+                val currentPercent = processed * 100 / totalEntries
+                if (currentPercent != lastPercent) {
+                    lastPercent = currentPercent
+                    val progress = 0.35f + ((processed.toFloat() / totalEntries) * 0.60f)
+                    onProgress(progress.coerceIn(0.35f, 0.95f), "Extracting world files...")
+                }
+            }
+        }
+    }
+
+    private fun childDirIgnoreCase(dir: File, name: String): File? =
+        dir.listFiles()?.firstOrNull { it.isDirectory && it.name.equals(name, ignoreCase = true) }
+
+    private fun hasRegionFiles(dir: File): Boolean =
+        dir.listFiles()?.any { it.isFile && it.extension.equals("mca", ignoreCase = true) } == true
+
+    internal fun installDimensionFromStaging(
+        stagingDir: File,
+        serverDir: File,
+        worldName: String,
+        dimension: ImportDimension
+    ) {
+        fun depth(dir: File) = dir.absolutePath.count { it == File.separatorChar }
+
+        // Directories that hold a populated region/ folder, shallowest first.
+        val dimensionRoots = stagingDir.walkTopDown().maxDepth(8)
+            .filter { it.isDirectory && childDirIgnoreCase(it, "region")?.let(::hasRegionFiles) == true }
+            .sortedBy(::depth)
+            .toList()
+
+        val sourceRoot = dimensionRoots.firstOrNull { it.name.lowercase() in dimension.folderNames }
+            ?: dimensionRoots.firstOrNull { root ->
+                val name = root.name.lowercase()
+                dimension.folderSuffixes.any { name == it || (it.startsWith("_") && name.endsWith(it)) }
+            }
+            ?: dimensionRoots.firstOrNull()
+
+        // Fall back to a zip of the bare .mca files (the contents of a region folder).
+        val looseRegionDir = if (sourceRoot == null) {
+            stagingDir.walkTopDown().maxDepth(8)
+                .filter { it.isDirectory && hasRegionFiles(it) }
+                .minByOrNull(::depth)
+        } else null
+
+        if (sourceRoot == null && looseRegionDir == null) {
+            throw java.io.IOException("This ZIP has no ${dimension.label} region (.mca) files.")
+        }
+
+        // The import replaces the dimension: DimensionMigrator keeps whichever copy of a
+        // region file is larger, so stale chunks left behind would beat the imported ones.
+        val worldRoot = File(serverDir, worldName)
+        val bukkitRoot = File(serverDir, worldName + dimension.bukkitSuffix)
+        listOf(
+            bukkitRoot,
+            File(worldRoot, dimension.vanillaFolder),
+            File(worldRoot, "dimensions/minecraft/${dimension.namespacedFolder}")
+        ).forEach { if (it.exists()) it.deleteRecursively() }
+
+        // Bukkit-style sibling layout; DimensionMigrator moves it to wherever the server type
+        // expects the dimension.
+        val destination = File(bukkitRoot, dimension.vanillaFolder)
+        if (sourceRoot != null) {
+            android.util.Log.i("WorldImporter", "Installing ${dimension.label} from ${sourceRoot.relativeTo(stagingDir).path.ifEmpty { "." }}")
+            listOf("region", "entities", "poi").forEach { name ->
+                childDirIgnoreCase(sourceRoot, name)?.let { mergeDirectoryContents(it, File(destination, name)) }
+            }
+        } else {
+            mergeDirectoryContents(looseRegionDir!!, File(destination, "region"))
+        }
+
+        ensureRestoredServerProperties(serverDir, worldName)
+    }
 
     private fun queryContentLength(context: Context, uri: Uri): Long {
         runCatching {
@@ -207,13 +315,13 @@ object WorldImporter {
         // 1. Locate level.dat to find the overworld directory
         val levelDat = serverDir.walkTopDown().maxDepth(6).firstOrNull { it.isFile && it.name.lowercase() == "level.dat" }
         if (levelDat == null) {
-            // Check if this is a dimension-only import (e.g. Aternos Nether or End export with no level.dat)
+            // Region-only export with no level.dat
             val hasRegionFiles = serverDir.walkTopDown().maxDepth(6).any { 
                 it.isFile && it.extension.lowercase() == "mca" 
             }
             if (hasRegionFiles) {
-                android.util.Log.i("WorldImporter", "No level.dat found, but region files detected. Processing as dimension/region import for $targetWorld.")
-                normalizeDimensionOnlyImport(serverDir, targetWorld)
+                android.util.Log.i("WorldImporter", "No level.dat found, but region files detected. Processing as region-only import for $targetWorld.")
+                normalizeRegionOnlyImport(serverDir, targetWorld)
                 return
             }
             android.util.Log.e("WorldImporter", "No level.dat or region files found in extracted backup.")
@@ -354,51 +462,21 @@ object WorldImporter {
         ensureRestoredServerProperties(serverDir, targetWorld)
     }
 
-    private fun normalizeDimensionOnlyImport(serverDir: File, targetWorld: String) {
+    /** A world zip without level.dat: just region data, optionally with DIM-1/DIM1 beside it. */
+    private fun normalizeRegionOnlyImport(serverDir: File, targetWorld: String) {
         val targetRoot = File(serverDir, targetWorld)
-        if (!targetRoot.exists()) targetRoot.mkdirs()
+        val dimensionFolders = ImportDimension.NETHER.folderNames + ImportDimension.END.folderNames
+        val worldRoot = serverDir.walkTopDown().maxDepth(6)
+            .filter { it.isDirectory && it.name.lowercase() !in dimensionFolders }
+            .filter { childDirIgnoreCase(it, "region")?.let(::hasRegionFiles) == true }
+            .minByOrNull { it.absolutePath.count { c -> c == File.separatorChar } }
 
-        val isNether = targetWorld.endsWith("_nether", ignoreCase = true) || targetWorld.equals("dim-1", ignoreCase = true)
-        val isEnd = targetWorld.endsWith("_the_end", ignoreCase = true) || targetWorld.equals("dim1", ignoreCase = true)
-
-        val destinationDir = when {
-            isNether -> File(serverDir, if (targetWorld.contains("_nether")) targetWorld else "${targetWorld}_nether").also { it.mkdirs() }
-            isEnd -> File(serverDir, if (targetWorld.contains("_the_end")) targetWorld else "${targetWorld}_the_end").also { it.mkdirs() }
-            else -> targetRoot
-        }
-
-        // Find if DIM-1 or DIM1 folder exists anywhere in the extracted tree
-        val dimensionSubdir = serverDir.walkTopDown().maxDepth(4).firstOrNull { 
-            it.isDirectory && (it.name.equals("DIM-1", ignoreCase = true) || it.name.equals("DIM1", ignoreCase = true)) &&
-            it.absolutePath != destinationDir.absolutePath
-        }
-
-        if (dimensionSubdir != null) {
-            mergeDirectoryContents(dimensionSubdir, destinationDir)
-            dimensionSubdir.deleteRecursively()
-        }
-
-        // Also check if region folder exists directly anywhere in the extracted tree
-        val regionFolder = serverDir.walkTopDown().maxDepth(4).firstOrNull { 
-            it.isDirectory && it.name.equals("region", ignoreCase = true) &&
-            it.parentFile?.absolutePath != destinationDir.absolutePath
-        }
-        if (regionFolder != null) {
-            val targetRegion = File(destinationDir, "region")
-            mergeDirectoryContents(regionFolder, targetRegion)
-            regionFolder.deleteRecursively()
-        }
-
-        // Also check for entities/ and poi/ folders if present
-        listOf("entities", "poi").forEach { folderName ->
-            val folder = serverDir.walkTopDown().maxDepth(4).firstOrNull { 
-                it.isDirectory && it.name.equals(folderName, ignoreCase = true) &&
-                it.parentFile?.absolutePath != destinationDir.absolutePath
-            }
-            if (folder != null) {
-                val targetFolder = File(destinationDir, folderName)
-                mergeDirectoryContents(folder, targetFolder)
-                folder.deleteRecursively()
+        when {
+            worldRoot == null || worldRoot.absolutePath == targetRoot.absolutePath -> Unit
+            worldRoot.absolutePath == serverDir.absolutePath -> moveRootLevelWorldContentIntoTarget(serverDir, targetRoot)
+            else -> {
+                mergeDirectoryContents(worldRoot, targetRoot)
+                worldRoot.deleteRecursively()
             }
         }
 
@@ -407,7 +485,7 @@ object WorldImporter {
             it.deleteRecursively()
         }
 
-        ensureRestoredServerProperties(serverDir, targetWorld.substringBefore("_nether").substringBefore("_the_end"))
+        ensureRestoredServerProperties(serverDir, targetWorld)
     }
 
     private fun mapImportedDimensionName(sourceName: String, importedBaseWorldName: String, targetBaseWorldName: String, serverType: com.pockethost.app.data.model.ServerType): String {
@@ -498,7 +576,9 @@ object WorldImporter {
         val worldFileNames = setOf(
             "advancements", "data", "datapacks", "dim-1", "dim1", "entities",
             "icon.png", "level.dat", "level.dat_old", "playerdata", "poi", "region",
-            "session.lock", "stats", "uid.dat"
+            "session.lock", "stats", "uid.dat",
+            // Minecraft 26.1+ keeps chunks under dimensions/ and player files under players/.
+            "dimensions", "players"
         )
         if (!targetRoot.exists()) {
             targetRoot.mkdirs()

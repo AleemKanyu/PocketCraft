@@ -13,17 +13,29 @@ object ServerFileManager {
      * up to context.filesDir to prevent SELinux/umask file access errors on MIUI/HyperOS/OnePlus.
      */
     fun ensureDirectoryPermissions(dir: File) {
+        ensureDirectoryChainPermissions(dir)
+        runCatching {
+            if (dir.exists()) {
+                dir.walkTopDown().forEach { file ->
+                    android.system.Os.chmod(file.absolutePath, 0x1ED) // 0755
+                }
+            }
+        }
+    }
+
+    /**
+     * Applies 0755 to [dir] and its parents only. The directory getters below are called from
+     * the UI thread on nearly every screen, and walking a whole world folder (thousands of
+     * region files) there froze the app. The full recursive pass still runs before each
+     * server launch, off the main thread.
+     */
+    private fun ensureDirectoryChainPermissions(dir: File) {
         runCatching {
             var current: File? = dir
             while (current != null) {
                 android.system.Os.chmod(current.absolutePath, 0x1ED) // 0755
                 if (current.name == "files" || current.name == "code_cache" || current.name == "cache") break
                 current = current.parentFile
-            }
-            if (dir.exists()) {
-                dir.walkTopDown().forEach { file ->
-                    android.system.Os.chmod(file.absolutePath, 0x1ED) // 0755
-                }
             }
         }
     }
@@ -34,7 +46,7 @@ object ServerFileManager {
     fun getServerDir(context: Context, worldName: String): File {
         return File(context.filesDir, "servers/worlds/$worldName").also {
             it.mkdirs()
-            ensureDirectoryPermissions(it)
+            ensureDirectoryChainPermissions(it)
         }
     }
 
@@ -43,7 +55,7 @@ object ServerFileManager {
      */
     fun getServerDirNoCreate(context: Context, worldName: String): File {
         return File(context.filesDir, "servers/worlds/$worldName").also {
-            if (it.exists()) ensureDirectoryPermissions(it)
+            if (it.exists()) ensureDirectoryChainPermissions(it)
         }
     }
 
@@ -53,7 +65,7 @@ object ServerFileManager {
     fun getServerJarDir(context: Context, gameVersion: String): File {
         return File(context.filesDir, "servers/binaries/$gameVersion").also {
             it.mkdirs()
-            ensureDirectoryPermissions(it)
+            ensureDirectoryChainPermissions(it)
         }
     }
 

@@ -1104,7 +1104,14 @@ class ServerHostService : Service() {
         // Log to Crashlytics if exit was abnormal
         if (exitCode != 0 && exitCode != 130 && exitCode != 143) { // 130/143 are SIGINT/SIGTERM
             val exception = RuntimeException("JVM exited abnormally: code=$exitCode")
-            runCatching { FirebaseCrashlytics.getInstance().recordException(exception) }
+            runCatching {
+                // The exit code alone says nothing about why; the last console lines do.
+                val crashlytics = FirebaseCrashlytics.getInstance()
+                synchronized(logBuffer) { logBuffer.toList().takeLast(30) }.forEach { line ->
+                    crashlytics.log(line.take(500))
+                }
+                crashlytics.recordException(exception)
+            }
         }
     }
 

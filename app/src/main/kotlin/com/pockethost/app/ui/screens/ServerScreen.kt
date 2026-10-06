@@ -1347,9 +1347,11 @@ fun EulaDialog(onAccept: () -> Unit, onDismiss: () -> Unit) {
                                     color = PocketColors.Primary,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.clickable {
-                                        context.startActivity(
-                                            Intent(Intent.ACTION_VIEW, Uri.parse("https://www.minecraft.net/eula"))
-                                        )
+                                        runCatching {
+                                            context.startActivity(
+                                                Intent(Intent.ACTION_VIEW, Uri.parse("https://www.minecraft.net/eula"))
+                                            )
+                                        }
                                     }
                                 )
                             }
