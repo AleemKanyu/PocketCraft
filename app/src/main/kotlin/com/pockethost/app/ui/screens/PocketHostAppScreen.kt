@@ -1281,6 +1281,19 @@ fun PocketHostApp(
         )
     }
 
+    // showPremiumUpgradeDialog was set by the support reminder and by promotions, but nothing
+    // here ever drew the sheet: the button did nothing, and the flag stayed on, which also
+    // left the system navigation bar in the sheet colour instead of the footer colour.
+    if (showPremiumUpgradeDialog) {
+        com.pockethost.app.ui.components.PremiumUpgradeBottomSheet(
+            onDismissRequest = { showPremiumUpgradeDialog = false },
+            onNavigateToSignUp = {
+                showPremiumUpgradeDialog = false
+                Toast.makeText(context, "Sign in from Settings > Account, then open Support again.", Toast.LENGTH_LONG).show()
+            }
+        )
+    }
+
     if (showAnnouncementDialog) {
         AnnouncementDialog.Content(
             onFinished = {
