@@ -424,6 +424,10 @@ fun FilesScreen(
                     onClick = { /* Could navigate to Worlds page if we passed navigation function */ }
                 )
             }
+
+            Spacer(Modifier.height(8.dp))
+
+            com.pockethost.app.ui.components.ImportPlayerDataButton(stateHolder = stateHolder)
         }
     }
 

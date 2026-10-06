@@ -239,13 +239,19 @@ fun PlayersScreen(
                         stateHolder = stateHolder,
                         onPlayerSelected = onPlayerSelected
                     )
-                    1 -> PlayersListTab(
-                        players = stateHolder.knownPlayers,
-                        emptyTitle = "No known players",
-                        emptySubtitle = "Players will appear here once they join your server.",
-                        onPlayerSelected = onPlayerSelected,
-                        actionLists = { _ -> emptyList() }
-                    )
+                    1 -> Column(modifier = Modifier.fillMaxSize()) {
+                        com.pockethost.app.ui.components.ImportPlayerDataButton(
+                            stateHolder = stateHolder,
+                            modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp)
+                        )
+                        PlayersListTab(
+                            players = stateHolder.knownPlayers,
+                            emptyTitle = "No known players",
+                            emptySubtitle = "Players will appear here once they join your server, or after you import player data.",
+                            onPlayerSelected = onPlayerSelected,
+                            actionLists = { _ -> emptyList() }
+                        )
+                    }
                     2 -> WhitelistTab(
                         stateHolder = stateHolder,
                         players = stateHolder.whitelistPlayers,

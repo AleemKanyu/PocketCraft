@@ -104,7 +104,8 @@ class ServerConfigRepository @Inject constructor(
                 File(dir, "level.dat").exists() ||
                     File(dir, "region").isDirectory ||
                     File(dir, "stats").isDirectory ||
-                    File(dir, "playerdata").isDirectory
+                    File(dir, "playerdata").isDirectory ||
+                    File(dir, "dimensions").isDirectory
             }
             ?.map { it.name }
             .orEmpty()
@@ -120,8 +121,8 @@ class ServerConfigRepository @Inject constructor(
 
     suspend fun listKnownPlayers(worldName: String): List<PlayerInfo> = withContext(Dispatchers.IO) {
         val worldDir = File(serverDir, worldName)
-        val statsDir = File(worldDir, "stats")
-        val playerdataDir = File(worldDir, "playerdata")
+        val statsDir = com.pockethost.app.service.PlayerDataManager.playerDirs(worldDir).stats
+        val playerdataDir = com.pockethost.app.service.PlayerDataManager.playerDirs(worldDir).data
 
         val worldUuids = linkedSetOf<String>()
         statsDir.listFiles()

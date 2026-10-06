@@ -4771,7 +4771,8 @@ class ServerStateHolder(
         candidates.forEach { worldDir ->
             android.util.Log.i("ServerStateHolder", "readKnownPlayers: Checking candidate dir=${worldDir.absolutePath}")
             // Try stats (case-insensitive)
-            val statsDir = worldDir.listFiles()?.find { it.isDirectory && it.name.equals("stats", ignoreCase = true) }
+            val playerDirs = PlayerDataManager.playerDirs(worldDir)
+            val statsDir = playerDirs.stats.takeIf { it.isDirectory }
             val statsCount = statsDir?.listFiles()
                 ?.filter { it.isFile && it.extension.equals("json", ignoreCase = true) }
                 ?.mapTo(knownUuids) { it.nameWithoutExtension }
@@ -4779,7 +4780,7 @@ class ServerStateHolder(
             android.util.Log.i("ServerStateHolder", "readKnownPlayers: statsDir=${statsDir?.absolutePath}, found $statsCount jsons")
 
             // Try playerdata (case-insensitive)
-            val pdDir = worldDir.listFiles()?.find { it.isDirectory && it.name.equals("playerdata", ignoreCase = true) }
+            val pdDir = playerDirs.data.takeIf { it.isDirectory }
             val pdCount = pdDir?.listFiles()
                 ?.filter { it.isFile && it.extension.equals("dat", ignoreCase = true) }
                 ?.mapTo(knownUuids) { it.nameWithoutExtension }

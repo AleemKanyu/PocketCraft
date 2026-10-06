@@ -3122,7 +3122,7 @@ class ServerHostService : Service() {
             } catch (e: Exception) {}
         }
         
-        val playerdataDir = java.io.File(worldDir, "playerdata")
+        val playerdataDir = com.pockethost.app.service.PlayerDataManager.playerDirs(worldDir).data
         if (playerdataDir.exists() && playerdataDir.isDirectory) {
             playerdataDir.listFiles()?.filter { it.isFile && it.extension == "dat" }?.forEach { file ->
                 val uuid = file.nameWithoutExtension.lowercase()
