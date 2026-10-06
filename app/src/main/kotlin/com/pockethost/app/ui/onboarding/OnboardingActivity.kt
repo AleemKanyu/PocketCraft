@@ -451,7 +451,8 @@ class OnboardingActivity : ComponentActivity() {
     private fun completeOnboarding() {
         try {
             preferences.onboardingCompleted = true
-            preferences.openWorldSetupNextLaunch = false
+            // Onboarding no longer configures a server; the home screen opens world setup.
+            preferences.openWorldSetupNextLaunch = true
             val intent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
@@ -489,12 +490,6 @@ private fun OnboardingScreen(
     val s = LocalAppStrings.current
     val steps = remember(s) { onboardingSteps(s) }
     var privacyAccepted by rememberSaveable { mutableStateOf(false) }
-    var setupServerName by rememberSaveable { mutableStateOf("PocketHost Server") }
-    var setupWorldDescription by rememberSaveable { mutableStateOf("") }
-    var setupSeed by rememberSaveable { mutableStateOf("") }
-    var setupVersion by rememberSaveable { mutableStateOf("") }
-    var setupServerType by rememberSaveable { mutableStateOf(ServerType.PAPER) }
-    var setupCustomJarPath by rememberSaveable { mutableStateOf<String?>(null) }
     var setupRelayHost by rememberSaveable {
         mutableStateOf(AppPreferences(context).relayHost)
     }
@@ -503,11 +498,6 @@ private fun OnboardingScreen(
     var relaySelectionChangedManually by rememberSaveable { mutableStateOf(false) }
     var isFindingBestRelay by rememberSaveable { mutableStateOf(false) }
     var relayRecommendation by rememberSaveable { mutableStateOf<String?>(null) }
-    var setupShowVersionDialog by remember { mutableStateOf(false) }
-    var setupFormError by rememberSaveable { mutableStateOf("") }
-    var versionSelectionError by rememberSaveable { mutableStateOf(false) }
-    var versionShakeTick by rememberSaveable { mutableIntStateOf(0) }
-    var versionShakeConsumed by rememberSaveable { mutableStateOf(false) }
     var notificationsPermissionGranted by remember { mutableStateOf(isNotificationPermissionGranted(context)) }
     var permissionStepError by rememberSaveable { mutableStateOf("") }
     var permissionWarningTick by rememberSaveable { mutableIntStateOf(0) }
@@ -563,8 +553,6 @@ private fun OnboardingScreen(
     val relayRegions by RemoteConfigManager.relayRegions.collectAsState(initial = RelayServers.defaultRegions())
 
     LaunchedEffect(Unit) {
-        setupVersion = ""
-        setupSeed = AppPreferencesStore.getWorldSeedFlow(context).first()
         notificationsPermissionGranted = isNotificationPermissionGranted(context)
         RemoteConfigManager.initialize(context)
     }
@@ -633,8 +621,7 @@ private fun OnboardingScreen(
                 stepLabel = steps[currentStep].label,
                 currentMobTheme = currentMobTheme,
                 onMobThemeChange = onMobThemeChange,
-                // Skipping the tour must still land on server setup — leaving onboarding
-                // entirely drops the user into the app with no server configured.
+                // Skipping the tour lands on the closing page, which hands over to server setup.
                 onSkipAll = { currentStep = steps.lastIndex },
                 // The terms and privacy policy live on the first step, so skipping past them
                 // would mean never accepting them.
@@ -696,31 +683,7 @@ private fun OnboardingScreen(
                                 relayAutoSelectedByLatency = false
                             }
                         )
-                        else -> OnboardingSetupScreen(
-                            serverName = setupServerName,
-                            onServerNameChange = {
-                                setupServerName = it
-                                if (setupFormError.isNotBlank()) setupFormError = ""
-                            },
-                            worldDescription = setupWorldDescription,
-                            onWorldDescriptionChange = {
-                                setupWorldDescription = it
-                                if (setupFormError.isNotBlank()) setupFormError = ""
-                            },
-                            selectedServerType = setupServerType,
-                            selectedVersion = setupVersion,
-                            onVersionClick = {
-                                setupShowVersionDialog = true
-                                versionSelectionError = false
-                                playHaptic()
-                            },
-                            worldSeed = setupSeed,
-                            onWorldSeedChange = { setupSeed = it },
-                            showVersionError = versionSelectionError,
-                            versionShakeTick = versionShakeTick,
-                            shakeConsumed = versionShakeConsumed,
-                            onShakeConsumed = { versionShakeConsumed = true }
-                        )
+                        else -> OnboardingReadyScreen()
                     }
                 }
             }
@@ -745,24 +708,11 @@ private fun OnboardingScreen(
 
                     PrimaryButton(
                         modifier = Modifier.weight(1.25f),
-                        text = if (currentStep == steps.lastIndex) s.onboardingButtonFinish else s.onboardingButtonNext,
+                        text = if (currentStep == steps.lastIndex) s.onboardingButtonGetStarted else s.onboardingButtonNext,
                         enabled = if (currentStep == 0) privacyAccepted else true,
                         onClick = {
                             if (currentStep == steps.lastIndex) {
-                                if (setupServerName.trim().isBlank()) {
-                                    setupFormError = "Server name is required."
-                                    playHaptic(doublePulse = true)
-                                    return@PrimaryButton
-                                }
-                                if (setupVersion.trim().isBlank()) {
-                                    setupFormError = "Game version is required."
-                                    versionSelectionError = true
-                                    versionShakeTick++
-                                    playHaptic(doublePulse = true)
-                                    return@PrimaryButton
-                                }
                                 scope.launch {
-                                    val selectedVersion = setupVersion.trim()
                                     AppPreferences(context).apply {
                                         if (relaySelectionChangedManually) {
                                             setManualRelayHost(setupRelayHost)
@@ -774,47 +724,12 @@ private fun OnboardingScreen(
                                         }
                                     }
                                     AppPreferencesStore.setRelayHost(context, setupRelayHost)
-                                    AppPreferencesStore.setSelectedServerType(context, setupServerType.name)
-                                    AppPreferencesStore.setServerVersion(context, selectedVersion)
-                                    AppPreferencesStore.setWorldSeed(context, setupSeed.trim())
-                                    AppPreferencesStore.setSeedSetupShown(context, true)
-                                    AppPreferencesStore.setInitialWorldSetupShown(context, true)
-                                    AppPreferencesStore.setPendingAutoDownloadVersion(context, selectedVersion)
                                     AppPreferencesStore.setLegalVersionAccepted(context, BuildConfig.LEGAL_POLICY_VERSION)
                                     AppPreferencesStore.setCrashDiagnosticsConsent(context, true)
                                     AppPreferencesStore.setAnalyticsConsent(context, true)
 
-                                    runCatching {
-                                        val repo = ServerConfigRepository(context.applicationContext)
-                                        val current = repo.loadConfig()
-                                        val displayName = setupServerName.trim()
-                                        val description = setupWorldDescription.trim()
-                                        repo.saveConfig(
-                                            current.copy(
-                                                gameVersion = selectedVersion,
-                                                serverType = setupServerType,
-                                                customJarPath = setupCustomJarPath,
-                                                motd = description.ifBlank { displayName }.take(120)
-                                            )
-                                        )
-                                        // The name and description typed here used to be dropped.
-                                        // Store them under the same keys the Home "edit details"
-                                        // dialog writes (ServerStateHolder.updateWorldServerDetails).
-                                        withContext(Dispatchers.IO) {
-                                            val worldKey = current.worldName.ifBlank { "world" }
-                                            val serverDir = ServerFileManager.getServerDir(
-                                                context,
-                                                AppPreferences(context).selectedWorld.ifBlank { "world" }
-                                            )
-                                            val props = ServerPropertiesHelper.readProperties(serverDir)
-                                            props["pocketcraft-world-display.$worldKey"] = displayName
-                                            if (description.isNotEmpty()) {
-                                                props["pocketcraft-world-description.$worldKey"] = description
-                                            }
-                                            ServerPropertiesHelper.saveProperties(serverDir, props)
-                                        }
-                                    }
-                                    preferences.openWorldSetupNextLaunch = false
+                                    // The first server is created in the app itself: the home screen opens
+                                    // world setup for a world that has not been through it yet.
                                     onComplete()
                                 }
                             } else {
@@ -857,48 +772,6 @@ private fun OnboardingScreen(
             }
         }
 
-        if (setupShowVersionDialog) {
-            val versionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-            ModalBottomSheet(
-                onDismissRequest = {
-                    scope.launch {
-                        versionSheetState.hide()
-                        setupShowVersionDialog = false
-                    }
-                },
-                sheetState = versionSheetState,
-                dragHandle = null,
-                containerColor = MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-            ) {
-                ServerTypeVersionBottomSheet(
-                    onDismissRequest = {
-                        scope.launch {
-                            versionSheetState.hide()
-                            setupShowVersionDialog = false
-                        }
-                    },
-                    onConfirm = { type, version, customJar ->
-                        scope.launch {
-                            setupServerType = type
-                            setupCustomJarPath = customJar
-                            setupVersion = if (type.supportsVersionSelect) {
-                                version ?: setupVersion
-                            } else {
-                                setupVersion.ifBlank { "custom" }
-                            }
-                            if (setupFormError.isNotBlank()) setupFormError = ""
-                            versionSelectionError = false
-                            versionSheetState.hide()
-                            setupShowVersionDialog = false
-                        }
-                    },
-                    currentServerType = setupServerType,
-                    currentGameVersion = setupVersion,
-                    currentCustomJarPath = setupCustomJarPath
-                )
-            }
-        }
     }
 }
 
@@ -915,7 +788,7 @@ private fun onboardingSteps(s: AppStrings): List<OnboardingStep> {
         OnboardingStep(s.onboardingStepFullControl),
         OnboardingStep(s.onboardingStepCrossPlay),
         OnboardingStep(s.onboardingStepPickRegion),
-        OnboardingStep(s.onboardingStepSetup)
+        OnboardingStep(s.onboardingStepReady)
     )
 }
 
@@ -1913,147 +1786,36 @@ private fun PermissionsScreen(
 }
 
 @Composable
-private fun OnboardingSetupScreen(
-    serverName: String,
-    onServerNameChange: (String) -> Unit,
-    worldDescription: String,
-    onWorldDescriptionChange: (String) -> Unit,
-    selectedServerType: ServerType,
-    selectedVersion: String,
-    onVersionClick: () -> Unit,
-    worldSeed: String,
-    onWorldSeedChange: (String) -> Unit,
-    showVersionError: Boolean,
-    versionShakeTick: Int,
-    shakeConsumed: Boolean = false,
-    onShakeConsumed: () -> Unit = {}
-) {
+private fun OnboardingReadyScreen() {
     val s = LocalAppStrings.current
     val scale = onboardingCompactScale()
-    val versionShakeOffset = remember { Animatable(0f) }
-    LaunchedEffect(versionShakeTick) {
-        // Same re-entry issue as PermissionsScreen's shake: versionShakeTick survives the
-        // outer AnimatedContent tearing this composable down and recreating it on Back/Next,
-        // but this LaunchedEffect itself restarts on that recreate even with an unchanged
-        // tick value — shakeConsumed (owned by the parent) stops it from replaying.
-        if (shakeConsumed) return@LaunchedEffect
-        if (versionShakeTick == 0) return@LaunchedEffect
-        onShakeConsumed()
-        val keyframes = listOf(0f, -7f, 7f, -5f, 5f, -3f, 3f, 0f)
-        keyframes.forEach {
-            versionShakeOffset.animateTo(it, animationSpec = tween(durationMillis = 32))
-        }
-    }
-
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp.scaled(scale))
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp.scaled(scale))
     ) {
-        OnboardingHeading(
-            title = s.onboardingSetupTitle,
-            eyebrow = "LAST STEP",
-            centered = false,
-            titleSize = 20.sp
-        )
-
-        OutlinedTextField(
-            value = serverName,
-            onValueChange = onServerNameChange,
-            singleLine = true,
-            label = { Text(s.onboardingSetupServerLabel) },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Filled.Dns,
-                    contentDescription = null,
-                    tint = onboardingAccentStrong()
-                )
-            },
-            shape = duoTextFieldShape(),
-            modifier = Modifier.fillMaxWidth(),
-            colors = duoOutlinedTextFieldColors()
-        )
-
-        OutlinedTextField(
-            value = worldDescription,
-            onValueChange = onWorldDescriptionChange,
-            label = { Text(s.onboardingSetupWorldDescLabel) },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Filled.Storage,
-                    contentDescription = null,
-                    tint = onboardingAccentStrong()
-                )
-            },
-            shape = duoTextFieldShape(),
-            modifier = Modifier.fillMaxWidth(),
-            colors = duoOutlinedTextFieldColors()
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset(x = versionShakeOffset.value.dp)
-                .clickable(onClick = onVersionClick)
-        ) {
-            val hasSelectedVersion = selectedVersion.isNotBlank()
-            OutlinedTextField(
-                value = if (selectedServerType.supportsVersionSelect) {
-                    if (hasSelectedVersion) "${selectedServerType.displayName} $selectedVersion" else s.onboardingSetupVersionPlaceholder
-                } else {
-                    s.onboardingSetupCustomJar.format(selectedServerType.displayName)
-                },
-                onValueChange = {},
-                singleLine = true,
-                readOnly = true,
-                enabled = false,
-                label = { Text(s.onboardingSetupVersionLabel) },
-                trailingIcon = {
-                    Icon(
-                        imageVector = Icons.Filled.Dns,
-                        contentDescription = null,
-                        tint = onboardingAccentStrong()
-                    )
-                },
-                colors = OutlinedTextFieldDefaults.colors(
-                    disabledTextColor = if (hasSelectedVersion) {
-                        onboardingTextPrimary()
-                    } else {
-                        onboardingTextSecondary()
-                    },
-                    disabledBorderColor = if (showVersionError) MaterialTheme.colorScheme.error else onboardingBorder(),
-                    disabledLabelColor = onboardingTextSecondary(),
-                    disabledTrailingIconColor = onboardingAccentStrong()
-                ),
-                shape = duoTextFieldShape(),
-                modifier = Modifier.fillMaxWidth()
+        OnboardingIconTile(accent = onboardingSuccess(), size = 64.dp.scaled(scale)) {
+            Icon(
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = null,
+                tint = onboardingSuccess(),
+                modifier = Modifier.size(28.dp.scaled(scale))
             )
         }
 
-        if (showVersionError) {
-            OnboardingErrorStrip(text = s.onboardingSetupVersionError)
-        }
-
-        OutlinedTextField(
-            value = worldSeed,
-            onValueChange = onWorldSeedChange,
-            singleLine = true,
-            label = { Text(s.onboardingSetupSeedLabel) },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Filled.Forest,
-                    contentDescription = null,
-                    tint = onboardingAccentStrong()
-                )
-            },
-            shape = duoTextFieldShape(),
-            modifier = Modifier.fillMaxWidth(),
-            colors = duoOutlinedTextFieldColors()
+        OnboardingHeading(
+            title = s.onboardingReadyTitle,
+            subtitle = s.onboardingReadySubtitle,
+            titleSize = 20.sp
         )
 
-        OnboardingNoticeStrip(
+        FeatureListCard(
             accent = onboardingSuccess(),
-            icon = Icons.Filled.CheckCircle,
-            text = s.onboardingSetupBackupNotice
+            entries = listOf(
+                s.onboardingReadyCreateTitle to s.onboardingReadyCreateBody,
+                s.onboardingReadyStartTitle to s.onboardingReadyStartBody,
+                s.onboardingReadyInviteTitle to s.onboardingReadyInviteBody
+            )
         )
     }
 }
