@@ -51,12 +51,16 @@ object PlayerDataManager {
      * Minecraft 26.1 moved player files from playerdata/, stats/ and advancements/ in the
      * world root to players/data, players/stats and players/advancements. Everything that
      * reads or writes player files goes through here so both layouts work.
+     *
+     * [newWorldUsesSplitLayout] only matters for a world the server has not created yet, where
+     * nothing on disk says which layout it will have: pass true when it will run on 26.1+.
      */
-    fun playerDirs(worldDir: File): PlayerDirs {
+    fun playerDirs(worldDir: File, newWorldUsesSplitLayout: Boolean = false): PlayerDirs {
         val players = File(worldDir, "players")
+        val hasOldPlayerData = findSubFolder(worldDir, "playerdata").isDirectory
         val splitLayout = File(players, "data").isDirectory ||
-            (com.pockethost.app.server.usesSplitWorldLayout(worldDir) &&
-                !findSubFolder(worldDir, "playerdata").isDirectory)
+            (com.pockethost.app.server.usesSplitWorldLayout(worldDir) && !hasOldPlayerData) ||
+            (newWorldUsesSplitLayout && !hasOldPlayerData && !File(worldDir, "level.dat").exists())
         return if (splitLayout) {
             PlayerDirs(File(players, "data"), File(players, "stats"), File(players, "advancements"))
         } else {
@@ -528,13 +532,18 @@ object PlayerDataManager {
     ): Result<Int> = withContext(Dispatchers.IO) {
         val temp = File(context.cacheDir, "player_import_${System.currentTimeMillis()}")
         try {
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                temp.outputStream().use { input.copyTo(it) }
+            val header = context.contentResolver.openInputStream(uri)?.use { stream ->
+                ByteArray(4).also { stream.read(it) }
             } ?: return@withContext Result.failure(Exception("Could not open the selected file."))
 
-            val header = temp.inputStream().use { stream -> ByteArray(4).also { stream.read(it) } }
             val serverDir = ServerFileManager.getServerDir(context, worldName)
-            val dirs = playerDirs(resolveWorldDirFromServerDir(serverDir, worldName))
+            val gameVersion = runCatching {
+                com.pockethost.app.data.repository.ServerConfigRepository(context).loadConfig().gameVersion
+            }.getOrDefault("")
+            val dirs = playerDirs(
+                resolveWorldDirFromServerDir(serverDir, worldName),
+                newWorldUsesSplitLayout = MinecraftVersionPolicy.isReleaseTrain26(gameVersion)
+            )
 
             when (detectImportKind(header)) {
                 PlayerImportKind.SINGLE_PLAYER_FILE -> {
@@ -542,6 +551,9 @@ object PlayerDataManager {
                     if (name.isEmpty()) {
                         return@withContext Result.failure(Exception("Enter the player this file belongs to."))
                     }
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        temp.outputStream().use { input.copyTo(it) }
+                    } ?: return@withContext Result.failure(Exception("Could not open the selected file."))
                     // Fails here, before anything is replaced, if the file is not readable NBT.
                     java.util.zip.GZIPInputStream(temp.inputStream()).use { it.readBytes() }
                     val uuid = resolveImportUuid(serverDir, name)
@@ -551,30 +563,21 @@ object PlayerDataManager {
                     Result.success(1)
                 }
                 PlayerImportKind.ZIP -> {
-                    var imported = 0
-                    com.pockethost.app.WorldImporter.openZip(temp).use { zip ->
-                        val entries = zip.entries()
-                        while (entries.hasMoreElements()) {
-                            val entry = entries.nextElement()
-                            if (entry.isDirectory) continue
-                            val target = when (classifyPlayerEntry(entry.name)) {
-                                "data" -> dirs.data
-                                "stats" -> dirs.stats
-                                "advancements" -> dirs.advancements
-                                else -> if (entry.name.substringAfterLast('/').equals("usercache.json", ignoreCase = true)) {
-                                    // Names for the imported UUIDs; only used when the server has none yet.
-                                    val cache = File(serverDir, "usercache.json")
-                                    if (!cache.exists()) zip.getInputStream(entry).use { input -> cache.outputStream().use { input.copyTo(it) } }
-                                    null
-                                } else null
-                            } ?: continue
-                            target.mkdirs()
-                            val fileName = entry.name.replace('\\', '/').substringAfterLast('/')
-                            zip.getInputStream(entry).use { input ->
-                                File(target, fileName).outputStream().use { input.copyTo(it) }
+                    // World backups run to gigabytes. When the picker hands over a real file the
+                    // zip is read in place through its descriptor, pulling out only the player
+                    // entries; a source that cannot be read that way (a cloud document, say)
+                    // is copied into the cache first.
+                    val imported = runCatching {
+                        context.contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+                            java.io.FileInputStream(descriptor.fileDescriptor).use { stream ->
+                                extractPlayerEntries(stream.channel, serverDir, dirs)
                             }
-                            imported++
                         }
+                    }.getOrNull() ?: run {
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            temp.outputStream().use { input.copyTo(it) }
+                        } ?: return@withContext Result.failure(Exception("Could not open the selected file."))
+                        java.io.FileInputStream(temp).use { extractPlayerEntries(it.channel, serverDir, dirs) }
                     }
                     if (imported == 0) {
                         return@withContext Result.failure(Exception("No player data was found in this file."))
@@ -591,6 +594,45 @@ object PlayerDataManager {
         } finally {
             temp.delete()
         }
+    }
+
+    /** Copies every player file in the zip behind [channel] into [dirs]; returns how many. */
+    private fun extractPlayerEntries(
+        channel: java.nio.channels.SeekableByteChannel,
+        serverDir: File,
+        dirs: PlayerDirs
+    ): Int {
+        var imported = 0
+        org.apache.commons.compress.archivers.zip.ZipFile.builder()
+            .setSeekableByteChannel(channel)
+            .get()
+            .use { zip ->
+                val entries = zip.entries
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    if (entry.isDirectory) continue
+                    val fileName = entry.name.replace('\\', '/').substringAfterLast('/')
+                    val target = when (classifyPlayerEntry(entry.name)) {
+                        "data" -> dirs.data
+                        "stats" -> dirs.stats
+                        "advancements" -> dirs.advancements
+                        else -> {
+                            // Names for the imported UUIDs; only used when the server has none yet.
+                            val cache = File(serverDir, "usercache.json")
+                            if (fileName.equals("usercache.json", ignoreCase = true) && !cache.exists()) {
+                                zip.getInputStream(entry).use { input -> cache.outputStream().use { input.copyTo(it) } }
+                            }
+                            null
+                        }
+                    } ?: continue
+                    target.mkdirs()
+                    zip.getInputStream(entry).use { input ->
+                        File(target, fileName).outputStream().use { input.copyTo(it) }
+                    }
+                    imported++
+                }
+            }
+        return imported
     }
 
     /** Adds [name] to usercache.json so the app can show who an imported file belongs to. */

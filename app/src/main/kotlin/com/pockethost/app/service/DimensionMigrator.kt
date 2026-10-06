@@ -38,10 +38,13 @@ object DimensionMigrator {
             }
         }
 
-        // Also check legacy version directories if available (e.g. context.filesDir/servers/*)
+        // Also check legacy version directories if available (e.g. context.filesDir/servers/*).
+        // The other worlds live under servers/worlds/ and are never a source: region files are
+        // matched by name alone, so their Nether and End would be copied into this world.
         val parentServersDir = serverDir.parentFile?.parentFile
+        val otherWorldsDir = serverDir.parentFile
         if (parentServersDir != null && parentServersDir.isDirectory) {
-            parentServersDir.walkTopDown().maxDepth(5).forEach { file ->
+            parentServersDir.walkTopDown().onEnter { it != otherWorldsDir }.maxDepth(5).forEach { file ->
                 if (file.isFile && file.name.lowercase(Locale.getDefault()).endsWith(".mca")) {
                     val pathLower = file.absolutePath.lowercase(Locale.getDefault())
                     val isNether = pathLower.contains("dim-1") || pathLower.contains("_nether") || pathLower.contains("/the_nether/") || pathLower.contains("/nether/")
@@ -67,13 +70,17 @@ object DimensionMigrator {
         val bukkitNetherRoot = File(serverDir, "${levelName}_nether")
         val bukkitEndRoot = File(serverDir, "${levelName}_the_end")
 
-        val netherTargets = listOf(
-            File(rootLevelDir, "DIM-1/region"),
+        // A Minecraft 26.1+ world keeps its dimensions under dimensions/ for every server type.
+        // Writing the DIM-1/DIM1 copies as well only doubled the size of the Nether and the End.
+        val splitLayout = com.pockethost.app.server.usesSplitWorldLayout(rootLevelDir)
+
+        val netherTargets = listOfNotNull(
+            File(rootLevelDir, "DIM-1/region").takeUnless { splitLayout },
             File(rootLevelDir, "dimensions/minecraft/the_nether/region")
         )
 
-        val endTargets = listOf(
-            File(rootLevelDir, "DIM1/region"),
+        val endTargets = listOfNotNull(
+            File(rootLevelDir, "DIM1/region").takeUnless { splitLayout },
             File(rootLevelDir, "dimensions/minecraft/the_end/region")
         )
 
@@ -82,9 +89,9 @@ object DimensionMigrator {
         deployBestRegionFiles(endBestFiles, endTargets)
 
         // 4. Also sync non-region data subfolders (entities, poi, data)
-        syncSubfolderContents(serverDir, levelName, "entities")
-        syncSubfolderContents(serverDir, levelName, "poi")
-        syncSubfolderContents(serverDir, levelName, "data")
+        syncSubfolderContents(serverDir, levelName, "entities", splitLayout)
+        syncSubfolderContents(serverDir, levelName, "poi", splitLayout)
+        syncSubfolderContents(serverDir, levelName, "data", splitLayout)
 
         // 5. Clean up legacy Bukkit sibling folders (_nether, _the_end) so Paper/Purpur 1.20+
         // migration won't throw java.io.IOException: Refusing to overwrite existing migrated file
@@ -93,6 +100,14 @@ object DimensionMigrator {
         }
         if (bukkitEndRoot.exists()) {
             runCatching { bukkitEndRoot.deleteRecursively() }
+        }
+
+        // In a 26.1+ world the old-style folders have just been merged into dimensions/ and
+        // nothing reads them again.
+        if (splitLayout) {
+            listOf("DIM-1", "DIM1").map { File(rootLevelDir, it) }.filter { it.exists() }.forEach {
+                runCatching { it.deleteRecursively() }
+            }
         }
     }
 
@@ -112,7 +127,7 @@ object DimensionMigrator {
         }
     }
 
-    private fun syncSubfolderContents(serverDir: File, levelName: String, subFolderName: String) {
+    private fun syncSubfolderContents(serverDir: File, levelName: String, subFolderName: String, splitLayout: Boolean) {
         val rootLevelDir = File(serverDir, levelName)
         val bukkitNetherRoot = File(serverDir, "${levelName}_nether")
         val bukkitEndRoot = File(serverDir, "${levelName}_the_end")
@@ -123,8 +138,8 @@ object DimensionMigrator {
             File(rootLevelDir, "DIM-1/$subFolderName"),
             File(rootLevelDir, "dimensions/minecraft/the_nether/$subFolderName")
         )
-        val netherTargets = listOf(
-            File(rootLevelDir, "DIM-1/$subFolderName"),
+        val netherTargets = listOfNotNull(
+            File(rootLevelDir, "DIM-1/$subFolderName").takeUnless { splitLayout },
             File(rootLevelDir, "dimensions/minecraft/the_nether/$subFolderName")
         )
 
@@ -136,8 +151,8 @@ object DimensionMigrator {
             File(rootLevelDir, "DIM1/$subFolderName"),
             File(rootLevelDir, "dimensions/minecraft/the_end/$subFolderName")
         )
-        val endTargets = listOf(
-            File(rootLevelDir, "DIM1/$subFolderName"),
+        val endTargets = listOfNotNull(
+            File(rootLevelDir, "DIM1/$subFolderName").takeUnless { splitLayout },
             File(rootLevelDir, "dimensions/minecraft/the_end/$subFolderName")
         )
 

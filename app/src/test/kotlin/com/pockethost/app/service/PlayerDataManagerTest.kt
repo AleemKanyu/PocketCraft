@@ -40,6 +40,22 @@ class PlayerDataManagerTest {
     }
 
     @Test
+    fun `a world that does not exist yet follows the server version`() {
+        val world = File(tmp.newFolder("server"), "world")
+        assertEquals(File(world, "playerdata"), PlayerDataManager.playerDirs(world).data)
+        assertEquals(
+            File(world, "players/data"),
+            PlayerDataManager.playerDirs(world, newWorldUsesSplitLayout = true).data
+        )
+        // An existing older world is not relocated just because the server version is newer.
+        File(world, "playerdata").mkdirs()
+        assertEquals(
+            File(world, "playerdata"),
+            PlayerDataManager.playerDirs(world, newWorldUsesSplitLayout = true).data
+        )
+    }
+
+    @Test
     fun `zip entries are sorted into player folders for both layouts`() {
         assertEquals("data", PlayerDataManager.classifyPlayerEntry("world/playerdata/$uuid.dat"))
         assertEquals("data", PlayerDataManager.classifyPlayerEntry("/world/players/data/$uuid.dat"))
