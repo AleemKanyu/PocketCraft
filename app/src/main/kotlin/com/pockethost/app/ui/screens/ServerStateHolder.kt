@@ -572,6 +572,64 @@ class ServerStateHolder(
     var lastAfkEnabledTime by mutableStateOf(0L)
         private set
 
+    /** Puts the screen into its "starting" state for a launch that began outside the app UI. */
+    private fun adoptExternalStart() {
+        if (isRunning || isStarting || isStopping) return
+        val now = SystemClock.elapsedRealtime()
+        lastStartRequestedRealtime = now
+        isStarting = true
+        isRunning = false
+        areSpawnChunksLoaded = false
+        isJavaServerDone = false
+        isGeyserDone = false
+        isRelayDone = false
+        resetJoinable()
+        startedAtRealtime = now
+        startupStartedAtRealtime = now
+        startupProgressPercent = 0
+        targetStartupProgressPercent = 1
+        startupStatusMessage = "Starting server..."
+        consoleVisibleAfterStart = true
+        startStartupProgressTracking()
+        updateServerUiState()
+    }
+
+    /** Mirrors [stopServer] for a stop that was requested outside the app UI. */
+    private fun adoptExternalStop() {
+        if (isStopping || (!isRunning && !isStarting && !isRestartingCycle)) return
+        startupLaunchJob?.cancel()
+        startupLaunchJob = null
+        pendingRestart = false
+        isRestartingCycle = false
+        restartFallbackJob?.cancel()
+        restartFallbackJob = null
+        isStopping = true
+        isJavaServerDone = false
+        isGeyserDone = false
+        areSpawnChunksLoaded = false
+        stopStartupProgressTracking(reset = true)
+        updateServerUiState()
+        stopPeriodicWorldSave()
+        stopPeriodicLocationPolling()
+        startStopWatchdog()
+    }
+
+    /** Mirrors [restartServer] for a restart that was requested outside the app UI. */
+    private fun adoptExternalRestart() {
+        if (isStopping || pendingRestart || (!isRunning && !isStarting)) return
+        isRestartingCycle = true
+        pendingRestart = true
+        isStarting = true
+        isStopping = true
+        isJavaServerDone = false
+        isGeyserDone = false
+        startupStatusMessage = "Restarting server..."
+        updateServerUiState()
+        stopPeriodicWorldSave()
+        stopPeriodicLocationPolling()
+        startStopWatchdog()
+    }
+
     private fun attemptTransitionToOnline() {
         if (!isStarting && !isRestartingCycle && !isRunning) return
         // Multiple independent signals (EVENT_SERVER_READY, log-line parsing, the
@@ -647,6 +705,13 @@ class ServerStateHolder(
                         isStarting = true
                         isRunning = false
                     }
+                } else if (!isRunning && !isStarting && type == ServerHostService.EVENT_OUTPUT &&
+                    ServerHostService.getPersistedRuntimeState(appContext, versionId) == ServerHostService.RUNTIME_STATE_STARTING
+                ) {
+                    // A start this screen did not request (the home-screen widget, a dashboard
+                    // command). Output buffered from a server that already stopped cannot get
+                    // here: the service has persisted "offline" by then.
+                    scope.launch { adoptExternalStart() }
                 }
             }
 
@@ -751,6 +816,15 @@ class ServerStateHolder(
                     ServerHostService.EVENT_OUTPUT -> {
                         if (!line.startsWith("[PocketHost]")) {
                             lastServerOutputAtRealtime = SystemClock.elapsedRealtime()
+                        }
+                        // The service announces every stop and restart it accepts. When this
+                        // screen did not ask for it (the widget did), follow along; otherwise
+                        // it kept showing ONLINE and then fell into STARTING once the relay
+                        // closed.
+                        // Output arrives in batches, several lines to one event.
+                        when {
+                            line.contains("[PocketHost] Stop requested.") -> adoptExternalStop()
+                            line.contains("[PocketHost] Restart requested.") -> adoptExternalRestart()
                         }
                         appendLog(line)
                     }
@@ -1372,14 +1446,19 @@ class ServerStateHolder(
             try {
                 val currentWorld = activeWorld.ifBlank { "world" }
                 val uid = FirebaseAuth.getInstance().currentUser?.uid?.trim().orEmpty()
-                if (uid.isNotBlank()) {
+                // The custom-subdomain lookup is the one network call in front of the launch. It
+                // is skipped with no connection and capped otherwise, so the server still starts
+                // (LAN only) when the phone is offline or the lookup stalls.
+                if (uid.isNotBlank() && com.pockethost.app.util.NetworkUtils.isOnline(appContext)) {
                     runCatching {
-                        val snapshot = FirebaseFirestore.getInstance()
-                            .collection("subdomains")
-                            .whereEqualTo("ownerId", uid)
-                            .limit(1)
-                            .get()
-                            .await()
+                        val snapshot = kotlinx.coroutines.withTimeout(4_000L) {
+                            FirebaseFirestore.getInstance()
+                                .collection("subdomains")
+                                .whereEqualTo("ownerId", uid)
+                                .limit(1)
+                                .get()
+                                .await()
+                        }
                         val doc = snapshot.documents.firstOrNull()
                         val currentPrefs = AppPreferences(appContext)
                         val isPremium = com.pockethost.app.billing.BillingManager.getInstance(appContext).isPremium.value
@@ -4152,7 +4231,9 @@ class ServerStateHolder(
                 if (!isServerProcessAlive()) {
                     // Update state to offline because the process might have died before updating SharedPreferences
                     ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
-                    
+                    // The process that would have told the widget is the one that just died.
+                    ServerHostService.pushWidgetUpdate(appContext, ServerHostService.RUNTIME_STATE_OFFLINE)
+
                     val shouldRestart = pendingRestart
                     pendingRestart = false
                     stopStartupProgressTracking(reset = !shouldRestart)
@@ -4759,10 +4840,23 @@ class ServerStateHolder(
         }
     }
 
+    /** Makes the next refresh rescan the player folders, for when files were added from outside. */
+    fun invalidateKnownPlayers() {
+        lastKnownPlayersScanTime = 0L
+    }
+
     private fun readKnownPlayers(worldName: String): List<PlayerInfo> {
         val now = System.currentTimeMillis()
         if (cachedKnownPlayersList.isNotEmpty() && (now - lastKnownPlayersScanTime) < 30_000L) {
-            return cachedKnownPlayersList
+            // Only the directory scan is worth caching. OP status changes the moment the user
+            // taps Make OP, and a cached flag put the old state back on screen for 30 seconds.
+            val opLookup = readNamedList("ops.json")
+            val opUuids = opLookup.mapNotNull { it.uuid.takeIf(String::isNotBlank) }.toSet()
+            val opNames = opLookup.map { it.name.lowercase(Locale.getDefault()) }.toSet()
+            return cachedKnownPlayersList.map { player ->
+                val isOp = player.uuid in opUuids || player.name.lowercase(Locale.getDefault()) in opNames
+                if (player.isOp == isOp) player else player.copy(isOp = isOp)
+            }
         }
         val knownUuids = linkedSetOf<String>()
         val candidates = worldDirectoryCandidates(worldName)

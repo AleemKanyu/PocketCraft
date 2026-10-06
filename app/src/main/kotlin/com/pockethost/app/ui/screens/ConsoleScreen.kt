@@ -2418,8 +2418,14 @@ private fun OnlinePlayerCard(
         username = player.name,
         subtitle = player.pingText(),
         modifier = Modifier.clickable { onOpenDetails() },
+        badgeText = if (player.isOp) "OPED" else null,
+        badgeColor = PocketColors.PrimaryDark,
         actions = listOf(
-            PlayerCardAction(label = "Make OP", onClick = { stateHolder.opPlayer(player.name) }),
+            if (player.isOp) {
+                PlayerCardAction(label = "Remove OP", onClick = { stateHolder.removeOp(player.name) }, tint = PocketColors.Offline)
+            } else {
+                PlayerCardAction(label = "Make OP", onClick = { stateHolder.opPlayer(player.name) })
+            },
             PlayerCardAction(label = "Kick", onClick = { stateHolder.kickPlayer(player.name) }),
             PlayerCardAction(
                 label = "Ban",

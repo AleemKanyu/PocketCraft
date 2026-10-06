@@ -4,7 +4,15 @@ const STATUS_REQUEST_TIMEOUT_MS = 2_500;
 const DEFAULT_JAVA_VERSION = '1.21.11';
 const DEFAULT_JAVA_PROTOCOL = 774;
 
+// Minecraft switched to year-based version names after 1.21.11 (26.1, 26.2, ...).
+// 26.2 and 26.3 are the numbers ViaVersion reports on those servers; the 26.1 line is
+// the step between them and 1.21.11.
 const JAVA_PROTOCOL_BY_VERSION = {
+  '26.3': 777,
+  '26.2': 776,
+  '26.1.2': 775,
+  '26.1.1': 775,
+  '26.1': 775,
   '1.21.11': 774,
   '1.21.10': 773,
   '1.21.9': 773,
@@ -94,16 +102,22 @@ function wrapPacket(packetId, payload = Buffer.alloc(0)) {
 }
 
 function normalizeJavaVersion(version) {
-  const match = String(version || '').match(/\b1\.\d+(?:\.\d+)?\b/);
+  // "1.21.11" and the year-based names that followed it ("26.3"). Matching only "1.x" made
+  // every 26.x server show up in the multiplayer list as 1.21.11.
+  const match = String(version || '').match(/\b(?:1|[2-9]\d)\.\d+(?:\.\d+)?\b/);
   return match ? match[0] : DEFAULT_JAVA_VERSION;
 }
 
-function protocolForJavaVersion(version) {
+// For a version this table does not know yet, answer with the protocol the client asked
+// with: the name is still right, and the client is not told it is incompatible on a guess.
+function protocolForJavaVersion(version, clientProtocol) {
   const normalized = normalizeJavaVersion(version);
-  return JAVA_PROTOCOL_BY_VERSION[normalized] || DEFAULT_JAVA_PROTOCOL;
+  const known = JAVA_PROTOCOL_BY_VERSION[normalized];
+  if (known) return known;
+  return Number.isInteger(clientProtocol) && clientProtocol > 0 ? clientProtocol : DEFAULT_JAVA_PROTOCOL;
 }
 
-function createJavaSLPResponse(port) {
+function createJavaSLPResponse(port, clientProtocol) {
   const status = getServerStatus(port) || {};
   const versionName = normalizeJavaVersion(status.version);
   const motd = status.motd || 'A Minecraft Server';
@@ -113,7 +127,7 @@ function createJavaSLPResponse(port) {
   const responseObj = {
     version: {
       name: versionName,
-      protocol: protocolForJavaVersion(versionName)
+      protocol: protocolForJavaVersion(versionName, clientProtocol)
     },
     players: {
       max: maxPlayers,
@@ -133,7 +147,7 @@ function createJavaSLPResponse(port) {
   return wrapPacket(0x00, Buffer.concat([jsonLen, jsonBuf]));
 }
 
-function createJavaSLPResponseDirect(status) {
+function createJavaSLPResponseDirect(status, clientProtocol) {
   const versionName = normalizeJavaVersion(status?.version);
   const motd = status?.motd || 'A Minecraft Server';
   const players = Number.isFinite(Number(status?.players)) ? Math.max(0, Number(status.players) | 0) : 0;
@@ -142,7 +156,7 @@ function createJavaSLPResponseDirect(status) {
   const responseObj = {
     version: {
       name: versionName,
-      protocol: protocolForJavaVersion(versionName)
+      protocol: protocolForJavaVersion(versionName, clientProtocol)
     },
     players: {
       max: maxPlayers,
@@ -185,12 +199,13 @@ function parseHandshake(buf) {
   if (!nextState) return null;
 
   return {
+    protocol: protocol.value,
     nextState: nextState.value,
     remaining: buf.subarray(packet.nextOffset)
   };
 }
 
-function handleStatusPackets(socket, port, initialBuffer) {
+function handleStatusPackets(socket, port, initialBuffer, clientProtocol) {
   let buffer = Buffer.from(initialBuffer || Buffer.alloc(0));
   let respondedToStatus = false;
   let closed = false;
@@ -216,7 +231,7 @@ function handleStatusPackets(socket, port, initialBuffer) {
 
       if (packet.packetId === 0x00 && !respondedToStatus) {
         respondedToStatus = true;
-        socket.write(createJavaSLPResponse(port));
+        socket.write(createJavaSLPResponse(port, clientProtocol));
         continue;
       }
 
@@ -271,7 +286,7 @@ function handleJavaPing(socket, chunk, port) {
   if (!handshake) return false;
 
   if (handshake.nextState === 1) {
-    handleStatusPackets(socket, port, handshake.remaining);
+    handleStatusPackets(socket, port, handshake.remaining, handshake.protocol);
     return true;
   }
 
@@ -285,6 +300,8 @@ function handleJavaPing(socket, chunk, port) {
 
 module.exports = {
   handleJavaPing,
+  normalizeJavaVersion,
+  protocolForJavaVersion,
   createJavaSLPResponse,
   createJavaSLPResponseDirect,
   createJavaPongResponse,

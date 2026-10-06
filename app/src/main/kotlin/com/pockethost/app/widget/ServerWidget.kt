@@ -117,6 +117,15 @@ class StopServerAction : ActionCallback {
     ) {
         ServerWidgetUpdater.push(context, "stopping")
         ServerHostService.stop(context)
+        // The server usually runs as a JVM inside the ":server" process, which exits with it.
+        // Nothing in that process is left to report "offline", so it is watched from here.
+        repeat(16) {
+            kotlinx.coroutines.delay(500)
+            if (!ServerWidgetUpdater.isServerHostProcessAlive(context)) {
+                ServerWidgetUpdater.push(context, ServerHostService.RUNTIME_STATE_OFFLINE)
+                return
+            }
+        }
     }
 }
 
@@ -163,12 +172,17 @@ class ServerWidget : GlanceAppWidget() {
             ?: ServerHostService.getPersistedActiveWorld(context)
             .ifBlank { "world" }
 
-        val liveStatus = ServerWidgetUpdater.resolveStatus(context, liveVersion, liveWorld)
-
+        // The status pushed into the widget state is what gets drawn. It used to be worked out
+        // again here with a socket probe, which cannot run on the thread a widget is composed
+        // on: the probe always failed and a running server was drawn as STARTING. The one thing
+        // re-checked is that a "running" server still has a process behind it.
         val status = when {
-            rawStatus.equals("stopping", ignoreCase = true) && liveStatus != ServerHostService.RUNTIME_STATE_RUNNING -> "stopping"
-            rawStatus?.uppercase()?.startsWith("STARTING") == true && liveStatus == ServerHostService.RUNTIME_STATE_OFFLINE -> rawStatus
-            else -> liveStatus
+            rawStatus.isNullOrBlank() -> ServerHostService.RUNTIME_STATE_OFFLINE
+            rawStatus.equals(ServerHostService.RUNTIME_STATE_RUNNING, ignoreCase = true) &&
+                !ServerWidgetUpdater.isServerAlive(context, liveVersion) -> ServerHostService.RUNTIME_STATE_OFFLINE
+            rawStatus.equals("stopping", ignoreCase = true) &&
+                !ServerWidgetUpdater.isServerHostProcessAlive(context) -> ServerHostService.RUNTIME_STATE_OFFLINE
+            else -> rawStatus
         }
 
         val worldName = if (!rawWorld.isNullOrBlank()) rawWorld else liveWorld.ifBlank { "world" }
@@ -611,11 +625,30 @@ object ServerWidgetUpdater {
         )
     }
 
+    /**
+     * The widget is drawn from the main process, but the server lives in ":server", usually as
+     * an in-process JVM with no child pid to probe. So "alive" also means: that process exists
+     * and the state it last persisted is not offline.
+     */
+    fun isServerHostProcessAlive(context: Context): Boolean = runCatching {
+        val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        manager.runningAppProcesses.orEmpty().any { it.processName == "${context.packageName}:server" }
+    }.getOrDefault(false)
+
+    /** Whether a server is up, judged without touching the network (safe on any thread). */
+    fun isServerAlive(context: Context, versionId: String): Boolean {
+        if (ServerLauncher.isServerProcessAlive(context)) return true
+        val safeVersion = versionId.ifBlank { ServerHostService.getPersistedActiveVersion(context) }
+        val persisted = ServerHostService.getPersistedRuntimeState(context, safeVersion)
+        return !persisted.equals(ServerHostService.RUNTIME_STATE_OFFLINE, ignoreCase = true) &&
+            isServerHostProcessAlive(context)
+    }
+
     fun resolveStatus(context: Context, versionId: String, activeWorld: String): String {
-        val processAlive = ServerLauncher.isServerProcessAlive(context)
         val portOpen = isLocalServerPortOpen(context, activeWorld)
         val safeVersion = versionId.ifBlank { ServerHostService.getPersistedActiveVersion(context) }
         val persisted = ServerHostService.getPersistedRuntimeState(context, safeVersion) ?: ServerHostService.RUNTIME_STATE_OFFLINE
+        val processAlive = isServerAlive(context, safeVersion)
 
         val isStartingState = persisted.uppercase().startsWith("STARTING") ||
             persisted.equals(ServerHostService.RUNTIME_STATE_STARTING, ignoreCase = true)

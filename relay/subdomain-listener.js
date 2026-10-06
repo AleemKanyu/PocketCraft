@@ -117,7 +117,7 @@ function tryParseHandshake(buf) {
   if (!nextStateRes || nextStateRes.invalid) return { status: 'invalid' };
   const nextState = nextStateRes.value;
 
-  return { status: 'ok', hostname, nextState, totalLength: packetStart + packetLength };
+  return { status: 'ok', hostname, nextState, protocol: protoRes.value, totalLength: packetStart + packetLength };
 }
 
 // --- Relay status lookup (read-only, existing endpoint) ---
@@ -276,7 +276,7 @@ async function routeConnection(playerSocket, fullBuffer, handshakeLength, hostna
 
 // --- TCP listener (separate port, separate process — index.js untouched) ---
 
-function sendSLPAndPong(socket, status, initialBuffer) {
+function sendSLPAndPong(socket, status, initialBuffer, clientProtocol) {
   let buffer = Buffer.from(initialBuffer || Buffer.alloc(0));
   let respondedToStatus = false;
   let closed = false;
@@ -301,7 +301,7 @@ function sendSLPAndPong(socket, status, initialBuffer) {
 
       if (packet.packetId === 0x00 && !respondedToStatus) {
         respondedToStatus = true;
-        socket.write(createJavaSLPResponseDirect(status));
+        socket.write(createJavaSLPResponseDirect(status, clientProtocol));
         continue;
       }
 
@@ -331,7 +331,7 @@ function sendSLPAndPong(socket, status, initialBuffer) {
   processBufferedPackets();
 }
 
-async function handleCloudStatusPing(playerSocket, fullBuffer, handshakeLength, hostname) {
+async function handleCloudStatusPing(playerSocket, fullBuffer, handshakeLength, hostname, clientProtocol) {
   const remaining = fullBuffer.subarray(handshakeLength);
   let result;
   try {
@@ -370,11 +370,11 @@ async function handleCloudStatusPing(playerSocket, fullBuffer, handshakeLength, 
       players: 0,
       maxPlayers: 20
     };
-    sendSLPAndPong(playerSocket, offlineStatus, remaining);
+    sendSLPAndPong(playerSocket, offlineStatus, remaining, clientProtocol);
     return;
   }
 
-  sendSLPAndPong(playerSocket, entry, remaining);
+  sendSLPAndPong(playerSocket, entry, remaining, clientProtocol);
 }
 
 const server = net.createServer({
@@ -419,7 +419,7 @@ const server = net.createServer({
 
     settled = true;
     if (parsed.nextState === 1) {
-      handleCloudStatusPing(playerSocket, buffer, parsed.totalLength, parsed.hostname)
+      handleCloudStatusPing(playerSocket, buffer, parsed.totalLength, parsed.hostname, parsed.protocol)
         .catch((err) => {
           console.error('[subdomain-listener] Cloud status ping error:', err.message);
           if (!playerSocket.destroyed) playerSocket.destroy();

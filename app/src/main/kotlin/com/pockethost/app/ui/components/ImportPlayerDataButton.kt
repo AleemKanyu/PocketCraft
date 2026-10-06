@@ -70,6 +70,7 @@ fun ImportPlayerDataButton(
             importing = false
             result
                 .onSuccess { count ->
+                    stateHolder.invalidateKnownPlayers()
                     stateHolder.refreshAll()
                     toast(if (count == 1) "Imported 1 player file." else "Imported $count player files.")
                 }
