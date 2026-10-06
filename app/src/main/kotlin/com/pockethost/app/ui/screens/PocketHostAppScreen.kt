@@ -93,6 +93,7 @@ import com.pockethost.app.config.RemoteConfigManager
 import com.pockethost.app.R
 import com.pockethost.app.ui.components.BroadcastBanner
 import com.pockethost.app.ui.components.AnnouncementDialog
+import com.pockethost.app.ui.components.SupportUsPopup
 import com.pockethost.app.ui.components.BroadcastPopup
 import com.pockethost.app.ui.components.NewFeaturesPopup
 import com.pockethost.app.ui.components.DuoButton
@@ -745,8 +746,10 @@ fun PocketHostApp(
         hasPendingBroadcast
     ) {
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
-        val is15thLaunch = preferences.appLaunchCount > 0 && (preferences.appLaunchCount % 15 == 0)
-        if (is15thLaunch && preferences.donationReminderLastShownLaunchCount != preferences.appLaunchCount) {
+        // Someone already supporting the app is not asked again.
+        if (!preferences.isPremiumUser &&
+            SupportUsPopup.isDue(preferences.appLaunchCount, preferences.donationReminderLastShownLaunchCount)
+        ) {
             pendingDonationReminderDialog = true
         }
     }
@@ -786,7 +789,10 @@ fun PocketHostApp(
             hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
         if (popupShownThisLaunch) return@LaunchedEffect
-        // Voluntary donation popups disabled
+        popupShownThisLaunch = true
+        preferences.donationReminderLastShownLaunchCount = preferences.appLaunchCount
+        pendingDonationReminderDialog = false
+        showDonationReminderDialog = true
     }
 
     LaunchedEffect(
@@ -1260,6 +1266,16 @@ fun PocketHostApp(
             onDismiss = {
                 broadcastViewModel.dismiss(msg.id)
             }
+        )
+    }
+
+    if (showDonationReminderDialog) {
+        SupportUsPopup.Content(
+            onSupport = {
+                showDonationReminderDialog = false
+                showPremiumUpgradeDialog = true
+            },
+            onDismiss = { showDonationReminderDialog = false }
         )
     }
 
