@@ -746,8 +746,10 @@ fun PocketHostApp(
         hasPendingBroadcast
     ) {
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
-        // Someone already supporting the app is not asked again.
-        if (!preferences.isPremiumUser &&
+        // Someone already supporting the app is not asked again. isPremiumUser cannot tell:
+        // it is true for everyone now that every feature is free.
+        val supportTier = preferences.lastSeenMembershipTier.ifBlank { PremiumTier.NONE.wireValue }
+        if (supportTier == PremiumTier.NONE.wireValue &&
             SupportUsPopup.isDue(preferences.appLaunchCount, preferences.donationReminderLastShownLaunchCount)
         ) {
             pendingDonationReminderDialog = true
