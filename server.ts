@@ -381,6 +381,19 @@ async function startServer() {
     }
   });
 
+  // Serve Spotify OAuth Callback
+  app.get(["/callback", "/callback/", "/callback.html"], (req, res) => {
+    const callbackDevPath = path.resolve(__dirname, "public", "callback", "index.html");
+    const callbackProdPath = path.join(
+      __dirname.endsWith(`${path.sep}dist`) ? __dirname : path.join(__dirname, "dist"),
+      "callback",
+      "index.html"
+    );
+    const targetPath = fs.existsSync(callbackProdPath) ? callbackProdPath : callbackDevPath;
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.sendFile(targetPath);
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

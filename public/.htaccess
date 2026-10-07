@@ -114,6 +114,9 @@
   # Serve site.webmanifest directly
   RewriteRule ^site\.webmanifest$ site.webmanifest [L]
 
+  # Spotify OAuth Callback
+  RewriteRule ^callback/?$ callback/index.html [L,QSA]
+
   # Razorpay Backend Endpoints
   RewriteRule ^api/create-order/?$ api/create-order.php [L]
   RewriteRule ^api/verify-payment/?$ api/verify-payment.php [L]
