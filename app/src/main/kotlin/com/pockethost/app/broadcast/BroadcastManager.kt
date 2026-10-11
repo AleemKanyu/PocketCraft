@@ -141,7 +141,9 @@ object BroadcastManager {
     fun initRemoteConfig(onBannerFetched: (BroadcastMessage?) -> Unit) {
         val settings = remoteConfigSettings { minimumFetchIntervalInSeconds = 60 }
         remoteConfig.setConfigSettingsAsync(settings)
-        remoteConfig.setDefaultsAsync(mapOf(BROADCAST_REMOTE_CONFIG_KEY to ""))
+        // No setDefaultsAsync here: each call replaces the whole default set, so setting one
+        // key wiped every default RemoteConfigManager loads from remote_config_defaults.xml.
+        // A missing string key already reads as "".
 
         fetchRemoteConfigBanner(onBannerFetched)
     }
@@ -151,8 +153,6 @@ object BroadcastManager {
     }
 
     private fun fetchRemoteConfigBanner(onBannerFetched: (BroadcastMessage?) -> Unit) {
-        remoteConfig.setDefaultsAsync(mapOf(BROADCAST_REMOTE_CONFIG_KEY to ""))
-
         remoteConfig.fetchAndActivate().addOnCompleteListener {
             onBannerFetched(parseRemoteConfigBanner())
         }
