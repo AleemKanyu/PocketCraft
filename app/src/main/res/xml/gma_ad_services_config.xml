@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Required by the Google Mobile Ads SDK since it began integrating with
+    Android's Privacy Sandbox (AdServices) APIs. This is not optional
+    boilerplate we chose to add - the SDK's own manifest references
+    @xml/gma_ad_services_config and the build fails without it. Boilerplate
+    matches Google's own quick-start guide: it grants the SDK access to these
+    APIs on Android versions that support them.
+-->
+<ad-services-config>
+    <attribution allowAllToAccess="true" />
+    <custom-audiences allowAllToAccess="true" />
+    <topics allowAllToAccess="true" />
+    <protected-signals allowAllToAccess="true" />
+    <ad-selection allowAllToAccess="true" />
+</ad-services-config>

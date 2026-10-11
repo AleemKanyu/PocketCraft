@@ -354,6 +354,7 @@ fun WorldsScreen(
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
+                                        com.pockethost.app.ads.NativeAdCard(com.pockethost.app.ads.AdPlacement.IMPORT)
                                     }
                                 } else {
                                     DuoButton(
@@ -418,6 +419,9 @@ fun WorldsScreen(
                                             worldPickerLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*"))
                                         }
                                     )
+                                    if (stateHolder.isImportingWorld) {
+                                        com.pockethost.app.ads.NativeAdCard(com.pockethost.app.ads.AdPlacement.IMPORT)
+                                    }
                                 }
                             }
                         }

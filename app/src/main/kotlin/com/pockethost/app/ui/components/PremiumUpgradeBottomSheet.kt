@@ -251,6 +251,8 @@ fun PremiumUpgradeBottomSheet(
                 }
             )
 
+            com.pockethost.app.ads.WatchAdSupportButton()
+
             Text(
                 text = "Voluntary contribution via Patreon · cancel your membership anytime",
                 fontSize = 11.sp,

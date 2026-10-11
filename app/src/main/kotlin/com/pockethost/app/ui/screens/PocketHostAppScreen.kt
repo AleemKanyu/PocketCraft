@@ -94,6 +94,8 @@ import com.pockethost.app.R
 import com.pockethost.app.ui.components.BroadcastBanner
 import com.pockethost.app.ui.components.AnnouncementDialog
 import com.pockethost.app.ui.components.SupportUsPopup
+import com.pockethost.app.ads.AdPlacement
+import com.pockethost.app.ads.NativeAdCard
 import com.pockethost.app.ui.components.BroadcastPopup
 import com.pockethost.app.ui.components.NewFeaturesPopup
 import com.pockethost.app.ui.components.DuoButton
@@ -1166,6 +1168,9 @@ fun PocketHostApp(
                     currentMobTheme = currentMobTheme,
                     onMobThemeChange = onMobThemeChange,
                     homeTopContent = {
+                        if (modpackImportInProgress && stateHolder.serverUiState != ServerUiState.STARTING) {
+                            NativeAdCard(AdPlacement.DOWNLOAD)
+                        }
                         if (modpackImportInProgress || modpackImportError != null) {
                             ModpackImportProgressCard(
                                 modpackId = modpackImportId.orEmpty(),

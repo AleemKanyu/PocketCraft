@@ -14,6 +14,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pockethost.app.ads.AdPlacement
+import com.pockethost.app.ads.NativeAdCard
 import com.pockethost.app.service.BackupForegroundService
 import com.pockethost.app.service.BackupProgressTracker
 import com.pockethost.app.ui.theme.Monocraft
@@ -122,6 +124,10 @@ fun BackupProgressBottomSheet(
                     trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                     strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
                 )
+            }
+
+            if (backupState == BackupProgressTracker.State.RUNNING) {
+                NativeAdCard(AdPlacement.BACKUP)
             }
 
             Spacer(modifier = Modifier.height(8.dp))

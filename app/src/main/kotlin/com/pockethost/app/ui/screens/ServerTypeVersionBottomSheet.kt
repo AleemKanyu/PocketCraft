@@ -935,6 +935,8 @@ private fun InlineDownloadCard(
                     )
                 }
             }
+
+            com.pockethost.app.ads.NativeAdCard(com.pockethost.app.ads.AdPlacement.DOWNLOAD)
         }
     }
 }

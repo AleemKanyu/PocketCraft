@@ -82,6 +82,37 @@ val officialWebsiteUrl = localProperties.getProperty("officialWebsiteUrl")
     ?: System.getenv("POCKETHOST_WEBSITE_URL")
     ?: "https://pockethost.online"
 
+// AdMob. admobUseTestAds defaults to true (Google's public TEST ad unit IDs,
+// safe to click during development) whenever it is missing or malformed, so a
+// fresh checkout or a typo can never silently start serving real ads. Set it
+// to exactly "false" in local.properties only when deliberately building a
+// release meant to show real ads.
+val admobUseTestAds = (localProperties.getProperty("admobUseTestAds")
+    ?: System.getenv("POCKETCRAFT_ADMOB_USE_TEST_ADS"))
+    ?.equals("false", ignoreCase = true)?.not() ?: true
+
+// Google's own public test IDs, see https://developers.google.com/admob/android/test-ads
+val testAdmobAppId = "ca-app-pub-3940256099942544~3347511713"
+val testAdmobRewardedUnitId = "ca-app-pub-3940256099942544/5224354917"
+val testAdmobInterstitialUnitId = "ca-app-pub-3940256099942544/1033173712"
+val testAdmobNativeUnitId = "ca-app-pub-3940256099942544/2247696110"
+
+fun admobId(key: String, env: String, testId: String): String =
+    if (admobUseTestAds) testId
+    else (localProperties.getProperty(key) ?: System.getenv(env))?.trim().takeUnless { it.isNullOrBlank() } ?: testId
+
+// For checking the placements in a release build before the Remote Config switch is
+// flipped: -PpocketcraftForceTestAds=true shows ads everywhere, and only ever takes
+// effect together with the test ad units above.
+val forceTestAds = providers.gradleProperty("pocketcraftForceTestAds")
+    .map { it.toBoolean() }
+    .getOrElse(false)
+
+val admobAppId = admobId("admobAppId", "POCKETCRAFT_ADMOB_APP_ID", testAdmobAppId)
+val admobRewardedUnitId = admobId("admobRewardedUnitId", "POCKETCRAFT_ADMOB_REWARDED_UNIT_ID", testAdmobRewardedUnitId)
+val admobInterstitialUnitId = admobId("admobInterstitialUnitId", "POCKETCRAFT_ADMOB_INTERSTITIAL_UNIT_ID", testAdmobInterstitialUnitId)
+val admobNativeUnitId = admobId("admobNativeUnitId", "POCKETCRAFT_ADMOB_NATIVE_UNIT_ID", testAdmobNativeUnitId)
+
 val autoVersionCode = (System.currentTimeMillis() / 60000).toInt()
 val allowDebugSigningForRelease = providers.gradleProperty("pocketcraftAllowDebugSigning")
     .map { it.toBoolean() }
@@ -111,6 +142,14 @@ android {
         buildConfigField("String", "WEBSITE_URL", "\"$officialWebsiteUrl\"")
         buildConfigField("String", "LEGAL_POLICY_VERSION", "\"2026-04-06\"")
         buildConfigField("String", "RELAY_SECRET", "\"$configuredRelaySecret\"")
+        buildConfigField("String", "ADMOB_REWARDED_UNIT_ID", "\"$admobRewardedUnitId\"")
+        buildConfigField("String", "ADMOB_INTERSTITIAL_UNIT_ID", "\"$admobInterstitialUnitId\"")
+        buildConfigField("String", "ADMOB_NATIVE_UNIT_ID", "\"$admobNativeUnitId\"")
+        buildConfigField("Boolean", "ADMOB_USE_TEST_ADS", "$admobUseTestAds")
+        buildConfigField("Boolean", "ADS_FORCE_TEST", "$forceTestAds")
+
+        // AdMob reads its App ID from manifest meta-data at SDK init, not from BuildConfig.
+        manifestPlaceholders["admobAppId"] = admobAppId
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -304,6 +343,8 @@ dependencies {
 
     implementation(libs.datastore.preferences)
     implementation(libs.play.billing)
+    implementation("com.google.android.gms:play-services-ads:23.6.0")
+    implementation("com.google.android.ump:user-messaging-platform:3.1.0")
     implementation("androidx.glance:glance-appwidget:1.1.1")
     constraints {
         implementation("androidx.glance:glance-appwidget-proto:1.1.1") {

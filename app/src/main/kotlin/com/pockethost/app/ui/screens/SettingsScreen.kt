@@ -1945,6 +1945,23 @@ fun SettingsScreen(
                                 onClick = onReplayGuidedTour
                             )
                             SettingsLinkRow(icon = Icons.Default.Policy, label = activeS.legalCenter, description = activeS.legalCenterDesc, onClick = onOpenLegalPage)
+                            // Only where the law requires a way to change ad consent, so users
+                            // elsewhere never see a row that would open nothing.
+                            val adPrivacyOptionsRequired by com.pockethost.app.ads.AdManager.privacyOptionsRequired.collectAsState()
+                            if (adPrivacyOptionsRequired && com.pockethost.app.ads.AdsConfig.adsEnabled(context)) {
+                                SettingsLinkRow(
+                                    icon = Icons.Default.PrivacyTip,
+                                    label = "Ad privacy choices",
+                                    description = "Change or withdraw your consent for ads",
+                                    onClick = {
+                                        context.findActivity()?.let { activity ->
+                                            com.pockethost.app.ads.AdManager.showPrivacyOptionsForm(activity) {
+                                                onMessage("Could not open ad privacy choices.")
+                                            }
+                                        }
+                                    }
+                                )
+                            }
                             SettingsLinkRow(icon = Icons.Default.BugReport, label = "Report a Bug", description = "Report on our Discord server", onClick = {
                                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(context.getString(R.string.discord_invite_url)))) }
                                     .onFailure { onMessage("Could not open Discord link.") }

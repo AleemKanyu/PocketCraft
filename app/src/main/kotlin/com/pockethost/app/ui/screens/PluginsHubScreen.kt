@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -634,8 +635,16 @@ fun PluginsHubScreen(
                             }
                         }
                         else -> {
-                            items(pagedDiscoveredItems, key = { it.catalogKey }) { remote ->
+                            itemsIndexed(pagedDiscoveredItems, key = { _, remote -> remote.catalogKey }) { index, remote ->
                                 val installed = isRemoteInstalled(remote, installedKeys)
+                                // One ad per list, a few rows down. A loaded native ad can sit in
+                                // only one view, so the same card cannot repeat further on.
+                                if (index == DISCOVER_AD_ROW) {
+                                    com.pockethost.app.ads.NativeAdCard(
+                                        placement = com.pockethost.app.ads.AdPlacement.PLUGIN_LIST,
+                                        modifier = Modifier.padding(bottom = 12.dp)
+                                    )
+                                }
                                 RemoteContentRow(
                                     item = remote,
                                     installed = installed,
@@ -1751,6 +1760,7 @@ private fun normalizeInstallKey(value: String): String {
 
 /** Below this length a name fragment is too generic to identify a project by prefix. */
 private const val MIN_FUZZY_INSTALL_KEY_LENGTH = 5
+private const val DISCOVER_AD_ROW = 4
 
 private fun isRemoteInstalled(
     item: PluginManager.RemoteCatalogItem,

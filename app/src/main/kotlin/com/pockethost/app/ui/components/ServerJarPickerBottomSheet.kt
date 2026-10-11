@@ -51,6 +51,8 @@ import com.pockethost.app.ui.theme.PocketColors
 import kotlinx.coroutines.launch
 
 import androidx.compose.material3.LinearProgressIndicator
+import com.pockethost.app.ads.AdPlacement
+import com.pockethost.app.ads.NativeAdCard
 import com.pockethost.app.service.ServerFileManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -198,6 +200,7 @@ fun ServerJarPickerBottomSheet(
                             fontWeight = FontWeight.Bold,
                             color = PocketColors.Primary
                         )
+                        NativeAdCard(AdPlacement.DOWNLOAD)
                     }
                 } else {
                     DuoButton(

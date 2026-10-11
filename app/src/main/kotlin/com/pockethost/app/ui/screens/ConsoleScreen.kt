@@ -720,15 +720,26 @@ fun ConsoleScreen(
                         // and the bar always move in lockstep instead of the label popping
                         // ahead of the bar visually catching up.
                         val displayPercent = if (isDone) 100 else (displayProgress * 100f).roundToInt().coerceIn(1, 99)
-                        StartupProgressCard(
-                            progress = displayProgress,
-                            progressPercent = displayPercent,
-                            status = stateHolder.startupStatusMessage.ifBlank { "Initializing server..." },
-                            isStopping = stateHolder.isStopping,
-                            onStop = {
-                                stateHolder.stopServer()
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            StartupProgressCard(
+                                progress = displayProgress,
+                                progressPercent = displayPercent,
+                                status = stateHolder.startupStatusMessage.ifBlank { "Initializing server..." },
+                                isStopping = stateHolder.isStopping,
+                                onStop = {
+                                    stateHolder.stopServer()
+                                }
+                            )
+                            // Below the progress card, never above it: an ad that loads late must
+                            // not push the Stop button out from under a finger.
+                            if (!stateHolder.isStopping) {
+                                // Extra room above, so a tap that misses Stop does not land on the ad.
+                                com.pockethost.app.ads.NativeAdCard(
+                                    placement = com.pockethost.app.ads.AdPlacement.BOOT,
+                                    modifier = Modifier.padding(top = 12.dp)
+                                )
                             }
-                        )
+                        }
                     }
                     ServerUiState.RUNNING -> {
                         if (stateHolder.isStopping && !stateHolder.isRestarting) {
@@ -759,6 +770,11 @@ fun ConsoleScreen(
                                     icon = Icons.Default.Stop,
                                     onClick = {
                                         stateHolder.stopServer()
+                                        // Only here, on a stop the host asked for: a crash or a
+                                        // restart must never bring up a full-screen ad.
+                                        (context as? android.app.Activity)?.let {
+                                            com.pockethost.app.ads.AdManager.showStopInterstitial(it)
+                                        }
                                     },
                                     enabled = true,
                                     modifier = Modifier.weight(0.42f),

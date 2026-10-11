@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pockethost.app.ads.WatchAdSupportButton
 import com.pockethost.app.ui.theme.ButtonFont
 import com.pockethost.app.ui.theme.PocketColors
 import kotlinx.coroutines.launch
@@ -126,6 +127,8 @@ object SupportUsPopup {
                         fontFamily = ButtonFont
                     )
                 }
+
+                WatchAdSupportButton()
 
                 TextButton(onClick = { close(onDismiss) }) {
                     Text(

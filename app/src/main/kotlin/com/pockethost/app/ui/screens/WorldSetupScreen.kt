@@ -983,6 +983,9 @@ fun WorldSetupScreen(
                                         importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*"))
                                     }
                                 )
+                                if (isImporting) {
+                                    com.pockethost.app.ads.NativeAdCard(com.pockethost.app.ads.AdPlacement.IMPORT)
+                                }
                             }
                         }
                     }

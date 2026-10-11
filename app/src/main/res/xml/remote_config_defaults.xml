@@ -51,4 +51,52 @@
         <key>feature_free_trial_enabled</key>
         <value>false</value>
     </entry>
+
+    <!-- Ads. ads_enabled (Play Store build) and ads_enabled_external (side-loaded
+         build) are the master switches and ship off; each ads_spot_* key
+         turns one placement on or off once the master switch is on. -->
+    <entry>
+        <key>ads_enabled</key>
+        <value>false</value>
+    </entry>
+    <entry>
+        <key>ads_enabled_external</key>
+        <value>false</value>
+    </entry>
+    <entry>
+        <key>ads_child_directed</key>
+        <value>false</value>
+    </entry>
+    <entry>
+        <key>ads_min_ram_mb</key>
+        <value>3000</value>
+    </entry>
+    <entry>
+        <key>ads_spot_boot</key>
+        <value>true</value>
+    </entry>
+    <entry>
+        <key>ads_spot_download</key>
+        <value>true</value>
+    </entry>
+    <entry>
+        <key>ads_spot_backup</key>
+        <value>true</value>
+    </entry>
+    <entry>
+        <key>ads_spot_import</key>
+        <value>true</value>
+    </entry>
+    <entry>
+        <key>ads_spot_plugin_list</key>
+        <value>true</value>
+    </entry>
+    <entry>
+        <key>ads_spot_rewarded_support</key>
+        <value>true</value>
+    </entry>
+    <entry>
+        <key>ads_spot_stop_interstitial</key>
+        <value>true</value>
+    </entry>
 </defaultsMap>

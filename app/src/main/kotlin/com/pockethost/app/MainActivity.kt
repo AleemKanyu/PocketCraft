@@ -221,6 +221,8 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 com.pockethost.app.config.RemoteConfigManager.initialize(applicationContext)
                 remoteConfigInitialized = true
+                // After Remote Config, which holds the switch that turns ads on.
+                com.pockethost.app.ads.AdManager.start(this@MainActivity)
             }
 
             val currentVersionCode = com.pockethost.app.BuildConfig.VERSION_CODE

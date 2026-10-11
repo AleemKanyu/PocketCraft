@@ -43,6 +43,18 @@
             android:name="com.android.dynamic_linker.use_16kb_app_compat"
             android:value="true" />
 
+        <!-- AdMob reads its App ID here at SDK init. admobAppId is filled per build
+             from build.gradle.kts: Google's public test ID unless admobUseTestAds
+             is explicitly set to false in local.properties. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="${admobAppId}" />
+
+        <property
+            android:name="android.adservices.AD_SERVICES_CONFIG"
+            android:resource="@xml/gma_ad_services_config"
+            tools:replace="android:resource" />
+
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
