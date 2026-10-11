@@ -28,6 +28,7 @@ object AdsConfig {
     private val KEY_ENABLED = if (BuildConfig.IS_EXTERNAL_BUILD) "ads_enabled_external" else "ads_enabled"
     private const val KEY_CHILD_DIRECTED = "ads_child_directed"
     private const val KEY_MIN_RAM_MB = "ads_min_ram_mb"
+    private const val KEY_TEST_DEVICE_IDS = "ads_test_device_ids"
 
     // A debug build on Google's test ad units always shows ads, as does a release built
     // with -PpocketcraftForceTestAds=true, so the placements can be checked on a device
@@ -58,6 +59,15 @@ object AdsConfig {
         if (config.getValue(KEY_CHILD_DIRECTED).source == FirebaseRemoteConfig.VALUE_SOURCE_STATIC) return true
         return config.getBoolean(KEY_CHILD_DIRECTED)
     }
+
+    /**
+     * Phones that get Google's test ads even from the real ad units, listed in Remote
+     * Config by the hashed ID the ads SDK prints to logcat. Lets the team look at ads in
+     * a release build without serving themselves real ones, which AdMob treats as fraud.
+     */
+    fun testDeviceIds(): List<String> =
+        remoteConfig?.getString(KEY_TEST_DEVICE_IDS).orEmpty()
+            .split(',').map { it.trim() }.filter { it.isNotEmpty() }
 
     private fun isSupporter(context: Context): Boolean {
         val tier = AppPreferences(context).lastSeenMembershipTier

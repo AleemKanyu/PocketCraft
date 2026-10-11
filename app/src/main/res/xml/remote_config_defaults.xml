@@ -72,6 +72,10 @@
         <value>3000</value>
     </entry>
     <entry>
+        <key>ads_test_device_ids</key>
+        <value></value>
+    </entry>
+    <entry>
         <key>ads_spot_boot</key>
         <value>true</value>
     </entry>

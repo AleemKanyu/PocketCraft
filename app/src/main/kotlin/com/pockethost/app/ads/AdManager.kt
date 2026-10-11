@@ -151,6 +151,7 @@ object AdManager {
                     if (childDirected) RequestConfiguration.MAX_AD_CONTENT_RATING_G
                     else RequestConfiguration.MAX_AD_CONTENT_RATING_T
                 )
+                .setTestDeviceIds(AdsConfig.testDeviceIds())
                 .build()
         )
         PocketHostApp.applicationScope.launch {
