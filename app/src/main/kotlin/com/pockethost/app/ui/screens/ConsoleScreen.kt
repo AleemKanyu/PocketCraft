@@ -2328,7 +2328,12 @@ private fun WorldSelectorCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(world.name, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, maxLines = 1)
                     Text(
-                        text = if (world.isActive) "Active world" else "${world.sizeMb} MB",
+                        text = when {
+                            world.isActive -> "Active world"
+                            // Inactive worlds are listed without being measured; "0 MB" read as lost data.
+                            world.sizeMb > 0 -> "${world.sizeMb} MB"
+                            else -> "Tap to make active"
+                        },
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1
