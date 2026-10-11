@@ -192,7 +192,7 @@ fun PremiumUpgradeBottomSheet(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "100% free & open source. All server features are unlocked for everyone. Voluntary donations help fund server hosting and continuous updates.",
+                    text = "100% free. All server features are unlocked for everyone. Voluntary donations help fund server hosting and continuous updates.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -368,7 +368,7 @@ private fun MonthlyDonationCard(
             }
 
             Text(
-                text = "Voluntary monthly contribution to help fund server relays, infrastructure, and open-source updates.",
+                text = "Voluntary monthly contribution to help fund server relays, infrastructure, and updates.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f),
                 lineHeight = 17.sp

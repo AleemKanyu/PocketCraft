@@ -5,7 +5,7 @@
 **Host dedicated Minecraft Java & Bedrock servers directly on your Android device.**  
 *Zero port forwarding required. Native ARM64 Java performance. Worldwide cross-play.*
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android_8.0+-green.svg)](https://developer.android.com)
 [![Java Runtime](https://img.shields.io/badge/Java-17_%7C_21_%7C_25-orange.svg)](https://adoptium.net)
 
@@ -120,11 +120,11 @@ To avoid buffer bloat across cellular radios, TCP relay socket buffers are stric
 
 ## Contributing
 
-Contributions, bug reports, and feature proposals are welcome! Please check out [CONTRIBUTING.md](CONTRIBUTING.md) for details on code style, branch guidelines, and testing procedures.
+This is a private, closed-source repository. Team members should read [CONTRIBUTING.md](CONTRIBUTING.md) for code style, branch guidelines, and testing procedures. Bug reports and feature ideas from users are welcome on the PocketHost Discord.
 
 ---
 
 ## License
 
-This project is licensed under the [Apache License 2.0](LICENSE).
-Minecraft is a trademark of Mojang Synergies AB. PocketHost is an independent open-source tool and is not affiliated with or endorsed by Mojang or Microsoft.
+PocketHost is proprietary, closed-source software. All rights reserved; see [LICENSE](LICENSE). Third-party components keep their own licences.
+Minecraft is a trademark of Mojang Synergies AB. PocketHost is an independent tool and is not affiliated with or endorsed by Mojang or Microsoft.

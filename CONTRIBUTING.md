@@ -1,6 +1,6 @@
 # Contributing to PocketHost
 
-Thank you for your interest in contributing to PocketHost! We welcome bug fixes, documentation improvements, translation updates, and new features.
+PocketHost is closed source and this repository is private. These guidelines are for team members with access to it. Do not copy code from this repository into public repositories, issues or chats.
 
 ---
 
@@ -20,7 +20,7 @@ Before modifying socket configurations or packet buffering in `RelayManager.kt` 
 
 ## Pull Request Workflow
 
-1. Fork the repository and create a descriptive feature branch:
+1. Create a descriptive feature branch in this repository (do not fork it to a public account):
    ```bash
    git checkout -b feat/your-feature-name
    ```
@@ -32,7 +32,7 @@ Before modifying socket configurations or packet buffering in `RelayManager.kt` 
    - `feat(ui): add new setting for render distance`
    - `fix(server): handle missing world configuration gracefully`
    - `docs: improve build instructions for Linux`
-4. Push to your fork and submit a Pull Request against `main`.
+4. Push your branch to this private repository and open a Pull Request.
 
 ---
 
