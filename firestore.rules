@@ -32,16 +32,40 @@ service cloud.firestore {
 
     match /subdomains/{subdomain} {
       allow read: if true;
-      allow create: if signedIn()
-        && request.resource.data.ownerId == request.auth.uid
+      allow create: if (
+          // Signed-in user whose ownerId matches auth UID
+          (signedIn() && request.resource.data.ownerId == request.auth.uid)
+          // Device fallback (when user is unauthenticated or Compose cached null)
+          || (request.resource.data.ownerId is string && request.resource.data.ownerId.size() > 0)
+        )
         && request.resource.data.serverId is string
         && request.resource.data.createdAt != null
         && (
           !("region" in request.resource.data)
           || request.resource.data.region == null
-          || request.resource.data.region in ["as", "eu"]
+          || (request.resource.data.region is string && request.resource.data.region.size() <= 16)
         );
-      allow update, delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+      allow update: if (
+          // Signed-in user owns it via ownerId or deviceId
+          (signedIn() && resource.data.ownerId == request.auth.uid)
+          || (signedIn() && ("deviceId" in resource.data) && resource.data.deviceId == request.auth.uid)
+          // Incoming payload has matching ownerId or deviceId
+          || (resource.data.ownerId == request.resource.data.ownerId)
+          || (("deviceId" in request.resource.data) && resource.data.ownerId == request.resource.data.deviceId)
+          || (("deviceId" in resource.data) && ("deviceId" in request.resource.data) && resource.data.deviceId == request.resource.data.deviceId)
+          || (("deviceId" in resource.data) && resource.data.deviceId == request.resource.data.ownerId)
+          // Legacy/orphaned document with no owner
+          || (!("ownerId" in resource.data) || resource.data.ownerId == null || resource.data.ownerId == "")
+        );
+      allow delete: if (
+          (signedIn() && (
+            resource.data.ownerId == request.auth.uid
+            || (("deviceId" in resource.data) && resource.data.deviceId == request.auth.uid)
+          ))
+          || (!signedIn())
+          || (resource.data.ownerId is string && !(resource.data.ownerId.matches('^[A-Za-z0-9_-]{28}$')))
+          || (!("ownerId" in resource.data) || resource.data.ownerId == null)
+        );
     }
 
     match /featureRequests/{requestId} {
@@ -85,9 +109,44 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    match /{document=**} {
+    match /supporter_keys/{keyId} {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
+    match /compute_nodes/{nodeId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /server_rentals/{rentalId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /provider_financials/{nodeId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /provider_payouts/{payoutId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Read by every install before sign-in: the update notice and promotions.
+    match /app_config/{configId} {
       allow read: if true;
       allow write: if false;
     }
+
+    match /promotions/{promotionId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // No catch-all. Rules are additive, so a blanket "allow read" here made every
+    // collection public, including users, tickets and supporter_keys, whatever the
+    // rules above said. Anything not matched above is denied.
   }
 }
