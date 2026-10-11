@@ -1323,7 +1323,9 @@ class RelayManager(private val context: Context) {
         // read() calls (they live outside poolJob and don't otherwise respond to it being
         // cancelled above), letting them exit and release the socket pair instead of leaking
         // both threads and sockets across a reconnect.
-        activeBridgeSockets.toList().forEach { runCatching { it.close() } }
+        // Iterate the concurrent set directly. toList() reads the size and then the first
+        // element in two steps, and throws when a bridge thread removes the last socket in between.
+        activeBridgeSockets.forEach { runCatching { it.close() } }
         activeBridgeSockets.clear()
 
         if (!currentUserId.isNullOrBlank()) {
