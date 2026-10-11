@@ -42,7 +42,8 @@ PocketCraft includes Google Firebase and Google Ads SDKs. Depending on your cons
 - Firebase Firestore:
   - User-submitted feedback payloads and metadata
 - Google Mobile Ads (AdMob):
-  - Ad request metadata and identifiers required to serve ads
+  - The device advertising ID, IP address (approximate location), device and app metadata, and ad interactions, used to serve and measure ads and detect fraud
+  - In the EEA, the UK and Switzerland no ad is requested until the user has made a consent choice
 
 ### 1.4 Crash and diagnostics data
 
@@ -77,10 +78,10 @@ PocketCraft provides settings to control optional processing:
 
 - Crash diagnostics consent toggle
 - Usage analytics consent toggle
-- Personalized ads consent toggle
+- Ad privacy choices, which reopens the ad consent form (shown where the law requires consent, under Settings > About)
 - Push announcements toggle
 
-You can change these anytime in Settings under Privacy and Legal.
+You can change these anytime in Settings. The advertising ID itself can be reset or deleted in the Google section of Android settings.
 
 ## 5. Sharing and Processors
 
@@ -120,7 +121,7 @@ Depending on your location, you may have rights to:
 
 ## 10. Children
 
-PocketCraft is not intended for children under 13 without parental involvement. If we learn we collected personal data from a child where prohibited, we will delete it as required by law.
+PocketCraft is intended for users aged 13 and over. If we learn we collected personal data from a child where prohibited, we will delete it as required by law.
 
 ## 11. Contact
 
