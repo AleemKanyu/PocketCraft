@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Shield, Eye, Server, Users, Lock, Mail, Megaphone } from "lucide-react";
+import { Shield, Eye, Server, Users, Lock, Mail, Megaphone, UserCheck } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { SEO } from "../components/SEO";
@@ -10,13 +10,17 @@ const sections = [
     icon: Eye,
     title: "1. Information We Collect",
     content: [
-      "PocketHost is designed with your privacy in mind. We collect minimal data to provide and improve our service:",
+      "PocketHost collects only what it needs to run the service and keep it stable:",
+      "• **Account Information (optional)**: You can use the app without an account. If you create one or sign in with Google, we store your email address and an account ID so your custom server address, settings and supporter status follow your account. If you use the web dashboard, your server's status and the commands you send from it are stored with your account.",
       "• **Device Information**: Basic device model and Android version to ensure compatibility and optimize performance.",
-      "• **Usage Analytics**: Anonymous, aggregated data about app usage patterns (e.g., server start/stop events) to improve stability. No personal data is included.",
-      "• **Crash Reports**: Automatic crash logs to help us fix bugs and improve reliability. These contain technical stack traces only — no personal information.",
-      "• **IP Address**: Temporarily processed for our relay tunnel service to enable multiplayer connections. We do not store or log IP addresses.",
+      "• **Usage Analytics**: Data about how the app is used (for example server start and stop events), collected through Google Firebase Analytics to improve stability. The app asks whether you allow this before it is switched on.",
+      "• **Crash Reports**: Automatic crash and error reports sent through Firebase Crashlytics to help us fix bugs. These contain technical stack traces and device details, and may include the last lines of your server console.",
+      "• **IP Address**: Used by our relay tunnel service to route players to your server, and may appear in short-lived operational logs kept for security and abuse prevention. We do not use it to identify you.",
+      "• **Feedback and Support**: Messages, and any log excerpt you choose to attach, when you send feedback or contact support.",
+      "• **Supporter Status**: If you support PocketHost through Google Play or Patreon, we record that your account is a supporter. Payments are handled by Google Play or Patreon; we never see your card details.",
+      "• **Notification Token**: A push token used to deliver announcements, if notifications are on.",
       "• **Advertising Data**: The app may show ads through Google AdMob. AdMob collects your device's advertising ID and related data to do so. See the Advertising section below.",
-      "We do NOT collect your name, email, phone number, location, contacts, photos, or any other personal information unless you voluntarily provide it (e.g., when contacting support).",
+      "We do not collect your phone number, your contacts or your precise location.",
     ],
   },
   {
@@ -24,9 +28,9 @@ const sections = [
     title: "2. How Your Server Works",
     content: [
       "PocketHost runs a Minecraft Java Edition server directly on your Android device. This means:",
-      "• **Your world data stays on your device.** We never upload, access, or store your Minecraft worlds, configurations, or plugin data on our servers.",
+      "• **Your world data stays on your device.** We never upload, access, or store your Minecraft worlds, configurations, or plugin data on our servers. If you turn on Google Drive backup, backups go to your own Google Drive, which we cannot access.",
       "• **Server files are local.** All server JARs, configs, and player data are stored in your device's local storage.",
-      "• **Relay tunneling is ephemeral.** Our relay service creates a temporary network tunnel so other players can connect to your phone. Once your server stops, the tunnel is destroyed. No gameplay data passes through or is stored on our relay infrastructure.",
+      "• **Relay tunneling is ephemeral.** Our relay service creates a temporary network tunnel so other players can connect to your phone. Gameplay traffic passes through the relay to reach your phone, but it is not stored. Once your server stops, the tunnel is closed.",
       "• **Plugins run locally.** Any Bukkit/Spigot plugins you install execute on your device. We are not responsible for data collection by third-party plugins.",
     ],
   },
@@ -34,11 +38,14 @@ const sections = [
     icon: Users,
     title: "3. Third-Party Services",
     content: [
-      "PocketHost may interact with the following third-party services:",
+      "PocketHost relies on the following third-party services, which process data on our behalf or under their own policies:",
+      "• **Google Firebase**: Sign-in (Authentication), account data storage (Firestore), Analytics, Crashlytics, push notifications (Cloud Messaging) and Remote Config.",
+      "• **Google AdMob**: Shows ads in the app and collects the data described in the Advertising section below.",
+      "• **Google Play and Patreon**: Handle supporter payments.",
+      "• **Google Drive**: Only if you turn on cloud backup, and only to your own Drive.",
       "• **Mojang / Microsoft**: Minecraft is a trademark of Mojang Studios / Microsoft. PocketHost is an independent project and is not affiliated with, endorsed by, or connected to Mojang or Microsoft in any way. Players connecting to your server use their own Minecraft accounts.",
       "• **Discord**: We maintain a community Discord server for support and updates. Discord's own privacy policy applies when you use their platform.",
-      "• **CDN Services**: We use content delivery networks to serve app updates and assets. These services may process your IP address to deliver content.",
-      "• **Google AdMob**: We use Google AdMob to show ads in the app. AdMob collects the data described in the Advertising section below.",
+      "• **Download and CDN Services**: Used to deliver app updates, server software and plugins. These services may process your IP address to deliver content.",
       "We do not sell or rent your data. The only data shared for advertising is what Google AdMob collects to show ads, as described in the Advertising section.",
     ],
   },
@@ -55,21 +62,30 @@ const sections = [
     ],
   },
   {
-    icon: Users,
-    title: "5. Children's Privacy",
+    icon: UserCheck,
+    title: "5. Your Choices and Rights",
     content: [
-      "PocketHost is intended for users aged 13 and over. We do not knowingly collect personal information from children under the age of 13. Our app is a tool for hosting Minecraft servers and does not require account creation or personal data submission.",
+      "• **Delete your account**: You can delete your account and the data stored with it at any time in the app under Settings → Account, or at https://pockethost.online/delete-account.",
+      "• **Analytics and ads**: Usage analytics is only switched on if you allow it when the app asks. You can change your ad consent as described in the Advertising section.",
+      "• **Access and correction**: You can ask us for a copy of the data linked to your account, or ask us to correct it, by contacting us.",
+      "Depending on where you live, you may have further rights under laws such as the GDPR, including the right to object to or restrict processing and to lodge a complaint with your local data protection authority.",
+    ],
+  },
+  {
+    icon: Users,
+    title: "6. Children's Privacy",
+    content: [
+      "PocketHost is intended for users aged 13 and over. We do not knowingly collect personal information from children under the age of 13. The app can be used without creating an account.",
       "If you are a parent or guardian and believe your child has provided personal information to us (e.g., through a support email), please contact us and we will promptly delete it.",
       "Parents should supervise their children's multiplayer gaming activities and ensure appropriate behavior when hosting public servers.",
     ],
   },
   {
     icon: Lock,
-    title: "6. Data Security",
+    title: "7. Data Security",
     content: [
       "We take reasonable measures to protect any data we process:",
-      "• All relay tunnel connections use encrypted channels.",
-      "• We do not maintain databases of user information.",
+      "• Account data is stored with Google Firebase rather than on servers we run ourselves.",
       "• Crash reports and analytics are processed through secure, industry-standard services.",
       "• App updates are delivered over HTTPS.",
       "However, no method of electronic transmission or storage is 100% secure. While we strive to protect your data, we cannot guarantee absolute security.",
@@ -77,7 +93,7 @@ const sections = [
   },
   {
     icon: Mail,
-    title: "7. Contact Us",
+    title: "8. Contact Us",
     content: [
       "If you have any questions about this Privacy Policy or your data, you can reach us at:",
       "• **Email**: support@pockethost.online",
@@ -149,7 +165,7 @@ export default function Privacy() {
               theme === "dark" ? "text-white/30" : "text-black/40"
             }`}
           >
-            Last updated: {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+            Last updated: October 11, 2026
           </motion.p>
         </div>
       </section>
