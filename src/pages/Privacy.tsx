@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Shield, Eye, Server, Users, Lock, Mail } from "lucide-react";
+import { Shield, Eye, Server, Users, Lock, Mail, Megaphone } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { SEO } from "../components/SEO";
@@ -15,6 +15,7 @@ const sections = [
       "• **Usage Analytics**: Anonymous, aggregated data about app usage patterns (e.g., server start/stop events) to improve stability. No personal data is included.",
       "• **Crash Reports**: Automatic crash logs to help us fix bugs and improve reliability. These contain technical stack traces only — no personal information.",
       "• **IP Address**: Temporarily processed for our relay tunnel service to enable multiplayer connections. We do not store or log IP addresses.",
+      "• **Advertising Data**: The app may show ads through Google AdMob. AdMob collects your device's advertising ID and related data to do so. See the Advertising section below.",
       "We do NOT collect your name, email, phone number, location, contacts, photos, or any other personal information unless you voluntarily provide it (e.g., when contacting support).",
     ],
   },
@@ -37,21 +38,34 @@ const sections = [
       "• **Mojang / Microsoft**: Minecraft is a trademark of Mojang Studios / Microsoft. PocketHost is an independent project and is not affiliated with, endorsed by, or connected to Mojang or Microsoft in any way. Players connecting to your server use their own Minecraft accounts.",
       "• **Discord**: We maintain a community Discord server for support and updates. Discord's own privacy policy applies when you use their platform.",
       "• **CDN Services**: We use content delivery networks to serve app updates and assets. These services may process your IP address to deliver content.",
-      "We do not sell, rent, or share your data with any third parties for advertising or marketing purposes.",
+      "• **Google AdMob**: We use Google AdMob to show ads in the app. AdMob collects the data described in the Advertising section below.",
+      "We do not sell or rent your data. The only data shared for advertising is what Google AdMob collects to show ads, as described in the Advertising section.",
+    ],
+  },
+  {
+    icon: Megaphone,
+    title: "4. Advertising",
+    content: [
+      "PocketHost may show ads in some parts of the app to help pay for the relay servers. Ads are provided by **Google AdMob**. Your server, console and players are never interrupted by ads.",
+      "• **What AdMob collects**: Your device's advertising ID, your IP address (which gives an approximate location), device and app information, and how you interact with ads. Google and its partners use this to show and measure ads, limit how often you see the same ad, and detect fraud.",
+      "• **Personalised ads**: Where the law allows and where you have agreed, Google may use this data to show ads based on your interests. Otherwise you are shown non-personalised ads.",
+      "• **Your choice in Europe**: If you are in the European Economic Area, the United Kingdom or Switzerland, the app asks for your choice before any ad is requested. You can change or withdraw that choice at any time in the app under **Settings → About → Ad privacy choices**.",
+      "• **Your advertising ID**: You can reset or delete your advertising ID, or opt out of ad personalisation, in the Google section of your Android settings.",
+      "Google's handling of this data is covered by Google's Privacy Policy (https://policies.google.com/privacy). How Google uses data from apps that use its services is explained at https://policies.google.com/technologies/partner-sites.",
     ],
   },
   {
     icon: Users,
-    title: "4. Children's Privacy",
+    title: "5. Children's Privacy",
     content: [
-      "PocketHost does not knowingly collect personal information from children under the age of 13. Our app is a tool for hosting Minecraft servers and does not require account creation or personal data submission.",
+      "PocketHost is intended for users aged 13 and over. We do not knowingly collect personal information from children under the age of 13. Our app is a tool for hosting Minecraft servers and does not require account creation or personal data submission.",
       "If you are a parent or guardian and believe your child has provided personal information to us (e.g., through a support email), please contact us and we will promptly delete it.",
       "Parents should supervise their children's multiplayer gaming activities and ensure appropriate behavior when hosting public servers.",
     ],
   },
   {
     icon: Lock,
-    title: "5. Data Security",
+    title: "6. Data Security",
     content: [
       "We take reasonable measures to protect any data we process:",
       "• All relay tunnel connections use encrypted channels.",
@@ -63,7 +77,7 @@ const sections = [
   },
   {
     icon: Mail,
-    title: "6. Contact Us",
+    title: "7. Contact Us",
     content: [
       "If you have any questions about this Privacy Policy or your data, you can reach us at:",
       "• **Email**: support@pockethost.online",
@@ -82,7 +96,7 @@ export default function Privacy() {
     }`}>
       <SEO
         title="Privacy Policy - PocketHost"
-        description="Learn how PocketHost handles your data. We respect your privacy: your Minecraft world files and server data stay exclusively on your device."
+        description="Learn how PocketHost handles your data. Your Minecraft world files and server data stay on your device; ads, where shown, are served by Google AdMob."
         path="/privacy"
       />
       <Navbar />
@@ -124,7 +138,7 @@ export default function Privacy() {
               theme === "dark" ? "text-white/50" : "text-black/60"
             }`}
           >
-            How PocketHost handles your data — spoiler: we barely collect any.
+            How PocketHost handles your data, and what our ad partner collects.
           </motion.p>
 
           <motion.p
