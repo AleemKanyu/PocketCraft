@@ -42,6 +42,8 @@ object AdsConfig {
 
     /** Master switch, minus supporters and phones too short on memory to spare any for ads. */
     fun adsEnabled(context: Context): Boolean {
+        // The side-loaded build carries no ads at all, whatever Remote Config says.
+        if (BuildConfig.IS_EXTERNAL_BUILD) return false
         if (!forcedOn && !flag(KEY_ENABLED)) return false
         if (isSupporter(context)) return false
         return hasSpareRam(context)
