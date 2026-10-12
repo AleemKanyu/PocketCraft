@@ -21,8 +21,87 @@ object ServerPropertiesHelper {
     const val POCKETCRAFT_JOIN_MESSAGE_TEXT = "hosted on PocketHost"
     const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/7xw3Rd2vs2"
 
+    private const val WORLD_DETAILS_FILE = "pocketcraft-world-details.properties"
+    private val WORLD_DETAIL_KEY_PREFIXES = listOf(
+        "pocketcraft-world-display.",
+        "pocketcraft-world-photo.",
+        "pocketcraft-world-description."
+    )
+    private val AMPERSAND_COLOR_CODE = Regex("&(?=[0-9a-fk-orA-FK-OR])")
+
     fun getServerPropertiesFile(serverDir: File): File {
         return File(serverDir, "server.properties")
+    }
+
+    /** Turns the "&a" style colour codes people type into the "§a" codes Minecraft reads. */
+    fun translateColorCodes(text: String): String = AMPERSAND_COLOR_CODE.replace(text, "\u00A7")
+
+    /**
+     * Loads a properties file the way the Minecraft server does: UTF-8 first, ISO-8859-1 when
+     * the bytes are not valid UTF-8. The server rewrites server.properties in UTF-8 on every
+     * start, so reading it as ISO-8859-1 mangles "§" and any other non-ASCII character.
+     * The saved world details are then laid on top, see [saveWorldDetails].
+     */
+    fun loadInto(file: File, props: Properties) {
+        val bytes = file.readBytes()
+        val text = try {
+            Charsets.UTF_8.newDecoder()
+                .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                .decode(java.nio.ByteBuffer.wrap(bytes))
+                .toString()
+        } catch (error: java.nio.charset.CharacterCodingException) {
+            String(bytes, Charsets.ISO_8859_1)
+        }
+        try {
+            props.load(java.io.StringReader(text))
+        } catch (error: IllegalArgumentException) {
+            // Properties.load rejects the whole file over one bad \uXXXX escape (a hand-edited
+            // MOTD is the usual cause). Keep every line that can still be read as key=value.
+            android.util.Log.w("ServerPropertiesHelper", "Malformed ${file.name}, reading line by line", error)
+            props.clear()
+            text.lineSequence()
+                .filter { it.contains('=') && !it.trimStart().startsWith("#") }
+                .forEach { line ->
+                    val idx = line.indexOf('=')
+                    val key = line.substring(0, idx).trim()
+                    if (key.isNotEmpty()) props[key] = line.substring(idx + 1).trim()
+                }
+        }
+        file.parentFile?.let { overlayWorldDetails(it, props) }
+    }
+
+    /**
+     * World name, photo and description also live in a file only the app writes. A running
+     * Minecraft server saves server.properties from its own memory, which puts back the
+     * values it loaded at start and would undo an edit made while it was running.
+     */
+    fun saveWorldDetails(serverDir: File, details: Map<String, String>) {
+        updateWorldDetailsFile(serverDir) { stored -> details.forEach { (key, value) -> stored[key] = value } }
+    }
+
+    fun removeWorldDetails(serverDir: File, keys: Collection<String>) {
+        if (!File(serverDir, WORLD_DETAILS_FILE).exists()) return
+        updateWorldDetailsFile(serverDir) { stored -> keys.forEach { stored.remove(it) } }
+    }
+
+    private fun updateWorldDetailsFile(serverDir: File, change: (Properties) -> Unit) {
+        val file = File(serverDir, WORLD_DETAILS_FILE)
+        val stored = Properties()
+        if (file.exists()) runCatching { file.inputStream().use { stored.load(it) } }
+        change(stored)
+        serverDir.mkdirs()
+        file.outputStream().use { stored.store(it, "PocketHost world details") }
+    }
+
+    private fun overlayWorldDetails(serverDir: File, props: Properties) {
+        val file = File(serverDir, WORLD_DETAILS_FILE)
+        if (!file.exists()) return
+        val stored = Properties()
+        runCatching { file.inputStream().use { stored.load(it) } }
+        stored.stringPropertyNames()
+            .filter { key -> WORLD_DETAIL_KEY_PREFIXES.any { key.startsWith(it) } }
+            .forEach { key -> props[key] = stored.getProperty(key) }
     }
 
     fun readProperties(serverDir: File, persistDefaults: Boolean = true): Properties {
@@ -36,21 +115,7 @@ object ServerPropertiesHelper {
             }
         }
         if (file.exists()) {
-            try {
-                file.inputStream().use { props.load(it) }
-            } catch (error: IllegalArgumentException) {
-                // Properties.load rejects the whole file over one bad \uXXXX escape (a hand-edited
-                // MOTD is the usual cause). Keep every line that can still be read as key=value.
-                android.util.Log.w("ServerPropertiesHelper", "Malformed server.properties, reading line by line", error)
-                props.clear()
-                file.useLines { lines ->
-                    lines.filter { it.contains('=') && !it.trimStart().startsWith("#") }.forEach { line ->
-                        val idx = line.indexOf('=')
-                        val key = line.substring(0, idx).trim()
-                        if (key.isNotEmpty()) props[key] = line.substring(idx + 1).trim()
-                    }
-                }
-            }
+            loadInto(file, props)
         } else {
             // Default properties for a new server
             props["server-port"] = "25565"

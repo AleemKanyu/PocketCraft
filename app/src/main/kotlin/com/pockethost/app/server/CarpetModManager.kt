@@ -40,7 +40,7 @@ object CarpetModManager {
     fun removeIncompatibleCarpetJars(modsDir: File, targetMcVersion: String, onOutput: ((String) -> Unit)? = null) {
         val cleanVer = cleanMcVersion(targetMcVersion)
         modsDir.listFiles()?.filter { file ->
-            file.name.contains("carpet", ignoreCase = true) && file.extension == "jar"
+            file.name.startsWith("fabric-carpet", ignoreCase = true) && file.extension == "jar"
         }?.forEach { file ->
             // If the jar name doesn't contain the target MC version substring (e.g. fabric-carpet-1.21.1...), delete it
             if (!file.name.contains(cleanVer)) {
@@ -65,7 +65,9 @@ object CarpetModManager {
     fun purgeAllCarpetJars(modsDir: File, mcVersion: String = "", onOutput: ((String) -> Unit)? = null) {
         val cleanVer = if (mcVersion.isNotBlank()) cleanMcVersion(mcVersion) else ""
         modsDir.listFiles()?.filter { file ->
-            (file.name.contains("carpet", ignoreCase = true) || file.name.contains("fabric-api", ignoreCase = true)) &&
+            // Only the two jars the app installs itself. Matching every name with "carpet" in it
+            // deleted the player's own Carpet add-ons on each start.
+            (file.name.startsWith("fabric-carpet", ignoreCase = true) || file.name.startsWith("fabric-api", ignoreCase = true)) &&
                 (file.extension == "jar" || file.extension == "disabled")
         }?.forEach { file ->
             if (cleanVer.isNotBlank() && file.name.contains(cleanVer)) {

@@ -2803,7 +2803,31 @@ class ServerHostService : Service() {
             "us" -> "$subdomain.us.pocketcraft.online"
             else -> defaultDomain
         }
+        // The port is only open on the relay this session registered with. A custom name
+        // whose DNS record points at another machine gives players "Connection refused".
+        if (host != defaultDomain && !resolvesToSameMachine(host, defaultDomain)) {
+            android.util.Log.w(
+                "ServerHostService",
+                "Custom address $host does not point at relay $defaultDomain. Showing the relay address instead."
+            )
+            return "$defaultDomain:${address.port}"
+        }
         return "$host:${address.port}"
+    }
+
+    private suspend fun resolvesToSameMachine(host: String, relayHost: String): Boolean = withContext(Dispatchers.IO) {
+        val lookup: (String) -> Set<String> = { name ->
+            runCatching { java.net.InetAddress.getAllByName(name).mapNotNull { it.hostAddress }.toSet() }
+                .getOrDefault(emptySet())
+        }
+        val relayIps = kotlinx.coroutines.withTimeoutOrNull(4_000L) {
+            kotlinx.coroutines.runInterruptible { lookup(relayHost) }
+        }.orEmpty()
+        val hostIps = kotlinx.coroutines.withTimeoutOrNull(4_000L) {
+            kotlinx.coroutines.runInterruptible { lookup(host) }
+        }.orEmpty()
+        // A failed lookup of the relay itself proves nothing about the custom name.
+        relayIps.isEmpty() || hostIps.any { it in relayIps }
     }
 
     private fun relayRegionWireValue(host: String): String? = when (host.trim().lowercase()) {
@@ -2847,7 +2871,7 @@ class ServerHostService : Service() {
             val propsFile = File(serverDir, "server.properties")
             val props = Properties()
             if (propsFile.exists()) {
-                propsFile.inputStream().use { props.load(it) }
+                com.pockethost.app.service.ServerPropertiesHelper.loadInto(propsFile, props)
             }
             val motd = props.getProperty("motd", "A PocketCraft Server").trim()
             val maxPlayers = props.getProperty("max-players", "10").toIntOrNull() ?: 10
@@ -2969,7 +2993,7 @@ class ServerHostService : Service() {
         val propsMap = try {
             if (file.exists()) {
                 val props = java.util.Properties()
-                file.inputStream().use { props.load(it) }
+                com.pockethost.app.service.ServerPropertiesHelper.loadInto(file, props)
                 mapOf(
                     "difficulty" to props.getProperty("difficulty", "normal"),
                     "gamemode" to props.getProperty("gamemode", "survival"),

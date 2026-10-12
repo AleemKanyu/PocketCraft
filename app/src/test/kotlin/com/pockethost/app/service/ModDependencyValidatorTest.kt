@@ -203,4 +203,26 @@ class ModDependencyValidatorTest {
         assertTrue(File(modsDir, "biomesoplenty.jar.disabled").exists())
         assertTrue(standaloneJar.exists())
     }
+
+    @Test
+    fun `only mods the app disabled are turned back on`() {
+        val serverDir = tempFolder.newFolder("server-restore")
+        val modsDir = File(serverDir, "mods").apply { mkdirs() }
+        val json = { id: String, dep: String? ->
+            val depends = if (dep != null) ", \"depends\": {\"$dep\": \"*\"}" else ""
+            mapOf("fabric.mod.json" to "{\"schemaVersion\": 1, \"id\": \"$id\", \"name\": \"$id\", \"version\": \"1.0.0\"$depends}")
+        }
+        createModJar(modsDir, "needslib.jar", json("needslib", "lib"))
+        val userDisabled = createModJar(modsDir, "userchoice.jar", json("userchoice", null))
+        ModDependencyValidator.disableMod(userDisabled)
+
+        assertEquals(1, ModDependencyValidator.quarantineMissingDependencies(serverDir).size)
+        createModJar(modsDir, "lib.jar", json("lib", null))
+        val restored = ModDependencyValidator.restoreSatisfiedMods(serverDir)
+
+        assertEquals(1, restored.size)
+        assertTrue(File(modsDir, "needslib.jar").exists())
+        assertTrue(File(modsDir, "userchoice.jar.disabled").exists())
+        assertFalse(File(modsDir, "userchoice.jar").exists())
+    }
 }

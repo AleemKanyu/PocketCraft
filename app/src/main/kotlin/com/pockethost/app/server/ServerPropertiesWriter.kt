@@ -146,14 +146,14 @@ object ServerPropertiesWriter {
             difficulty = config.difficulty,
             gameMode = config.gameMode,
             onlineMode = config.onlineMode,
-            motd = if (config.motd.isBlank()) {
+            motd = ServerPropertiesHelper.translateColorCodes(if (config.motd.isBlank()) {
                 "Hosted on PocketHost"
             } else if (config.motd.contains("Hosted on PocketHost", ignoreCase = true)) {
                 config.motd
             } else {
                 val cleanedMotd = config.motd.removeSuffix(" - Hosted on Pocketcraft").removeSuffix(" - Hosted on PocketHost").trim()
                 "$cleanedMotd - Hosted on PocketHost"
-            },
+            }),
             pvp = config.pvp,
             viewDistance = config.viewDistance,
             simulationDistance = config.simulationDistance,
@@ -198,21 +198,8 @@ object ServerPropertiesWriter {
             }
         }
         if (file.exists()) {
-            runCatching {
-                file.inputStream().use { input -> props.load(input) }
-            }.onFailure { err ->
-                Log.e(TAG, "Failed to parse properties from ${file.name}: ${err.message}. Performing line-by-line fallback recovery.", err)
-                runCatching {
-                    file.useLines { lines ->
-                        lines.filter { it.contains("=") && !it.startsWith("#") }.forEach { line ->
-                            val idx = line.indexOf('=')
-                            val k = line.substring(0, idx).trim()
-                            val v = line.substring(idx + 1).trim()
-                            if (k.isNotEmpty()) props[k] = v
-                        }
-                    }
-                }
-            }
+            runCatching { ServerPropertiesHelper.loadInto(file, props) }
+                .onFailure { err -> Log.e(TAG, "Failed to read ${file.name}: ${err.message}", err) }
         }
         return props
     }

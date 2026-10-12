@@ -266,14 +266,12 @@ class ServerConfigRepository @Inject constructor(
 
     private fun parseConfig(file: File, fallbackConfig: ServerConfig? = null): ServerConfig {
         if (!file.exists()) return fallbackConfig ?: ServerConfig()
-        val props = runCatching {
-            file.useLines { lines ->
-                lines.filter { it.contains("=") && !it.startsWith("#") }
-                    .associate { line ->
-                        val idx = line.indexOf('=')
-                        line.substring(0, idx).trim() to line.substring(idx + 1).trim()
-                    }
-            }
+        // Read through Properties so escapes written by Properties.store (\: \= \uXXXX)
+        // come back as the real characters instead of piling up on every save.
+        val props: Map<String, String> = runCatching {
+            val loaded = java.util.Properties()
+            ServerPropertiesHelper.loadInto(file, loaded)
+            loaded.stringPropertyNames().associateWith { loaded.getProperty(it).trim() }
         }.getOrElse { emptyMap() }
         val fallbackName = if (file.name == "server.properties") {
             file.parentFile?.name?.takeIf { it != "worlds" && it != "servers" } ?: "world"

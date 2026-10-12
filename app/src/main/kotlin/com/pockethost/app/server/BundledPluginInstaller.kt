@@ -137,7 +137,11 @@ object BundledPluginInstaller {
 
             // Only delete if app was updated to a new version, or if the ZIP is corrupted on disk
             if (appUpdated || !isZipValid(targetFile)) {
-                if (!targetFile.delete()) {
+                if (targetFile == disabledFile) {
+                    // Refresh it in place. Deleting it made the installer put the plugin back
+                    // enabled, undoing the player's choice after every app update.
+                    copyAssetPlugin(context, pluginName, disabledFile)
+                } else if (!targetFile.delete()) {
                     Log.w(TAG, "Could not delete stale/corrupted bundled plugin ${targetFile.name}")
                 }
             }

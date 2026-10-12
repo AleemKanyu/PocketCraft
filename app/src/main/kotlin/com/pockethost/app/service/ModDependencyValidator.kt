@@ -126,6 +126,30 @@ object ModDependencyValidator {
         return file.renameTo(target)
     }
 
+    private const val QUARANTINE_LIST_FILE = ".pockethost-quarantined-mods"
+
+    private fun quarantineListFile(modsDir: File): File = File(modsDir.parentFile, QUARANTINE_LIST_FILE)
+
+    private fun readQuarantined(modsDir: File): MutableSet<String> =
+        runCatching { quarantineListFile(modsDir).readLines().map { it.trim() }.filter { it.isNotEmpty() } }
+            .getOrDefault(emptyList())
+            .toMutableSet()
+
+    private fun writeQuarantined(modsDir: File, names: Set<String>) {
+        runCatching { quarantineListFile(modsDir).writeText(names.sorted().joinToString("\n")) }
+    }
+
+    /**
+     * Disables a mod on the app's behalf and remembers it, so [restoreSatisfiedMods] can tell it
+     * apart from a mod the player switched off and only ever turns the former back on.
+     */
+    fun quarantineMod(file: File): Boolean {
+        val modsDir = file.parentFile ?: return false
+        if (!disableMod(file)) return false
+        writeQuarantined(modsDir, readQuarantined(modsDir).apply { add(file.name) })
+        return true
+    }
+
     /**
      * Enables a disabled mod JAR by renaming .jar.disabled to .jar.
      */
@@ -153,11 +177,21 @@ object ModDependencyValidator {
         val modsDir = File(serverDir, "mods")
         if (!modsDir.isDirectory) return emptyList()
 
+        // Servers from before the list existed have no record of who disabled what. Leave their
+        // disabled mods alone: a mod the player turned off must not come back on every start.
+        if (!quarantineListFile(modsDir).exists()) {
+            writeQuarantined(modsDir, emptySet())
+            return emptyList()
+        }
+        val quarantined = readQuarantined(modsDir)
+        if (quarantined.isEmpty()) return emptyList()
+
         val restored = mutableListOf<File>()
         // Bounded so a metadata quirk can never spin here.
         repeat(5) {
             val disabled = modsDir.listFiles { file ->
-                file.isFile && file.name.endsWith(".jar.disabled", ignoreCase = true)
+                file.isFile && file.name.endsWith(".jar.disabled", ignoreCase = true) &&
+                    file.name.removeSuffix(".disabled") in quarantined
             }?.toList().orEmpty()
             if (disabled.isEmpty()) return@repeat
 
@@ -182,6 +216,7 @@ object ModDependencyValidator {
                 }
                 if (unmet.isNotEmpty()) continue
                 if (enableMod(candidate)) {
+                    quarantined.remove(candidate.name.removeSuffix(".disabled"))
                     restoredThisPass = true
                     restored.add(candidate)
                     onOutput("[PocketHost] Re-enabled '${meta.name}' — its dependencies are installed now.")
@@ -190,6 +225,7 @@ object ModDependencyValidator {
             }
             if (!restoredThisPass) return@repeat
         }
+        if (restored.isNotEmpty()) writeQuarantined(modsDir, quarantined)
         return restored
     }
 
@@ -217,7 +253,7 @@ object ModDependencyValidator {
                 val depSummary = causes.joinToString(", ") { "${it.dependencyId} ${it.versionRequirement.orEmpty()}".trim() }
                 onOutput("[PocketHost] Warning: Disabling '${jarFile.name}' because required dependency is missing: $depSummary")
                 Log.w(TAG, "Quarantining ${jarFile.name}: missing required dependencies [$depSummary]")
-                if (disableMod(jarFile)) {
+                if (quarantineMod(jarFile)) {
                     quarantinedFiles.add(jarFile)
                 }
             }

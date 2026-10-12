@@ -1236,7 +1236,7 @@ class ServerStateHolder(
         for (fileName in fileNames) {
             val jarFile = File(modsDir, fileName)
             if (jarFile.exists()) {
-                ModDependencyValidator.disableMod(jarFile)
+                ModDependencyValidator.quarantineMod(jarFile)
             }
         }
         showMissingModDependenciesDialog = false
@@ -1502,7 +1502,7 @@ class ServerStateHolder(
                     if (propsFile.exists()) {
                         try {
                             val props = java.util.Properties()
-                            propsFile.inputStream().use { props.load(it) }
+                            ServerPropertiesHelper.loadInto(propsFile, props)
                             val currentMax = props.getProperty("max-players")?.toIntOrNull() ?: 15
                             if (currentMax > maxPlayersLimit) {
                                 props["max-players"] = maxPlayersLimit.toString()
@@ -2873,6 +2873,14 @@ class ServerStateHolder(
         if (activeWorldName.equals(normalized, ignoreCase = true)) {
             props["motd"] = activeMotd
         }
+        ServerPropertiesHelper.saveWorldDetails(
+            targetServerDir,
+            mapOf(
+                worldDisplayNameKey(normalized) to trimmedName,
+                worldPhotoKey(normalized) to trimmedPhoto,
+                worldDescriptionKey(normalized) to trimmedDescription
+            )
+        )
         ServerPropertiesHelper.saveProperties(targetServerDir, props)
         if (activeWorldName.equals(normalized, ignoreCase = true)) {
             writeServerIcon(trimmedPhoto)
@@ -4562,11 +4570,13 @@ class ServerStateHolder(
     private fun buildServerMotd(displayName: String, description: String): String {
         val cleanName = displayName.trim()
         val cleanDescription = description.trim()
-        return when {
-            cleanDescription.isNotBlank() -> cleanDescription
-            cleanName.isNotBlank() -> cleanName
-            else -> "A PocketHost Server"
-        }.take(120)
+        return ServerPropertiesHelper.translateColorCodes(
+            when {
+                cleanDescription.isNotBlank() -> cleanDescription
+                cleanName.isNotBlank() -> cleanName
+                else -> "A PocketHost Server"
+            }.take(120)
+        )
     }
 
     private fun syncActiveWorldServerPresentation() {
@@ -5627,6 +5637,12 @@ class ServerStateHolder(
                 p.remove(worldPhotoKey(targetName))
                 p.remove(worldDescriptionKey(targetName))
             }
+            ServerPropertiesHelper.removeWorldDetails(
+                dir,
+                worldsToRemove.map(::sanitizeWorldName).flatMap {
+                    listOf(worldDisplayNameKey(it), worldPhotoKey(it), worldDescriptionKey(it))
+                }
+            )
 
             ServerPropertiesHelper.saveProperties(dir, p)
         }
