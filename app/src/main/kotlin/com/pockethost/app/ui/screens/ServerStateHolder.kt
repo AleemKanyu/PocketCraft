@@ -122,7 +122,7 @@ class ServerStateHolder(
 ) {
     companion object {
         const val DEFAULT_SERVER_DESCRIPTION = "Hosted on PocketHost"
-        private const val WORLDWIDE_SUGGESTION_PING_MS = 180L
+        private const val INTERNATIONAL_SUGGESTION_PING_MS = 180L
         private const val POCKETCRAFT_JOIN_MESSAGE_TEXT =
             "hosted on PocketHost"
         private const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/7xw3Rd2vs2"
@@ -414,15 +414,15 @@ class ServerStateHolder(
     /** Page on playit.gg where the user can fix the current tunnel error, when there is one. */
     var tunnelHelpUrl by mutableStateOf<String?>(null)
         private set
-    /** Best ping to a PocketCraft relay when it is poor enough to suggest the worldwide network. */
-    var worldwideSuggestionPingMs by mutableStateOf<Long?>(null)
+    /** Best ping to a PocketCraft relay when it is poor enough to suggest the international network. */
+    var internationalSuggestionPingMs by mutableStateOf<Long?>(null)
         private set
     private val playitLinker by lazy { com.pockethost.app.relay.PlayitTunnelManager(appContext) }
     private var playitLinkJob: Job? = null
 
-    /** What the region menus show as selected: a relay host, or the worldwide option. */
+    /** What the region menus show as selected: a relay host, or the international option. */
     val selectedRoute: String
-        get() = if (usesPlayitTunnel) com.pockethost.app.config.RelayServers.WORLDWIDE_OPTION else relayHost
+        get() = if (usesPlayitTunnel) com.pockethost.app.config.RelayServers.INTERNATIONAL_OPTION else relayHost
     /** playit.gg gives Bedrock its own address, unlike the relay where it shares the Java host. */
     var playitBedrockAddress by mutableStateOf<String?>(null)
         private set
@@ -949,7 +949,7 @@ class ServerStateHolder(
         refreshAll()
         ensureBedrockBridgeProvisioned()
         syncRunningStateWithService()
-        checkWorldwideSuggestion()
+        checkInternationalSuggestion()
         
         scope.launch {
             AppPreferencesStore.isFirstBootCompleteFlow(appContext).collect { complete ->
@@ -2899,24 +2899,24 @@ class ServerStateHolder(
         }
     }
 
-    fun dismissWorldwideSuggestion() {
-        worldwideSuggestionPingMs = null
-        com.pockethost.app.data.preferences.AppPreferences(appContext).worldwideSuggestionDismissed = true
+    fun dismissInternationalSuggestion() {
+        internationalSuggestionPingMs = null
+        com.pockethost.app.data.preferences.AppPreferences(appContext).internationalSuggestionDismissed = true
     }
 
-    /** Suggests the worldwide network once, when every PocketCraft relay is far from this phone. */
-    private fun checkWorldwideSuggestion() {
+    /** Suggests the international network once, when every PocketCraft relay is far from this phone. */
+    private fun checkInternationalSuggestion() {
         scope.launch(Dispatchers.IO) {
             val prefs = com.pockethost.app.data.preferences.AppPreferences(appContext)
-            if (prefs.usesPlayitTunnel || prefs.worldwideSuggestionDismissed) return@launch
+            if (prefs.usesPlayitTunnel || prefs.internationalSuggestionDismissed) return@launch
             if (!com.pockethost.app.util.NetworkUtils.isOnline(appContext)) return@launch
             val best = com.pockethost.app.config.RelayServers.currentRegions()
                 .map { async { com.pockethost.app.config.RelayLatencySelector.measureRelayLatency(it.host) } }
                 .awaitAll()
                 .minOrNull() ?: return@launch
             // An unreachable relay reports Long.MAX_VALUE; that is an outage, not distance.
-            if (best == Long.MAX_VALUE || best < WORLDWIDE_SUGGESTION_PING_MS) return@launch
-            withContext(Dispatchers.Main) { worldwideSuggestionPingMs = best }
+            if (best == Long.MAX_VALUE || best < INTERNATIONAL_SUGGESTION_PING_MS) return@launch
+            withContext(Dispatchers.Main) { internationalSuggestionPingMs = best }
         }
     }
 
@@ -2924,7 +2924,7 @@ class ServerStateHolder(
     suspend fun updateTunnelProvider(usePlayit: Boolean): String = withContext(Dispatchers.IO) {
         if (usePlayit == usesPlayitTunnel) {
             if (usePlayit && !playitLinked) withContext(Dispatchers.Main) { openPlayitSetup() }
-            return@withContext if (usePlayit) "Already using the worldwide network." else "Already using PocketCraft relays."
+            return@withContext if (usePlayit) "Already using the international network." else "Already using PocketCraft relays."
         }
         val prefs = com.pockethost.app.data.preferences.AppPreferences(appContext)
         val switchingLive = isNavigationLocked
@@ -2944,7 +2944,7 @@ class ServerStateHolder(
             playitClaimUrl = null
             playitBedrockAddress = null
             tunnelHelpUrl = null
-            if (usePlayit) worldwideSuggestionPingMs = null
+            if (usePlayit) internationalSuggestionPingMs = null
             if (switchingLive) {
                 publicAddress = null
                 relaySwitchInProgress = true
@@ -2956,8 +2956,8 @@ class ServerStateHolder(
         }
         when {
             usePlayit && !playitLinked -> "One quick step: link playit.gg."
-            usePlayit && switchingLive -> "Switching to the worldwide network. Your address will change."
-            usePlayit -> "Worldwide network is on."
+            usePlayit && switchingLive -> "Switching to the international network. Your address will change."
+            usePlayit -> "International network is on."
             switchingLive -> "Switching back to PocketCraft relays. Your address will change."
             else -> "Using PocketCraft relays."
         }
@@ -2968,7 +2968,7 @@ class ServerStateHolder(
         if (normalizedHost.isBlank()) {
             return@withContext "Invalid relay location."
         }
-        if (normalizedHost == com.pockethost.app.config.RelayServers.WORLDWIDE_OPTION) {
+        if (normalizedHost == com.pockethost.app.config.RelayServers.INTERNATIONAL_OPTION) {
             return@withContext updateTunnelProvider(usePlayit = true)
         }
         val displayName = com.pockethost.app.config.RelayServers.getDisplayName(normalizedHost)

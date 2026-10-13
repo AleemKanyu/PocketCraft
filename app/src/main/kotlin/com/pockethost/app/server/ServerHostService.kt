@@ -1711,7 +1711,7 @@ class ServerHostService : Service() {
             sendEvent(versionId, EVENT_OUTPUT, "[PocketHost] LAN address: $endpoint")
         }
         if (AppPreferences(applicationContext).usesPlayitTunnel) {
-            sendEvent(versionId, EVENT_TUNNEL_CONNECTING, "[PocketHost] Opening the worldwide network...")
+            sendEvent(versionId, EVENT_TUNNEL_CONNECTING, "[PocketHost] Opening the international network...")
             relayJob = serviceScope.launch(Dispatchers.IO) { runPlayitTunnel(versionId) }
             return
         }
@@ -1937,7 +1937,7 @@ class ServerHostService : Service() {
                         )
                     } else {
                         sendTunnelFailed(
-                            "The worldwide network is unavailable right now. Players on the same Wi-Fi can still join with the LAN address."
+                            "The international network is unavailable right now. Players on the same Wi-Fi can still join with the LAN address."
                         )
                     }
                 }

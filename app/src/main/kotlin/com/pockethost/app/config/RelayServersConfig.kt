@@ -21,16 +21,16 @@ object RelayServers {
      * Menu key for the playit.gg route. Not a relay host: choosing it sends internet
      * players through the user's own playit.gg account instead of a PocketCraft relay.
      */
-    const val WORLDWIDE_OPTION = "playit.gg"
-    const val WORLDWIDE_LABEL = "Worldwide"
+    const val INTERNATIONAL_OPTION = "playit.gg"
+    const val INTERNATIONAL_LABEL = "International"
 
     val MUMBAI = RelayServerConfig(
         host = "mine.pocketcraft.online",
-        displayName = "Asia (India)",
-        region = "Asia (India)",
+        displayName = "South Asia",
+        region = "South Asia",
         icon = "🌏",
-        description = "Optimized for players in India and South Asia",
-        bestFor = "Players in India, Pakistan, Bangladesh, Sri Lanka",
+        description = "Optimized for players in South Asia",
+        bestFor = "Players across South Asia",
         fallbackIp = "13.233.131.236"
     )
 
@@ -63,7 +63,7 @@ object RelayServers {
     private var dynamicConfigs: List<RelayServerConfig> = buildConfigs(dynamicRegions)
 
     fun defaultRegions(): List<RelayRegion> = listOf(
-        RelayRegion("Asia (India)", MUMBAI.host),
+        RelayRegion(MUMBAI.displayName, MUMBAI.host),
         RelayRegion("Europe", EUROPE.host),
         RelayRegion("America", AMERICA.host)
     )
@@ -140,7 +140,8 @@ object RelayServers {
 
     fun updateRegions(regions: List<RelayRegion>) {
         val normalized = regions
-            .map { RelayRegion(it.label.trim(), it.host.trim()) }
+            // The South Asia relay keeps our own name even when remote config still sends an older label.
+            .map { RelayRegion(if (it.host.trim() == MUMBAI.host) MUMBAI.displayName else it.label.trim(), it.host.trim()) }
             .filter { it.label.isNotBlank() && it.host.isNotBlank() }
             .distinctBy { it.host }
         if (normalized.isEmpty()) return

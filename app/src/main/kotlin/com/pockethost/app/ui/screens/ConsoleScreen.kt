@@ -2068,9 +2068,9 @@ private fun ServerIdentityCard(
             stateHolder.usesPlayitTunnel && stateHolder.tunnelHelpUrl != null -> "Needs a fix on playit.gg"
             else -> "Opening internet relay..."
         }
-        val worldwide = stateHolder.usesPlayitTunnel
+        val international = stateHolder.usesPlayitTunnel
         // Only shown once the Java address is up, so both rows appear together.
-        val worldwideBedrockAddress = stateHolder.playitBedrockAddress?.takeIf { !publicAddress.isNullOrBlank() }
+        val internationalBedrockAddress = stateHolder.playitBedrockAddress?.takeIf { !publicAddress.isNullOrBlank() }
 
         val localWifiAddress = stateHolder.localIp
             .takeIf(::isShareableLanIp)
@@ -2145,7 +2145,7 @@ private fun ServerIdentityCard(
                                         relaySwitching -> "Relay Switching"
                                         relayConnecting && stateHolder.status == ServerStatus.ONLINE -> "Reconnecting"
                                         relayConnecting -> "Connecting"
-                                        relayReady && worldwide -> "Worldwide Ready"
+                                        relayReady && international -> "International Ready"
                                         relayReady -> "Relay Ready"
                                         stateHolder.tunnelError != null -> "Relay Error"
                                         else -> "Relay Offline"
@@ -2163,25 +2163,25 @@ private fun ServerIdentityCard(
                     }
 
                     AddressValueRow(
-                        label = if (worldwide) "Worldwide (Java)" else "Internet relay",
+                        label = if (international) "International (Java)" else "Internet relay",
                         address = internetRelayAddress,
                         emphasized = true,
                         // Custom subdomains live on PocketCraft's relays, not on playit.gg.
-                        onEditClick = if (worldwide) null else {
+                        onEditClick = if (international) null else {
                             { showIpBottomSheet = true }
                         },
                         onRetryClick = { stateHolder.reconnectRelay() }
                     )
 
-                    if (worldwideBedrockAddress != null) {
+                    if (internationalBedrockAddress != null) {
                         AddressValueRow(
-                            label = "Worldwide (Bedrock)",
-                            address = worldwideBedrockAddress,
+                            label = "International (Bedrock)",
+                            address = internationalBedrockAddress,
                             emphasized = false
                         )
                     }
 
-                    if (worldwide && publicAddress.isNullOrBlank() &&
+                    if (international && publicAddress.isNullOrBlank() &&
                         (!stateHolder.playitLinked || stateHolder.tunnelHelpUrl != null)
                     ) {
                         PremiumHomeButton(
@@ -2193,10 +2193,10 @@ private fun ServerIdentityCard(
                         )
                     }
 
-                    val farPing = stateHolder.worldwideSuggestionPingMs
-                    if (!worldwide && farPing != null) {
+                    val farPing = stateHolder.internationalSuggestionPingMs
+                    if (!international && farPing != null) {
                         Text(
-                            text = "You are far from our servers (${farPing} ms). The worldwide network may give your players less lag.",
+                            text = "You are far from our servers (${farPing} ms). The international network may give your players less lag.",
                             fontSize = 11.sp,
                             lineHeight = 15.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -2204,10 +2204,10 @@ private fun ServerIdentityCard(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = {
                                 scope.launch {
-                                    stateHolder.updateRelayHost(com.pockethost.app.config.RelayServers.WORLDWIDE_OPTION)
+                                    stateHolder.updateRelayHost(com.pockethost.app.config.RelayServers.INTERNATIONAL_OPTION)
                                 }
-                            }) { Text("Try worldwide") }
-                            TextButton(onClick = { stateHolder.dismissWorldwideSuggestion() }) { Text("No thanks") }
+                            }) { Text("Try international") }
+                            TextButton(onClick = { stateHolder.dismissInternationalSuggestion() }) { Text("No thanks") }
                         }
                     }
 
@@ -2233,7 +2233,7 @@ private fun ServerIdentityCard(
                                 context = context,
                                 internetAddress = publicAddress,
                                 lanAddress = localWifiAddress.takeIf { stateHolder.isServerFullyReady },
-                                bedrockAddress = worldwideBedrockAddress
+                                bedrockAddress = internationalBedrockAddress
                             )
                         },
                         enabled = canShareAddresses && (!publicAddress.isNullOrBlank() || localWifiAddress != null),

@@ -259,10 +259,10 @@ class AppPreferences(context: Context) {
             runCatching { tunnelProviderFile.writeText(value) }
         }
 
-    /** The user said no to the "try the worldwide network" hint, so do not show it again. */
-    var worldwideSuggestionDismissed: Boolean
-        get() = prefs.getBoolean("worldwide_suggestion_dismissed", false)
-        set(value) = prefs.edit().putBoolean("worldwide_suggestion_dismissed", value).apply()
+    /** The user said no to the "try the international network" hint, so do not show it again. */
+    var internationalSuggestionDismissed: Boolean
+        get() = prefs.getBoolean("international_suggestion_dismissed", false)
+        set(value) = prefs.edit().putBoolean("international_suggestion_dismissed", value).apply()
 
     private val tunnelProviderFile: java.io.File
         get() = java.io.File(appContext.filesDir, "tunnel_provider")

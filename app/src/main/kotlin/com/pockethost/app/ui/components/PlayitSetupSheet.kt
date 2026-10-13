@@ -33,7 +33,7 @@ import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.ui.theme.pocketSheetBorderColor
 
 /**
- * Guided setup for the worldwide network. The user approves this phone once on
+ * Guided setup for the international network. The user approves this phone once on
  * playit.gg; the sheet notices the approval by itself and every later start is automatic.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,7 +71,7 @@ fun PlayitSetupSheet(stateHolder: ServerStateHolder) {
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Icon(Icons.Default.Public, contentDescription = null, tint = PocketColors.Primary)
-                    Text("Worldwide network", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("International network", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
                 }
 
                 when {

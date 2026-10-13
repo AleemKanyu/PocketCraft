@@ -390,23 +390,23 @@ fun PocketTopBar(
                                 }
                             )
                         }
-                        val selectWorldwide = {
+                        val selectInternational = {
                             relayMenuExpanded = false
-                            onRelayHostChange(RelayServers.WORLDWIDE_OPTION)
+                            onRelayHostChange(RelayServers.INTERNATIONAL_OPTION)
                         }
                         PremiumDropdownItem(
-                            title = "playit.gg (${RelayServers.WORLDWIDE_LABEL})",
+                            title = "playit.gg (${RelayServers.INTERNATIONAL_LABEL})",
                             subtitle = when {
                                 !playitLinked -> "For players far from these regions. Free, one-time setup"
-                                relayHost == RelayServers.WORLDWIDE_OPTION ->
+                                relayHost == RelayServers.INTERNATIONAL_OPTION ->
                                     if (relayLocked) "Currently active" else "Currently selected"
-                                else -> "Linked. Tap to use the worldwide network"
+                                else -> "Linked. Tap to use the international network"
                             },
-                            selected = relayHost == RelayServers.WORLDWIDE_OPTION,
+                            selected = relayHost == RelayServers.INTERNATIONAL_OPTION,
                             // Selecting it while unlinked opens the guided setup.
                             actionLabel = "Set up".takeIf { !playitLinked },
-                            onAction = selectWorldwide,
-                            onClick = selectWorldwide
+                            onAction = selectInternational,
+                            onClick = selectInternational
                         )
                     }
                 }
