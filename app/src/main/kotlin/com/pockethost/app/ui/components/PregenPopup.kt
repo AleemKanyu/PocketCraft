@@ -25,6 +25,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -117,7 +120,8 @@ fun PregenPopup(stateHolder: ServerStateHolder) {
                     mode == "running" -> "Building"
                     else -> "Ready"
                 },
-                active = mode != "setup" && !stateHolder.pregenPaused
+                active = mode != "setup" && !stateHolder.pregenPaused,
+                onClose = dismiss
             )
             AnimatedContent(
                 targetState = mode,
@@ -142,7 +146,11 @@ fun PregenPopup(stateHolder: ServerStateHolder) {
 
 @Composable
 private fun Setup(stateHolder: ServerStateHolder) {
-    var sizeIndex by remember { mutableIntStateOf(1) }
+    val built = stateHolder.pregenBuiltRadius
+    // Start on the first size that adds something new.
+    var sizeIndex by remember(built) {
+        mutableIntStateOf(PREGEN_SIZES.indexOfFirst { it.radiusBlocks > built }.takeIf { it >= 0 } ?: PREGEN_SIZES.lastIndex)
+    }
     var limitIndex by remember { mutableIntStateOf(0) }
 
     Title("Pre-generate World")
@@ -158,14 +166,21 @@ private fun Setup(stateHolder: ServerStateHolder) {
         PREGEN_SIZES.forEachIndexed { index, size ->
             Choice(
                 title = size.label,
-                detail = "${size.radiusBlocks} blocks",
+                detail = if (size.radiusBlocks <= built) "Built" else "${size.radiusBlocks} blocks",
                 selected = index == sizeIndex,
                 modifier = Modifier.weight(1f),
                 onClick = { sizeIndex = index }
             )
         }
     }
-    Hint("About ${"%,d".format(PREGEN_SIZES[sizeIndex].chunks)} chunks, ${PREGEN_SIZES[sizeIndex].radiusBlocks} blocks out from spawn in every direction.")
+    val picked = PREGEN_SIZES[sizeIndex]
+    Hint(
+        when {
+            picked.radiusBlocks <= built -> "This part is already built. Pick a bigger size to add more."
+            built > 0 -> "You already have $built blocks built. This continues from there out to ${picked.radiusBlocks} blocks."
+            else -> "About ${"%,d".format(picked.chunks)} chunks, ${picked.radiusBlocks} blocks out from spawn in every direction."
+        }
+    )
 
     Label("Stop after")
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -227,6 +242,9 @@ private fun Running(stateHolder: ServerStateHolder, dismiss: () -> Unit) {
     }
 
     stateHolder.pregenMessage?.let { Hint(it, warning = true) }
+    if (!paused && progress != null && progress.percent / 100f < stateHolder.pregenSkipFraction) {
+        Hint("Skipping the part you already built...")
+    }
     stateHolder.pregenTimeLimitMinutes?.let { Hint("Pauses by itself after $it minutes.") }
 
     DuoButton(
@@ -255,14 +273,15 @@ private fun Done(stateHolder: ServerStateHolder, dismiss: () -> Unit) {
 }
 
 @Composable
-private fun Header(status: String, active: Boolean) {
+private fun Header(status: String, active: Boolean, onClose: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 18.dp, bottom = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 14.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             "WORLD BUILDER",
+            modifier = Modifier.weight(1f),
             fontSize = 12.sp,
             fontWeight = FontWeight.ExtraBold,
             color = PocketColors.Primary
@@ -278,6 +297,21 @@ private fun Header(status: String, active: Boolean) {
         ) {
             Box(modifier = Modifier.size(7.dp).clip(RoundedCornerShape(50)).background(tint))
             Text(status, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = tint)
+        }
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(17.dp))
+                .background(PocketColors.IconBtnBg)
+                .clickable(onClick = onClose),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Close",
+                modifier = Modifier.size(17.dp),
+                tint = PocketColors.TextSecondary
+            )
         }
     }
 }

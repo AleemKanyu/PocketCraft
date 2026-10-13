@@ -222,8 +222,12 @@ fun ServerScreen(
     fun navigateToTab(tab: PocketTab) {
         currentTab = tab
         selectedPlayer = null
-        settingsInitialActiveTab = null
-        settingsInitialAuthTab = null
+        // Callers that send the user to a specific Settings page (such as Account for
+        // sign-in) set these just before navigating, so only clear them for other tabs.
+        if (tab != PocketTab.SETTINGS) {
+            settingsInitialActiveTab = null
+            settingsInitialAuthTab = null
+        }
     }
 
     // What a bottom-bar tap does: close any full-screen page first, then switch tab.
@@ -244,6 +248,9 @@ fun ServerScreen(
         if (showLegalPage) {
             showLegalPage = false
         }
+        // A plain tab tap always opens Settings on its first page.
+        settingsInitialActiveTab = null
+        settingsInitialAuthTab = null
         navigateToTab(tab)
     }
 
@@ -464,8 +471,25 @@ fun ServerScreen(
                             AnimatedContent(
                                 targetState = currentTab,
                                 transitionSpec = {
-                                    (fadeIn(tween(durationMillis = 120)) + scaleIn(initialScale = 0.985f, animationSpec = tween(durationMillis = 120))) togetherWith
-                                    (fadeOut(tween(durationMillis = 90)) + scaleOut(targetScale = 0.995f, animationSpec = tween(durationMillis = 90)))
+                                    // Settings grows out of its gear in the top-right corner and folds back into it.
+                                    val gearCorner = androidx.compose.ui.graphics.TransformOrigin(0.95f, 0f)
+                                    when {
+                                        targetState == PocketTab.SETTINGS ->
+                                            (fadeIn(tween(240)) + scaleIn(
+                                                initialScale = 0.88f,
+                                                transformOrigin = gearCorner,
+                                                animationSpec = tween(320, easing = FastOutSlowInEasing)
+                                            )) togetherWith fadeOut(tween(120))
+                                        initialState == PocketTab.SETTINGS ->
+                                            fadeIn(tween(200)) togetherWith (fadeOut(tween(180)) + scaleOut(
+                                                targetScale = 0.9f,
+                                                transformOrigin = gearCorner,
+                                                animationSpec = tween(220, easing = FastOutSlowInEasing)
+                                            ))
+                                        else ->
+                                            (fadeIn(tween(durationMillis = 120)) + scaleIn(initialScale = 0.985f, animationSpec = tween(durationMillis = 120))) togetherWith
+                                                (fadeOut(tween(durationMillis = 90)) + scaleOut(targetScale = 0.995f, animationSpec = tween(durationMillis = 90)))
+                                    }
                                 },
                                 label = "tab-navigation"
                             ) { targetTab ->
@@ -721,20 +745,45 @@ fun ServerScreen(
                 // Pulse only on first server start (discovery hint) — stops permanently after first tap
                 val showAttentionPulse = isServerActive && !isFloatingChatFirstTimeShown && chatNotificationCount == 0 && !showFloatingChatSheet
 
-                var chatDragOffsetX by remember { mutableFloatStateOf(0f) }
-                var chatDragOffsetY by remember { mutableFloatStateOf(0f) }
+                // The bubble rests in the bottom-left corner. It can be dragged, but never off
+                    // the screen, and when let go it slides to the nearer side edge.
+                val bubbleDensity = androidx.compose.ui.platform.LocalDensity.current
+                val bubbleConfig = androidx.compose.ui.platform.LocalConfiguration.current
+                val bubbleMargin = 20.dp
+                val bubbleMaxX = with(bubbleDensity) {
+                    (bubbleConfig.screenWidthDp.dp - 56.dp - bubbleMargin * 2).toPx().coerceAtLeast(0f)
+                }
+                val bubbleMinY = with(bubbleDensity) {
+                    -(bubbleConfig.screenHeightDp.dp - 56.dp - bottomPadding - 88.dp - 150.dp).toPx().coerceAtLeast(0f)
+                }
+                val chatOffsetX = remember { Animatable(0f) }
+                val chatOffsetY = remember { Animatable(0f) }
 
                 if (!isSubPageOpen) {
                     Box(
                         modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .offset { IntOffset(chatDragOffsetX.roundToInt(), chatDragOffsetY.roundToInt()) }
-                            .padding(end = 20.dp, bottom = bottomPadding + 88.dp + fabOffsetY)
-                            .pointerInput(Unit) {
-                                detectDragGestures { change, dragAmount ->
+                            .align(Alignment.BottomStart)
+                            .offset { IntOffset(chatOffsetX.value.roundToInt(), chatOffsetY.value.roundToInt()) }
+                            .padding(start = bubbleMargin, bottom = bottomPadding + 88.dp + fabOffsetY)
+                            .pointerInput(bubbleMaxX, bubbleMinY) {
+                                detectDragGestures(
+                                    onDragEnd = {
+                                        scope.launch {
+                                            chatOffsetX.animateTo(
+                                                if (chatOffsetX.value > bubbleMaxX / 2) bubbleMaxX else 0f,
+                                                androidx.compose.animation.core.spring(
+                                                    dampingRatio = 0.7f,
+                                                    stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+                                                )
+                                            )
+                                        }
+                                    }
+                                ) { change, dragAmount ->
                                     change.consume()
-                                    chatDragOffsetX += dragAmount.x
-                                    chatDragOffsetY += dragAmount.y
+                                    scope.launch {
+                                        chatOffsetX.snapTo((chatOffsetX.value + dragAmount.x).coerceIn(0f, bubbleMaxX))
+                                        chatOffsetY.snapTo((chatOffsetY.value + dragAmount.y).coerceIn(bubbleMinY, 0f))
+                                    }
                                 }
                             }
                     ) {

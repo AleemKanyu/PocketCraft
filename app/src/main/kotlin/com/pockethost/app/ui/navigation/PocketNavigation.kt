@@ -14,6 +14,7 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material.icons.filled.Add
@@ -205,15 +206,42 @@ fun PocketTopBar(
     val subduedIconTint = PocketColors.IconBtnIcon
     val accentTint = PocketColors.Primary
 
+    // Tapping the logo gives it a small bounce and tilt.
+    val logoScope = androidx.compose.runtime.rememberCoroutineScope()
+    val logoScale = remember { androidx.compose.animation.core.Animatable(1f) }
+    val logoTilt = remember { androidx.compose.animation.core.Animatable(0f) }
+    val logoSpring = androidx.compose.animation.core.spring<Float>(
+        dampingRatio = 0.42f,
+        stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+    )
+
     TopAppBar(
         title = {
             Row(
+                modifier = Modifier.clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null
+                ) {
+                    logoScope.launch {
+                        logoScale.animateTo(1.32f, tween(140, easing = FastOutSlowInEasing))
+                        logoScale.animateTo(1f, logoSpring)
+                    }
+                    logoScope.launch {
+                        logoTilt.animateTo(-10f, tween(140, easing = FastOutSlowInEasing))
+                        logoTilt.animateTo(0f, logoSpring)
+                    }
+                },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .size(32.dp)
+                        .graphicsLayer {
+                            scaleX = logoScale.value
+                            scaleY = logoScale.value
+                            rotationZ = logoTilt.value
+                        }
                         .clip(RoundedCornerShape(9.dp))
                         .background(
                             color = PocketColors.Primary,
@@ -265,7 +293,10 @@ fun PocketTopBar(
                     label = "heart_pulse_scale"
                 )
 
-                Box(
+                val showSupportHeart = remember {
+                    com.pockethost.app.data.preferences.AppPreferences(context).supportHeartVisibleThisLaunch()
+                }
+                if (showSupportHeart) Box(
                     modifier = Modifier
                         .size(34.dp)
                         .graphicsLayer {

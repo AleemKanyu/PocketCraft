@@ -659,19 +659,26 @@ fun ConsoleScreen(
                                 lineHeight = 16.sp
                             )
                             Spacer(Modifier.height(10.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(
-                                    onClick = { stateHolder.enableWhitelist() },
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, pocketWarningBorderColor()),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = pocketWarningAccentColor())
-                                ) {
-                                    Text("Enable Whitelist", fontSize = 12.sp)
-                                }
-                                TextButton(
-                                    onClick = { stateHolder.acknowledgeOpenServerRisk() }
-                                ) {
-                                    Text("I understand the risks", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
+                            // Stacked and full width: side by side, the second label wrapped onto
+                            // three cramped lines on narrow phones.
+                            OutlinedButton(
+                                onClick = { stateHolder.enableWhitelist() },
+                                modifier = Modifier.fillMaxWidth(),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, pocketWarningBorderColor()),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = pocketWarningAccentColor())
+                            ) {
+                                Text("Enable Whitelist", fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            }
+                            TextButton(
+                                onClick = { stateHolder.acknowledgeOpenServerRisk() },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    "I understand the risks",
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
@@ -2217,23 +2224,24 @@ private fun ServerIdentityCard(
                         emphasized = false
                     )
 
-                    if (stateHolder.pregenSupported) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         PremiumHomeButton(
-                            text = if (stateHolder.pregenActive) "World Pre-generation (running)" else "Pre-generate World",
-                            icon = Icons.Default.Public,
-                            onClick = { stateHolder.openPregenSheet() },
-                            modifier = Modifier.fillMaxWidth(),
+                            text = "How to Join",
+                            icon = Icons.Filled.Info,
+                            onClick = onOpenBedrockHelp,
+                            modifier = Modifier.weight(1f),
                             style = PremiumHomeButtonStyle.Secondary
                         )
+                        if (stateHolder.pregenSupported) {
+                            PremiumHomeButton(
+                                text = if (stateHolder.pregenActive) "Pre-generating" else "Pre-generate",
+                                icon = Icons.Default.Public,
+                                onClick = { stateHolder.openPregenSheet() },
+                                modifier = Modifier.weight(1f),
+                                style = PremiumHomeButtonStyle.Secondary
+                            )
+                        }
                     }
-
-                    PremiumHomeButton(
-                        text = "How to Join",
-                        icon = Icons.Filled.Info,
-                        onClick = onOpenBedrockHelp,
-                        modifier = Modifier.fillMaxWidth(),
-                        style = PremiumHomeButtonStyle.Secondary
-                    )
 
                     PremiumHomeButton(
                         text = "Share Join Addresses",

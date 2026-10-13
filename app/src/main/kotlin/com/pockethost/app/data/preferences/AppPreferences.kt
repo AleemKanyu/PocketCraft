@@ -93,6 +93,9 @@ class AppPreferences(context: Context) {
         const val TUNNEL_PROVIDER_PLAYIT = "playit"
 
         @Volatile
+        private var supportHeartDecision: Boolean? = null
+
+        @Volatile
         private var prefsInstance: SharedPreferences? = null
         @Volatile
         private var relayPrefsInstance: SharedPreferences? = null
@@ -258,6 +261,24 @@ class AppPreferences(context: Context) {
         set(value) {
             runCatching { tunnelProviderFile.writeText(value) }
         }
+
+    /**
+     * The top-bar Support heart shows on one app open in three, so it stays a small
+     * surprise instead of a permanent fixture. Decided once per app start.
+     */
+    fun supportHeartVisibleThisLaunch(): Boolean {
+        supportHeartDecision?.let { return it }
+        val opens = prefs.getInt("support_heart_app_opens", 0) + 1
+        prefs.edit().putInt("support_heart_app_opens", opens).apply()
+        return (opens % 3 == 0).also { supportHeartDecision = it }
+    }
+
+    /** Radius in blocks already pre-generated around spawn for [worldName], or 0. */
+    fun pregenBuiltRadius(worldName: String): Int = prefs.getInt("pregen_radius_$worldName", 0)
+
+    fun setPregenBuiltRadius(worldName: String, radiusBlocks: Int) {
+        prefs.edit().putInt("pregen_radius_$worldName", radiusBlocks).apply()
+    }
 
     /** The user said no to the "try the international network" hint, so do not show it again. */
     var internationalSuggestionDismissed: Boolean

@@ -576,6 +576,13 @@ class ServerStateHolder(
     /** Minutes after which the task pauses itself, or null for no limit. */
     var pregenTimeLimitMinutes by mutableStateOf<Int?>(null)
         private set
+    /** Blocks out from spawn that earlier runs already built for this world. */
+    var pregenBuiltRadius by mutableStateOf(0)
+        private set
+    /** Share of the current run that earlier runs already built; Chunky skips through it fast. */
+    var pregenSkipFraction by mutableStateOf(0f)
+        private set
+    private var pregenRequestedRadius = 0
     private var pregenRequestedAtMs = 0L
     private var pregenWatchJob: Job? = null
     private var pregenLimitJob: Job? = null
@@ -2942,8 +2949,11 @@ class ServerStateHolder(
         }
     }
 
+    private fun pregenWorldName(): String = config.worldName.ifBlank { activeWorld.ifBlank { "world" } }
+
     fun openPregenSheet() {
         pregenMessage = null
+        pregenBuiltRadius = com.pockethost.app.data.preferences.AppPreferences(appContext).pregenBuiltRadius(pregenWorldName())
         pregenSheetVisible = true
     }
 
@@ -2977,10 +2987,22 @@ class ServerStateHolder(
         pregenTimeLimitMinutes = timeLimitMinutes
         pregenStartedAtMs = System.currentTimeMillis()
         pregenRequestedAtMs = SystemClock.elapsedRealtime()
-        val world = config.worldName.ifBlank { activeWorld.ifBlank { "world" } }
-        listOf("chunky world $world", "chunky spawn", "chunky radius $radiusBlocks", "chunky start").forEach {
-            sendCommand(it, showOfflineWarning = false)
+        pregenRequestedRadius = radiusBlocks
+        // Area grows with the square of the radius, so that is the share already built.
+        pregenSkipFraction = if (pregenBuiltRadius in 1 until radiusBlocks) {
+            (pregenBuiltRadius.toFloat() / radiusBlocks).let { it * it }
+        } else {
+            0f
         }
+        // Concentric order works outwards from spawn, so the part built by an earlier run
+        // comes first and is skipped quickly before any new terrain is made.
+        listOf(
+            "chunky world ${pregenWorldName()}",
+            "chunky spawn",
+            "chunky radius $radiusBlocks",
+            "chunky pattern concentric",
+            "chunky start"
+        ).forEach { sendCommand(it, showOfflineWarning = false) }
         // Chunky only loads when the server starts, so the first use after an app update needs one restart.
         pregenWatchJob = scope.launch {
             delay(12_000L)
@@ -3040,6 +3062,11 @@ class ServerStateHolder(
                     ?: PregenProgress(100f, 0, 0, 0f, SystemClock.elapsedRealtime())
                 pregenFinished = true
                 pregenPaused = false
+                if (pregenRequestedRadius > pregenBuiltRadius) {
+                    pregenBuiltRadius = pregenRequestedRadius
+                    com.pockethost.app.data.preferences.AppPreferences(appContext)
+                        .setPregenBuiltRadius(pregenWorldName(), pregenRequestedRadius)
+                }
             }
             line.contains("Task paused for") -> pregenPaused = true
             line.contains("Task continuing for") -> pregenPaused = false
