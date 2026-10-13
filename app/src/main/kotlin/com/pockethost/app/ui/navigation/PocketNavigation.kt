@@ -190,6 +190,7 @@ fun PocketTopBar(
     currentMobTheme: MobTheme = MobTheme.SKELETON,
     onMobThemeChange: (MobTheme) -> Unit = {},
     relayLocked: Boolean = false,
+    playitLinked: Boolean = false,
     onPremiumUpgradeClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {}
 ) {
@@ -389,6 +390,24 @@ fun PocketTopBar(
                                 }
                             )
                         }
+                        val selectWorldwide = {
+                            relayMenuExpanded = false
+                            onRelayHostChange(RelayServers.WORLDWIDE_OPTION)
+                        }
+                        PremiumDropdownItem(
+                            title = "playit.gg (${RelayServers.WORLDWIDE_LABEL})",
+                            subtitle = when {
+                                !playitLinked -> "For players far from these regions. Free, one-time setup"
+                                relayHost == RelayServers.WORLDWIDE_OPTION ->
+                                    if (relayLocked) "Currently active" else "Currently selected"
+                                else -> "Linked. Tap to use the worldwide network"
+                            },
+                            selected = relayHost == RelayServers.WORLDWIDE_OPTION,
+                            // Selecting it while unlinked opens the guided setup.
+                            actionLabel = "Set up".takeIf { !playitLinked },
+                            onAction = selectWorldwide,
+                            onClick = selectWorldwide
+                        )
                     }
                 }
 
@@ -456,6 +475,8 @@ private fun PremiumDropdownItem(
     selected: Boolean,
     locked: Boolean = false,
     lockedLabel: String = "Soon",
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     Box(
@@ -516,6 +537,20 @@ private fun PremiumDropdownItem(
                 )
             }
             when {
+                actionLabel != null && onAction != null -> Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(PocketColors.Primary)
+                        .clickable(onClick = onAction)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = actionLabel,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White
+                    )
+                }
                 locked -> Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)

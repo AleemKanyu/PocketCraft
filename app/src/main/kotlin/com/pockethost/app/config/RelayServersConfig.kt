@@ -17,6 +17,13 @@ data class RelayServerConfig(
 )
 
 object RelayServers {
+    /**
+     * Menu key for the playit.gg route. Not a relay host: choosing it sends internet
+     * players through the user's own playit.gg account instead of a PocketCraft relay.
+     */
+    const val WORLDWIDE_OPTION = "playit.gg"
+    const val WORLDWIDE_LABEL = "Worldwide"
+
     val MUMBAI = RelayServerConfig(
         host = "mine.pocketcraft.online",
         displayName = "Asia (India)",

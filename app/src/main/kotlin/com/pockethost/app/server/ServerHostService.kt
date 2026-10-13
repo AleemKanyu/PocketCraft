@@ -1711,7 +1711,7 @@ class ServerHostService : Service() {
             sendEvent(versionId, EVENT_OUTPUT, "[PocketHost] LAN address: $endpoint")
         }
         if (AppPreferences(applicationContext).usesPlayitTunnel) {
-            sendEvent(versionId, EVENT_TUNNEL_CONNECTING, "[PocketHost] Opening playit.gg global network...")
+            sendEvent(versionId, EVENT_TUNNEL_CONNECTING, "[PocketHost] Opening the worldwide network...")
             relayJob = serviceScope.launch(Dispatchers.IO) { runPlayitTunnel(versionId) }
             return
         }
@@ -1905,10 +1905,9 @@ class ServerHostService : Service() {
                                 }
                             }
                             is com.pockethost.app.relay.PlayitTunnelManager.Event.NeedsTunnel ->
-                                sendEvent(
-                                    versionId,
-                                    EVENT_TUNNEL_FAILED,
-                                    "Your playit.gg account has no Minecraft tunnel yet. Add one at ${event.url}, then retry."
+                                sendTunnelFailed(
+                                    "playit.gg could not make a tunnel for this server. Open playit.gg to check your account.",
+                                    helpUrl = event.url
                                 )
                             is com.pockethost.app.relay.PlayitTunnelManager.Event.Warning ->
                                 sendEvent(versionId, EVENT_OUTPUT, "[PocketHost] playit.gg: ${event.code} (${event.message})")
@@ -1929,19 +1928,38 @@ class ServerHostService : Service() {
 
                 failedRuns++
                 persistPublicAddress(applicationContext, "")
+                val overLimit = failure?.code == com.pockethost.app.relay.PlayitTunnelManager.AGENT_OVER_LIMIT
                 if (failedRuns == 1 || failedRuns % 5 == 0) {
-                    sendEvent(
-                        versionId,
-                        EVENT_TUNNEL_FAILED,
-                        "playit.gg network is unavailable ($reason). Players on the same Wi-Fi can still join with the LAN address."
-                    )
+                    if (overLimit) {
+                        sendTunnelFailed(
+                            "Your playit.gg account has too many devices linked. Remove the ones you do not use, and this one connects by itself.",
+                            helpUrl = com.pockethost.app.relay.PlayitTunnelManager.AGENTS_URL
+                        )
+                    } else {
+                        sendTunnelFailed(
+                            "The worldwide network is unavailable right now. Players on the same Wi-Fi can still join with the LAN address."
+                        )
+                    }
                 }
-                delay(if (failedRuns < 5) 5_000L else 30_000L)
+                // Over the limit clears as soon as the user removes a device, so keep checking often.
+                delay(if (overLimit || failedRuns < 5) 5_000L else 30_000L)
             }
         } finally {
             killer.cancel()
             tunnelStarted.set(false)
         }
+    }
+
+    private fun sendTunnelFailed(message: String, helpUrl: String? = null) {
+        sendBroadcast(
+            Intent(ACTION_SERVER_EVENT).apply {
+                setPackage(packageName)
+                putExtra(EXTRA_VERSION_ID, currentVersionId ?: "unknown")
+                putExtra(EXTRA_EVENT_TYPE, EVENT_TUNNEL_FAILED)
+                putExtra(EXTRA_LINE, message)
+                putExtra(EXTRA_HELP_URL, helpUrl.orEmpty())
+            }
+        )
     }
 
     private fun reconnectRelay(
@@ -3404,6 +3422,7 @@ class ServerHostService : Service() {
 
         const val EXTRA_IS_FALLBACK = "is_fallback"
         const val EXTRA_BEDROCK_ADDRESS = "bedrock_address"
+        const val EXTRA_HELP_URL = "help_url"
 
         const val EVENT_OUTPUT = "output"
         const val EVENT_ERROR = "error"

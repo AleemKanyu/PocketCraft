@@ -122,6 +122,7 @@ class ServerStateHolder(
 ) {
     companion object {
         const val DEFAULT_SERVER_DESCRIPTION = "Hosted on PocketHost"
+        private const val WORLDWIDE_SUGGESTION_PING_MS = 180L
         private const val POCKETCRAFT_JOIN_MESSAGE_TEXT =
             "hosted on PocketHost"
         private const val POCKETCRAFT_JOIN_MESSAGE_URL = "https://discord.gg/7xw3Rd2vs2"
@@ -403,6 +404,25 @@ class ServerStateHolder(
     /** Link the user must approve on playit.gg before the first playit tunnel can open. */
     var playitClaimUrl by mutableStateOf<String?>(null)
         private set
+    /** This phone already holds a playit.gg agent key, so no approval is needed. */
+    var playitLinked by mutableStateOf(false)
+        private set
+    var playitSetupVisible by mutableStateOf(false)
+        private set
+    var playitSetupError by mutableStateOf<String?>(null)
+        private set
+    /** Page on playit.gg where the user can fix the current tunnel error, when there is one. */
+    var tunnelHelpUrl by mutableStateOf<String?>(null)
+        private set
+    /** Best ping to a PocketCraft relay when it is poor enough to suggest the worldwide network. */
+    var worldwideSuggestionPingMs by mutableStateOf<Long?>(null)
+        private set
+    private val playitLinker by lazy { com.pockethost.app.relay.PlayitTunnelManager(appContext) }
+    private var playitLinkJob: Job? = null
+
+    /** What the region menus show as selected: a relay host, or the worldwide option. */
+    val selectedRoute: String
+        get() = if (usesPlayitTunnel) com.pockethost.app.config.RelayServers.WORLDWIDE_OPTION else relayHost
     /** playit.gg gives Bedrock its own address, unlike the relay where it shares the Java host. */
     var playitBedrockAddress by mutableStateOf<String?>(null)
         private set
@@ -843,10 +863,16 @@ class ServerStateHolder(
                         appendLog("[PocketHost] Opening internet relay...")
                     }
                     ServerHostService.EVENT_TUNNEL_CLAIM -> {
+                        // The running server asks for the link itself; drop our own request.
+                        playitLinker.stop()
                         playitClaimUrl = line.trim().ifBlank { null }
+                        playitSetupError = null
+                        playitSetupVisible = true
                     }
                     ServerHostService.EVENT_TUNNEL_CONNECTED -> {
                         playitClaimUrl = null
+                        tunnelHelpUrl = null
+                        if (usesPlayitTunnel) playitLinked = true
                         playitBedrockAddress = intent.getStringExtra(ServerHostService.EXTRA_BEDROCK_ADDRESS)
                             ?.takeIf { it.isNotBlank() }
                         publicAddress = line.trim().ifBlank { null }
@@ -871,6 +897,7 @@ class ServerStateHolder(
                             publicAddress = null
                         }
                         tunnelError = line.ifBlank { "Internet relay unavailable." }
+                        tunnelHelpUrl = intent.getStringExtra(ServerHostService.EXTRA_HELP_URL)?.takeIf { it.isNotBlank() }
                         isRelayDone = true
                         appendLog("[WARN] ${tunnelError.orEmpty()}")
                         if (isStarting) {
@@ -922,6 +949,7 @@ class ServerStateHolder(
         refreshAll()
         ensureBedrockBridgeProvisioned()
         syncRunningStateWithService()
+        checkWorldwideSuggestion()
         
         scope.launch {
             AppPreferencesStore.isFirstBootCompleteFlow(appContext).collect { complete ->
@@ -1081,6 +1109,7 @@ class ServerStateHolder(
             replaceAll(worlds, snapshot.worlds)
             relayHost = snapshot.relayHost
             usesPlayitTunnel = snapshot.usesPlayitTunnel
+            playitLinked = snapshot.playitLinked
             activeWorldNeedsSetup = snapshot.activeWorldNeedsSetup
             bedrockBridgeEnabled = snapshot.bedrockBridgeEnabled
             applyPersistedRuntimeState(persistedRuntimeState)
@@ -2815,14 +2844,87 @@ class ServerStateHolder(
         }
     }
 
-    fun dismissPlayitClaim() {
+    /** Opens the guided playit.gg setup, asking for a link right away when the server is not running. */
+    fun openPlayitSetup() {
+        playitSetupVisible = true
+        if (!playitLinked && !isRunning && !isStarting) startPlayitLink()
+    }
+
+    fun closePlayitSetup() {
+        playitSetupVisible = false
+        playitSetupError = null
+        playitLinker.stop()
+        if (!isRunning && !isStarting) playitClaimUrl = null
+    }
+
+    /**
+     * Links the playit.gg account before the server ever starts, so the first start
+     * goes online with no extra step. A running server asks for the link itself.
+     */
+    fun startPlayitLink() {
+        if (playitLinkJob?.isActive == true) return
+        playitSetupError = null
         playitClaimUrl = null
+        playitLinkJob = scope.launch(Dispatchers.IO) {
+            val prefs = com.pockethost.app.data.preferences.AppPreferences(appContext)
+            var failure: String? = null
+            val result = runCatching {
+                playitLinker.run(secretKey = null, javaPort = 25565, bedrockPort = 0, linkOnly = true) { event ->
+                    when (event) {
+                        is com.pockethost.app.relay.PlayitTunnelManager.Event.Claim ->
+                            scope.launch { playitClaimUrl = event.url }
+                        is com.pockethost.app.relay.PlayitTunnelManager.Event.Secret -> {
+                            prefs.playitSecretKey = event.key
+                            scope.launch {
+                                playitLinked = true
+                                playitClaimUrl = null
+                            }
+                        }
+                        is com.pockethost.app.relay.PlayitTunnelManager.Event.Failed -> failure = when (event.code) {
+                            "claim_rejected" -> "You declined the link on playit.gg."
+                            "claim_timeout" -> "The link ran out of time."
+                            else -> "Could not reach playit.gg. Check your internet."
+                        }
+                        else -> Unit
+                    }
+                }
+            }
+            val message = failure ?: result.exceptionOrNull()?.let { "Could not start the setup on this phone." }
+            withContext(Dispatchers.Main) {
+                if (message != null && playitSetupVisible && !playitLinked) {
+                    playitClaimUrl = null
+                    playitSetupError = message
+                }
+            }
+        }
+    }
+
+    fun dismissWorldwideSuggestion() {
+        worldwideSuggestionPingMs = null
+        com.pockethost.app.data.preferences.AppPreferences(appContext).worldwideSuggestionDismissed = true
+    }
+
+    /** Suggests the worldwide network once, when every PocketCraft relay is far from this phone. */
+    private fun checkWorldwideSuggestion() {
+        scope.launch(Dispatchers.IO) {
+            val prefs = com.pockethost.app.data.preferences.AppPreferences(appContext)
+            if (prefs.usesPlayitTunnel || prefs.worldwideSuggestionDismissed) return@launch
+            if (!com.pockethost.app.util.NetworkUtils.isOnline(appContext)) return@launch
+            val best = com.pockethost.app.config.RelayServers.currentRegions()
+                .map { async { com.pockethost.app.config.RelayLatencySelector.measureRelayLatency(it.host) } }
+                .awaitAll()
+                .minOrNull() ?: return@launch
+            // An unreachable relay reports Long.MAX_VALUE; that is an outage, not distance.
+            if (best == Long.MAX_VALUE || best < WORLDWIDE_SUGGESTION_PING_MS) return@launch
+            withContext(Dispatchers.Main) { worldwideSuggestionPingMs = best }
+        }
     }
 
     /** Switches internet access between PocketCraft's relays and the user's playit.gg account. */
     suspend fun updateTunnelProvider(usePlayit: Boolean): String = withContext(Dispatchers.IO) {
         if (usePlayit == usesPlayitTunnel) {
-            return@withContext if (usePlayit) "Already using the playit.gg global network." else "Already using PocketCraft relays."
+            if (usePlayit && !playitLinked) withContext(Dispatchers.Main) { openPlayitSetup() }
+            return@withContext if (usePlayit) "Already using the worldwide network." else "Already using PocketCraft relays."
         }
         val prefs = com.pockethost.app.data.preferences.AppPreferences(appContext)
         val switchingLive = isNavigationLocked
@@ -2841,6 +2943,8 @@ class ServerStateHolder(
             usesPlayitTunnel = usePlayit
             playitClaimUrl = null
             playitBedrockAddress = null
+            tunnelHelpUrl = null
+            if (usePlayit) worldwideSuggestionPingMs = null
             if (switchingLive) {
                 publicAddress = null
                 relaySwitchInProgress = true
@@ -2848,10 +2952,12 @@ class ServerStateHolder(
                 tunnelError = null
                 ServerHostService.reconnectRelay(appContext, skipUnregister = true)
             }
+            if (usePlayit && !playitLinked) openPlayitSetup()
         }
         when {
-            usePlayit && switchingLive -> "Switching to the playit.gg global network. Your address will change."
-            usePlayit -> "Using the playit.gg global network. You will link your playit.gg account on the next start."
+            usePlayit && !playitLinked -> "One quick step: link playit.gg."
+            usePlayit && switchingLive -> "Switching to the worldwide network. Your address will change."
+            usePlayit -> "Worldwide network is on."
             switchingLive -> "Switching back to PocketCraft relays. Your address will change."
             else -> "Using PocketCraft relays."
         }
@@ -2861,6 +2967,9 @@ class ServerStateHolder(
         val normalizedHost = host.trim()
         if (normalizedHost.isBlank()) {
             return@withContext "Invalid relay location."
+        }
+        if (normalizedHost == com.pockethost.app.config.RelayServers.WORLDWIDE_OPTION) {
+            return@withContext updateTunnelProvider(usePlayit = true)
         }
         val displayName = com.pockethost.app.config.RelayServers.getDisplayName(normalizedHost)
         if (usesPlayitTunnel) {
@@ -4271,6 +4380,7 @@ class ServerStateHolder(
     }
 
     fun dispose() {
+        playitLinker.stop()
         stopPeriodicWorldSave()
         stopPeriodicLocationPolling()
         stopStartupProgressTracking(reset = false)
@@ -4583,6 +4693,7 @@ class ServerStateHolder(
             backups = listBackupsForWorld(activeWorld),
             relayHost = com.pockethost.app.data.preferences.AppPreferences(appContext).relayHost,
             usesPlayitTunnel = com.pockethost.app.data.preferences.AppPreferences(appContext).usesPlayitTunnel,
+            playitLinked = com.pockethost.app.data.preferences.AppPreferences(appContext).playitSecretKey != null,
             activeWorldNeedsSetup = !readWorldsWithCompletedSetup(properties).contains(levelName),
             bedrockBridgeEnabled = PluginManager.isBedrockBridgeEnabled(appContext, activeWorld.ifBlank { "world" })
         )
@@ -6258,6 +6369,7 @@ class ServerStateHolder(
         val backups: List<BackupEntry>,
         val relayHost: String,
         val usesPlayitTunnel: Boolean,
+        val playitLinked: Boolean,
         val activeWorldNeedsSetup: Boolean,
         val bedrockBridgeEnabled: Boolean
     )

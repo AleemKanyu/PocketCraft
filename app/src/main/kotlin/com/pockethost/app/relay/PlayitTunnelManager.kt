@@ -34,7 +34,13 @@ class PlayitTunnelManager(private val context: Context) {
      * Starts the agent and blocks, delivering events until it exits or [stop] is called.
      * Run it on an IO thread.
      */
-    fun run(secretKey: String?, javaPort: Int, bedrockPort: Int, onEvent: (Event) -> Unit) {
+    fun run(
+        secretKey: String?,
+        javaPort: Int,
+        bedrockPort: Int,
+        linkOnly: Boolean = false,
+        onEvent: (Event) -> Unit
+    ) {
         val binary = File(context.applicationInfo.nativeLibraryDir, BINARY_NAME)
         if (!binary.exists()) {
             throw IOException("Tunnel agent is missing from this build ($BINARY_NAME)")
@@ -44,6 +50,8 @@ class PlayitTunnelManager(private val context: Context) {
             environment()["PT_SECRET"] = secretKey.orEmpty()
             environment()["PT_JAVA_PORT"] = javaPort.toString()
             environment()["PT_BEDROCK_PORT"] = bedrockPort.toString()
+            // Link the account and exit: lets the user finish setup before the server starts.
+            if (linkOnly) environment()["PT_LINK_ONLY"] = "1"
             redirectError(ProcessBuilder.Redirect.to(File("/dev/null")))
         }.start()
         process = started
@@ -90,5 +98,7 @@ class PlayitTunnelManager(private val context: Context) {
         private const val TAG = "PlayitTunnelManager"
         private const val BINARY_NAME = "libpockettunnel.so"
         const val SECRET_INVALID = "secret_invalid"
+        const val AGENT_OVER_LIMIT = "agent_over_limit"
+        const val AGENTS_URL = "https://playit.gg/account/agents"
     }
 }

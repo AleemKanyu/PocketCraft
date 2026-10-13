@@ -353,10 +353,11 @@ fun ServerScreen(
     Scaffold(
         topBar = {
             PocketTopBar(
-                relayHost = stateHolder.relayHost,
+                relayHost = stateHolder.selectedRoute,
                 currentMobTheme = currentMobTheme,
                 onMobThemeChange = onMobThemeChange,
                 relayLocked = stateHolder.isNavigationLocked,
+                playitLinked = stateHolder.playitLinked,
                 onRelayHostChange = { host ->
                     scope.launch {
                         showMessage(stateHolder.updateRelayHost(host))
@@ -887,6 +888,10 @@ fun ServerScreen(
                     stateHolder = stateHolder,
                     onDismissRequest = { showBackupSheet = false }
                 )
+            }
+
+            if (stateHolder.playitSetupVisible) {
+                com.pockethost.app.ui.components.PlayitSetupSheet(stateHolder)
             }
 
             if (showPremiumBottomSheet) {

@@ -8,6 +8,7 @@
 //!   PT_SECRET        saved agent secret key, empty on first run
 //!   PT_JAVA_PORT     local Java port (default 25565)
 //!   PT_BEDROCK_PORT  local Bedrock port, 0 to skip (default 19132)
+//!   PT_LINK_ONLY     "1" to link the account and exit, without opening tunnels
 //! The process exits when stdin closes, so it never outlives the app.
 
 use std::io::{Read, Write};
@@ -82,6 +83,10 @@ async fn main() {
             secret
         }
     };
+
+    if std::env::var("PT_LINK_ONLY").is_ok_and(|v| v == "1") {
+        return;
+    }
 
     let api = PlayitApi::create(API_BASE.to_string(), Some(secret.clone()));
     let lookup = Arc::new(OriginLookup::default());

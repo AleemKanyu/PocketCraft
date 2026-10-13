@@ -1128,28 +1128,6 @@ fun ConsoleScreen(
         }
     }
 
-    stateHolder.playitClaimUrl?.let { claimUrl ->
-        AlertDialog(
-            onDismissRequest = { stateHolder.dismissPlayitClaim() },
-            title = { Text("Link playit.gg", fontWeight = FontWeight.ExtraBold) },
-            text = {
-                Text("Your server uses the playit.gg global network. Open playit.gg once and approve this phone. After that it connects by itself.")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    runCatching {
-                        context.startActivity(
-                            android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(claimUrl))
-                        )
-                    }
-                }) { Text("Open playit.gg") }
-            },
-            dismissButton = {
-                TextButton(onClick = { stateHolder.dismissPlayitClaim() }) { Text("Later") }
-            }
-        )
-    }
-
     if (showBedrockHelpDialog) {
         val bedrockHelpSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val publicAddress = stateHolder.publicAddress?.takeIf { it.isNotBlank() }
@@ -2086,8 +2064,13 @@ private fun ServerIdentityCard(
             relayConnecting && stateHolder.status == ServerStatus.ONLINE -> "Reconnecting to the servers..."
             relayConnecting -> "Connecting to the servers..."
             !publicAddress.isNullOrBlank() -> publicAddress
+            stateHolder.usesPlayitTunnel && !stateHolder.playitLinked -> "Link playit.gg to go online"
+            stateHolder.usesPlayitTunnel && stateHolder.tunnelHelpUrl != null -> "Needs a fix on playit.gg"
             else -> "Opening internet relay..."
         }
+        val worldwide = stateHolder.usesPlayitTunnel
+        // Only shown once the Java address is up, so both rows appear together.
+        val worldwideBedrockAddress = stateHolder.playitBedrockAddress?.takeIf { !publicAddress.isNullOrBlank() }
 
         val localWifiAddress = stateHolder.localIp
             .takeIf(::isShareableLanIp)
@@ -2162,6 +2145,7 @@ private fun ServerIdentityCard(
                                         relaySwitching -> "Relay Switching"
                                         relayConnecting && stateHolder.status == ServerStatus.ONLINE -> "Reconnecting"
                                         relayConnecting -> "Connecting"
+                                        relayReady && worldwide -> "Worldwide Ready"
                                         relayReady -> "Relay Ready"
                                         stateHolder.tunnelError != null -> "Relay Error"
                                         else -> "Relay Offline"
@@ -2179,14 +2163,53 @@ private fun ServerIdentityCard(
                     }
 
                     AddressValueRow(
-                        label = "Internet relay",
+                        label = if (worldwide) "Worldwide (Java)" else "Internet relay",
                         address = internetRelayAddress,
                         emphasized = true,
-                        onEditClick = {
-                            showIpBottomSheet = true
+                        // Custom subdomains live on PocketCraft's relays, not on playit.gg.
+                        onEditClick = if (worldwide) null else {
+                            { showIpBottomSheet = true }
                         },
                         onRetryClick = { stateHolder.reconnectRelay() }
                     )
+
+                    if (worldwideBedrockAddress != null) {
+                        AddressValueRow(
+                            label = "Worldwide (Bedrock)",
+                            address = worldwideBedrockAddress,
+                            emphasized = false
+                        )
+                    }
+
+                    if (worldwide && publicAddress.isNullOrBlank() &&
+                        (!stateHolder.playitLinked || stateHolder.tunnelHelpUrl != null)
+                    ) {
+                        PremiumHomeButton(
+                            text = if (stateHolder.playitLinked) "Fix on playit.gg" else "Link playit.gg",
+                            icon = Icons.Filled.Info,
+                            onClick = { stateHolder.openPlayitSetup() },
+                            modifier = Modifier.fillMaxWidth(),
+                            style = PremiumHomeButtonStyle.Secondary
+                        )
+                    }
+
+                    val farPing = stateHolder.worldwideSuggestionPingMs
+                    if (!worldwide && farPing != null) {
+                        Text(
+                            text = "You are far from our servers (${farPing} ms). The worldwide network may give your players less lag.",
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = {
+                                scope.launch {
+                                    stateHolder.updateRelayHost(com.pockethost.app.config.RelayServers.WORLDWIDE_OPTION)
+                                }
+                            }) { Text("Try worldwide") }
+                            TextButton(onClick = { stateHolder.dismissWorldwideSuggestion() }) { Text("No thanks") }
+                        }
+                    }
 
                     AddressValueRow(
                         label = "Wi-Fi (Java)",
@@ -2209,7 +2232,8 @@ private fun ServerIdentityCard(
                             shareServerAddresses(
                                 context = context,
                                 internetAddress = publicAddress,
-                                lanAddress = localWifiAddress.takeIf { stateHolder.isServerFullyReady }
+                                lanAddress = localWifiAddress.takeIf { stateHolder.isServerFullyReady },
+                                bedrockAddress = worldwideBedrockAddress
                             )
                         },
                         enabled = canShareAddresses && (!publicAddress.isNullOrBlank() || localWifiAddress != null),
@@ -2782,7 +2806,8 @@ private enum class PremiumHomeButtonStyle {
 private fun shareServerAddresses(
     context: android.content.Context,
     internetAddress: String?,
-    lanAddress: String?
+    lanAddress: String?,
+    bedrockAddress: String? = null
 ) {
     if (internetAddress.isNullOrBlank() && lanAddress.isNullOrBlank()) return
     val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -2793,6 +2818,7 @@ private fun shareServerAddresses(
                 appendLine("PocketHost join addresses")
                 appendLine()
                 appendLine("Internet: ${internetAddress?.takeIf { it.isNotBlank() } ?: "Unavailable right now"}")
+                bedrockAddress?.takeIf { it.isNotBlank() }?.let { appendLine("Bedrock: $it") }
                 append("Wi-Fi: ${lanAddress?.takeIf { it.isNotBlank() } ?: "Unavailable right now"}")
             }
         )
