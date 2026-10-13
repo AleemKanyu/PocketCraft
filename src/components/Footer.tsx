@@ -216,7 +216,7 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="pt-8 border-t border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-white/15 text-[10px] font-mono uppercase tracking-[0.2em] text-center sm:text-left">
-            © {new Date().getFullYear()} PocketHost. All Rights Reserved.
+            © <span suppressHydrationWarning>{new Date().getFullYear()}</span> PocketHost. All Rights Reserved.
           </p>
           <p className="text-white/10 text-[10px] uppercase tracking-[0.15em]">
             Made for players, by players 🎮

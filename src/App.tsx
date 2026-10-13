@@ -1,7 +1,8 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import { useScrollToTop } from "./hooks/useScrollToTop";
 import Home from "./pages/Home";
+import NotFound from "./pages/NotFound";
 import { ThemeProvider, useTheme } from "./lib/ThemeContext";
 import { CubicPixelTrail } from "./components/CubicPixelTrail";
 
@@ -21,23 +22,32 @@ const RouteLoadingFallback = () => (
   </div>
 );
 
+// The single list of pages. The build also reads it (entry-server.tsx) to decide
+// which URLs become static HTML and go into the sitemap, so a page added here is
+// picked up everywhere.
+export const pageRoutes = [
+  { path: "/", element: <Home /> },
+  { path: "/faq", element: <FAQ /> },
+  { path: "/blog", element: <Blog /> },
+  { path: "/blog/:id", element: <BlogPost /> },
+  { path: "/roadmap", element: <Roadmap /> },
+  { path: "/community", element: <Community /> },
+  { path: "/world", element: <WorldDrop /> },
+  { path: "/privacy", element: <Privacy /> },
+  { path: "/terms", element: <Terms /> },
+  { path: "/delete-account", element: <DeleteAccount /> },
+];
+
 function AppRoutes() {
   useScrollToTop();
 
   return (
     <Suspense fallback={<RouteLoadingFallback />}>
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/faq" element={<FAQ />} />
-        <Route path="/blog" element={<Blog />} />
-        <Route path="/blog/:id" element={<BlogPost />} />
-        <Route path="/roadmap" element={<Roadmap />} />
-        <Route path="/community" element={<Community />} />
-        <Route path="/privacy" element={<Privacy />} />
-        <Route path="/terms" element={<Terms />} />
-        <Route path="/world" element={<WorldDrop />} />
-        <Route path="/delete-account" element={<DeleteAccount />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {pageRoutes.map((route) => (
+          <Route key={route.path} path={route.path} element={route.element} />
+        ))}
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>
   );
@@ -48,13 +58,13 @@ function MainLayout() {
   return (
     <div className={`relative isolate min-h-screen select-none ${theme === "dark" ? "bg-[#0a0a0a]" : "bg-white"}`}>
       <CubicPixelTrail />
-      <Router>
-        <AppRoutes />
-      </Router>
+      <AppRoutes />
     </div>
   );
 }
 
+// The router is supplied by the caller: BrowserRouter in the browser (main.tsx),
+// StaticRouter when pages are rendered to HTML at build time (entry-server.tsx).
 export default function App() {
   return (
     <ThemeProvider>

@@ -105,7 +105,7 @@ export default function Terms() {
       theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"
     }`}>
       <SEO
-        title="Terms of Service - PocketHost"
+        title="Terms of Service | PocketHost"
         description="Review the PocketHost terms of service for hosting dedicated Minecraft servers on Android devices and relay networking."
         path="/terms"
       />
@@ -159,7 +159,7 @@ export default function Terms() {
               theme === "dark" ? "text-white/30" : "text-black/40"
             }`}
           >
-            Last updated: {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+            Last updated: <span suppressHydrationWarning>{new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
           </motion.p>
         </div>
       </section>

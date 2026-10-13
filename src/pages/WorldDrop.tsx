@@ -17,6 +17,8 @@ import {
   ShieldCheck,
   Sparkles
 } from "lucide-react";
+import { SEO } from "../components/SEO";
+import { breadcrumbSchema } from "../seo/site";
 
 declare global {
   interface Window {
@@ -26,6 +28,30 @@ declare global {
 
 const WORLD_PRICE_INR = 199;
 const WORLD_PRICE_PAISE = WORLD_PRICE_INR * 100;
+const RAZORPAY_CHECKOUT_SRC = "https://checkout.razorpay.com/v1/checkout.js";
+let razorpayLoading: Promise<boolean> | null = null;
+
+// The checkout script is third-party and only this page takes payments, so it is
+// loaded here on demand instead of on every page of the site.
+function ensureRazorpayLoaded(): Promise<boolean> {
+  if (typeof window.Razorpay !== "undefined") return Promise.resolve(true);
+  if (!razorpayLoading) {
+    razorpayLoading = new Promise<boolean>((resolve) => {
+      const script = document.createElement("script");
+      script.src = RAZORPAY_CHECKOUT_SRC;
+      script.async = true;
+      script.onload = () => resolve(typeof window.Razorpay !== "undefined");
+      script.onerror = () => {
+        script.remove();
+        razorpayLoading = null;
+        resolve(false);
+      };
+      document.head.appendChild(script);
+    });
+  }
+  return razorpayLoading;
+}
+
 // Encoded public Key ID for client-side Razorpay modal fallback
 const CLIENT_KEY_ID = atob("cnpwX3Rlc3RfVGRudXZqdGF2MldJU2c=");
 
@@ -117,7 +143,7 @@ export default function WorldDrop() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   useEffect(() => {
-    document.title = "Soulspeedmc World - The Viral Minecraft World";
+    void ensureRazorpayLoaded();
   }, []);
 
   const handleCopyLink = () => {
@@ -167,13 +193,15 @@ export default function WorldDrop() {
       return;
     }
 
-    if (typeof window.Razorpay === "undefined") {
-      setErrorMessage("Payment gateway script is loading. Please check your internet connection and try again.");
-      return;
-    }
-
     setIsLoading(true);
     setStatusMessage("Opening secure checkout...");
+
+    if (!(await ensureRazorpayLoaded())) {
+      setIsLoading(false);
+      setStatusMessage(null);
+      setErrorMessage("Payment gateway could not be loaded. Please check your internet connection and try again.");
+      return;
+    }
 
     try {
       // 1. Attempt backend order creation, handling static hosts gracefully
@@ -292,6 +320,12 @@ export default function WorldDrop() {
 
   return (
     <div className="min-h-screen bg-[#fafaf9] text-black font-sans selection:bg-[#7FE620] selection:text-black">
+      <SEO
+        title="Soulspeedmc World: Download the Viral Minecraft World Save"
+        description="Play in the Soulspeedmc world yourself. Get the full Minecraft world save with the matching modpack and resource packs as an instant download."
+        path="/world"
+        schema={breadcrumbSchema([{ name: "Soulspeedmc World", path: "/world" }])}
+      />
       {/* Top Neo-Brutalist Ticker / Navigation (White Mode) */}
       <header className="sticky top-0 z-40 bg-white border-b-3 border-black px-4 md:px-8 py-3 flex items-center justify-between shadow-[0_2px_0px_#000000]">
         <div className="flex items-center gap-3">

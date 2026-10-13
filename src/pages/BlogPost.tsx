@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
-import { useParams, Navigate } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { Link } from "react-router-dom";
 import { useEffect } from "react";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
@@ -9,6 +8,9 @@ import { SEO } from "../components/SEO";
 import { blogPosts } from "../data/blogData";
 import { useTheme } from "../lib/ThemeContext";
 import GooglePreferredSource from "../components/GooglePreferredSource";
+import { renderMarkdown } from "../lib/renderMarkdown";
+import NotFound from "./NotFound";
+import { DEFAULT_OG_IMAGE, ORGANIZATION_ID, absoluteUrl, breadcrumbSchema, toIsoDate } from "../seo/site";
 
 const categoryColors: Record<string, string> = {
   Announcement: "#7FE620",
@@ -17,20 +19,6 @@ const categoryColors: Record<string, string> = {
   Comparison: "#7FE620",
   Update: "#1CB0F6",
   Release: "#FF85B3",
-};
-
-const renderBoldText = (text: string) => {
-  const parts = text.split(/(\*\*.*?\*\*)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return (
-        <strong key={i} className="font-bold">
-          {part.substring(2, part.length - 2)}
-        </strong>
-      );
-    }
-    return part;
-  });
 };
 
 export default function BlogPost() {
@@ -43,37 +31,44 @@ export default function BlogPost() {
   }, [id]);
 
   if (!post) {
-    return <Navigate to="/blog" replace />;
+    return <NotFound />;
   }
 
+  const postPath = `/blog/${post.id}`;
+  const publishedTime = toIsoDate(post.date);
+  const seoTitle = post.title.includes("PocketHost") ? post.title : `${post.title} | PocketHost`;
+
   const articleSchema = {
-    "@context": "https://schema.org",
     "@type": "BlogPosting",
+    "@id": `${absoluteUrl(postPath)}#article`,
     headline: post.title,
     description: post.excerpt,
-    datePublished: post.date,
-    author: {
-      "@type": "Organization",
-      name: "PocketHost",
-    },
-    publisher: {
-      "@type": "Organization",
-      name: "PocketHost",
-      logo: {
-        "@type": "ImageObject",
-        url: "https://pockethost.online/app-icon-circle-hd.png",
-      },
-    },
+    url: absoluteUrl(postPath),
+    mainEntityOfPage: absoluteUrl(postPath),
+    image: DEFAULT_OG_IMAGE,
+    articleSection: post.category,
+    inLanguage: "en",
+    ...(publishedTime ? { datePublished: publishedTime, dateModified: publishedTime } : {}),
+    author: { "@id": ORGANIZATION_ID },
+    publisher: { "@id": ORGANIZATION_ID },
   };
 
   return (
     <div className={`min-h-screen section-transition ${theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"}`}>
       <SEO
-        title={`${post.title} - PocketHost Blog`}
+        title={seoTitle}
         description={post.excerpt}
-        path={`/blog/${post.id}`}
+        path={postPath}
         type="article"
-        schema={articleSchema}
+        publishedTime={publishedTime}
+        modifiedTime={publishedTime}
+        schema={[
+          articleSchema,
+          breadcrumbSchema([
+            { name: "Blog", path: "/blog" },
+            { name: post.title, path: postPath },
+          ]),
+        ]}
       />
       <Navbar />
 
@@ -105,7 +100,7 @@ export default function BlogPost() {
               </span>
             </div>
             <p className={`font-medium text-lg ${theme === "dark" ? "text-white/35" : "text-black/50"}`}>
-              {post.date}
+              <time dateTime={publishedTime}>{post.date}</time>
             </p>
           </motion.div>
         </div>
@@ -120,61 +115,7 @@ export default function BlogPost() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className={`font-medium leading-relaxed space-y-6 ${theme === "dark" ? "text-white/65" : "text-black/70"}`}
           >
-            {post.content.split("\n\n").map((paragraph, idx) => {
-              // Headers
-              if (paragraph.startsWith("## ")) {
-                return (
-                  <h2 key={idx} className={`text-3xl font-bold mt-8 mb-4 ${theme === "dark" ? "text-white" : "text-black"}`}>
-                    {paragraph.substring(3)}
-                  </h2>
-                );
-              }
-
-              // Numbered lists
-              if (/^\d+\.\s/.test(paragraph)) {
-                const items = paragraph.split("\n").filter((line) => /^\d+\.\s/.test(line));
-                return (
-                  <ol key={idx} className="space-y-2 ml-6 list-decimal">
-                    {items.map((item, i) => {
-                      const content = item.replace(/^\d+\.\s/, "");
-                      return (
-                        <li key={i} className={theme === "dark" ? "text-white/65 font-medium" : "text-black/70 font-medium"}>
-                          {renderBoldText(content)}
-                        </li>
-                      );
-                    })}
-                  </ol>
-                );
-              }
-
-              // Bullet lists
-              if (paragraph.startsWith("- ")) {
-                const items = paragraph.split("\n").filter((line) => line.startsWith("- "));
-                return (
-                  <ul key={idx} className="space-y-2 ml-6">
-                    {items.map((item, i) => {
-                      const content = item.substring(2);
-                      return (
-                        <li key={i} className={theme === "dark" ? "list-disc text-white/65 font-medium" : "list-disc text-black/70 font-medium"}>
-                          {renderBoldText(content)}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                );
-              }
-
-              // Regular paragraphs with bold text support
-              if (paragraph.trim()) {
-                return (
-                  <p key={idx} className={theme === "dark" ? "text-white/65 font-medium leading-relaxed" : "text-black/70 font-medium leading-relaxed"}>
-                    {renderBoldText(paragraph)}
-                  </p>
-                );
-              }
-
-              return null;
-            })}
+            {renderMarkdown(post.content, theme)}
           </motion.article>
 
           <GooglePreferredSource variant="card" className="mt-12 mb-4" />

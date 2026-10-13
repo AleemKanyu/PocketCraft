@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import Footer from "../components/Footer";
@@ -6,8 +6,14 @@ import Navbar from "../components/Navbar";
 import { SEO } from "../components/SEO";
 import { useTheme } from "../lib/ThemeContext";
 import GooglePreferredSource from "../components/GooglePreferredSource";
+import { breadcrumbSchema, faqSchema } from "../seo/site";
 
 const faqs = [
+  {
+    question: "What is PocketHost?",
+    answer:
+      "PocketHost is a free Android app that turns your phone into a Minecraft server. It runs a real PaperMC Java Edition server on the device, lets Bedrock players join through Geyser crossplay, supports plugins, and gives your friends a public address to connect to without port forwarding. You can get it on Google Play or as a direct APK from pockethost.online.",
+  },
   {
     question: "Do I need a PC to run PocketHost?",
     answer:
@@ -54,6 +60,11 @@ const faqs = [
       "No! PocketHost features built-in encrypted relay tunneling. Friends can connect from anywhere over Wi-Fi or mobile data with zero router configuration or port forwarding needed.",
   },
   {
+    question: "Is PocketHost the same as pockethost.io?",
+    answer:
+      "No. PocketHost at pockethost.online is the Android app for hosting Minecraft servers on your phone. pockethost.io is a separate, unrelated service for hosting PocketBase databases. The two only share a name.",
+  },
+  {
     question: "How do I make PocketHost my preferred source on Google Search?",
     answer:
       "Google now supports Preferred Sources across Google Search, Top Stories, and AI Overviews. Click the 'Star on Google Search' button on this page or search for pockethost.online in Google's Source Preferences tool (google.com/preferences/source). Whenever you search for Minecraft hosting, plugins, or server setups, Google will prioritize PocketHost's verified guides.",
@@ -64,27 +75,13 @@ export default function FAQ() {
   const { theme } = useTheme();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
-  const faqSchema = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: faqs.map((f) => ({
-      "@type": "Question",
-      name: f.question,
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: f.answer,
-      },
-    })),
-  };
-
   return (
     <div className={`min-h-screen section-transition ${theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"}`}>
       <SEO
-        title="FAQ - Free Minecraft Server Hosting on Android | PocketHost"
-        description="Answers to common questions about PocketHost: 100% free Minecraft server hosting on Android, Bedrock crossplay, plugins, zero port forwarding, and performance."
-        keywords="free minecraft hosting faq, pockethost questions, free minecraft server android, how to host minecraft server on phone, aternos free alternative"
+        title="PocketHost FAQ: Minecraft Server Hosting on Android"
+        description="What PocketHost is, what it costs, and how it works: Bedrock crossplay, plugins, player limits, backups and hosting without port forwarding."
         path="/faq"
-        schema={faqSchema}
+        schema={[faqSchema(faqs), breadcrumbSchema([{ name: "FAQ", path: "/faq" }])]}
       />
       <Navbar />
       {/* Header */}
@@ -125,6 +122,8 @@ export default function FAQ() {
               >
                 <button
                   onClick={() => setOpenIndex(isOpen ? null : index)}
+                  aria-expanded={isOpen}
+                  aria-controls={`faq-answer-${index}`}
                   className={`w-full px-6 py-4 flex items-center justify-between transition-colors ${
                     theme === "dark" ? "bg-white/[0.02] hover:bg-white/[0.04]" : "bg-white hover:bg-black/2"
                   }`}
@@ -138,22 +137,24 @@ export default function FAQ() {
                   />
                 </button>
 
-                <AnimatePresence initial={false}>
-                  {isOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className={`px-6 py-4 border-t-2 ${
-                        theme === "dark" ? "bg-white/[0.03] border-white/10" : "bg-black/2 border-black/10"
-                      }`}
-                    >
-                      <p className={`font-medium leading-relaxed ${theme === "dark" ? "text-white/65" : "text-black/70"}`}>
-                        {faq.answer}
-                      </p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {/* The answer stays in the page while collapsed so search engines can read it. */}
+                <motion.div
+                  id={`faq-answer-${index}`}
+                  initial={false}
+                  animate={{ opacity: isOpen ? 1 : 0, height: isOpen ? "auto" : 0 }}
+                  style={{ visibility: isOpen ? "visible" : "hidden" }}
+                  className="overflow-hidden"
+                >
+                  <div
+                    className={`px-6 py-4 border-t-2 ${
+                      theme === "dark" ? "bg-white/[0.03] border-white/10" : "bg-black/2 border-black/10"
+                    }`}
+                  >
+                    <p className={`font-medium leading-relaxed ${theme === "dark" ? "text-white/65" : "text-black/70"}`}>
+                      {faq.answer}
+                    </p>
+                  </div>
+                </motion.div>
               </motion.div>
             );
           })}

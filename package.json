@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "NODE_ENV=development tsx server.ts",
     "start": "NODE_ENV=production node dist/server.js",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.js",
+    "build": "vite build && vite build --ssr src/entry-server.tsx --outDir dist-ssr && node scripts/prerender.mjs && esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.js",
     "preview": "vite preview",
+    "indexnow": "node scripts/indexnow.mjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "scan:secrets": "bash scripts/scan-secrets.sh",

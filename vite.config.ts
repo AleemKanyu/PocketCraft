@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 
-export default defineConfig(({mode}) => {
+export default defineConfig(({mode, isSsrBuild}) => {
   loadEnv(mode, '.', '');
   return {
     plugins: [react(), tailwindcss()],
@@ -13,15 +13,18 @@ export default defineConfig(({mode}) => {
       },
     },
     build: {
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-motion': ['framer-motion'],
-            'vendor-icons': ['lucide-react'],
+      // The prerender build (--ssr) keeps these packages external, so they cannot be chunked there.
+      rollupOptions: isSsrBuild
+        ? {}
+        : {
+            output: {
+              manualChunks: {
+                'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+                'vendor-motion': ['framer-motion'],
+                'vendor-icons': ['lucide-react'],
+              },
+            },
           },
-        },
-      },
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

@@ -1,13 +1,37 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Googlebot-Image
-Allow: /
-
-User-agent: Mediapartners-Google
-Allow: /
+# PocketHost - https://pockethost.online
+# Every page is public. Search engines and AI assistants are welcome to read it.
 
 User-agent: *
+Allow: /
+Disallow: /api/
+
+# Search engines
+User-agent: Googlebot
+User-agent: Googlebot-Image
+User-agent: Bingbot
+User-agent: DuckDuckBot
+User-agent: Applebot
+Allow: /
+Disallow: /api/
+
+# AI search and assistants (ChatGPT, Gemini, Copilot, Perplexity, Claude, Apple Intelligence)
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: GPTBot
+User-agent: Google-Extended
+User-agent: PerplexityBot
+User-agent: Perplexity-User
+User-agent: ClaudeBot
+User-agent: Claude-SearchBot
+User-agent: Claude-User
+User-agent: Applebot-Extended
+User-agent: Amazonbot
+User-agent: CCBot
+Allow: /
+Disallow: /api/
+
+# AdSense / AdMob
+User-agent: Mediapartners-Google
 Allow: /
 
 Sitemap: https://pockethost.online/sitemap.xml

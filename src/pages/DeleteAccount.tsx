@@ -51,7 +51,7 @@ export default function DeleteAccount() {
       }`}
     >
       <SEO
-        title="Delete Account – PocketHost"
+        title="Delete Your Account | PocketHost"
         description="Request deletion of your PocketHost account and all associated data. We process all requests within 30 days."
         path="/delete-account"
       />

@@ -77,9 +77,15 @@
     Header set Cache-Control "max-age=31536000, public, immutable"
   </FilesMatch>
 
-  # HTML, robots.txt, and sitemap.xml must never be stale
-  <FilesMatch "(\.(html|htm)|robots\.txt|sitemap\.xml)$">
-    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  # HTML, robots.txt, sitemap.xml and llms.txt are revalidated on every visit so they
+  # are never stale. "no-store" is avoided: it disables the back/forward cache.
+  <FilesMatch "(\.(html|htm)|robots\.txt|sitemap\.xml|llms\.txt)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+
+  # Downloads and data files are not search results
+  <FilesMatch "\.(zip|apk|md|json)$">
+    Header set X-Robots-Tag "noindex"
   </FilesMatch>
 
   # Security Headers
@@ -88,31 +94,33 @@
   Header set Referrer-Policy "strict-origin-when-cross-origin"
 </IfModule>
 
-# 5. Canonical Redirection & SPA Rewrite Engine
+# 5. Canonical Redirects, Prerendered Pages & 404s
+# Unknown URLs get a real 404 status (with a helpful page) instead of the home page.
+ErrorDocument 404 /404.html
+
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
 
-  # 1. Canonical Redirect: www to non-www (single-hop directly to HTTPS)
+  # 1. One URL per page: drop trailing slashes (/faq/ -> /faq) in a single hop
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^(.+)/$ https://pockethost.online/$1 [L,R=301]
+
+  # 2. Canonical Redirect: www to non-www (single-hop directly to HTTPS)
   RewriteCond %{HTTP_HOST} ^www\.pockethost\.online$ [NC]
   RewriteRule ^(.*)$ https://pockethost.online/$1 [L,R=301]
 
-  # 2. Force HTTPS
+  # 3. Force HTTPS
   RewriteCond %{HTTPS} off
   RewriteCond %{HTTP:X-Forwarded-Proto} !https
   RewriteRule ^(.*)$ https://pockethost.online%{REQUEST_URI} [L,R=301]
 
-  # Serve sitemap.xml directly
-  RewriteRule ^sitemap\.xml$ sitemap.xml [L]
-
-  # Serve robots.txt directly
-  RewriteRule ^robots\.txt$ robots.txt [L]
-
-  # Serve app-ads.txt directly
-  RewriteRule ^app-ads\.txt$ app-ads.txt [L]
-
-  # Serve site.webmanifest directly
-  RewriteRule ^site\.webmanifest$ site.webmanifest [L]
+  # 4. Old and duplicate addresses point at the clean URL
+  RewriteCond %{THE_REQUEST} \s/+index\.html[\s?] [NC]
+  RewriteRule ^index\.html$ https://pockethost.online/ [L,R=301]
+  RewriteRule ^(privacy|terms)\.html$ https://pockethost.online/$1 [L,R=301]
+  RewriteCond %{THE_REQUEST} \s/+_pages/(.+?)\.html[\s?] [NC]
+  RewriteRule ^ https://pockethost.online/%1 [L,R=301]
 
   # Spotify OAuth Callback
   RewriteRule ^callback/?$ callback/index.html [L,QSA]
@@ -121,11 +129,7 @@
   RewriteRule ^api/create-order/?$ api/create-order.php [L]
   RewriteRule ^api/verify-payment/?$ api/verify-payment.php [L]
 
-  # Pass existing files and directories directly
-  RewriteCond %{REQUEST_FILENAME} -f [OR]
-  RewriteCond %{REQUEST_FILENAME} -d
-  RewriteRule ^ - [L]
-
-  # Rewrite all other routes to index.html for React Router
-  RewriteRule ^ index.html [L]
+  # 5. Prerendered pages. Each route is static HTML written by scripts/prerender.mjs,
+  #    which replaces the line below with one rule per page at build time.
+  # @@PRERENDERED_ROUTES@@
 </IfModule>

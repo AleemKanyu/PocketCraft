@@ -4,6 +4,7 @@ import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
 import { SEO } from "../components/SEO";
 import { useTheme } from "../lib/ThemeContext";
+import { breadcrumbSchema } from "../seo/site";
 
 const roadmapItems = [
   {
@@ -71,9 +72,10 @@ export default function Roadmap() {
   return (
     <div className={`min-h-screen section-transition ${theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"}`}>
       <SEO
-        title="Product Roadmap - PocketHost"
-        description="See what features are planned, currently in development, and recently launched for PocketHost Android Minecraft server hosting."
+        title="PocketHost Roadmap: What Is Built and What Is Next"
+        description="See which features have shipped, which are in development and which are planned for PocketHost, the Android Minecraft server hosting app."
         path="/roadmap"
+        schema={breadcrumbSchema([{ name: "Roadmap", path: "/roadmap" }])}
       />
       <Navbar />
       {/* Header */}

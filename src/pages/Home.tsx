@@ -5,12 +5,12 @@ import ComparisonTable from "../components/ComparisonTable";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
 import { SEO } from "../components/SEO";
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useTheme } from "../lib/ThemeContext";
 import { useLowEndDevice } from "../hooks/useLowEndDevice";
 import { DownloadDropdown } from "../components/DownloadDropdown";
 import Changelog from "../components/Changelog";
+import { appSchema, faqSchema } from "../seo/site";
 
 const DownloadIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -27,6 +27,11 @@ const DiscordIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
 );
 
 const homeFaqs = [
+  {
+    question: "What is PocketHost?",
+    answer:
+      "PocketHost is a free Android app that turns your phone into a Minecraft server. It runs a real PaperMC Java Edition server on the device, lets Bedrock players join through Geyser crossplay, supports plugins, and gives your friends a public address to connect to without port forwarding.",
+  },
   {
     question: "Is PocketHost really 100% free?",
     answer:
@@ -57,19 +62,6 @@ const Home = () => {
   const { theme } = useTheme();
   const isLowEnd = useLowEndDevice();
 
-  const homeFaqSchema = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: homeFaqs.map((faq) => ({
-      "@type": "Question",
-      name: faq.question,
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: faq.answer,
-      },
-    })),
-  };
-
   return (
     <div
       className={`min-h-screen selection:bg-[#7FE620] selection:text-black font-sans section-transition ${
@@ -77,11 +69,10 @@ const Home = () => {
       }`}
     >
       <SEO
-        title="PocketHost - 100% Free Minecraft Server Hosting on Android (Java & Bedrock)"
-        description="PocketHost is 100% free Minecraft server hosting directly on your Android phone. Host 24/7 PaperMC Java & Bedrock crossplay servers with zero queues, zero port forwarding, and full plugin support."
-        keywords="free minecraft hosting, free minecraft server hosting, pockethost, pocket host, pocketcraft, free 24/7 minecraft server, host minecraft server android, papermc mobile hosting, geysermc crossplay, free aternos alternative"
+        title="PocketHost: Free Minecraft Server Hosting on Android"
+        description="PocketHost is a free Android app that turns your phone into a Minecraft server. Java and Bedrock crossplay, plugins, no port forwarding and no PC needed."
         path="/"
-        schema={homeFaqSchema}
+        schema={[appSchema, faqSchema(homeFaqs)]}
       />
       <Navbar />
       <ModernHero />
@@ -120,6 +111,7 @@ const Home = () => {
             {homeFaqs.map((faq, idx) => (
               <motion.details
                 key={faq.question}
+                open={idx === 0}
                 initial={{ opacity: 0, y: 12 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
@@ -224,7 +216,7 @@ const Home = () => {
               theme === "dark" ? "text-white/20" : "text-black/40"
             }`}
           >
-            Free & Open • Instant Download • No Root Required
+            Free to Use • Instant Download • No Root Required
           </motion.p>
 
         </div>

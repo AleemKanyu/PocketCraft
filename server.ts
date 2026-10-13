@@ -425,9 +425,15 @@ async function startServer() {
       res.sendFile(path.join(dashboardPath, "index.html"));
     });
 
-    // SPA fallback
+    // Prerendered pages live in dist/_pages (see scripts/prerender.mjs); anything else is a 404.
+    const pagesPath = path.join(distPath, "_pages");
     app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      const pageFile = path.join(pagesPath, `${req.path.replace(/\/+$/, "")}.html`);
+      if (pageFile.startsWith(pagesPath + path.sep) && fs.existsSync(pageFile)) {
+        res.setHeader("Cache-Control", "no-cache");
+        return res.sendFile(pageFile);
+      }
+      res.status(404).sendFile(path.join(distPath, "404.html"));
     });
   }
 

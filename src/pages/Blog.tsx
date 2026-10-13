@@ -6,6 +6,7 @@ import { SEO } from "../components/SEO";
 import { blogPosts } from "../data/blogData";
 import { useTheme } from "../lib/ThemeContext";
 import GooglePreferredSource from "../components/GooglePreferredSource";
+import { ORGANIZATION_ID, absoluteUrl, breadcrumbSchema, toIsoDate } from "../seo/site";
 
 const categoryColors: Record<string, string> = {
   Announcement: "#7FE620",
@@ -22,9 +23,25 @@ export default function Blog() {
   return (
     <div className={`min-h-screen section-transition ${theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"}`}>
       <SEO
-        title="Blog & Updates - PocketHost"
-        description="Latest announcements, engineering updates, server optimization tips, and feature releases for PocketHost Android Minecraft hosting."
+        title="PocketHost Blog: Updates, Guides and Release Notes"
+        description="Release notes, server optimization guides and announcements from PocketHost, the Android app for hosting Minecraft servers on your phone."
         path="/blog"
+        schema={[
+          {
+            "@type": "Blog",
+            "@id": `${absoluteUrl("/blog")}#blog`,
+            name: "PocketHost Blog",
+            url: absoluteUrl("/blog"),
+            publisher: { "@id": ORGANIZATION_ID },
+            blogPost: blogPosts.map((post) => ({
+              "@type": "BlogPosting",
+              headline: post.title,
+              url: absoluteUrl(`/blog/${post.id}`),
+              datePublished: toIsoDate(post.date),
+            })),
+          },
+          breadcrumbSchema([{ name: "Blog", path: "/blog" }]),
+        ]}
       />
       <Navbar />
       {/* Header */}
@@ -80,7 +97,7 @@ export default function Blog() {
                 </div>
 
                 <p className={`text-sm font-medium mb-3 ${theme === "dark" ? "text-white/35" : "text-black/50"}`}>
-                  {post.date}
+                  <time dateTime={toIsoDate(post.date)}>{post.date}</time>
                 </p>
                 <p className={`font-medium leading-relaxed ${theme === "dark" ? "text-white/65" : "text-black/70"}`}>
                   {post.excerpt}

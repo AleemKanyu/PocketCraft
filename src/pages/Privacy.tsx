@@ -111,7 +111,7 @@ export default function Privacy() {
       theme === "dark" ? "bg-[#0a0a0a] text-white" : "bg-white text-black"
     }`}>
       <SEO
-        title="Privacy Policy - PocketHost"
+        title="Privacy Policy | PocketHost"
         description="Learn how PocketHost handles your data. Your Minecraft world files and server data stay on your device; ads, where shown, are served by Google AdMob."
         path="/privacy"
       />
