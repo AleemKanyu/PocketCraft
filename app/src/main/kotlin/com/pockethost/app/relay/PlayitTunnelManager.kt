@@ -66,6 +66,8 @@ class PlayitTunnelManager(private val context: Context) {
 
     private fun parse(line: String): Event? {
         val json = runCatching { JSONObject(line) }.getOrNull() ?: return null
+        // Never log the "secret" line: it carries the account's agent key.
+        if (json.optString("event") != "secret") Log.i(TAG, line)
         return when (json.optString("event")) {
             "claim" -> Event.Claim(json.optString("url"))
             "secret" -> Event.Secret(json.optString("key"))
@@ -77,10 +79,7 @@ class PlayitTunnelManager(private val context: Context) {
             "needs_tunnel" -> Event.NeedsTunnel(json.optString("url"))
             "warning" -> Event.Warning(json.optString("code"), json.optString("message"))
             "error" -> Event.Failed(json.optString("code"), json.optString("message"))
-            else -> {
-                Log.d(TAG, "Unhandled agent line: ${json.optString("event")}")
-                null
-            }
+            else -> null
         }
     }
 

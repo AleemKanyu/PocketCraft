@@ -20,10 +20,9 @@ use playit_agent_core::network::udp::udp_settings::UdpSettings;
 use playit_agent_core::playit_agent::{PlayitAgent, PlayitAgentSettings};
 use playit_api_client::PlayitApi;
 use playit_api_client::api::{
-    AccountTunnelOriginCreate, AgentOrigin, AgentRunDataV1, AgentTunnelAttr, AgentTunnelConfig,
-    AgentTunnelV1, ApiError, ApiErrorNoFail, ApiResponseError, ClaimAgentType, ClaimSetupResponse,
-    ReqClaimExchange, ReqClaimSetup, ReqTunnelsConfigV1, ReqTunnelsCreateV1, TunnelPortDetails,
-    TunnelType,
+    AgentRunDataV1, AgentTunnelAttr, AgentTunnelConfig, AgentTunnelV1, ApiError, ApiErrorNoFail,
+    ApiResponseError, ApiResult, ClaimAgentType, ClaimSetupResponse, ObjectId, PlayitHttpClient,
+    ReqClaimExchange, ReqClaimSetup, ReqTunnelsConfigV1,
 };
 use rand::Rng;
 use serde_json::{Value, json};
@@ -87,9 +86,6 @@ async fn main() {
     let api = PlayitApi::create(API_BASE.to_string(), Some(secret.clone()));
     let lookup = Arc::new(OriginLookup::default());
 
-    emit(json!({ "event": "status", "message": "Setting up tunnels" }));
-    let mut last_report = ensure_tunnels(&api, &lookup, java_port, bedrock_port).await;
-
     let agent = match PlayitAgent::new(
         PlayitAgentSettings {
             api_url: API_BASE.to_string(),
@@ -102,10 +98,21 @@ async fn main() {
     .await
     {
         Ok(agent) => agent,
-        Err(error) => fail("agent_setup_failed", format!("{error:?}")),
+        Err(error) => {
+            let detail = format!("{error:?}");
+            if detail.contains("AgentDisabledOverLimit") {
+                fail("agent_over_limit", "This playit.gg account has too many agents. Remove unused ones at https://playit.gg/account/agents");
+            }
+            fail("agent_setup_failed", detail)
+        }
     };
 
     emit(json!({ "event": "connected" }));
+
+    // After the agent is up: connecting registers its version with playit, and tunnel
+    // creation is refused ("AgentVersionTooOld") for an agent that never registered one.
+    emit(json!({ "event": "status", "message": "Setting up tunnels" }));
+    let mut last_report = ensure_tunnels(&api, &lookup, java_port, bedrock_port).await;
 
     let refresh = async {
         loop {
@@ -245,6 +252,36 @@ async fn run_data(api: &PlayitApi) -> AgentRunDataV1 {
     }
 }
 
+/// Creates a tunnel on playit's free global network, pointed at this agent.
+///
+/// The request is built by hand: the live API takes `protocol` and `endpoint`, which the
+/// request type in the pinned playit client (v1.0.12) does not have yet.
+async fn create_tunnel(
+    api: &PlayitApi,
+    data: &AgentRunDataV1,
+    tunnel_type: &str,
+    port: u16,
+    name: &str,
+) -> Result<(), String> {
+    let request = json!({
+        "name": name,
+        "protocol": { "type": "tunnel-type", "details": tunnel_type },
+        "origin": { "type": "agent", "data": { "agent_id": data.agent_id, "config": origin_config(port) } },
+        "endpoint": { "type": "region", "details": { "region": "global", "port": null } },
+        "enabled": true,
+    });
+    let result: Result<ApiResult<ObjectId, Value>, _> = api
+        .get_client()
+        .call(std::panic::Location::caller(), "/v1/tunnels/create", request)
+        .await;
+    match result {
+        Ok(ApiResult::Success(_)) => Ok(()),
+        Ok(ApiResult::Fail(reason)) => Err(reason.to_string()),
+        Ok(ApiResult::Error(error)) => Err(format!("{error:?}")),
+        Err(error) => Err(format!("{error:?}")),
+    }
+}
+
 /// Makes sure both tunnels exist and point at the local server, then reports their addresses.
 async fn ensure_tunnels(
     api: &PlayitApi,
@@ -252,15 +289,15 @@ async fn ensure_tunnels(
     java_port: u16,
     bedrock_port: u16,
 ) -> Value {
-    let mut wanted = vec![(JAVA_TYPE, TunnelType::MinecraftJava, java_port, "PocketCraft Java")];
+    let mut wanted = vec![(JAVA_TYPE, java_port, "PocketCraft Java")];
     if bedrock_port != 0 {
-        wanted.push((BEDROCK_TYPE, TunnelType::MinecraftBedrock, bedrock_port, "PocketCraft Bedrock"));
+        wanted.push((BEDROCK_TYPE, bedrock_port, "PocketCraft Bedrock"));
     }
 
     let data = run_data(api).await;
     let mut created = false;
 
-    for (type_name, tunnel_type, port, name) in &wanted {
+    for (type_name, port, name) in &wanted {
         let pending = data.pending.iter().any(|p| p.tunnel_type.as_deref() == Some(*type_name));
         match find(&data, type_name) {
             Some(tunnel) if local_port(tunnel) == Some(*port) => {}
@@ -279,23 +316,10 @@ async fn ensure_tunnels(
             }
             None if pending => created = true,
             None => {
-                let res = api
-                    .v1_tunnels_create(ReqTunnelsCreateV1 {
-                        ports: TunnelPortDetails::TunnelType(*tunnel_type),
-                        origin: AccountTunnelOriginCreate::Agent(AgentOrigin {
-                            agent_id: None,
-                            config: origin_config(*port),
-                        }),
-                        enabled: true,
-                        alloc: None,
-                        name: Some((*name).to_string()),
-                        firewall_id: None,
-                    })
-                    .await;
-                match res {
-                    Ok(_) => created = true,
-                    Err(error) => {
-                        emit(json!({ "event": "warning", "code": "tunnel_create_failed", "tunnel": type_name, "message": format!("{error:?}") }));
+                match create_tunnel(api, &data, type_name, *port, name).await {
+                    Ok(()) => created = true,
+                    Err(message) => {
+                        emit(json!({ "event": "warning", "code": "tunnel_create_failed", "tunnel": type_name, "message": message }));
                     }
                 }
             }
@@ -308,7 +332,7 @@ async fn ensure_tunnels(
         for _ in 0..20 {
             tokio::time::sleep(Duration::from_secs(2)).await;
             data = run_data(api).await;
-            let ready = wanted.iter().all(|(type_name, _, port, _)| {
+            let ready = wanted.iter().all(|(type_name, port, _)| {
                 find(&data, type_name).is_some_and(|t| local_port(t) == Some(*port))
             });
             if ready {

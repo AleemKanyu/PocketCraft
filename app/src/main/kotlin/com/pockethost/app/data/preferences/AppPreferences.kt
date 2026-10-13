@@ -265,12 +265,21 @@ class AppPreferences(context: Context) {
     val usesPlayitTunnel: Boolean
         get() = tunnelProvider == TUNNEL_PROVIDER_PLAYIT
 
-    /** Agent key playit.gg hands out once the user approves the claim link. */
+    /**
+     * Agent key playit.gg hands out once the user approves the claim link. A file for the
+     * same reason as [tunnelProvider]: `:server` saves it, and a later write from the UI
+     * process's cached SharedPreferences would wipe it. Kept out of device backups.
+     */
     var playitSecretKey: String?
-        get() = prefs.getString("playit_secret_key", null)?.takeIf { it.isNotBlank() }
-        set(value) = prefs.edit().apply {
-            if (value.isNullOrBlank()) remove("playit_secret_key") else putString("playit_secret_key", value)
-        }.apply()
+        get() = runCatching { playitSecretKeyFile.readText().trim() }.getOrNull()?.takeIf { it.isNotBlank() }
+        set(value) {
+            runCatching {
+                if (value.isNullOrBlank()) playitSecretKeyFile.delete() else playitSecretKeyFile.writeText(value)
+            }
+        }
+
+    private val playitSecretKeyFile: java.io.File
+        get() = java.io.File(appContext.noBackupFilesDir, "playit_agent_key")
 
     var cachedRelayServersJson: String?
         get() = prefs.getString("cached_relay_servers_json", null)
