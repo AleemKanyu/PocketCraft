@@ -600,7 +600,9 @@ fun ServerScreen(
 
                     ChunkyProgressBanner(
                         progress = stateHolder.chunkyProgressPercent,
-                        modifier = Modifier.align(Alignment.BottomCenter)
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .clickable { stateHolder.openPregenSheet() }
                     )
                 }
             }
@@ -888,6 +890,10 @@ fun ServerScreen(
                     stateHolder = stateHolder,
                     onDismissRequest = { showBackupSheet = false }
                 )
+            }
+
+            if (stateHolder.pregenSheetVisible) {
+                com.pockethost.app.ui.components.PregenPopup(stateHolder)
             }
 
             if (stateHolder.playitSetupVisible) {

@@ -12,7 +12,9 @@ object BundledPluginInstaller {
         "floodgate-spigot.jar",
         "ViaVersion.jar",
         "PocketCraftCompanion.jar",
-        "DummyPlayers.jar"
+        "DummyPlayers.jar",
+        // World pre-generation. Built from source by scripts/build_chunky.sh; idle until asked.
+        "Chunky.jar"
     )
 
     private val LEGACY_PLUGIN_NAMES = listOf(
@@ -53,6 +55,10 @@ object BundledPluginInstaller {
                 if (destFile.exists()) {
                     destFile.renameTo(File(pluginsDir, "$pluginName.disabled"))
                 }
+                return@forEach
+            }
+            if (pluginName == "Chunky.jar" && minor < 13) {
+                // Chunky needs Minecraft 1.13 or newer.
                 return@forEach
             }
             if (pluginName == "DummyPlayers.jar" && minor >= 20) {

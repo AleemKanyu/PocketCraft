@@ -2217,6 +2217,16 @@ private fun ServerIdentityCard(
                         emphasized = false
                     )
 
+                    if (stateHolder.pregenSupported) {
+                        PremiumHomeButton(
+                            text = if (stateHolder.pregenActive) "World Pre-generation (running)" else "Pre-generate World",
+                            icon = Icons.Default.Public,
+                            onClick = { stateHolder.openPregenSheet() },
+                            modifier = Modifier.fillMaxWidth(),
+                            style = PremiumHomeButtonStyle.Secondary
+                        )
+                    }
+
                     PremiumHomeButton(
                         text = "How to Join",
                         icon = Icons.Filled.Info,

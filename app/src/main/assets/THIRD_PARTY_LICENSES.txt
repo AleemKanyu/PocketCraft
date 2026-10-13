@@ -166,3 +166,19 @@ provide the matching corresponding-source archive.
 Credit: oryxel1 (original GeyserReversion and Ouranos adaptation),
 Blackjack200 (Ouranos), and the AnarchadiaMC / siberanka maintainers of the
 September 2026 compatibility update.
+
+---
+
+Chunky (world pre-generation plugin)
+Bundled at: assets/plugins/Chunky.jar, installed into plugins/ of Paper and
+Purpur worlds and used by "Pre-generate World".
+Source: https://github.com/pop4959/Chunky
+Exact source built: commit 4bec4848adc8417fca2a5579a904b17ce6ede841 (tag 1.5.0)
+https://github.com/pop4959/Chunky/tree/4bec4848adc8417fca2a5579a904b17ce6ede841
+License: GPL-3.0 (https://www.gnu.org/licenses/gpl-3.0.html)
+PocketHost builds the Bukkit plugin from the unmodified source above with
+scripts/build_chunky.sh, compiled for Java 17 so it runs on every bundled Java
+runtime. The complete corresponding source for the bundled build is available
+at the links above; on request PocketHost will also provide the matching
+corresponding-source archive.
+Credit: pop4959 and the Chunky contributors.

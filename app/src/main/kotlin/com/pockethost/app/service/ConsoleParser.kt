@@ -9,6 +9,14 @@ data class ChunkyProgress(
     val percent: Float
 )
 
+/** One progress line from a running Chunky pre-generation task. */
+data class ChunkyTaskUpdate(
+    val chunks: Long,
+    val percent: Float,
+    val etaSeconds: Long,
+    val chunksPerSecond: Float
+)
+
 data class ParsedPlayerPing(
     val pingMs: Int,
     val ip: String = "",
@@ -182,8 +190,28 @@ object ConsoleParser {
 
     fun isPreparingStartRegion(line: String): Boolean = PREPARING_START_REGION_REGEX.containsMatchIn(line)
 
+    // "[Chunky] Task running for world. Processed: 3500 chunks (35.00%), ETA: 0:02:15, Rate: 50.5 cps, Current: 0, 0"
+    private val CHUNKY_UPDATE_REGEX = Regex(
+        """\[Chunky\] Task running for .*?\. Processed: (\d+) chunks \(([\d.]+)%\), ETA: (\d+):(\d+):(\d+), Rate: ([\d.]+) cps"""
+    )
+
+    fun parseChunkyUpdate(line: String): ChunkyTaskUpdate? {
+        if (!line.contains("[Chunky] Task running")) return null
+        val match = CHUNKY_UPDATE_REGEX.find(line) ?: return null
+        val (chunks, percent, hours, minutes, seconds, rate) = match.destructured
+        return ChunkyTaskUpdate(
+            chunks = chunks.toLongOrNull() ?: return null,
+            percent = percent.toFloatOrNull() ?: return null,
+            etaSeconds = (hours.toLongOrNull() ?: 0) * 3600 + (minutes.toLongOrNull() ?: 0) * 60 + (seconds.toLongOrNull() ?: 0),
+            chunksPerSecond = rate.toFloatOrNull() ?: 0f
+        )
+    }
+
     fun parseChunkyProgress(line: String): ChunkyProgress? {
         if (!line.contains("[Chunky] Task ")) return null
+        parseChunkyUpdate(line)?.let { update ->
+            return ChunkyProgress(current = update.chunks, total = 0, percent = update.percent)
+        }
         CHUNKY_PROGRESS_REGEX.find(line)?.let { match ->
             return ChunkyProgress(
                 current = match.groupValues[1].toLong(),

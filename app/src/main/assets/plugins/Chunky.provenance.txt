@@ -1,0 +1,8 @@
+Chunky (world pre-generation plugin)
+source: https://github.com/pop4959/Chunky.git
+commit: 4bec4848adc8417fca2a5579a904b17ce6ede841
+built-jar: Chunky-Bukkit-1.4.0.jar
+sha256: 01bedc2b9aa171c215e2c5226db5ee02d817854cc3523b275d374fd12e96c332
+corresponding-source: third_party_sources/Chunky-4bec4848adc8-corresponding-source.zip
+build-changes: Bukkit module only, compiled for Java 17 (see scripts/build_chunky.sh)
+license: GPL-3.0

@@ -552,6 +552,40 @@ class ServerStateHolder(
         private set
     var chunkyProgressPercent by mutableStateOf<Int?>(null)
         private set
+
+    /** Live numbers for the world pre-generation popup. */
+    data class PregenProgress(
+        val percent: Float,
+        val chunks: Long,
+        val etaSeconds: Long,
+        val chunksPerSecond: Float,
+        val updatedAtMs: Long
+    )
+    var pregenSheetVisible by mutableStateOf(false)
+        private set
+    var pregenProgress by mutableStateOf<PregenProgress?>(null)
+        private set
+    var pregenStartedAtMs by mutableStateOf<Long?>(null)
+        private set
+    var pregenPaused by mutableStateOf(false)
+        private set
+    var pregenFinished by mutableStateOf(false)
+        private set
+    var pregenMessage by mutableStateOf<String?>(null)
+        private set
+    /** Minutes after which the task pauses itself, or null for no limit. */
+    var pregenTimeLimitMinutes by mutableStateOf<Int?>(null)
+        private set
+    private var pregenRequestedAtMs = 0L
+    private var pregenWatchJob: Job? = null
+    private var pregenLimitJob: Job? = null
+
+    /** Chunky is a Bukkit plugin, so pre-generation runs on Paper and Purpur servers. */
+    val pregenSupported: Boolean
+        get() = config.serverType == com.pockethost.app.data.model.ServerType.PAPER ||
+            config.serverType == com.pockethost.app.data.model.ServerType.PURPUR
+    val pregenActive: Boolean
+        get() = pregenStartedAtMs != null && !pregenFinished
     var chunksLoadingTipShown by mutableStateOf(false)
         private set
     var firstBootComplete by mutableStateOf(false)
@@ -1959,6 +1993,8 @@ class ServerStateHolder(
             }
         }
 
+        if (cleanLine.contains("[Chunky]")) handlePregenLine(cleanLine)
+
         if (cleanLine.contains("[Chunky] Task finished", ignoreCase = true)) {
             scope.launch {
                 val firstBoot = !AppPreferencesStore.isFirstBootCompleteFlow(appContext).first()
@@ -2902,6 +2938,121 @@ class ServerStateHolder(
                     playitClaimUrl = null
                     playitSetupError = message
                 }
+            }
+        }
+    }
+
+    fun openPregenSheet() {
+        pregenMessage = null
+        pregenSheetVisible = true
+    }
+
+    fun closePregenSheet() {
+        pregenSheetVisible = false
+        if (pregenFinished) resetPregen()
+    }
+
+    private fun resetPregen() {
+        pregenLimitJob?.cancel()
+        pregenWatchJob?.cancel()
+        pregenProgress = null
+        pregenStartedAtMs = null
+        pregenPaused = false
+        pregenFinished = false
+        pregenTimeLimitMinutes = null
+    }
+
+    /**
+     * Builds the world out to [radiusBlocks] from spawn ahead of time, so players do not
+     * wait on new terrain while exploring. With [timeLimitMinutes] the task pauses itself
+     * after that long and can be resumed later.
+     */
+    fun startPregen(radiusBlocks: Int, timeLimitMinutes: Int?) {
+        if (!isRunning) {
+            pregenMessage = "Start the server first."
+            return
+        }
+        resetPregen()
+        pregenMessage = null
+        pregenTimeLimitMinutes = timeLimitMinutes
+        pregenStartedAtMs = System.currentTimeMillis()
+        pregenRequestedAtMs = SystemClock.elapsedRealtime()
+        val world = config.worldName.ifBlank { activeWorld.ifBlank { "world" } }
+        listOf("chunky world $world", "chunky spawn", "chunky radius $radiusBlocks", "chunky start").forEach {
+            sendCommand(it, showOfflineWarning = false)
+        }
+        // Chunky only loads when the server starts, so the first use after an app update needs one restart.
+        pregenWatchJob = scope.launch {
+            delay(12_000L)
+            if (pregenProgress == null && !pregenFinished && pregenMessage == null) {
+                pregenStartedAtMs = null
+                pregenMessage = "The world builder is not loaded yet. Restart the server once, then try again."
+            }
+        }
+        if (timeLimitMinutes != null) {
+            pregenLimitJob = scope.launch {
+                delay(timeLimitMinutes * 60_000L)
+                if (pregenActive && !pregenPaused) {
+                    pausePregen()
+                    pregenMessage = "Time limit reached. Resume whenever you like."
+                }
+            }
+        }
+    }
+
+    fun pausePregen() {
+        sendCommand("chunky pause", showOfflineWarning = false)
+        pregenPaused = true
+    }
+
+    fun resumePregen() {
+        pregenMessage = null
+        sendCommand("chunky continue", showOfflineWarning = false)
+        pregenPaused = false
+    }
+
+    fun stopPregen() {
+        sendCommand("chunky cancel", showOfflineWarning = false)
+        sendCommand("chunky confirm", showOfflineWarning = false)
+        resetPregen()
+    }
+
+    private fun handlePregenLine(line: String) {
+        ConsoleParser.parseChunkyUpdate(line)?.let { update ->
+            if (pregenStartedAtMs == null) pregenStartedAtMs = System.currentTimeMillis()
+            pregenFinished = false
+            pregenPaused = false
+            pregenProgress = PregenProgress(
+                percent = update.percent,
+                chunks = update.chunks,
+                etaSeconds = update.etaSeconds,
+                chunksPerSecond = update.chunksPerSecond,
+                updatedAtMs = SystemClock.elapsedRealtime()
+            )
+            chunkyProgressPercent = update.percent.toInt()
+            return
+        }
+        val askedJustNow = SystemClock.elapsedRealtime() - pregenRequestedAtMs < 15_000L
+        when {
+            line.contains("Task finished for") -> {
+                pregenLimitJob?.cancel()
+                pregenProgress = pregenProgress?.copy(percent = 100f, etaSeconds = 0)
+                    ?: PregenProgress(100f, 0, 0, 0f, SystemClock.elapsedRealtime())
+                pregenFinished = true
+                pregenPaused = false
+            }
+            line.contains("Task paused for") -> pregenPaused = true
+            line.contains("Task continuing for") -> pregenPaused = false
+            line.contains("Task cancelled for") || line.contains("Task stopped for") -> {
+                if (!askedJustNow) chunkyProgressPercent = null
+            }
+            // An older unfinished task exists; the user just picked a new size, so replace it.
+            askedJustNow && line.contains("A task was already started") ->
+                sendCommand("chunky confirm", showOfflineWarning = false)
+            askedJustNow && line.contains("disk space remaining") -> {
+                pregenWatchJob?.cancel()
+                pregenStartedAtMs = null
+                pregenMessage = "Not enough free storage for this size. Pick a smaller one."
             }
         }
     }
