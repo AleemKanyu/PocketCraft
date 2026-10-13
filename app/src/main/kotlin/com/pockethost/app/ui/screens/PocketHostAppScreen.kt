@@ -559,6 +559,18 @@ fun PocketHostApp(
         if (needsConsent) {
             pendingConsentDialog = true
         }
+        // No server yet means the user is on the Create Server guide. Notes and social
+        // prompts wait for a later launch instead of landing on top of it.
+        val firstServerPending = withContext(Dispatchers.IO) {
+            val world = stateHolder.activeWorld.ifBlank { "world" }
+            val props = ServerPropertiesHelper.readProperties(
+                ServerFileManager.getServerDir(context.applicationContext, world),
+                persistDefaults = false
+            )
+            world !in props.getProperty("pocketcraft-world-setup-list", "").split(',').map { it.trim() } &&
+                props.getProperty("pocketcraft-world-list").isNullOrBlank()
+        }
+        if (firstServerPending) return@LaunchedEffect
         if (
             !showAnnouncementDialog &&
             !pendingAnnouncementDialog &&

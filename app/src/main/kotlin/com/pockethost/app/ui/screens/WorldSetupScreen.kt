@@ -92,6 +92,7 @@ private enum class WorldImportSlot { MAIN, NETHER, END }
 fun WorldSetupScreen(
     stateHolder: ServerStateHolder,
     createMode: Boolean = false,
+    firstSetup: Boolean = false,
     onVersionSelected: (String) -> Unit = {},
     onBack: () -> Unit,
     onMessage: (String) -> Unit,
@@ -101,11 +102,16 @@ fun WorldSetupScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val activeWorld = stateHolder.activeWorld.ifBlank { "world" }
+    // Shown as a creation: a new world, or the first setup of the default one.
+    val creating = createMode || firstSetup
 
-    var serverName by remember(stateHolder.serverName, activeWorld, createMode) {
+    var serverName by remember(stateHolder.serverName, activeWorld, createMode, firstSetup) {
         mutableStateOf(
             if (createMode) {
                 stateHolder.serverName.ifBlank { "My Minecraft Server" }
+            } else if (firstSetup) {
+                // The untouched default is just the folder name, "world".
+                stateHolder.serverName.takeIf { it.isNotBlank() && it != activeWorld } ?: "My Minecraft Server"
             } else {
                 stateHolder.serverName.ifBlank { activeWorld }
             }
@@ -171,8 +177,8 @@ fun WorldSetupScreen(
     val tour = LocalTourController.current
     val prefs = remember { AppPreferences(context) }
 
-    LaunchedEffect(createMode) {
-        if (createMode && !prefs.createServerTourShown) {
+    LaunchedEffect(creating) {
+        if (creating && !prefs.createServerTourShown) {
             kotlinx.coroutines.delay(500)
             tour?.start(TourId.CREATE_SERVER, PocketTours.createServer()) { _, _ ->
                 prefs.createServerTourShown = true
@@ -181,6 +187,9 @@ fun WorldSetupScreen(
     }
     
     var showVersionDialog by remember { mutableStateOf(false) }
+    // Set when Create was pressed before the server file was downloaded, so confirming the
+    // download carries on with the creation instead of asking for a second press.
+    var resumeSetupAfterVersion by remember { mutableStateOf(false) }
     var showAdvancedOptions by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
 
@@ -360,7 +369,8 @@ fun WorldSetupScreen(
         }
 
         if (!isJarDownloaded && selectedServerType.supportsVersionSelect) {
-            onMessage("Please download and select the server file for ${selectedServerType.displayName} $versionId first.")
+            onMessage("Download ${selectedServerType.displayName} $versionId to finish. It only takes a moment.")
+            resumeSetupAfterVersion = true
             showVersionDialog = true
             return
         }
@@ -386,7 +396,7 @@ fun WorldSetupScreen(
             onVersionSelected(versionId)
         }
 
-        onMessage(if (createMode) "Server created successfully!" else "Settings saved.")
+        onMessage(if (creating) "Server created successfully!" else "Settings saved.")
         onComplete()
     }
 
@@ -403,13 +413,13 @@ fun WorldSetupScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                     Text(
-                        text = if (createMode) "Create Server" else "Server Settings",
+                        text = if (creating) "Create Server" else "Server Settings",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.ExtraBold,
                         color = if (isDarkTheme) PocketColors.PrimaryLight else PocketColors.PrimaryDark,
                         modifier = Modifier.weight(1f)
                     )
-                    if (createMode) {
+                    if (creating) {
                         IconButton(
                             onClick = {
                                 tour?.start(TourId.CREATE_SERVER, PocketTours.createServer())
@@ -434,7 +444,7 @@ fun WorldSetupScreen(
             ) {
                 Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).navigationBarsPadding()) {
                     DuoButton(
-                        text = if (isSubmitting) (if (createMode) "CREATING SERVER…" else "SAVING CHANGES…") else (if (createMode) "CREATE SERVER" else "SAVE CHANGES"),
+                        text = if (isSubmitting) (if (creating) "CREATING SERVER…" else "SAVING CHANGES…") else (if (creating) "CREATE SERVER" else "SAVE CHANGES"),
                         onClick = {
                             if (!isSubmitting && isFormValid) {
                                 isSubmitting = true
@@ -1002,6 +1012,7 @@ fun WorldSetupScreen(
                 scope.launch {
                     versionSheetState.hide()
                     showVersionDialog = false
+                    resumeSetupAfterVersion = false
                     if (tour?.currentStep?.key in listOf(
                         PocketTours.STEP_SHEET_SERVER_TYPES,
                         PocketTours.STEP_SHEET_VERSION,
@@ -1021,6 +1032,7 @@ fun WorldSetupScreen(
                     scope.launch {
                         versionSheetState.hide()
                         showVersionDialog = false
+                        resumeSetupAfterVersion = false
                         if (tour?.currentStep?.key in listOf(
                             PocketTours.STEP_SHEET_SERVER_TYPES,
                             PocketTours.STEP_SHEET_VERSION,
@@ -1051,6 +1063,14 @@ fun WorldSetupScreen(
                             )
                         ) {
                             tour?.advanceTo(PocketTours.STEP_CREATE_GAMEMODE)
+                        }
+                        if (resumeSetupAfterVersion) {
+                            resumeSetupAfterVersion = false
+                            if (!isSubmitting) {
+                                isSubmitting = true
+                                runCatching { finishSetup() }.onFailure { onMessage(it.message ?: "An error occurred.") }
+                                isSubmitting = false
+                            }
                         }
                     }
                 },

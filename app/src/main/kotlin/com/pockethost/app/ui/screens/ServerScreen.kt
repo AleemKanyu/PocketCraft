@@ -208,6 +208,9 @@ fun ServerScreen(
     var showServerDetailsPage by remember { mutableStateOf(false) }
     var showWorldMapPage by remember { mutableStateOf(false) }
     var worldSetupCreateMode by remember { mutableStateOf(false) }
+    // The very first server: the default world is set up in place, but the screen reads as
+    // "Create Server" and runs the creation guide.
+    var worldSetupFirstSetup by remember { mutableStateOf(false) }
     var showSetupLoading by remember { mutableStateOf(false) }
     var setupLoadingProgress by remember { mutableStateOf(0f) }
     var settingsInitialActiveTab by remember { mutableStateOf<Int?>(null) }
@@ -244,8 +247,9 @@ fun ServerScreen(
         navigateToTab(tab)
     }
 
-    fun openWorldSetup(createMode: Boolean) {
+    fun openWorldSetup(createMode: Boolean, firstSetup: Boolean = false) {
         worldSetupCreateMode = createMode
+        worldSetupFirstSetup = firstSetup
         showWorldSetupPage = false
         showSetupLoading = true
     }
@@ -253,8 +257,11 @@ fun ServerScreen(
     LaunchedEffect(Unit) {
         val prefs = AppPreferences(context)
         if (prefs.openWorldSetupNextLaunch) {
-            openWorldSetup(createMode = false)
+            // Straight out of onboarding: this is the first server, so present it as one.
+            val firstSetup = !AppPreferencesStore.isInitialWorldSetupShownFlow(context).first()
+            openWorldSetup(createMode = false, firstSetup = firstSetup)
             prefs.openWorldSetupNextLaunch = false
+            if (firstSetup) AppPreferencesStore.setInitialWorldSetupShown(context, true)
         }
     }
 
@@ -262,7 +269,7 @@ fun ServerScreen(
         if (!stateHolder.activeWorldNeedsSetup) return@LaunchedEffect
         val alreadyShown = AppPreferencesStore.isInitialWorldSetupShownFlow(context).first()
         if (!alreadyShown) {
-            openWorldSetup(createMode = false)
+            openWorldSetup(createMode = false, firstSetup = true)
             AppPreferencesStore.setInitialWorldSetupShown(context, true)
         }
     }
@@ -405,6 +412,7 @@ fun ServerScreen(
                         showWorldSetupPage -> WorldSetupScreen(
                             stateHolder = stateHolder,
                             createMode = worldSetupCreateMode,
+                            firstSetup = worldSetupFirstSetup,
                             onVersionSelected = onVersionSelected,
                             onBack = {
                                 showWorldSetupPage = false
