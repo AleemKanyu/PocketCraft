@@ -26,3 +26,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "PocketCraft"
 include(":app")
+include(":crossplay_pack")

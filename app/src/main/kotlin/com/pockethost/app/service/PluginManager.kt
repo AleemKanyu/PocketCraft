@@ -943,6 +943,14 @@ object PluginManager {
         ).forEach { (jar, projectId) ->
             dropCorruptJar(jar)
             if (jar.exists() && jar.length() >= 500_000L) return@forEach
+            // The Play build carries these in its crossplay asset pack; use that copy when present.
+            val bundled = runCatching {
+                context.assets.open("plugins/${jar.name}").use { input ->
+                    jar.outputStream().use { output -> input.copyTo(output) }
+                }
+                jar.length() >= 500_000L
+            }.getOrDefault(false)
+            if (bundled) return@forEach
             val fallbackUrl = "https://api.spiget.org/v2/resources/19254/download".takeIf { projectId == "viaversion" }
             val url = fetchModrinthPluginDownloadUrl(context, projectId) ?: fallbackUrl ?: return@forEach
             runCatching {

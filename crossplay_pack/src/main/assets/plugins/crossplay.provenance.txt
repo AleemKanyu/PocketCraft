@@ -1,0 +1,4 @@
+Geyser-Spigot.jar: geyser 2.11.3 build 1251, sha256 0bd00484f688c49e45f84f7c8bf9326f52d48a4c697d72a28526f2fe3f55dc36, from download.geysermc.org
+floodgate-spigot.jar: floodgate 2.2.5 build 141, sha256 21570aff9ce17d6983928e8552777760e1ede5050026b04c686b0ae112e6fd7e, from download.geysermc.org
+ViaVersion.jar: viaversion 5.12.2-SNAPSHOT+1104, sha512 07c985b403dfcc044a789873617c1fc2..., from modrinth.com
+ViaBackwards.jar: viabackwards 5.12.2-SNAPSHOT+658, sha512 cfd06800d0e6aa07b21ad09ce9fcdef7..., from modrinth.com

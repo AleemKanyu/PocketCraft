@@ -124,6 +124,8 @@ val fastReleaseBuild = providers.gradleProperty("pocketcraftFastRelease")
 android {
     namespace = "com.pockethost.app"
     compileSdk = 36
+    // Crossplay plugins, delivered by Google Play with the app bundle. See crossplay_pack/.
+    assetPacks += listOf(":crossplay_pack")
 
     defaultConfig {
         applicationId = "com.pockethost.app"

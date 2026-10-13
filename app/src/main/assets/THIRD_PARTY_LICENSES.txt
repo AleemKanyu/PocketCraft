@@ -182,3 +182,16 @@ runtime. The complete corresponding source for the bundled build is available
 at the links above; on request PocketHost will also provide the matching
 corresponding-source archive.
 Credit: pop4959 and the Chunky contributors.
+
+---
+
+ViaVersion and ViaBackwards (ViaVersion team)
+Bundled in the Google Play build's crossplay asset pack as ViaVersion.jar and
+ViaBackwards.jar, installed into plugins/ of worlds with Bedrock crossplay.
+Source: https://github.com/ViaVersion/ViaVersion and
+https://github.com/ViaVersion/ViaBackwards
+License: GPL-3.0 (https://www.gnu.org/licenses/gpl-3.0.html)
+PocketHost ships the unmodified official builds published on Modrinth
+(https://modrinth.com/plugin/viaversion, https://modrinth.com/plugin/viabackwards).
+The exact builds are listed in assets/plugins/crossplay.provenance.txt; the
+complete corresponding source is available at the links above.
