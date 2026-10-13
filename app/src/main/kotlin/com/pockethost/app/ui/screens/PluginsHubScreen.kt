@@ -219,6 +219,12 @@ fun PluginsHubScreen(
     }
 
     fun performDirectInstall(remote: PluginManager.RemoteCatalogItem) {
+        // The Play build never downloads a plugin or mod itself: it hands over to the
+        // browser sheet, where the user downloads the file and then picks it.
+        if (!com.pockethost.app.config.DownloadPolicy.inAppCodeDownloads) {
+            pendingRemoteInstall = remote
+            return
+        }
         scope.launch {
             isUploading = true
             uploadProgress = 0
@@ -834,6 +840,9 @@ fun PluginsHubScreen(
             isLoadingDependencies = false
         }
 
+        // The Play build stops here: the browser sheet below takes over.
+        if (!com.pockethost.app.config.DownloadPolicy.inAppCodeDownloads) return@LaunchedEffect
+
         // Trigger the install
         isDownloading = true
         downloadingCatalogKey = item.catalogKey
@@ -870,6 +879,67 @@ fun PluginsHubScreen(
         }.onFailure { err ->
             onMessage("Install failed: ${err.message}")
         }
+    }
+
+    val browserInstallItem = pendingRemoteInstall
+    if (browserInstallItem != null && !com.pockethost.app.config.DownloadPolicy.inAppCodeDownloads) {
+        val itemType = currentTab().type
+        val itemSlug = browserInstallItem.slug.ifBlank { browserInstallItem.projectId }
+        val itemPageUrl = when (browserInstallItem.source.lowercase(java.util.Locale.US)) {
+            "hangar" -> "https://hangar.papermc.io/$itemSlug"
+            else -> when (itemType) {
+                PluginManager.ContentType.MODS -> "https://modrinth.com/mod/$itemSlug"
+                PluginManager.ContentType.RESOURCE_PACKS -> "https://modrinth.com/resourcepack/$itemSlug"
+                PluginManager.ContentType.PLUGINS -> "https://modrinth.com/plugin/$itemSlug"
+            }
+        }
+        val mimeTypes = when (itemType) {
+            PluginManager.ContentType.RESOURCE_PACKS -> arrayOf("application/zip", "application/octet-stream", "*/*")
+            else -> arrayOf("application/java-archive", "application/octet-stream", "*/*")
+        }
+        val installPicked: (android.net.Uri, String, () -> Unit) -> Unit = { uri, title, onDone ->
+            scope.launch {
+                isUploading = true
+                uploadProgress = 0
+                val result = PluginManager.installFromUri(
+                    context = context,
+                    uri = uri,
+                    worldName = stateHolder.activeWorld,
+                    type = itemType,
+                    runtimeKey = runtimeKey,
+                    onProgress = { uploadProgress = it }
+                )
+                isUploading = false
+                result.onSuccess {
+                    onMessage("Installed $title.")
+                    refreshDownloadedItems()
+                    onDone()
+                }.onFailure { err ->
+                    onMessage("Could not install $title: ${err.message}")
+                }
+            }
+        }
+
+        com.pockethost.app.ui.components.PluginInstallBottomSheet(
+            itemName = browserInstallItem.title,
+            itemPageUrl = itemPageUrl,
+            pickerMimeTypes = mimeTypes,
+            onDismiss = {
+                pendingRemoteInstall = null
+                pendingUpdateReplaces = null
+            },
+            onFileSelected = { uri ->
+                installPicked(uri, browserInstallItem.title) {
+                    pendingRemoteInstall = null
+                    pendingUpdateReplaces = null
+                }
+            },
+            dependencies = dependenciesList,
+            isLoadingDependencies = isLoadingDependencies,
+            contentTypeLabel = currentTab().label(s),
+            worldName = stateHolder.activeWorld,
+            onDependencyFileSelected = { dep, uri, onComplete -> installPicked(uri, dep.title, onComplete) }
+        )
     }
 
     detailCard?.let { activeDetail ->

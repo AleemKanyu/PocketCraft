@@ -30,6 +30,7 @@ object InAppDownloader {
         targetFile: File,
         onProgress: (bytesDownloaded: Long, totalBytes: Long, percentage: Float) -> Unit = { _, _, _ -> }
     ): Result<File> = withContext(Dispatchers.IO) {
+        if (!com.pockethost.app.config.DownloadPolicy.inAppCodeDownloads) return@withContext Result.failure(com.pockethost.app.config.DownloadPolicy.Blocked())
         runCatching {
             targetFile.parentFile?.mkdirs()
             if (targetFile.exists()) {

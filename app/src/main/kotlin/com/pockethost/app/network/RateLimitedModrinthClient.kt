@@ -256,6 +256,7 @@ class RateLimitedModrinthClient(context: Context) {
     }
 
     suspend fun downloadMod(projectId: String, versionNumber: String): Result<ByteArray> = withContext(Dispatchers.IO) {
+        if (!com.pockethost.app.config.DownloadPolicy.inAppCodeDownloads) return@withContext Result.failure(com.pockethost.app.config.DownloadPolicy.Blocked())
         try {
             val versionUrl = "$baseUrl/project/$projectId/version"
             val request = Request.Builder()

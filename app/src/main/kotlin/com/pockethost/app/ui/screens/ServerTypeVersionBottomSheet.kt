@@ -89,6 +89,7 @@ fun ServerTypeVersionBottomSheet(
     var selectedModpackId by remember { mutableStateOf<String?>(null) }
     var selectedModpackPageUrl by remember { mutableStateOf<String?>(null) }
     var versionToDelete by remember { mutableStateOf<String?>(null) }
+    var versionToImport by remember { mutableStateOf<String?>(null) }
     var downloadError by remember { mutableStateOf<String?>(null) }
     var downloadingVersion by remember { mutableStateOf<String?>(null) }
     var downloadProgressFraction by remember { mutableFloatStateOf(0f) }
@@ -493,7 +494,14 @@ fun ServerTypeVersionBottomSheet(
                             text = buttonText,
                             onClick = {
                                 if (selectedVersionNeedsImport) {
-                                    selectedVersion?.let { startInlineDownload(it) }
+                                    // Google Play does not allow an app to fetch code it then runs, so the
+                                    // Play build sends the user to the official page in their browser and
+                                    // imports the file they pick. The side-loaded build downloads in place.
+                                    if (com.pockethost.app.BuildConfig.IS_EXTERNAL_BUILD) {
+                                        selectedVersion?.let { startInlineDownload(it) }
+                                    } else {
+                                        versionToImport = selectedVersion
+                                    }
                                 } else {
                                     if (tour?.runningTour == TourId.CREATE_SERVER) {
                                         tour?.advanceTo(PocketTours.STEP_CREATE_GAMEMODE)
@@ -524,6 +532,41 @@ fun ServerTypeVersionBottomSheet(
                 }
             )
         }
+    }
+
+    versionToImport?.let { importVersion ->
+        com.pockethost.app.ui.components.ServerJarPickerBottomSheet(
+            serverType = selectedType,
+            version = importVersion,
+            onDismiss = { versionToImport = null },
+            onJarSelected = { uri ->
+                versionToImport = null
+                scope.launch {
+                    val importResult = withContext(Dispatchers.IO) {
+                        val targetFile = ServerFileManager.getServerJarFile(
+                            context = context.applicationContext,
+                            gameVersion = importVersion,
+                            serverType = selectedType
+                        )
+                        com.pockethost.app.server.ServerJarImporter.importServerJar(
+                            context = context.applicationContext,
+                            uri = uri,
+                            targetFile = targetFile,
+                            serverType = selectedType
+                        )
+                    }
+                    when (importResult) {
+                        is com.pockethost.app.server.ServerJarImporter.ImportResult.Success -> {
+                            viewModel.onServerJarImported(importVersion)
+                            viewModel.setSelectedVersion(importVersion)
+                            Toast.makeText(context, "${selectedType.displayName} $importVersion imported.", Toast.LENGTH_SHORT).show()
+                        }
+                        is com.pockethost.app.server.ServerJarImporter.ImportResult.Error ->
+                            Toast.makeText(context, importResult.message, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        )
     }
 
     if (versionToDelete != null) {

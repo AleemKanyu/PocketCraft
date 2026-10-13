@@ -798,6 +798,8 @@ object PluginManager {
         mcVersion: String,
         onOutput: ((String) -> Unit)? = null
     ): File? {
+        // Fabric API is a mod JAR like any other: the Play build leaves it to the user to import.
+        if (!com.pockethost.app.config.DownloadPolicy.inAppCodeDownloads) return null
         val cleanVersion = com.pockethost.app.server.CarpetModManager.cleanMcVersion(mcVersion)
         if (cleanVersion.isBlank()) return null
 
@@ -1056,6 +1058,7 @@ object PluginManager {
         minBytes: Long,
         expectedSha256: String? = null
     ): Boolean {
+        if (!com.pockethost.app.config.DownloadPolicy.inAppCodeDownloads) return false
         val tmp = File.createTempFile("${target.name}.", ".part", target.parentFile)
         try {
             val request = Request.Builder().url(url).header("User-Agent", userAgent()).build()
@@ -1646,6 +1649,7 @@ object PluginManager {
         runtimeKey: String = worldName,
         onProgress: (Int) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
+        if (!com.pockethost.app.config.DownloadPolicy.inAppCodeDownloads) return@withContext Result.failure(com.pockethost.app.config.DownloadPolicy.Blocked())
         try {
             val client = getHttpClient(context)
             val request = Request.Builder()
