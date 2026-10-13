@@ -16,6 +16,7 @@ class ServerPropertiesHelperTest {
     fun `ampersand colour codes become section sign codes`() {
         assertEquals("§aGreen §lBold", ServerPropertiesHelper.translateColorCodes("&aGreen &lBold"))
         assertEquals("Tom & Jerry &z", ServerPropertiesHelper.translateColorCodes("Tom & Jerry &z"))
+        assertEquals("Green Bold & more", ServerPropertiesHelper.stripColorCodes("&aGreen §lBold & more"))
     }
 
     @Test

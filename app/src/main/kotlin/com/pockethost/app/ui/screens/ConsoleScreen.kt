@@ -1636,7 +1636,7 @@ private fun ServerIdentityCard(
                                 text = if (stateHolder.serverDescription.isBlank() || stateHolder.serverDescription.contains("Pocketcraft", ignoreCase = true) || stateHolder.serverDescription.contains("PocketCraft", ignoreCase = true)) {
                                     "Hosted on PocketHost"
                                 } else {
-                                    stateHolder.serverDescription
+                                    com.pockethost.app.service.ServerPropertiesHelper.stripColorCodes(stateHolder.serverDescription)
                                 },
                                 fontSize = 12.sp,
                                 lineHeight = 14.sp,

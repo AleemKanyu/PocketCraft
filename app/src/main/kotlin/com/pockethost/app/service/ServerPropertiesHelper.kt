@@ -28,6 +28,7 @@ object ServerPropertiesHelper {
         "pocketcraft-world-description."
     )
     private val AMPERSAND_COLOR_CODE = Regex("&(?=[0-9a-fk-orA-FK-OR])")
+    private val ANY_COLOR_CODE = Regex("[&\u00A7][0-9a-fk-orA-FK-OR]")
 
     fun getServerPropertiesFile(serverDir: File): File {
         return File(serverDir, "server.properties")
@@ -35,6 +36,9 @@ object ServerPropertiesHelper {
 
     /** Turns the "&a" style colour codes people type into the "§a" codes Minecraft reads. */
     fun translateColorCodes(text: String): String = AMPERSAND_COLOR_CODE.replace(text, "\u00A7")
+
+    /** Removes "&a" and "§a" style codes, for showing a description as plain text in the app. */
+    fun stripColorCodes(text: String): String = ANY_COLOR_CODE.replace(text, "")
 
     /**
      * Loads a properties file the way the Minecraft server does: UTF-8 first, ISO-8859-1 when

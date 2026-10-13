@@ -388,7 +388,11 @@ fun PocketHostApp(
         transitionTarget = Screen.SERVER
     }
 
-    LaunchedEffect(stateHolder, versionId, selectedServerType, bootstrapComplete) {
+    // On a fresh install no version is known yet. The first server is then created on the
+    // settings screen, which saves the version into the config only, so this has to run again
+    // when that happens or Start fails with "No server version is selected" until a relaunch.
+    val savedVersionWhileUnset = if (versionId.isBlank()) stateHolder.config.gameVersion else ""
+    LaunchedEffect(stateHolder, versionId, selectedServerType, bootstrapComplete, savedVersionWhileUnset) {
         if (!bootstrapComplete) return@LaunchedEffect
 
         if (stateHolder.activeWorld != lastProcessedWorld) {
