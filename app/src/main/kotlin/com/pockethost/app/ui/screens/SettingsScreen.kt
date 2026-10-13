@@ -846,6 +846,64 @@ fun SettingsScreen(
 
                 item {
                     AnimatedEntranceContainer(index = 8) {
+                        SettingsSection("GAME RULES", Icons.Default.Settings)
+                    }
+                }
+                item {
+                    AnimatedEntranceContainer(index = 8) {
+                        val rules = currentState.config.gameRules
+                        val setRules: (com.pockethost.app.data.model.GameRuleOptions) -> Unit = {
+                            currentState = currentState.copy(config = currentState.config.copy(gameRules = it))
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SettingsToggleRow(
+                                label = "Keep Inventory",
+                                description = "Players keep their items and XP when they die",
+                                checked = rules.keepInventory,
+                                onToggle = { setRules(rules.copy(keepInventory = it)) }
+                            )
+                            SettingsToggleRow(
+                                label = "One Player Sleep",
+                                description = "One sleeping player skips the night for everyone",
+                                checked = rules.onePlayerSleep,
+                                onToggle = { setRules(rules.copy(onePlayerSleep = it)) }
+                            )
+                            SettingsToggleRow(
+                                label = "Creeper & Mob Damage",
+                                description = "Creepers, endermen and other mobs can break blocks",
+                                checked = rules.mobGriefing,
+                                onToggle = { setRules(rules.copy(mobGriefing = it)) }
+                            )
+                            SettingsToggleRow(
+                                label = "Phantoms",
+                                description = "Phantoms attack players who have not slept",
+                                checked = rules.phantoms,
+                                onToggle = { setRules(rules.copy(phantoms = it)) }
+                            )
+                            SettingsToggleRow(
+                                label = "Fire Spread",
+                                description = "Fire spreads and burns builds",
+                                checked = rules.fireSpread,
+                                onToggle = { setRules(rules.copy(fireSpread = it)) }
+                            )
+                            SettingsToggleRow(
+                                label = "Day & Night Cycle",
+                                description = "Turn off to freeze the time of day",
+                                checked = rules.daylightCycle,
+                                onToggle = { setRules(rules.copy(daylightCycle = it)) }
+                            )
+                            SettingsToggleRow(
+                                label = "Weather Changes",
+                                description = "Turn off to keep the current weather",
+                                checked = rules.weatherCycle,
+                                onToggle = { setRules(rules.copy(weatherCycle = it)) }
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    AnimatedEntranceContainer(index = 8) {
                         SettingsSection("EXTRA SERVER OPTIONS", Icons.Default.Settings)
                     }
                 }

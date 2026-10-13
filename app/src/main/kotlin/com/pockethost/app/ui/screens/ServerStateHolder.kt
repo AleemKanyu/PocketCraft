@@ -2808,8 +2808,15 @@ class ServerStateHolder(
                 add("difficulty ${config.difficulty.lowercase()}")
                 add("defaultgamemode ${config.gameMode.lowercase()}")
                 add("gamemode ${config.gameMode.lowercase()} @a")
+                val gameVersion = config.gameVersion.ifBlank { versionId }
                 add("gamerule pvp ${config.pvp}")
-                add("gamerule doMobSpawning ${config.spawnMonsters}")
+                add("gamerule ${com.pockethost.app.data.model.GameRuleOptions.mobSpawningRule(gameVersion)} ${config.spawnMonsters}")
+                addAll(
+                    com.pockethost.app.data.model.GameRuleOptions.commandsFor(
+                        File(ServerFileManager.getServerDir(appContext, activeWorld.ifBlank { "world" }), "server.properties"),
+                        gameVersion
+                    )
+                )
                 add("save-all")
             }
         }

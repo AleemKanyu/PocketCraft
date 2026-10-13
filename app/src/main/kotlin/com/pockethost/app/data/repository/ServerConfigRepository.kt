@@ -328,6 +328,7 @@ class ServerConfigRepository @Inject constructor(
             joinMessageEnabled = true,
             joinMessageText = props["pocketcraft-join-message-text"] ?: POCKETCRAFT_JOIN_MESSAGE_TEXT,
             joinMessageUrl = props["pocketcraft-join-message-url"] ?: POCKETCRAFT_JOIN_MESSAGE_URL,
+            gameRules = com.pockethost.app.data.model.GameRuleOptions.readFrom(props),
             serverType = props["pocketcraft-server-type"]?.let { ServerType.fromString(it) }
                 ?: fallbackConfig?.serverType
                 ?: ServerType.fromString(com.pockethost.app.data.preferences.AppPreferences(context).selectedServerType),
