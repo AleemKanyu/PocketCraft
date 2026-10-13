@@ -56,6 +56,8 @@ service cloud.firestore {
           || (("deviceId" in resource.data) && resource.data.deviceId == request.resource.data.ownerId)
           // Legacy/orphaned document with no owner
           || (!("ownerId" in resource.data) || resource.data.ownerId == null || resource.data.ownerId == "")
+          // The owner signed out and the one-day hold has run out, so anyone may take it
+          || (("releaseAt" in resource.data) && resource.data.releaseAt is timestamp && resource.data.releaseAt <= request.time)
         );
       allow delete: if (
           (signedIn() && (

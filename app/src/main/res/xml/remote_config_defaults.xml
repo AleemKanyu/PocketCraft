@@ -52,6 +52,12 @@
         <value>false</value>
     </entry>
 
+    <!-- playit.gg "International" route. Off until playit.gg gives written consent. -->
+    <entry>
+        <key>feature_playit_route_enabled</key>
+        <value>false</value>
+    </entry>
+
     <!-- Ads. ads_enabled (Play Store build) and ads_enabled_external (side-loaded
          build) are the master switches and ship off; each ads_spot_* key
          turns one placement on or off once the master switch is on. -->
@@ -97,6 +103,10 @@
     </entry>
     <entry>
         <key>ads_spot_rewarded_support</key>
+        <value>true</value>
+    </entry>
+    <entry>
+        <key>ads_spot_rewarded_pregen</key>
         <value>true</value>
     </entry>
     <entry>

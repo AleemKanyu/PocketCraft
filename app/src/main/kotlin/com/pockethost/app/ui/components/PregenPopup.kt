@@ -52,7 +52,14 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.os.SystemClock
+import androidx.compose.ui.platform.LocalContext
+import com.pockethost.app.ads.AdManager
+import com.pockethost.app.ads.AdPlacement
+import com.pockethost.app.ads.AdsConfig
 import com.pockethost.app.ui.screens.ServerStateHolder
 import com.pockethost.app.ui.theme.PocketColors
 import com.pockethost.app.ui.theme.Monocraft
@@ -209,11 +216,44 @@ private fun Setup(stateHolder: ServerStateHolder) {
 
     stateHolder.pregenMessage?.let { Hint(it, warning = true) }
 
+    // On builds with ads, each run starts with a rewarded ad. The side-loaded build has
+    // none, so there the button starts the run straight away.
+    val context = LocalContext.current
+    val adGated = AdsConfig.isEnabled(context, AdPlacement.REWARDED_PREGEN)
+    var adNotice by remember { mutableStateOf<String?>(null) }
+    var adMisses by remember { mutableIntStateOf(0) }
+    val start = { stateHolder.startPregen(PREGEN_SIZES[sizeIndex].radiusBlocks, PREGEN_LIMITS[limitIndex].second) }
+
+    adNotice?.let { Hint(it, warning = true) }
     DuoButton(
-        text = "Start",
+        text = if (adGated) "Watch Ad & Start" else "Start",
         enabled = stateHolder.isRunning,
-        onClick = { stateHolder.startPregen(PREGEN_SIZES[sizeIndex].radiusBlocks, PREGEN_LIMITS[limitIndex].second) }
+        onClick = {
+            val activity = context.findActivity()
+            if (!adGated || activity == null) {
+                start()
+            } else {
+                AdManager.showRewardedAd(
+                    activity = activity,
+                    onEarnedReward = {
+                        adNotice = null
+                        start()
+                    },
+                    onNotReady = {
+                        // No ad to show is not the user's fault: ask once, then let them through.
+                        adMisses++
+                        if (adMisses >= 2) {
+                            adNotice = null
+                            start()
+                        } else {
+                            adNotice = "The ad is still loading. Tap again in a few seconds."
+                        }
+                    }
+                )
+            }
+        }
     )
+    if (adGated) Hint("A short ad keeps PocketHost free. Watch it to the end to start.")
     if (!stateHolder.isRunning) Hint("Start the server first.")
 }
 
@@ -457,6 +497,12 @@ private fun Hint(text: String, warning: Boolean = false) {
         lineHeight = 17.sp,
         color = if (warning) PocketColors.Warning else PocketColors.TextSecondary
     )
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 private fun clock(totalSeconds: Long): String {

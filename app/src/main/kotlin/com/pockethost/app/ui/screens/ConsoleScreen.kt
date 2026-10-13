@@ -451,7 +451,7 @@ fun ConsoleScreen(
             replayGuidedTourRequested -> {
                 delay(250)
                 if (uiState == ServerUiState.RUNNING) {
-                    controller.start(TourId.SERVER_LIVE, PocketTours.serverLive())
+                    controller.start(TourId.SERVER_LIVE, PocketTours.serverLive(pregenAvailable = stateHolder.pregenSupported))
                 } else {
                     controller.start(
                         TourId.FIRST_SERVER,
@@ -476,7 +476,7 @@ fun ConsoleScreen(
 
             !checklistPrefs.serverLiveTourShown && uiState == ServerUiState.RUNNING -> {
                 delay(1400) // the join address card slides in once the relay is ready
-                controller.start(TourId.SERVER_LIVE, PocketTours.serverLive()) { _, _ ->
+                controller.start(TourId.SERVER_LIVE, PocketTours.serverLive(pregenAvailable = stateHolder.pregenSupported)) { _, _ ->
                     checklistPrefs.serverLiveTourShown = true
                 }
             }
@@ -2237,7 +2237,7 @@ private fun ServerIdentityCard(
                                 text = if (stateHolder.pregenActive) "Pre-generating" else "Pre-generate",
                                 icon = Icons.Default.Public,
                                 onClick = { stateHolder.openPregenSheet() },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).tourAnchor(TourAnchor.PREGEN_BUTTON),
                                 style = PremiumHomeButtonStyle.Secondary
                             )
                         }

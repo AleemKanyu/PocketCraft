@@ -125,7 +125,7 @@ object PocketTours {
     )
 
     /** Shown once, the first time a server actually reaches Online. */
-    fun serverLive(): List<TourStep> = listOf(
+    fun serverLive(pregenAvailable: Boolean = false): List<TourStep> = listOfNotNull(
         TourStep(
             key = "join_card",
             anchor = TourAnchor.JOIN_CARD,
@@ -136,6 +136,17 @@ object PocketTours {
             spotlightPadding = 8.dp,
             spotlightCornerRadius = 24.dp
         ),
+        // The button only exists on servers that can load the world builder.
+        TourStep(
+            key = "pregenerate",
+            anchor = TourAnchor.PREGEN_BUTTON,
+            title = "Pre-generate your world",
+            body = "Tap Pre-generate to build the chunks around spawn ahead of time. Players " +
+                "then explore without waiting on new terrain, so the server feels smoother.",
+            advance = TourAdvance.Button("Next"),
+            spotlightPadding = 4.dp,
+            spotlightCornerRadius = 18.dp
+        ).takeIf { pregenAvailable },
         TourStep(
             key = "players_tab",
             anchor = TourAnchor.NAV_PLAYERS,
@@ -151,9 +162,19 @@ object PocketTours {
             title = "Add mods and plugins",
             body = "Install plugins or mods from the Mods tab, then restart the server so it " +
                 "loads them.",
-            advance = TourAdvance.Button("Done"),
+            advance = TourAdvance.Button("Next"),
             spotlightPadding = 4.dp,
             spotlightCornerRadius = 16.dp
+        ),
+        TourStep(
+            key = "custom_ip_later",
+            anchor = TourAnchor.JOIN_CARD,
+            title = "Want your own address?",
+            body = "Your server starts on a standard address. You can pick a custom IP any " +
+                "time: tap the pencil beside the internet address.",
+            advance = TourAdvance.Button("Done"),
+            spotlightPadding = 8.dp,
+            spotlightCornerRadius = 24.dp
         )
     )
 

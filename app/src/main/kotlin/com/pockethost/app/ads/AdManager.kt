@@ -162,7 +162,11 @@ object AdManager {
                         if (_ready.value) return@withContext
                         Log.d(TAG, "MobileAds initialized (testAds=${BuildConfig.ADMOB_USE_TEST_ADS})")
                         _ready.value = true
-                        if (AdsConfig.isEnabled(context, AdPlacement.REWARDED_SUPPORT)) preloadRewardedAd(context)
+                        if (AdsConfig.isEnabled(context, AdPlacement.REWARDED_SUPPORT) ||
+                            AdsConfig.isEnabled(context, AdPlacement.REWARDED_PREGEN)
+                        ) {
+                            preloadRewardedAd(context)
+                        }
                         if (AdsConfig.isEnabled(context, AdPlacement.STOP_INTERSTITIAL)) preloadInterstitialAd(context)
                     }
                 }

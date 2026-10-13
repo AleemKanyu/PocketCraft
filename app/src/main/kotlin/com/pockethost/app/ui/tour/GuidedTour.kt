@@ -34,6 +34,7 @@ enum class TourAnchor {
     SERVER_CARD,
     START_BUTTON,
     JOIN_CARD,
+    PREGEN_BUTTON,
     NAV_PLAYERS,
     NAV_STORAGE,
     NAV_MODS,

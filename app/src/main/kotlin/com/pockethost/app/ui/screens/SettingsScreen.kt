@@ -825,8 +825,13 @@ fun SettingsScreen(
                 item {
                     AnimatedEntranceContainer(index = 8) {
                         val relayRegions by RemoteConfigManager.relayRegions.collectAsState(initial = RelayServers.defaultRegions())
-                        val relayOptions = relayRegions.associate { it.host to it.label } +
-                            (RelayServers.INTERNATIONAL_OPTION to "playit.gg (${RelayServers.INTERNATIONAL_LABEL})")
+                        val relayOptions = relayRegions.associate { it.host to it.label }.let { regions ->
+                            if (RelayServers.internationalRouteAvailable()) {
+                                regions + (RelayServers.INTERNATIONAL_OPTION to "playit.gg (${RelayServers.INTERNATIONAL_LABEL})")
+                            } else {
+                                regions
+                            }
+                        }
                         SettingsDropdownRow(
                             icon = Icons.Default.Router,
                             label = "Relay Server",

@@ -24,6 +24,19 @@ object RelayServers {
     const val INTERNATIONAL_OPTION = "playit.gg"
     const val INTERNATIONAL_LABEL = "International"
 
+    /**
+     * Whether the playit.gg route is offered. playit's terms need their written consent
+     * before it ships inside another app, so release builds keep it off until the
+     * `feature_playit_route_enabled` Remote Config flag is turned on. Debug builds always
+     * show it, for testing.
+     */
+    fun internationalRouteAvailable(): Boolean =
+        com.pockethost.app.BuildConfig.DEBUG ||
+            runCatching {
+                com.google.firebase.remoteconfig.FirebaseRemoteConfig.getInstance()
+                    .getBoolean("feature_playit_route_enabled")
+            }.getOrDefault(false)
+
     val MUMBAI = RelayServerConfig(
         host = "mine.pocketcraft.online",
         displayName = "South Asia",

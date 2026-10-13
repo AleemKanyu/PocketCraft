@@ -187,7 +187,40 @@ object AccountManager {
             }
     }
 
+    /**
+     * Signs out. First marks the user's custom IP to be freed one day from now: that has
+     * to be sent while still signed in, since only the owner may change the record.
+     * Signing back in and opening the Custom IP card cancels it. Best effort: offline,
+     * nothing is marked.
+     */
     fun signOut(context: Context, onComplete: () -> Unit) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        if (uid == null) {
+            finishSignOut(context, onComplete)
+            return
+        }
+        // Give the release mark a moment to go out under this account, but never keep
+        // the user waiting on the network to sign out.
+        val finished = java.util.concurrent.atomic.AtomicBoolean(false)
+        val finish = { if (finished.compareAndSet(false, true)) finishSignOut(context, onComplete) }
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        handler.postDelayed({ finish() }, 2_500L)
+        runCatching {
+            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            val releaseAt = com.google.firebase.Timestamp(
+                java.util.Date(System.currentTimeMillis() + com.pockethost.app.ui.components.SUBDOMAIN_HOLD_AFTER_SIGN_OUT_MS)
+            )
+            firestore.collection("subdomains").whereEqualTo("ownerId", uid).get()
+                .continueWithTask { task ->
+                    com.google.android.gms.tasks.Tasks.whenAll(
+                        task.result?.documents.orEmpty().map { it.reference.update("releaseAt", releaseAt) }
+                    )
+                }
+                .addOnCompleteListener { finish() }
+        }.onFailure { finish() }
+    }
+
+    private fun finishSignOut(context: Context, onComplete: () -> Unit) {
         // Firebase sign-out is purely local — invoke the callback immediately so the UI
         // never gets stuck waiting on a network call.
         FirebaseAuth.getInstance().signOut()

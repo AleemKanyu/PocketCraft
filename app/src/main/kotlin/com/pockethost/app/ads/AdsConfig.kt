@@ -15,6 +15,8 @@ enum class AdPlacement(val remoteKey: String) {
     IMPORT("ads_spot_import"),
     PLUGIN_LIST("ads_spot_plugin_list"),
     REWARDED_SUPPORT("ads_spot_rewarded_support"),
+    /** A rewarded ad before each world pre-generation run. */
+    REWARDED_PREGEN("ads_spot_rewarded_pregen"),
     STOP_INTERSTITIAL("ads_spot_stop_interstitial")
 }
 

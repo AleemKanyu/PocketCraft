@@ -923,6 +923,10 @@ class ServerStateHolder(
                         relayFallbackActive = intent.getBooleanExtra(ServerHostService.EXTRA_IS_FALLBACK, false)
                         if (!publicAddress.isNullOrBlank()) {
                             appendLog("[PocketHost] Internet address: $publicAddress")
+                            val addressPrefs = com.pockethost.app.data.preferences.AppPreferences(appContext)
+                            if (!usesPlayitTunnel && addressPrefs.customSubdomain.isNullOrBlank()) {
+                                appendLog("[PocketHost] Tip: you can set a custom IP any time. Tap the pencil beside the address.")
+                            }
                             if (relayFallbackActive) {
                                 appendLog("[PocketHost] NOTE: Selected relay is offline. Falling back to another relay for connection.")
                             }
@@ -3093,6 +3097,7 @@ class ServerStateHolder(
     private fun checkInternationalSuggestion() {
         scope.launch(Dispatchers.IO) {
             val prefs = com.pockethost.app.data.preferences.AppPreferences(appContext)
+            if (!com.pockethost.app.config.RelayServers.internationalRouteAvailable()) return@launch
             if (prefs.usesPlayitTunnel || prefs.internationalSuggestionDismissed) return@launch
             if (!com.pockethost.app.util.NetworkUtils.isOnline(appContext)) return@launch
             val best = com.pockethost.app.config.RelayServers.currentRegions()

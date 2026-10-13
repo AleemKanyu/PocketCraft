@@ -946,8 +946,18 @@ fun WorldSetupScreen(
                                 }
                             }
 
-                            // Custom IP Card
-                            IpManagerCard(entitlement, true, true, onMessage, onNavigateToSignUp)
+                            // A new server always starts on the standard address. A custom IP is
+                            // a choice for later, not something to settle while creating a world.
+                            if (creating) {
+                                Text(
+                                    text = "Custom IP: you can set one after the server is running, from the pencil beside its address.",
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                IpManagerCard(entitlement, true, true, onMessage, onNavigateToSignUp)
+                            }
 
                             // Import World Section
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

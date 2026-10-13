@@ -62,6 +62,13 @@ private enum class SubdomainRegion(val wireValue: String, val label: String) {
     EUROPE("eu", "Europe");
 }
 
+/** How long a custom IP stays reserved for its owner after they sign out. */
+internal const val SUBDOMAIN_HOLD_AFTER_SIGN_OUT_MS = 24L * 60 * 60 * 1000
+
+/** The wanted name belongs to someone else. [releaseAt] is set when it is on its way to being freed. */
+private class SubdomainInUseException(val name: String, val releaseAt: Timestamp?) :
+    IllegalStateException("\"$name\" is already in use. Try another name.")
+
 private data class UserSubdomainRecord(
     val subdomain: String,
     val region: String?
@@ -116,6 +123,7 @@ fun IpManagerContent(
     var saving by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
     var showPremiumBottomSheet by remember { mutableStateOf(false) }
+    var inUse by remember { mutableStateOf<SubdomainInUseException?>(null) }
 
     LaunchedEffect(currentUser?.uid, isPremiumUnlocked) {
         val ownerId = currentUser?.uid ?: android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "anonymous_device"
@@ -132,6 +140,12 @@ fun IpManagerContent(
                     subdomain = it.id,
                     region = it.getString("region")
                 )
+            }
+            // The owner is back, so cancel any release that signing out started.
+            if (doc != null && doc.contains("releaseAt")) {
+                runCatching {
+                    doc.reference.update("releaseAt", com.google.firebase.firestore.FieldValue.delete()).await()
+                }
             }
             if (existingRecord != null && isPremiumUnlocked) {
                 prefs.customSubdomain = existingRecord!!.subdomain
@@ -272,12 +286,63 @@ fun IpManagerContent(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = "You will need to restart your server for IP changes to take effect.",
+                        text = "You will need to restart your server for IP changes to take effect. " +
+                            "If you sign out, your IP stays yours for 1 day, then anyone can take it.",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 15.sp,
                         modifier = Modifier.weight(1f)
                     )
+                }
+
+                inUse?.let { taken ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(PocketColors.Danger.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                            .border(1.dp, PocketColors.Danger.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "\"${taken.name}\" is already in use.",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = PocketColors.Danger
+                        )
+                        Text(
+                            text = taken.releaseAt?.let {
+                                val freeOn = java.text.DateFormat.getDateTimeInstance(
+                                    java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT
+                                ).format(it.toDate())
+                                "Its owner signed out, so it becomes free on $freeOn. Try another name for now."
+                            } ?: "Try another name. If this one was yours on another account or phone, you can ask us to delete it.",
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        DuoButton(
+                            text = "REQUEST DELETION",
+                            onClick = {
+                                val intent = android.content.Intent(
+                                    android.content.Intent.ACTION_SENDTO,
+                                    android.net.Uri.parse("mailto:${com.pockethost.app.BuildConfig.SUPPORT_EMAIL}")
+                                ).apply {
+                                    putExtra(android.content.Intent.EXTRA_SUBJECT, "Delete custom IP: ${taken.name}")
+                                    putExtra(
+                                        android.content.Intent.EXTRA_TEXT,
+                                        "Please delete the custom IP \"${taken.name}\". It was mine on another account or phone.\n\n" +
+                                            "Account or device it was made on:\n"
+                                    )
+                                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                runCatching { context.startActivity(intent) }
+                                    .onFailure { onMessage("No email app found. Write to ${com.pockethost.app.BuildConfig.SUPPORT_EMAIL}") }
+                            },
+                            variant = DuoButtonVariant.Secondary,
+                            minHeight = 38.dp
+                        )
+                    }
                 }
 
                 Row(
@@ -341,6 +406,7 @@ fun IpManagerContent(
                                 return@DuoButton
                             }
                             saving = true
+                            inUse = null
                             scope.launch {
                                 runCatching {
                                     val detectedRegion = if (prefs.relayHost == "eu.pocketcraft.online") "eu" else "as"
@@ -358,7 +424,12 @@ fun IpManagerContent(
                                     isEditing = false
                                     onMessage("Custom IP saved: $normalized${regionDomainSuffix(detectedRegion)}")
                                 }.onFailure { error ->
-                                    onMessage(error.message ?: "Could not save IP.")
+                                    // The transaction wraps what it throws, so look down the cause chain.
+                                    val taken = generateSequence(error) { it.cause }
+                                        .filterIsInstance<SubdomainInUseException>()
+                                        .firstOrNull()
+                                    inUse = taken
+                                    onMessage(taken?.message ?: error.message ?: "Could not save IP.")
                                 }
                                 saving = false
                             }
@@ -443,8 +514,11 @@ private suspend fun saveSubdomain(
 
         if (existing.exists()) {
             val existingOwner = existing.getString("ownerId")
-            if (existingOwner != ownerId) {
-                throw IllegalStateException("That IP is already taken.")
+            val releaseAt = existing.getTimestamp("releaseAt")
+            // A name whose owner signed out more than a day ago is free to take again.
+            val released = releaseAt != null && releaseAt.toDate().time <= System.currentTimeMillis()
+            if (existingOwner != ownerId && !released) {
+                throw SubdomainInUseException(newSubdomain, releaseAt)
             }
         }
 
@@ -453,7 +527,7 @@ private suspend fun saveSubdomain(
             mapOf(
                 "serverId" to ownerId,
                 "ownerId" to ownerId,
-                "createdAt" to (existing.getTimestamp("createdAt") ?: Timestamp.now()),
+                "createdAt" to (existing.getTimestamp("createdAt")?.takeIf { existing.getString("ownerId") == ownerId } ?: Timestamp.now()),
                 "region" to newRegion
             )
         )

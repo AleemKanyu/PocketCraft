@@ -425,7 +425,7 @@ fun PocketTopBar(
                             relayMenuExpanded = false
                             onRelayHostChange(RelayServers.INTERNATIONAL_OPTION)
                         }
-                        PremiumDropdownItem(
+                        if (RelayServers.internationalRouteAvailable()) PremiumDropdownItem(
                             title = "playit.gg (${RelayServers.INTERNATIONAL_LABEL})",
                             subtitle = when {
                                 !playitLinked -> "For players far from these regions. Free, one-time setup"
