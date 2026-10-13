@@ -1933,6 +1933,21 @@ class ServerHostService : Service() {
         runCatching {
             ServerLauncher.sendCommand("gamerule spawnChunkRadius 1")
         }
+        // Game rules live in the world save, so re-send the ones chosen in Settings: a new
+        // or imported world then follows them from its first start.
+        runCatching {
+            val worldName = activeWorldNameOrDefault()
+            val propertiesFile = File(ServerFileManager.getServerDir(applicationContext, worldName), "server.properties")
+            val commands = com.pockethost.app.data.model.GameRuleOptions.commandsFor(propertiesFile, versionId)
+            if (ServerLauncher.hasActiveExternalProcess()) {
+                commands.forEach(ServerLauncher::sendCommand)
+            } else if (commands.isNotEmpty()) {
+                // The in-process server has no stdin to write to; it takes commands over RCON.
+                serviceScope.launch(Dispatchers.IO) {
+                    commands.forEach { sendRconCommandSuspended(it) }
+                }
+            }
+        }
 
         autoRecoverAttempts = 0
         autoRecoverWindowStartMs = 0L

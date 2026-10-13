@@ -62,5 +62,6 @@ data class ServerConfig(
     // Advanced versioning
     val serverType: ServerType = ServerType.PAPER,
     val gameVersion: String = "",
-    val customJarPath: String? = null
+    val customJarPath: String? = null,
+    val gameRules: GameRuleOptions = GameRuleOptions()
 )
