@@ -39,6 +39,34 @@ jobs:
           fi
           echo "server=$CLEAN_SERVER" >> $GITHUB_OUTPUT
 
+      # FTP-Deploy-Action removes folders by absolute path and assumes "./" is the FTP
+      # root. On this host the login directory is somewhere else, so deleting a folder
+      # failed with "550 No such file or directory" and left the deploy half done.
+      # Asking the server where we land after login gives the action the real path.
+      - name: Resolve FTP Server Directory
+        id: ftp-dir
+        env:
+          FTP_SERVER: ${{ steps.ftp-config.outputs.server }}
+          FTP_USERNAME: ${{ secrets.HOSTINGER_FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
+          CONFIGURED_DIR: ${{ secrets.HOSTINGER_SERVER_DIR }}
+        run: |
+          DIR="$CONFIGURED_DIR"
+          if [ -z "$DIR" ]; then
+            LOGIN_DIR=$(curl -sS -v --max-time 30 --list-only -o /dev/null \
+              --user "$FTP_USERNAME:$FTP_PASSWORD" "ftp://$FTP_SERVER/" 2>&1 \
+              | sed -n 's/^< 257 "\([^"]*\)".*/\1/p' | head -n 1)
+            if [ -n "$LOGIN_DIR" ]; then
+              DIR="${LOGIN_DIR%/}/"
+            else
+              DIR="./"
+            fi
+          fi
+          if [ "$DIR" != "./" ]; then
+            echo "::add-mask::$DIR"
+          fi
+          echo "dir=$DIR" >> $GITHUB_OUTPUT
+
       - name: Deploy to Hostinger via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -46,7 +74,7 @@ jobs:
           username: ${{ secrets.HOSTINGER_FTP_USERNAME }}
           password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
           local-dir: dist/
-          server-dir: ${{ secrets.HOSTINGER_SERVER_DIR || './' }}
+          server-dir: ${{ steps.ftp-dir.outputs.dir }}
           dangerous-clean-slate: false
 
       # Asks Bing (which also feeds ChatGPT search and Copilot) to recrawl the site.
