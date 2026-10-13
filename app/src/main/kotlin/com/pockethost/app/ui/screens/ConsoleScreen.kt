@@ -1128,13 +1128,37 @@ fun ConsoleScreen(
         }
     }
 
+    stateHolder.playitClaimUrl?.let { claimUrl ->
+        AlertDialog(
+            onDismissRequest = { stateHolder.dismissPlayitClaim() },
+            title = { Text("Link playit.gg", fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Text("Your server uses the playit.gg global network. Open playit.gg once and approve this phone. After that it connects by itself.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    runCatching {
+                        context.startActivity(
+                            android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(claimUrl))
+                        )
+                    }
+                }) { Text("Open playit.gg") }
+            },
+            dismissButton = {
+                TextButton(onClick = { stateHolder.dismissPlayitClaim() }) { Text("Later") }
+            }
+        )
+    }
+
     if (showBedrockHelpDialog) {
         val bedrockHelpSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val publicAddress = stateHolder.publicAddress?.takeIf { it.isNotBlank() }
         val hasPublicAddress = publicAddress != null
         
-        val publicHost = publicAddress?.substringBefore(":") ?: "Offline"
-        val publicPort = publicAddress?.substringAfter(":", "19132") ?: "19132"
+        // playit.gg hands Bedrock a separate address; the relay shares the Java host and port.
+        val bedrockAddress = stateHolder.playitBedrockAddress?.takeIf { hasPublicAddress } ?: publicAddress
+        val publicHost = bedrockAddress?.substringBefore(":") ?: "Offline"
+        val publicPort = bedrockAddress?.substringAfter(":", "19132") ?: "19132"
         
         val wifiHost = stateHolder.localIp
         

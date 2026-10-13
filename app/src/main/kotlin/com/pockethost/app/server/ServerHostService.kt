@@ -129,6 +129,7 @@ class ServerHostService : Service() {
     private var relayReconnectJob: Job? = null
     private var currentServerPort: Int = 25565
     private val relayManager by lazy { RelayManager(this) }
+    private val playitTunnelManager by lazy { com.pockethost.app.relay.PlayitTunnelManager(this) }
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var wifiLowLatencyLock: WifiManager.WifiLock? = null
@@ -1709,6 +1710,11 @@ class ServerHostService : Service() {
         resolveLanEndpoint(currentServerPort)?.let { endpoint ->
             sendEvent(versionId, EVENT_OUTPUT, "[PocketHost] LAN address: $endpoint")
         }
+        if (AppPreferences(applicationContext).usesPlayitTunnel) {
+            sendEvent(versionId, EVENT_TUNNEL_CONNECTING, "[PocketHost] Opening playit.gg global network...")
+            relayJob = serviceScope.launch(Dispatchers.IO) { runPlayitTunnel(versionId) }
+            return
+        }
         sendEvent(versionId, EVENT_TUNNEL_CONNECTING, "[PocketHost] Opening internet relay...")
 
         relayJob = serviceScope.launch(Dispatchers.IO) {
@@ -1841,6 +1847,103 @@ class ServerHostService : Service() {
         }
     }
 
+    /**
+     * Carries internet players over the user's own playit.gg account instead of a
+     * PocketCraft relay, for players who are far from every relay region.
+     */
+    private suspend fun runPlayitTunnel(versionId: String) = kotlinx.coroutines.coroutineScope {
+        val prefs = AppPreferences(applicationContext)
+        // The agent read below blocks, so cancelling this job has to kill the process.
+        val killer = launch {
+            try {
+                kotlinx.coroutines.awaitCancellation()
+            } finally {
+                playitTunnelManager.stop()
+            }
+        }
+        relayManager.disconnect()
+        var failedRuns = 0
+        try {
+            while (isActive) {
+                var failure: com.pockethost.app.relay.PlayitTunnelManager.Event.Failed? = null
+                var lastJavaAddress: String? = null
+                val bedrockPort = if (
+                    com.pockethost.app.service.PluginManager.isBedrockBridgeEnabled(applicationContext, activeWorldNameOrDefault())
+                ) 19132 else 0
+
+                val result = runCatching {
+                    playitTunnelManager.run(prefs.playitSecretKey, currentServerPort, bedrockPort) { event ->
+                        when (event) {
+                            is com.pockethost.app.relay.PlayitTunnelManager.Event.Claim -> {
+                                sendEvent(versionId, EVENT_OUTPUT, "[PocketHost] Link your playit.gg account to go online: ${event.url}")
+                                sendEvent(versionId, EVENT_TUNNEL_CLAIM, event.url)
+                            }
+                            is com.pockethost.app.relay.PlayitTunnelManager.Event.Secret -> {
+                                prefs.playitSecretKey = event.key
+                                sendEvent(versionId, EVENT_OUTPUT, "[PocketHost] playit.gg account linked.")
+                            }
+                            is com.pockethost.app.relay.PlayitTunnelManager.Event.Status ->
+                                android.util.Log.i("ServerHostService", "playit: ${event.message}")
+                            is com.pockethost.app.relay.PlayitTunnelManager.Event.Tunnels -> {
+                                val javaAddress = event.javaAddress
+                                if (javaAddress != null && javaAddress != lastJavaAddress) {
+                                    lastJavaAddress = javaAddress
+                                    failedRuns = 0
+                                    persistPublicAddress(applicationContext, javaAddress)
+                                    sendBroadcast(
+                                        Intent(ACTION_SERVER_EVENT).apply {
+                                            setPackage(packageName)
+                                            putExtra(EXTRA_VERSION_ID, currentVersionId ?: "unknown")
+                                            putExtra(EXTRA_EVENT_TYPE, EVENT_TUNNEL_CONNECTED)
+                                            putExtra(EXTRA_LINE, javaAddress)
+                                            putExtra(EXTRA_BEDROCK_ADDRESS, event.bedrockAddress.orEmpty())
+                                        }
+                                    )
+                                    event.bedrockAddress?.let {
+                                        sendEvent(versionId, EVENT_OUTPUT, "[PocketHost] Bedrock address: $it")
+                                    }
+                                }
+                            }
+                            is com.pockethost.app.relay.PlayitTunnelManager.Event.NeedsTunnel ->
+                                sendEvent(
+                                    versionId,
+                                    EVENT_TUNNEL_FAILED,
+                                    "Your playit.gg account has no Minecraft tunnel yet. Add one at ${event.url}, then retry."
+                                )
+                            is com.pockethost.app.relay.PlayitTunnelManager.Event.Warning ->
+                                sendEvent(versionId, EVENT_OUTPUT, "[PocketHost] playit.gg: ${event.code} (${event.message})")
+                            is com.pockethost.app.relay.PlayitTunnelManager.Event.Failed -> failure = event
+                        }
+                    }
+                }
+                if (!isActive) break
+
+                val reason = failure?.message ?: result.exceptionOrNull()?.message ?: "the tunnel closed"
+                android.util.Log.w("ServerHostService", "playit tunnel ended: ${failure?.code} $reason")
+                if (failure?.code == com.pockethost.app.relay.PlayitTunnelManager.SECRET_INVALID) {
+                    // The agent was removed on playit.gg. Drop the key so the next run links again.
+                    prefs.playitSecretKey = null
+                    sendEvent(versionId, EVENT_OUTPUT, "[PocketHost] playit.gg link is no longer valid. Linking again...")
+                    continue
+                }
+
+                failedRuns++
+                persistPublicAddress(applicationContext, "")
+                if (failedRuns == 1 || failedRuns % 5 == 0) {
+                    sendEvent(
+                        versionId,
+                        EVENT_TUNNEL_FAILED,
+                        "playit.gg network is unavailable ($reason). Players on the same Wi-Fi can still join with the LAN address."
+                    )
+                }
+                delay(if (failedRuns < 5) 5_000L else 30_000L)
+            }
+        } finally {
+            killer.cancel()
+            tunnelStarted.set(false)
+        }
+    }
+
     private fun reconnectRelay(
         skipUnregister: Boolean = false,
         requestedRelayHost: String? = null
@@ -1862,7 +1965,7 @@ class ServerHostService : Service() {
         persistPublicAddress(applicationContext, "")
         sendEvent(versionId, EVENT_TUNNEL_CONNECTING, "[PocketHost] Opening internet relay...")
         relayReconnectJob = serviceScope.launch(Dispatchers.IO) {
-            if (!skipUnregister) {
+            if (!skipUnregister && !AppPreferences(applicationContext).usesPlayitTunnel) {
                 runCatching {
                     kotlinx.coroutines.withTimeout(5_000L) {
                         relayManager.unregister()
@@ -2839,6 +2942,7 @@ class ServerHostService : Service() {
 
     private suspend fun ensureRelayTunnelHealthy(versionId: String) {
         if (!tunnelStarted.get()) return
+        if (AppPreferences(applicationContext).usesPlayitTunnel) return
         if (!isLocalServerPortOpen(currentServerPort)) return
 
         val health = relayManager.snapshotTunnelHealth()
@@ -3299,6 +3403,7 @@ class ServerHostService : Service() {
         const val EXTRA_LINE = "line"
 
         const val EXTRA_IS_FALLBACK = "is_fallback"
+        const val EXTRA_BEDROCK_ADDRESS = "bedrock_address"
 
         const val EVENT_OUTPUT = "output"
         const val EVENT_ERROR = "error"
@@ -3306,6 +3411,7 @@ class ServerHostService : Service() {
         const val EVENT_TUNNEL_CONNECTING = "tunnel_connecting"
         const val EVENT_TUNNEL_CONNECTED = "tunnel_connected"
         const val EVENT_TUNNEL_FAILED = "tunnel_failed"
+        const val EVENT_TUNNEL_CLAIM = "tunnel_claim"
         const val EVENT_SERVER_CRASHED = "server_crashed"
         const val EVENT_CHUNKS_LOADING = "chunks_loading"
         const val EVENT_CHUNKY_PROGRESS = "chunky_progress"

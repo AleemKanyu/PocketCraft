@@ -89,6 +89,9 @@ class AppPreferences(context: Context) {
         get() = getRelayPrefs(appContext)
 
     companion object {
+        const val TUNNEL_PROVIDER_RELAY = "relay"
+        const val TUNNEL_PROVIDER_PLAYIT = "playit"
+
         @Volatile
         private var prefsInstance: SharedPreferences? = null
         @Volatile
@@ -242,6 +245,32 @@ class AppPreferences(context: Context) {
             .putString("selected_relay_host", value)
             .putString("relay_host", value)
             .apply()
+
+    /** Which network carries internet players: PocketCraft's own relays or the user's playit.gg account. */
+    /**
+     * Kept in a file instead of SharedPreferences: the UI process writes it and the
+     * `:server` process reads it, and SharedPreferences are cached per process.
+     */
+    var tunnelProvider: String
+        get() = runCatching { tunnelProviderFile.readText().trim() }.getOrNull()
+            ?.takeIf { it == TUNNEL_PROVIDER_PLAYIT }
+            ?: TUNNEL_PROVIDER_RELAY
+        set(value) {
+            runCatching { tunnelProviderFile.writeText(value) }
+        }
+
+    private val tunnelProviderFile: java.io.File
+        get() = java.io.File(appContext.filesDir, "tunnel_provider")
+
+    val usesPlayitTunnel: Boolean
+        get() = tunnelProvider == TUNNEL_PROVIDER_PLAYIT
+
+    /** Agent key playit.gg hands out once the user approves the claim link. */
+    var playitSecretKey: String?
+        get() = prefs.getString("playit_secret_key", null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().apply {
+            if (value.isNullOrBlank()) remove("playit_secret_key") else putString("playit_secret_key", value)
+        }.apply()
 
     var cachedRelayServersJson: String?
         get() = prefs.getString("cached_relay_servers_json", null)

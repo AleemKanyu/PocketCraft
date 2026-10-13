@@ -825,7 +825,10 @@ fun SettingsScreen(
                 item {
                     AnimatedEntranceContainer(index = 8) {
                         val relayRegions by RemoteConfigManager.relayRegions.collectAsState(initial = RelayServers.defaultRegions())
-                        val relayOptions = relayRegions.associate { it.host to it.label }
+                        // Not a host: picking it hands internet access to the user's playit.gg account.
+                        val playitOption = "playit.gg"
+                        val relayOptions = relayRegions.associate { it.host to it.label } +
+                            (playitOption to "Global (playit.gg, test)")
                         SettingsDropdownRow(
                             icon = Icons.Default.Router,
                             label = "Relay Server",
@@ -836,8 +839,18 @@ fun SettingsScreen(
                             },
                             options = relayOptions.keys.toList(),
                             optionLabels = relayOptions,
-                            selected = stateHolder.relayHost,
-                            onSelected = { host -> scope.launch { onMessage(stateHolder.updateRelayHost(host)) } }
+                            selected = if (stateHolder.usesPlayitTunnel) playitOption else stateHolder.relayHost,
+                            onSelected = { host ->
+                                scope.launch {
+                                    onMessage(
+                                        if (host == playitOption) {
+                                            stateHolder.updateTunnelProvider(usePlayit = true)
+                                        } else {
+                                            stateHolder.updateRelayHost(host)
+                                        }
+                                    )
+                                }
+                            }
                         )
                     }
                 }

@@ -1,0 +1,29 @@
+[package]
+name = "pocket-tunnel"
+version = "0.1.0"
+edition = "2024"
+description = "PocketCraft's playit.gg tunnel agent, built on playit's open-source agent core"
+license = "BSD-2-Clause"
+publish = false
+
+[[bin]]
+name = "pocket-tunnel"
+path = "src/main.rs"
+
+[dependencies]
+# Pinned to playit-agent v1.0.12. Bump deliberately and rebuild with scripts/build_pocket_tunnel.sh.
+playit-agent-core = { git = "https://github.com/playit-cloud/playit-agent", rev = "633d650869a9cdb2c906efa9effc58aa8b7725a3" }
+playit-api-client = { git = "https://github.com/playit-cloud/playit-agent", rev = "633d650869a9cdb2c906efa9effc58aa8b7725a3" }
+
+tokio = { version = "1.48", features = ["full"] }
+serde_json = "1"
+rand = "0.9.2"
+hex = "0.4.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
