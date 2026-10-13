@@ -207,6 +207,13 @@ object ConsoleParser {
         )
     }
 
+    // "[Chunky] Task finished for world. Processed: 4225 chunks (100.00%), Total time: 0:10:01"
+    private val CHUNKY_DONE_REGEX = Regex("""\[Chunky\] Task finished for .*?\. Processed: (\d+) chunks""")
+
+    /** Chunks a finished Chunky task reports, or null when the line is not a finish line. */
+    fun parseChunkyFinishedChunks(line: String): Long? =
+        CHUNKY_DONE_REGEX.find(line)?.groupValues?.get(1)?.toLongOrNull()
+
     fun parseChunkyProgress(line: String): ChunkyProgress? {
         if (!line.contains("[Chunky] Task ")) return null
         parseChunkyUpdate(line)?.let { update ->

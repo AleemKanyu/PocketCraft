@@ -122,6 +122,13 @@ class ServerStateHolder(
 ) {
     companion object {
         const val DEFAULT_SERVER_DESCRIPTION = "Hosted on PocketHost"
+
+        /** Chunks in the square Chunky fills out to [radiusBlocks] from spawn, counting the centre chunk. */
+        fun pregenChunksWithin(radiusBlocks: Int): Int {
+            if (radiusBlocks <= 0) return 0
+            val side = 2 * ((radiusBlocks + 15) / 16) + 1
+            return side * side
+        }
         private const val INTERNATIONAL_SUGGESTION_PING_MS = 180L
         private const val POCKETCRAFT_JOIN_MESSAGE_TEXT =
             "hosted on PocketHost"
@@ -583,6 +590,8 @@ class ServerStateHolder(
     var pregenSkipFraction by mutableStateOf(0f)
         private set
     private var pregenRequestedRadius = 0
+    private val handledPregenFinishLines = mutableSetOf<String>()
+    private val handledPregenProgressLines = LinkedHashSet<String>()
     private var pregenRequestedAtMs = 0L
     private var pregenWatchJob: Job? = null
     private var pregenLimitJob: Job? = null
@@ -2957,6 +2966,8 @@ class ServerStateHolder(
 
     fun openPregenSheet() {
         pregenMessage = null
+        // A finish picked up from the console that this screen never started is not a result to show.
+        if (pregenFinished && pregenRequestedRadius == 0) resetPregen()
         pregenBuiltRadius = com.pockethost.app.data.preferences.AppPreferences(appContext).pregenBuiltRadius(pregenWorldName())
         pregenSheetVisible = true
     }
@@ -3045,6 +3056,11 @@ class ServerStateHolder(
 
     private fun handlePregenLine(line: String) {
         ConsoleParser.parseChunkyUpdate(line)?.let { update ->
+            // A progress line seen before is a console replay, not news.
+            if (!handledPregenProgressLines.add(line)) return
+            if (handledPregenProgressLines.size > 600) {
+                handledPregenProgressLines.iterator().let { it.next(); it.remove() }
+            }
             if (pregenStartedAtMs == null) pregenStartedAtMs = System.currentTimeMillis()
             pregenFinished = false
             pregenPaused = false
@@ -3061,9 +3077,15 @@ class ServerStateHolder(
         val askedJustNow = SystemClock.elapsedRealtime() - pregenRequestedAtMs < 15_000L
         when {
             line.contains("Task finished for") -> {
+                // The console replays recent lines when the app returns to the foreground (after
+                // an ad, for one), so an earlier run's finish line can arrive again. Take a finish
+                // only once, only for a run we started, and only if it covers that run's size.
+                val finishedChunks = ConsoleParser.parseChunkyFinishedChunks(line) ?: return
+                if (!pregenActive || !handledPregenFinishLines.add(line)) return
+                if (finishedChunks < pregenChunksWithin(pregenRequestedRadius) * 9L / 10) return
                 pregenLimitJob?.cancel()
-                pregenProgress = pregenProgress?.copy(percent = 100f, etaSeconds = 0)
-                    ?: PregenProgress(100f, 0, 0, 0f, SystemClock.elapsedRealtime())
+                pregenWatchJob?.cancel()
+                pregenProgress = PregenProgress(100f, finishedChunks, 0, 0f, SystemClock.elapsedRealtime())
                 pregenFinished = true
                 pregenPaused = false
                 if (pregenRequestedRadius > pregenBuiltRadius) {

@@ -71,12 +71,7 @@ private class PregenSize(val label: String, val radiusBlocks: Int) {
     val chunks: Int get() = chunksWithin(radiusBlocks)
 }
 
-/** Chunks in the square Chunky fills out to [radiusBlocks] from spawn, counting the centre chunk. */
-private fun chunksWithin(radiusBlocks: Int): Int {
-    if (radiusBlocks <= 0) return 0
-    val side = 2 * ((radiusBlocks + 15) / 16) + 1
-    return side * side
-}
+private fun chunksWithin(radiusBlocks: Int): Int = ServerStateHolder.pregenChunksWithin(radiusBlocks)
 
 private val PREGEN_SIZES = listOf(
     PregenSize("Small", 500),
