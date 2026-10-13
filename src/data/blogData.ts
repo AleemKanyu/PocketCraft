@@ -25,7 +25,7 @@ We are proud to announce that **PocketHost** is now fully integrated with Google
 
 When you mark PocketHost as a preferred source:
 - **Prioritized in Search & AI Overviews**: Whenever you ask Google about hosting Minecraft servers on mobile, fixing paper server lag, crossplay Geyser setups, or port forwarding workarounds, Google will highlight PocketHost's verified guides with a special **"Preferred" badge**.
-- **Top Stories & Release Alerts**: Immediate access to new PocketHost releases, performance updates, and community world drops as soon as they are published.
+- **Top Stories & Release Alerts**: Immediate access to new PocketHost releases and performance updates as soon as they are published.
 - **Zero Hallucinations**: Direct links to authentic, tested instructions tailored specifically for running dedicated Java & Bedrock servers on Android devices.
 
 ---

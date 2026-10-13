@@ -13,7 +13,6 @@ const Roadmap = lazy(() => import("./pages/Roadmap"));
 const Community = lazy(() => import("./pages/Community"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
-const WorldDrop = lazy(() => import("./pages/WorldDrop"));
 const DeleteAccount = lazy(() => import("./pages/DeleteAccount"));
 
 const RouteLoadingFallback = () => (
@@ -32,7 +31,6 @@ export const pageRoutes = [
   { path: "/blog/:id", element: <BlogPost /> },
   { path: "/roadmap", element: <Roadmap /> },
   { path: "/community", element: <Community /> },
-  { path: "/world", element: <WorldDrop /> },
   { path: "/privacy", element: <Privacy /> },
   { path: "/terms", element: <Terms /> },
   { path: "/delete-account", element: <DeleteAccount /> },
