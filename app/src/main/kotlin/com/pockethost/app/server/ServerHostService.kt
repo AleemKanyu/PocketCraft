@@ -2060,12 +2060,21 @@ class ServerHostService : Service() {
             val worldName = activeWorldNameOrDefault()
             val propertiesFile = File(ServerFileManager.getServerDir(applicationContext, worldName), "server.properties")
             val commands = com.pockethost.app.data.model.GameRuleOptions.commandsFor(propertiesFile, versionId)
-            if (ServerLauncher.hasActiveExternalProcess()) {
-                commands.forEach(ServerLauncher::sendCommand)
-            } else if (commands.isNotEmpty()) {
-                // The in-process server has no stdin to write to; it takes commands over RCON.
+            if (commands.isNotEmpty()) {
+                // Over RCON: writing to the server's stdin does not reach its console here.
                 serviceScope.launch(Dispatchers.IO) {
-                    commands.forEach { sendRconCommandSuspended(it) }
+                    // RCON only opens once the world has finished loading, which on a phone can be
+                    // minutes after the port first answers. Keep trying until the first rule lands.
+                    var attempts = 0
+                    while (RconClient.sendCommand(commands.first()).isBlank()) {
+                        if (++attempts >= 120 || stopInProgress.get() || currentVersionId != versionId) {
+                            android.util.Log.w("ServerHostService", "Game rules not applied: server console never answered")
+                            return@launch
+                        }
+                        delay(3_000L)
+                    }
+                    commands.drop(1).forEach { RconClient.sendCommand(it) }
+                    android.util.Log.i("ServerHostService", "Applied ${commands.size} game rules")
                 }
             }
         }
