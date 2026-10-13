@@ -1,5 +1,6 @@
 package com.pockethost.app.ui.tour
 
+import com.pockethost.app.config.DownloadPolicy
 import androidx.compose.ui.unit.dp
 
 /**
@@ -31,11 +32,23 @@ object PocketTours {
     const val STEP_CREATE_SUBMIT = "create_submit"
 
     /**
+     * The Play build may not download server files itself, so there the tutorial
+     * describes the browser hand-off instead of an in-app download.
+     */
+    private val downloadStepBody: String
+        get() = if (DownloadPolicy.inAppCodeDownloads) {
+            "Tap Download to fetch and verify the server JAR directly in the app."
+        } else {
+            "Tap Download. A sheet opens with two steps: tap Download in Browser to get the " +
+                "official server file, then tap Select Downloaded File and pick it."
+        }
+
+    /**
      * Enhanced server setup walkthrough that guides the user from choosing a server
      * type, selecting version, downloading the jar directly in-app, starting the
      * server, accepting EULA, and exploring server settings while booting.
      */
-    fun firstServer(): List<TourStep> = listOf(
+    fun firstServer(): List<TourStep> = listOfNotNull(
         TourStep(
             key = STEP_WELCOME,
             anchor = null,
@@ -74,7 +87,7 @@ object PocketTours {
             key = STEP_SHEET_DOWNLOAD,
             anchor = TourAnchor.SHEET_CONFIRM_BUTTON,
             title = "Download Server File",
-            body = "Tap Download to fetch and verify the server JAR directly in the app.",
+            body = downloadStepBody,
             advance = TourAdvance.TapTarget("Tap to Download"),
             spotlightPadding = 6.dp,
             spotlightCornerRadius = 14.dp
@@ -87,7 +100,7 @@ object PocketTours {
             advance = TourAdvance.Info("Downloading…"),
             spotlightPadding = 6.dp,
             spotlightCornerRadius = 16.dp
-        ),
+        ).takeIf { DownloadPolicy.inAppCodeDownloads },
         TourStep(
             key = STEP_SHEET_CONFIRM,
             anchor = TourAnchor.SHEET_CONFIRM_BUTTON,
@@ -182,7 +195,7 @@ object PocketTours {
      * Guided walkthrough for creating and configuring a new Minecraft server world.
      * Streamlined for direct in-app download on the external APK flavor.
      */
-    fun createServer(): List<TourStep> = listOf(
+    fun createServer(): List<TourStep> = listOfNotNull(
         TourStep(
             key = STEP_CREATE_NAME,
             anchor = TourAnchor.CREATE_SERVER_NAME,
@@ -223,7 +236,7 @@ object PocketTours {
             key = STEP_SHEET_DOWNLOAD,
             anchor = TourAnchor.SHEET_CONFIRM_BUTTON,
             title = "Download Server",
-            body = "Tap Download to fetch and verify the server JAR directly in the app.",
+            body = downloadStepBody,
             advance = TourAdvance.TapTarget("Tap to Download"),
             spotlightPadding = 6.dp,
             spotlightCornerRadius = 14.dp
@@ -236,7 +249,7 @@ object PocketTours {
             advance = TourAdvance.Info("Downloading…"),
             spotlightPadding = 6.dp,
             spotlightCornerRadius = 16.dp
-        ),
+        ).takeIf { DownloadPolicy.inAppCodeDownloads },
         TourStep(
             key = STEP_SHEET_CONFIRM,
             anchor = TourAnchor.SHEET_CONFIRM_BUTTON,

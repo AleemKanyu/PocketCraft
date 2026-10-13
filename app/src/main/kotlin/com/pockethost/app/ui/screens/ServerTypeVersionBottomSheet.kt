@@ -501,6 +501,10 @@ fun ServerTypeVersionBottomSheet(
                                         selectedVersion?.let { startInlineDownload(it) }
                                     } else {
                                         versionToImport = selectedVersion
+                                        // The browser sheet explains itself; the tutorial waits on Confirm.
+                                        if (tour?.runningTour == TourId.CREATE_SERVER || tour?.runningTour == TourId.FIRST_SERVER) {
+                                            tour?.advanceTo(PocketTours.STEP_SHEET_CONFIRM)
+                                        }
                                     }
                                 } else {
                                     if (tour?.runningTour == TourId.CREATE_SERVER) {
@@ -538,7 +542,13 @@ fun ServerTypeVersionBottomSheet(
         com.pockethost.app.ui.components.ServerJarPickerBottomSheet(
             serverType = selectedType,
             version = importVersion,
-            onDismiss = { versionToImport = null },
+            onDismiss = {
+                versionToImport = null
+                // Closed without a file: point the tutorial back at Download.
+                if (tour?.currentStep?.key == PocketTours.STEP_SHEET_CONFIRM) {
+                    tour?.advanceTo(PocketTours.STEP_SHEET_DOWNLOAD)
+                }
+            },
             onJarSelected = { uri ->
                 versionToImport = null
                 scope.launch {
@@ -561,8 +571,12 @@ fun ServerTypeVersionBottomSheet(
                             viewModel.setSelectedVersion(importVersion)
                             Toast.makeText(context, "${selectedType.displayName} $importVersion imported.", Toast.LENGTH_SHORT).show()
                         }
-                        is com.pockethost.app.server.ServerJarImporter.ImportResult.Error ->
+                        is com.pockethost.app.server.ServerJarImporter.ImportResult.Error -> {
                             Toast.makeText(context, importResult.message, Toast.LENGTH_LONG).show()
+                            if (tour?.currentStep?.key == PocketTours.STEP_SHEET_CONFIRM) {
+                                tour?.advanceTo(PocketTours.STEP_SHEET_DOWNLOAD)
+                            }
+                        }
                     }
                 }
             }
