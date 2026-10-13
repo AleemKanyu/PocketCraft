@@ -61,8 +61,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private class PregenSize(val label: String, val radiusBlocks: Int) {
-    /** Chunks in the square Chunky fills: the side is twice the radius, 16 blocks per chunk. */
-    val chunks: Int get() = (radiusBlocks * 2 / 16).let { it * it }
+    val chunks: Int get() = chunksWithin(radiusBlocks)
+}
+
+/** Chunks in the square Chunky fills out to [radiusBlocks] from spawn, counting the centre chunk. */
+private fun chunksWithin(radiusBlocks: Int): Int {
+    if (radiusBlocks <= 0) return 0
+    val side = 2 * ((radiusBlocks + 15) / 16) + 1
+    return side * side
 }
 
 private val PREGEN_SIZES = listOf(
@@ -160,6 +166,13 @@ private fun Setup(stateHolder: ServerStateHolder) {
         return
     }
 
+    if (built > 0) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Stat("Chunks built so far", "%,d".format(chunksWithin(built)), Modifier.weight(1f))
+            Stat("Out from spawn", "$built blocks", Modifier.weight(1f))
+        }
+    }
+
     Label("How much")
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         PREGEN_SIZES.forEachIndexed { index, size ->
@@ -176,7 +189,7 @@ private fun Setup(stateHolder: ServerStateHolder) {
     Hint(
         when {
             picked.radiusBlocks <= built -> "This part is already built. Pick a bigger size to add more."
-            built > 0 -> "You already have $built blocks built. This continues from there out to ${picked.radiusBlocks} blocks."
+            built > 0 -> "This continues from what you have, out to ${picked.radiusBlocks} blocks."
             else -> "About ${"%,d".format(picked.chunks)} chunks, ${picked.radiusBlocks} blocks out from spawn in every direction."
         }
     )
@@ -239,6 +252,7 @@ private fun Running(stateHolder: ServerStateHolder, dismiss: () -> Unit) {
         Stat("Time", clock(elapsed), Modifier.weight(1f))
         Stat("Speed", progress?.let { "${it.chunksPerSecond.toInt()}/s" } ?: "-", Modifier.weight(1f))
     }
+    Stat("Chunks built so far", "%,d".format(progress?.chunks ?: 0), Modifier.fillMaxWidth())
 
     stateHolder.pregenMessage?.let { Hint(it, warning = true) }
     if (!paused && progress != null && progress.percent / 100f < stateHolder.pregenSkipFraction) {

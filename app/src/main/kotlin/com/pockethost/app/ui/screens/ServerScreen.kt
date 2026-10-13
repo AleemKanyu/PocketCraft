@@ -622,14 +622,17 @@ fun ServerScreen(
                         )
                     }
 
-                    ChunkyProgressBanner(
-                        progress = stateHolder.chunkyProgressPercent,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .clickable { stateHolder.openPregenSheet() }
-                    )
                 }
             }
+            // Bottom-right corner, level with the chat bubble on the left, clear of the content.
+            ChunkyProgressBanner(
+                progress = stateHolder.chunkyProgressPercent.takeIf { !stateHolder.pregenSheetVisible },
+                chunks = stateHolder.pregenProgress?.chunks,
+                onClick = { stateHolder.openPregenSheet() },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = bottomPadding + 92.dp)
+            )
             val isServerActive = stateHolder.status == ServerStatus.ONLINE
             val showFloatingBubble = (currentTab == PocketTab.PLAYERS || 
                                       isFloatingChatEnabled || 
