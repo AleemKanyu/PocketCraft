@@ -1,15 +1,12 @@
 package com.pockethost.app.ui.components
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -28,7 +25,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,12 +49,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import android.os.SystemClock
 import com.pockethost.app.ui.screens.ServerStateHolder
 import com.pockethost.app.ui.theme.PocketColors
@@ -78,41 +78,40 @@ private val PREGEN_LIMITS: List<Pair<String, Int?>> = listOf(
 )
 
 /**
- * World pre-generation: pick how much of the world to build ahead of time, then watch a
- * live countdown while Chunky works. Pops in with a spring and fades out.
+ * World pre-generation drawer: pick how much of the world to build ahead of time, then
+ * watch a live countdown while Chunky works. Slides up from the bottom like the app's
+ * other drawers and slides back down when closed.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PregenPopup(stateHolder: ServerStateHolder) {
     val scope = rememberCoroutineScope()
-    val pop = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        pop.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow))
-    }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // Slide the drawer down first, then drop it from the screen.
     val dismiss: () -> Unit = {
         scope.launch {
-            pop.animateTo(0f, tween(160, easing = FastOutSlowInEasing))
+            sheetState.hide()
             stateHolder.closePregenSheet()
         }
     }
 
-    Dialog(onDismissRequest = dismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        PocketHostCard(
+    ModalBottomSheet(
+        onDismissRequest = { stateHolder.closePregenSheet() },
+        sheetState = sheetState,
+        dragHandle = { IosDragHandle() },
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        val mode = when {
+            stateHolder.pregenFinished -> "done"
+            stateHolder.pregenActive -> "running"
+            else -> "setup"
+        }
+        Column(
             modifier = Modifier
-                .padding(horizontal = 20.dp)
                 .fillMaxWidth()
-                .graphicsLayer {
-                    val scale = 0.82f + 0.18f * pop.value
-                    scaleX = scale
-                    scaleY = scale
-                    alpha = pop.value.coerceIn(0f, 1f)
-                },
-            cornerRadius = 28.dp
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
         ) {
-            val mode = when {
-                stateHolder.pregenFinished -> "done"
-                stateHolder.pregenActive -> "running"
-                else -> "setup"
-            }
             Header(
                 status = when {
                     mode == "done" -> "Done"
@@ -129,7 +128,7 @@ fun PregenPopup(stateHolder: ServerStateHolder) {
                 label = "pregen-mode"
             ) { current ->
                 Column(
-                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 22.dp),
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -275,7 +274,7 @@ private fun Done(stateHolder: ServerStateHolder, dismiss: () -> Unit) {
 @Composable
 private fun Header(status: String, active: Boolean, onClose: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 14.dp, bottom = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 14.dp, bottom = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
