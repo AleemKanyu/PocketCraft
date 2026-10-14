@@ -159,8 +159,10 @@ It contains the Ouranos Bedrock protocol translation engine
 (https://github.com/Blackjack200/Ouranos, as adapted in
 https://github.com/oryxel1/Ouranos), which is licensed AGPL-3.0
 (https://www.gnu.org/licenses/agpl-3.0.html).
-PocketHost builds this extension unmodified from the source above with
-scripts/build_geyser_reversion.sh. The complete corresponding source for the
+PocketHost builds this extension from the source above with
+scripts/build_geyser_reversion.sh, plus one fix of its own: older Bedrock
+players were kicked when a packet carried block data (see
+scripts/patches/geyserreversion-accept-translated-block-definitions.patch). The complete corresponding source for the
 bundled build is available at the links above; on request PocketHost will also
 provide the matching corresponding-source archive.
 Credit: oryxel1 (original GeyserReversion and Ouranos adaptation),

@@ -39,13 +39,22 @@ fi
 git -C "$WORK_DIR" checkout --quiet --force "$PINNED_COMMIT"
 git -C "$WORK_DIR" clean -fdxq
 
+# PocketHost fixes on top of the pinned commit. They are part of the build, so they land in
+# the corresponding-source archive below as well.
+PATCHES=("$ROOT"/scripts/patches/geyserreversion-*.patch)
+for patch in "${PATCHES[@]}"; do
+  [ -f "$patch" ] || continue
+  git -C "$WORK_DIR" apply "$patch"
+  echo "Applied $(basename "$patch")"
+done
+
 cd "$WORK_DIR"
 chmod +x ./gradlew
 # SKIP_TESTS=1 skips the upstream test suite (it needs ~3 GB of heap and several minutes).
 if [ "${SKIP_TESTS:-0}" = "1" ]; then
-  ./gradlew --no-daemon --console=plain clean shadowJar sourceRelease
+  "${GRADLE_CMD:-./gradlew}" --no-daemon --console=plain clean shadowJar sourceRelease
 else
-  ./gradlew --no-daemon --console=plain clean test shadowJar sourceRelease
+  "${GRADLE_CMD:-./gradlew}" --no-daemon --console=plain clean test shadowJar sourceRelease
 fi
 
 JAR="$(ls build/libs/GeyserReversion-*-all.jar | head -n1)"
@@ -63,6 +72,9 @@ cp "$SRC_ZIP" "$SOURCE_DIR/"
   echo "built-jar: $(basename "$JAR")"
   echo "sha256: $(sha256sum "$ASSET_DIR/GeyserReversion.jar" | cut -d' ' -f1)"
   echo "corresponding-source: third_party_sources/$(basename "$SRC_ZIP")"
+  for patch in "${PATCHES[@]}"; do
+    [ -f "$patch" ] && echo "patch: scripts/patches/$(basename "$patch")"
+  done
   echo "license: GPL-3.0-only (extension), AGPL-3.0 (bundled Ouranos translation engine)"
 } > "$ASSET_DIR/GeyserReversion.provenance.txt"
 

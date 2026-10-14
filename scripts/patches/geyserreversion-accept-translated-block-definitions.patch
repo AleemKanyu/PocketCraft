@@ -1,0 +1,63 @@
+diff --git i/src/main/java/oxy/geyser/reversion/session/GeyserTranslatedUser.java w/src/main/java/oxy/geyser/reversion/session/GeyserTranslatedUser.java
+index cdb3117..586e5c6 100644
+--- i/src/main/java/oxy/geyser/reversion/session/GeyserTranslatedUser.java
++++ w/src/main/java/oxy/geyser/reversion/session/GeyserTranslatedUser.java
+@@ -10,6 +10,7 @@ import org.cloudburstmc.protocol.bedrock.codec.BedrockCodecHelper;
+ import org.cloudburstmc.protocol.bedrock.data.definitions.BlockDefinition;
+ import org.cloudburstmc.protocol.bedrock.packet.BedrockPacket;
+ import org.cloudburstmc.protocol.common.DefinitionRegistry;
++import org.cloudburstmc.protocol.bedrock.codec.BedrockCodecHelper;
+ import org.geysermc.geyser.registry.Registries;
+ import org.geysermc.geyser.session.GeyserSession;
+ import oxy.geyser.reversion.DuplicatedProtocolInfo;
+@@ -90,9 +91,50 @@ public class GeyserTranslatedUser extends SpecialOuranosSession {
+             return;
+         }
+ 
++        allowTranslatedBlockDefinitions();
+         session.getUpstream().getSession().sendPacket(packet);
+     }
+ 
++    private DefinitionRegistry<BlockDefinition> lenientUpstreamBlocks;
++
++    /**
++     * Packets re-decoded above carry this bridge's own BlockDefinition objects. The player's
++     * connection still checks them against Geyser's block registry, which does not know
++     * them, so any packet with a block in it (entity data of an enderman's held block, a
++     * falling block, a minecart's display block...) failed to encode and the player was
++     * kicked with "An internal error occurred". The runtime ids inside are already the
++     * ones the client's version expects, so accept any definition on that connection.
++     * Geyser can swap the registry later (on StartGame), so this re-wraps whenever it does.
++     */
++    private void allowTranslatedBlockDefinitions() {
++        final BedrockCodecHelper helper = session.getUpstream().getCodecHelper();
++        if (helper == null) {
++            return;
++        }
++        final DefinitionRegistry<BlockDefinition> current = helper.getBlockDefinitions();
++        if (current != null && current == this.lenientUpstreamBlocks) {
++            return;
++        }
++        this.lenientUpstreamBlocks = new DefinitionRegistry<>() {
++            @Override
++            public BlockDefinition getDefinition(int runtimeId) {
++                if (current != null) {
++                    final BlockDefinition definition = current.getDefinition(runtimeId);
++                    if (definition != null) {
++                        return definition;
++                    }
++                }
++                return () -> runtimeId;
++            }
++
++            @Override
++            public boolean isRegistered(BlockDefinition definition) {
++                return true;
++            }
++        };
++        helper.setBlockDefinitions(this.lenientUpstreamBlocks);
++    }
++
+     @Override
+     public void sendDownstreamPacket(org.cloudburstmc.protocol.bedrock.packet.BedrockPacket bedrockPacket) {
+         final ByteBuf input = Unpooled.buffer();
