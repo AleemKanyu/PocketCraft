@@ -6630,35 +6630,54 @@ class ServerStateHolder(
     }
 
     fun changePlayerGamemode(player: PlayerInfo, mode: String) {
-        val isOnline = onlinePlayers.any { it.name.equals(player.name, ignoreCase = true) }
-        if (isOnline) {
-            sendCommand("gamemode $mode ${player.name}")
-        } else {
-            // Offline - try to edit .dat file
+        if (isRunning) {
+            // Ask the server first, whatever the app thinks about who is online: its online list
+            // can miss someone (a player who joined before the app reopened, say), and editing
+            // the save file of someone online is overwritten when they leave. A selector with a
+            // quoted name also covers Bedrock names with spaces, which "gamemode <mode> <name>"
+            // cannot parse.
+            val target = """@a[name="${escapeSelectorName(player.name)}",limit=1]"""
+            appendLog("> gamemode $mode ${player.name}")
             scope.launch(Dispatchers.IO) {
-                val uuid = player.uuid
-                if (uuid.isBlank()) {
+                val response = runCatching { sendRconCommand("gamemode $mode $target") }.getOrDefault("")
+                val offline = response.contains("No player was found", ignoreCase = true) ||
+                    response.contains("No entity was found", ignoreCase = true)
+                if (!offline) {
                     withContext(Dispatchers.Main) {
-                        appendLog("[PocketHost] Cannot change offline gamemode: UUID unknown for ${player.name}")
+                        appendLog(response.ifBlank { "[PocketHost] Set ${player.name} to $mode." })
                     }
                     return@launch
                 }
-                val modeInt = when(mode.lowercase()) {
-                    "survival" -> 0
-                    "creative" -> 1
-                    "adventure" -> 2
-                    "spectator" -> 3
-                    else -> 0
-                }
-                val success = PlayerDataManager.updateOfflineGamemode(appContext, versionId, uuid, modeInt)
-                withContext(Dispatchers.Main) {
-                    if (success) {
-                        appendLog("[PocketHost] Changed offline gamemode for ${player.name} to $mode")
-                        refreshAll()
-                    } else {
-                        appendLog("[PocketHost] Failed to change offline gamemode for ${player.name}")
-                    }
-                }
+                changeOfflineGamemode(player, mode)
+            }
+            return
+        }
+        scope.launch(Dispatchers.IO) { changeOfflineGamemode(player, mode) }
+    }
+
+    /** Edits the player's save file; for players who are not on the server right now. */
+    private suspend fun changeOfflineGamemode(player: PlayerInfo, mode: String) {
+        val uuid = player.uuid
+        if (uuid.isBlank()) {
+            withContext(Dispatchers.Main) {
+                appendLog("[PocketHost] Cannot change offline gamemode: UUID unknown for ${player.name}")
+            }
+            return
+        }
+        val modeInt = when (mode.lowercase()) {
+            "survival" -> 0
+            "creative" -> 1
+            "adventure" -> 2
+            "spectator" -> 3
+            else -> 0
+        }
+        val success = PlayerDataManager.updateOfflineGamemode(appContext, versionId, uuid, modeInt)
+        withContext(Dispatchers.Main) {
+            if (success) {
+                appendLog("[PocketHost] Changed offline gamemode for ${player.name} to $mode")
+                refreshAll()
+            } else {
+                appendLog("[PocketHost] Failed to change offline gamemode for ${player.name}")
             }
         }
     }
