@@ -1,5 +1,42 @@
+diff --git i/src/main/java/oxy/geyser/reversion/handler/TranslatorSendListener.java w/src/main/java/oxy/geyser/reversion/handler/TranslatorSendListener.java
+index 2e27d16..e9ac8a3 100644
+--- i/src/main/java/oxy/geyser/reversion/handler/TranslatorSendListener.java
++++ w/src/main/java/oxy/geyser/reversion/handler/TranslatorSendListener.java
+@@ -37,6 +37,7 @@ public final class TranslatorSendListener extends UpstreamSession {
+         if (this.user != null) {
+             final BedrockPacket translated = this.translate(packet);
+             if (translated != null) {
++                this.user.allowTranslatedBlockDefinitions();
+                 super.sendPacket(translated);
+             }
+             return;
+@@ -63,6 +64,16 @@ public final class TranslatorSendListener extends UpstreamSession {
+         super.queuePostStartGamePacket(packet);
+     }
+ 
++    @Override
++    public void sendPostStartGamePackets() {
++        // Queued packets were translated already; Geyser may have set its own block registry
++        // on the connection since, so accept the translated definitions again before flushing.
++        if (this.user != null) {
++            this.user.allowTranslatedBlockDefinitions();
++        }
++        super.sendPostStartGamePackets();
++    }
++
+     @Override
+     public void sendPacketImmediately(@NonNull BedrockPacket packet) {
+         if (packet instanceof ItemComponentPacket components) {
+@@ -71,6 +82,7 @@ public final class TranslatorSendListener extends UpstreamSession {
+         if (this.user != null) {
+             final BedrockPacket translated = this.translate(packet);
+             if (translated != null) {
++                this.user.allowTranslatedBlockDefinitions();
+                 super.sendPacketImmediately(translated);
+             }
+             return;
 diff --git i/src/main/java/oxy/geyser/reversion/session/GeyserTranslatedUser.java w/src/main/java/oxy/geyser/reversion/session/GeyserTranslatedUser.java
-index cdb3117..586e5c6 100644
+index cdb3117..8930dbc 100644
 --- i/src/main/java/oxy/geyser/reversion/session/GeyserTranslatedUser.java
 +++ w/src/main/java/oxy/geyser/reversion/session/GeyserTranslatedUser.java
 @@ -10,6 +10,7 @@ import org.cloudburstmc.protocol.bedrock.codec.BedrockCodecHelper;
@@ -29,7 +66,7 @@ index cdb3117..586e5c6 100644
 +     * ones the client's version expects, so accept any definition on that connection.
 +     * Geyser can swap the registry later (on StartGame), so this re-wraps whenever it does.
 +     */
-+    private void allowTranslatedBlockDefinitions() {
++    public void allowTranslatedBlockDefinitions() {
 +        final BedrockCodecHelper helper = session.getUpstream().getCodecHelper();
 +        if (helper == null) {
 +            return;
