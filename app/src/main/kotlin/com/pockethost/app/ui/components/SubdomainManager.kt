@@ -78,9 +78,9 @@ private data class UserSubdomainRecord(
 }
 
 private fun regionDomainSuffix(region: String?): String = when (region?.trim()?.lowercase(Locale.US)) {
-    "as" -> ".as.pocketcraft.online"
-    "eu" -> ".eu.pocketcraft.online"
-    else -> ".pocketcraft.online"
+    "as" -> ".as.pockethost.online"
+    "eu" -> ".eu.pockethost.online"
+    else -> ".pockethost.online"
 }
 
 @Composable

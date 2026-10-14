@@ -2924,10 +2924,12 @@ class ServerHostService : Service() {
 
     private suspend fun resolvePublicRelayAddress(address: RelayManager.RelayAddress): String {
         val region = relayRegionWireValue(address.host)
+        // Players are given our own domain. The pockethost.online names point at the same
+        // relay machines as the old pocketcraft.online ones the app still connects to.
         val defaultDomain = when (region) {
-            "as" -> "mine.pocketcraft.online"
-            "eu" -> "eu.pocketcraft.online"
-            "us" -> "us.pocketcraft.online"
+            "as" -> "mine.$PUBLIC_RELAY_DOMAIN"
+            "eu" -> "eu.$PUBLIC_RELAY_DOMAIN"
+            "us" -> "us.$PUBLIC_RELAY_DOMAIN"
             else -> address.host
         }
 
@@ -2943,9 +2945,9 @@ class ServerHostService : Service() {
         }
 
         val host = when (region) {
-            "as" -> "$subdomain.as.pocketcraft.online"
-            "eu" -> "$subdomain.eu.pocketcraft.online"
-            "us" -> "$subdomain.us.pocketcraft.online"
+            "as" -> "$subdomain.as.$PUBLIC_RELAY_DOMAIN"
+            "eu" -> "$subdomain.eu.$PUBLIC_RELAY_DOMAIN"
+            "us" -> "$subdomain.us.$PUBLIC_RELAY_DOMAIN"
             else -> defaultDomain
         }
         // The port is only open on the relay this session registered with. A custom name
@@ -2976,9 +2978,9 @@ class ServerHostService : Service() {
     }
 
     private fun relayRegionWireValue(host: String): String? = when (host.trim().lowercase()) {
-        "mine.pocketcraft.online", "13.233.131.236", "13.201.57.41" -> "as"
-        "eu.pocketcraft.online", "3.72.235.245", "54.93.247.2" -> "eu"
-        "us.pocketcraft.online", "98.83.40.35", "18.225.223.45" -> "us"
+        "mine.pocketcraft.online", "mine.pockethost.online", "13.233.131.236", "13.201.57.41" -> "as"
+        "eu.pocketcraft.online", "eu.pockethost.online", "3.72.235.245", "54.93.247.2" -> "eu"
+        "us.pocketcraft.online", "us.pockethost.online", "98.83.40.35", "18.225.223.45" -> "us"
         else -> null
     }
 
@@ -3455,6 +3457,8 @@ class ServerHostService : Service() {
         const val EVENT_TUNNEL_CONNECTED = "tunnel_connected"
         const val EVENT_TUNNEL_FAILED = "tunnel_failed"
         const val EVENT_TUNNEL_CLAIM = "tunnel_claim"
+        /** Domain in the addresses players are given; see resolvePublicRelayAddress. */
+        const val PUBLIC_RELAY_DOMAIN = "pockethost.online"
         const val EVENT_SERVER_CRASHED = "server_crashed"
         const val EVENT_CHUNKS_LOADING = "chunks_loading"
         const val EVENT_CHUNKY_PROGRESS = "chunky_progress"
