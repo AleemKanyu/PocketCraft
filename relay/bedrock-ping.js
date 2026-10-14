@@ -8,9 +8,18 @@ const RAKNET_MAGIC = Buffer.from([
 ]);
 
 const SERVER_GUID = 0xDEADBEEFCAFE1234n;
-const DEFAULT_PROTOCOL = '2169';
-const DEFAULT_VERSION = '1.26.45';
+// Only used when the phone's own Bedrock server has not answered a ping recently.
+// Geyser accepts current Bedrock clients whatever the Java version, so advertise the
+// current Bedrock release (what Geyser 2.11.3 reports) rather than an older one.
+const DEFAULT_PROTOCOL = '2193';
+const DEFAULT_VERSION = '26.52';
 const statusMap = new Map();
+// Ping replies captured from the phone's real Bedrock server (Geyser), per relay port.
+// Bedrock clients refuse servers whose advertised protocol is older than their own, and
+// guessing the protocol from the Java version kept advertising old ones, so the real
+// reply is preferred whenever there is a recent one.
+const realMotdMap = new Map();
+const REAL_MOTD_TTL_MS = 60_000;
 const DEBUG_NETWORK = process.env.POCKETCRAFT_DEBUG_NETWORK === '1';
 let pingLogCount = 0;
 
@@ -26,27 +35,6 @@ function normalizeMotdPart(value, fallback) {
     .trim() || fallback;
 }
 
-function getProtocolForVersion(version) {
-  if (!version) return DEFAULT_PROTOCOL;
-  const v = version.trim();
-  if (v.startsWith('1.20.8')) return '671';
-  if (v.startsWith('1.21.1') || v.startsWith('1.21.2')) return '723';
-  if (v.startsWith('1.21.3')) return '729';
-  if (v.startsWith('1.21.4')) return '748';
-  if (v.startsWith('1.21.5')) return '766';
-  if (v.startsWith('1.21.0') || v === '1.21') return '685';
-  if (v.startsWith('1.21.6')) return '776';
-  if (v.startsWith('1.21.7')) return '786';
-  if (v.startsWith('1.21.8')) return '800';
-  if (v.startsWith('1.21.9')) return '818';
-  if (v.startsWith('1.21.100')) return '827';
-  if (v.startsWith('1.22.0')) return '800';
-  // PowerNukkitX 3.0.4 advertises protocol 2169 for Bedrock 1.26.45, the build PocketHost
-  // hosts for native Bedrock servers.
-  if (v.startsWith('1.26.')) return '2169';
-  return DEFAULT_PROTOCOL;
-}
-
 function buildMotd(entry, port = 19132) {
   const finalPort = String(port || 19132);
   if (!entry) {
@@ -54,8 +42,11 @@ function buildMotd(entry, port = 19132) {
   }
 
   const motd = normalizeMotdPart(entry.motd, 'PocketCraft');
-  const version = normalizeMotdPart(entry.version, DEFAULT_VERSION);
-  const protocol = getProtocolForVersion(version);
+  // entry.version is the Java version of the server; it says nothing about which Bedrock
+  // clients Geyser accepts, and mapping it to old Bedrock protocols made current clients
+  // treat the server as outdated.
+  const version = DEFAULT_VERSION;
+  const protocol = DEFAULT_PROTOCOL;
   const players = Number.isFinite(Number(entry.players)) ? Math.max(0, Number(entry.players) | 0) : 0;
   const maxPlayers = Number.isFinite(Number(entry.maxPlayers)) ? Math.max(1, Number(entry.maxPlayers) | 0) : 20;
 
@@ -79,9 +70,43 @@ function buildPong(pingTime, motd) {
 }
 
 function getMotd(port) {
+  const real = port ? getRealMotd(port) : null;
+  if (real) return real;
   const entry = port ? statusMap.get(port) : statusMap.values().next().value;
   if (!entry) return null;
   return buildMotd(entry, port);
+}
+
+/**
+ * Remembers the MOTD string from a pong the phone's Bedrock server sent, with its
+ * IPv4/IPv6 port fields pointed at the relay port players actually use.
+ */
+function setRealMotd(port, motd) {
+  const parsedPort = Number(port);
+  if (!Number.isInteger(parsedPort) || parsedPort <= 0 || parsedPort >= 65536) return;
+  const text = String(motd || '');
+  if (!text.startsWith('MCPE;') && !text.startsWith('MCEE;')) return;
+  const parts = text.split(';');
+  if (parts.length > 11) {
+    parts[10] = String(parsedPort);
+    parts[11] = String(parsedPort);
+  }
+  realMotdMap.set(parsedPort, { motd: parts.join(';'), at: Date.now() });
+}
+
+function getRealMotd(port) {
+  const entry = realMotdMap.get(Number(port));
+  if (!entry) return null;
+  if (Date.now() - entry.at > REAL_MOTD_TTL_MS) return null;
+  return entry.motd;
+}
+
+/** MOTD string inside a RakNet unconnected pong (0x1c), or null. */
+function parsePongMotd(packet) {
+  if (!Buffer.isBuffer(packet) || packet.length < 35 || packet[0] !== 0x1c) return null;
+  const len = packet.readUInt16BE(33);
+  if (35 + len > packet.length) return null;
+  return packet.toString('utf8', 35, 35 + len);
 }
 
 function isRakNetPing(msg) {
@@ -144,6 +169,7 @@ function updateServerStatus(port, status) {
 
 function clearServerStatus(port) {
   statusMap.delete(Number(port));
+  realMotdMap.delete(Number(port));
 }
 
 function getServerStatus(port) {
@@ -157,5 +183,8 @@ module.exports = {
   getMotd,
   getServerStatus,
   clearServerStatus,
-  isRakNetPing
+  isRakNetPing,
+  setRealMotd,
+  getRealMotd,
+  parsePongMotd
 };

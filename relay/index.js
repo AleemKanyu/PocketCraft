@@ -9,14 +9,15 @@ const express = require('express');
 const dgram = require('dgram');
 const dns = require('dns');
 const { monitorEventLoopDelay } = require('perf_hooks');
-const { startBedrockPing, updateServerStatus } = require('./bedrock-ping');
+const { startBedrockPing, updateServerStatus, setRealMotd, parsePongMotd } = require('./bedrock-ping');
 const { handleJavaPing } = require('./java-ping');
 
 // Constants
 
 const CONTROL_PORT = 8080;
 const PHONE_RELAY_PORT = 9000;
-const PUBLIC_HOST = 'mine.pocketcraft.online';
+// Each relay should set PUBLIC_HOST (or PUBLIC_IP) to its own address; the default is the Mumbai relay.
+const PUBLIC_HOST = process.env.PUBLIC_HOST || 'mine.pocketcraft.online';
 function getPublicHost(req) {
   if (req && req.headers && req.headers.host) {
     return req.headers.host.split(':')[0];
@@ -78,6 +79,9 @@ function markTunnelActivity(tunnel) {
 const userUdpSockets = new Map();
 const udpRestartTimers = new Map();
 const bedrockClientMap = new Map();
+// Last time a player's ping was passed to the phone, per tunnel; see the ping handler.
+const pingForwardedAt = new Map();
+const PING_FORWARD_INTERVAL_MS = 10_000;
 
 // Socket helpers
 
@@ -533,6 +537,11 @@ function handlePhoneFrameData(userId, data) {
       continue;
     }
 
+    if (parsed.payload[0] === 0x1c && relayPort) {
+      const realMotd = parsePongMotd(parsed.payload);
+      if (realMotd) setRealMotd(relayPort, realMotd);
+    }
+
     const rewrittenPayload = rewriteAdvertisedRelayAddress(
       parsed.payload,
       relayPort || parsed.port,
@@ -794,6 +803,7 @@ function closeTunnel(userId, reason = 'manual') {
   tunnel.pendingPlayers.length = 0;
 
   stopUserUdpSocket(userId);
+  pingForwardedAt.delete(userId);
   activeTunnels.delete(userId);
 
   const { clearServerStatus } = require('./bedrock-ping');
@@ -810,14 +820,34 @@ function startUserUdpSocket(userId, assignedPort, getPhoneSocket) {
   const udpSock = dgram.createSocket('udp4');
   const clientMap = new Map();
   bedrockClientMap.set(userId, clientMap);
-  const { buildPong, getMotd, isRakNetPing } = require('./bedrock-ping');
+  const { buildPong, getMotd, getRealMotd, isRakNetPing } = require('./bedrock-ping');
 
   udpSock.on('message', (msg, rinfo) => {
     markTunnelActivity(activeTunnels.get(userId));
 
     if (isRakNetPing(msg)) {
       try {
-        const motd = getMotd(assignedPort);
+        // Ask the phone's Bedrock server too, now and then, so the cached reply carries
+        // its real protocol and version. Without a recent one, the phone answers this ping
+        // itself through the tunnel.
+        const realMotd = getRealMotd(assignedPort);
+        const now = Date.now();
+        const lastForward = pingForwardedAt.get(userId) || 0;
+        const phoneSocket = (now - lastForward > PING_FORWARD_INTERVAL_MS || !realMotd)
+          ? getBedrockPhoneSocket(userId)
+          : null;
+        if (phoneSocket && isValidIPv4(rinfo.address) && isValidUdpPort(rinfo.port)) {
+          const frame = buildBedrockFrame(rinfo.address, rinfo.port, msg);
+          if (frame) {
+            pingForwardedAt.set(userId, now);
+            try { phoneSocket.write(frame); } catch (_) { }
+          }
+        }
+        // First ask: let the phone answer. If it has been asked before and still has
+        // not answered (Bedrock switched off, for one), fall back to the built reply.
+        if (!realMotd && phoneSocket && lastForward === 0) return;
+
+        const motd = realMotd || getMotd(assignedPort);
         if (!motd) return;
         const pingTime = msg.readBigUInt64BE(1);
         const pong = buildPong(pingTime, motd);
