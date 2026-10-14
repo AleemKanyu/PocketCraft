@@ -58,6 +58,8 @@ import com.pockethost.app.ui.components.PocketDropdownMenu
 import com.pockethost.app.ui.components.PocketDropdownMenuItem
 import com.pockethost.app.BuildConfig
 import com.pockethost.app.R
+import com.pockethost.app.ui.tour.TourAnchor
+import com.pockethost.app.ui.tour.tourAnchor
 import com.pockethost.app.config.RelayServers
 import com.pockethost.app.config.RemoteConfigManager
 import com.pockethost.app.data.preferences.AppPreferences
@@ -71,8 +73,6 @@ import com.pockethost.app.ui.util.ThemePreference
 import com.pockethost.app.ui.util.ThemePreferenceStore
 import com.pockethost.app.ui.util.AppIcon
 import com.pockethost.app.ui.util.AppIconManager
-import com.pockethost.app.ui.tour.TourAnchor
-import com.pockethost.app.ui.tour.tourAnchor
 import androidx.compose.animation.animateContentSize
 import com.pockethost.app.ui.components.DuoButton
 import com.pockethost.app.ui.components.DuoButtonVariant
@@ -92,10 +92,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import com.pockethost.app.feedback.FeedbackService
 import com.pockethost.app.update.UpdateConfig
 import com.pockethost.app.update.UpdateManager
-import com.pockethost.app.update.GitHubUpdateChecker
-import com.pockethost.app.update.GitHubRelease
 import com.pockethost.app.ui.components.UpdatePopup
-import com.pockethost.app.ui.components.GitHubUpdatePopup
 
 data class LevelTypeOption(val displayName: String, val propertyValue: String)
 
@@ -146,12 +143,12 @@ fun SettingsScreen(
     onMessage: (String) -> Unit,
     onOpenConfigEditor: () -> Unit = {},
     onOpenLegalPage: () -> Unit = {},
-    onReplayGuidedTour: () -> Unit = {},
     onDarkThemeChange: (Boolean) -> Unit = {},
     currentMobTheme: MobTheme = MobTheme.SKELETON,
     onMobThemeChange: (MobTheme) -> Unit = {},
     initialActiveTab: Int? = null,
-    initialAuthTab: Int? = null
+    initialAuthTab: Int? = null,
+    onReplayGuidedTour: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -303,7 +300,6 @@ fun SettingsScreen(
     var showPremiumBottomSheet by remember { mutableStateOf(false) }
     var checkingForUpdate by remember { mutableStateOf(false) }
     var manualUpdateConfig by remember { mutableStateOf<UpdateConfig?>(null) }
-    var gitHubRelease by remember { mutableStateOf<GitHubRelease?>(null) }
 
     val hasUnsavedChanges by remember(currentState, savedState) {
         derivedStateOf {
@@ -1821,7 +1817,7 @@ fun SettingsScreen(
                                     Column {
                                         Text("Support PocketHost", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                         Text(
-                                            "Help fund server relays & updates",
+                                            "Ad-free access and supporter plans",
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -1829,36 +1825,22 @@ fun SettingsScreen(
                                 }
 
                                 Text(
-                                    "PocketHost is 100% free with unlimited player slots, worlds, and features. If you love the app and want to support our high-speed server relay infrastructure and development, consider donating below!",
+                                    "All server features remain free. Remove ads monthly or yearly, or become a supporter to help fund relays and development.",
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     lineHeight = 16.sp
                                 )
 
-                                Column(
+                                DuoButton(
+                                    text = "VIEW AD-FREE & SUPPORTER PLANS",
+                                    onClick = { showPremiumBottomSheet = true },
                                     modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    DuoButton(
-                                        text = "Support on Patreon",
-                                        onClick = {
-                                            try {
-                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.patreon.com/cw/pockethost"))
-                                                context.startActivity(intent)
-                                            } catch (_: Exception) {}
-                                        },
-                                        variant = DuoButtonVariant.Warning,
-                                        backgroundBrush = Brush.linearGradient(
-                                            colors = listOf(Color(0xFFFF5E5B), Color(0xFFFF416C))
-                                        ),
-                                        modifier = Modifier.fillMaxWidth(),
-                                        minHeight = 42.dp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
+                                    minHeight = 42.dp,
+                                    fontWeight = FontWeight.Bold
+                                )
 
                                 Text(
-                                    "Voluntary contribution via Patreon · cancel your membership anytime",
+                                    "Monthly, yearly, and supporter options · Billed via Google Play",
                                     fontSize = 10.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     textAlign = TextAlign.Center,
@@ -2076,10 +2058,10 @@ fun SettingsScreen(
                                         playHaptic()
                                         scope.launch {
                                             checkingForUpdate = true
-                                            val release = GitHubUpdateChecker.checkForUpdate()
+                                            val config = UpdateManager.fetchUpdateConfig(context)
                                             checkingForUpdate = false
-                                            if (release != null) {
-                                                gitHubRelease = release
+                                            if (config?.showUpdatePopup == true) {
+                                                manualUpdateConfig = config
                                             } else {
                                                 onMessage("Your app is up to date!")
                                             }
@@ -2110,18 +2092,6 @@ fun SettingsScreen(
                 },
                 onDismiss = {
                     manualUpdateConfig = null
-                }
-            )
-        }
-
-        gitHubRelease?.let { release ->
-            GitHubUpdatePopup(
-                release = release,
-                onDismiss = {
-                    gitHubRelease = null
-                },
-                onInstallStarted = {
-                    gitHubRelease = null
                 }
             )
         }
@@ -3533,5 +3503,3 @@ private fun LicenseItemCard(
         }
     }
 }
-
-

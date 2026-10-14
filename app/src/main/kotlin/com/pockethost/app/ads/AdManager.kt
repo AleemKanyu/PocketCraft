@@ -25,8 +25,11 @@ import com.pockethost.app.BuildConfig
 import com.pockethost.app.PocketHostApp
 import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -66,6 +69,23 @@ object AdManager {
      * when AdMob requires the app to offer a way back to the consent form.
      */
     val privacyOptionsRequired: StateFlow<Boolean> = _privacyOptionsRequired.asStateFlow()
+
+    private val _adDismissedEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /** Emits whenever a full-screen ad was watched and dismissed by the user. */
+    val adDismissedEvent: SharedFlow<Unit> = _adDismissedEvent.asSharedFlow()
+
+    private var lastAdFreePromptTimeMs = 0L
+    private const val AD_FREE_PROMPT_COOLDOWN_MS = 2L * 60 * 1000 // 2 minutes between prompts
+
+    private fun notifyAdWatched(context: Context) {
+        if (!AdsConfig.isSupporter(context)) {
+            val now = System.currentTimeMillis()
+            if (now - lastAdFreePromptTimeMs >= AD_FREE_PROMPT_COOLDOWN_MS) {
+                lastAdFreePromptTimeMs = now
+                _adDismissedEvent.tryEmit(Unit)
+            }
+        }
+    }
 
     private var rewardedAd: RewardedAd? = null
     private var rewardedAdLoading = false
@@ -218,6 +238,7 @@ object AdManager {
             override fun onAdDismissedFullScreenContent() {
                 preloadRewardedAd(activity)
                 onDismissed()
+                notifyAdWatched(activity)
             }
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
                 Log.w(TAG, "Rewarded ad failed to show: ${error.message}")
@@ -267,6 +288,9 @@ object AdManager {
         interstitialAd = null
         prefs.edit().putLong(KEY_LAST_INTERSTITIAL_MS, now).apply()
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+            override fun onAdDismissedFullScreenContent() {
+                notifyAdWatched(activity)
+            }
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
                 Log.w(TAG, "Interstitial ad failed to show: ${error.message}")
             }

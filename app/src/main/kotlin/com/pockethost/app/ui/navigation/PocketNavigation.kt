@@ -292,9 +292,7 @@ fun PocketTopBar(
                     }
                 }
 
-                val showSupportHeart = remember {
-                    com.pockethost.app.data.preferences.AppPreferences(context).supportHeartVisibleThisLaunch()
-                }
+                val showSupportHeart = true // Always show the support heart button
                 if (showSupportHeart) Box(
                     modifier = Modifier
                         .size(34.dp)

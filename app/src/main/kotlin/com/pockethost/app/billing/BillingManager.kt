@@ -40,8 +40,18 @@ class BillingManager private constructor(private val context: Context) {
     companion object {
         private const val TAG = "BillingManager"
         private const val VERIFY_PURCHASE_FUNCTION = "verifyPurchase"
-        const val PRODUCT_PREMIUM = "pocketcraft_premium_monthly"
-        const val PRODUCT_SUPPORTIVE = "pocketcraft_supportive_monthly"
+        const val PRODUCT_AD_FREE_MONTHLY = "pockethost_ad_free_monthly"
+        const val PRODUCT_AD_FREE_YEARLY = "pockethost_ad_free_yearly"
+        const val PRODUCT_SUPPORTER = "pocketcraft_premium_monthly"
+        const val PRODUCT_SUPPORTER_ALT = "pockethost_supporter_monthly"
+        const val PRODUCT_LEGACY_CHAMPION = "pocketcraft_supportive_monthly"
+
+        private val DISPLAYED_PRODUCTS = listOf(
+            PRODUCT_AD_FREE_MONTHLY,
+            PRODUCT_AD_FREE_YEARLY,
+            PRODUCT_SUPPORTER
+        )
+        private val RECOGNIZED_PRODUCTS = DISPLAYED_PRODUCTS + listOf(PRODUCT_SUPPORTER_ALT, PRODUCT_LEGACY_CHAMPION)
         const val BASE64_PUBLIC_KEY = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvcvyL+kRXt9VNV8wEgquQ1WJNGBnFMOsGLdXJqKJn0sXBoQi1TFC5qY3XtNiPdvj/NJo2LqlvCjGLlPqY0+itau0Bvwrsa98gzEkarHK8Hki2cemU2qGMTfQw/vgpQwa2sxylzB37OxFiKBgZGgCtHg3wxd6jLecpe7EcVhEeHvXy9YjErhCy7Pp9yJ5qu91QuLhZ2XHhX5ebgLkY1Daa3iRwHEdMb5cwMSdVimnponLMKafpx5OHCAGsiIGkRRBgYTsdhk1Jf4jGo5o4zBB8lUoo+nYp4EEn5y3LC6b2SUE9RJlCqugwC2R/DL7PK/QO4Zrw7r3TwAyOohaSdG5xQIDAQAB"
 
         @Volatile
@@ -60,7 +70,7 @@ class BillingManager private constructor(private val context: Context) {
 
     private val _entitlement = MutableStateFlow(
         PremiumEntitlement(
-            tier = PremiumTier.NONE
+            tier = PremiumTier.fromWireValue(preferences.lastSeenMembershipTier)
         )
     )
     val entitlement: StateFlow<PremiumEntitlement> = _entitlement.asStateFlow()
@@ -70,6 +80,9 @@ class BillingManager private constructor(private val context: Context) {
 
     private val _availableOffers = MutableStateFlow<List<SubscriptionOffer>>(emptyList())
     val availableOffers: StateFlow<List<SubscriptionOffer>> = _availableOffers.asStateFlow()
+
+    private val _activeProductIds = MutableStateFlow<Set<String>>(emptySet())
+    val activeProductIds: StateFlow<Set<String>> = _activeProductIds.asStateFlow()
 
     private val _lastMessage = MutableStateFlow<String?>(null)
     val lastMessage: StateFlow<String?> = _lastMessage.asStateFlow()
@@ -84,6 +97,7 @@ class BillingManager private constructor(private val context: Context) {
             billingResult.responseCode == BillingResponseCode.OK && purchases != null -> {
                 activePurchases = (activePurchases + purchases.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED })
                     .distinctBy { it.purchaseToken }
+                _activeProductIds.value = activePurchases.flatMap { it.products }.toSet()
                 purchases.forEach { purchase ->
                     scope.launch { verifyPurchaseServerSide(purchase) }
                 }
@@ -160,7 +174,7 @@ class BillingManager private constructor(private val context: Context) {
             return
         }
 
-        val products = listOf(PRODUCT_PREMIUM, PRODUCT_SUPPORTIVE).map { productId ->
+        val products = DISPLAYED_PRODUCTS.map { productId ->
             QueryProductDetailsParams.Product.newBuilder()
                 .setProductId(productId)
                 .setProductType(ProductType.SUBS)
@@ -174,7 +188,7 @@ class BillingManager private constructor(private val context: Context) {
             if (billingResult.responseCode == BillingResponseCode.OK) {
                 val detailsList = productDetailsResult.productDetailsList ?: emptyList()
                 _availableOffers.value = detailsList.mapNotNull { toSubscriptionOffer(it) }
-                    .sortedBy { if (it.tier == PremiumTier.PREMIUM) 0 else 1 }
+                    .sortedBy { DISPLAYED_PRODUCTS.indexOf(it.productId) }
                 onComplete?.invoke()
             } else {
                 _lastMessage.value = billingResult.debugMessage.ifBlank { "Could not load subscription prices." }
@@ -196,11 +210,12 @@ class BillingManager private constructor(private val context: Context) {
         client.queryPurchasesAsync(params) { billingResult, purchases ->
             if (billingResult.responseCode == BillingResponseCode.OK) {
                 activePurchases = purchases.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
+                _activeProductIds.value = activePurchases.flatMap { it.products }.toSet()
                 var hasActiveSubscription = false
                 purchases.forEach { purchase ->
                     if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED) {
                         val productId = purchase.products.firstOrNull()
-                        if (productId == PRODUCT_PREMIUM || productId == PRODUCT_SUPPORTIVE) {
+                        if (productId in RECOGNIZED_PRODUCTS) {
                             hasActiveSubscription = true
                             scope.launch { verifyPurchaseServerSide(purchase) }
                         }
@@ -233,11 +248,12 @@ class BillingManager private constructor(private val context: Context) {
             if (billingResult.responseCode == BillingResponseCode.OK) {
                 val purchasedItems = purchases.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
                 activePurchases = purchasedItems
+                _activeProductIds.value = purchasedItems.flatMap { it.products }.toSet()
                 if (purchasedItems.isNotEmpty()) {
                     var restoredCount = 0
                     purchasedItems.forEach { purchase ->
                         val productId = purchase.products.firstOrNull()
-                        if (productId == PRODUCT_PREMIUM || productId == PRODUCT_SUPPORTIVE) {
+                        if (productId in RECOGNIZED_PRODUCTS) {
                             restoredCount++
                             scope.launch { verifyPurchaseServerSide(purchase) }
                         }
@@ -270,30 +286,49 @@ class BillingManager private constructor(private val context: Context) {
         }
 
         val offer = _availableOffers.value.firstOrNull { it.productId == productId }
-        val productDetails = offer?.productDetails
-        if (offer == null || productDetails == null) {
+        if (offer?.productDetails == null) {
             queryAvailableProducts {
-                launchBillingFlow(activity, productId, onResult)
+                val refreshedOffer = _availableOffers.value.firstOrNull { it.productId == productId }
+                if (refreshedOffer?.productDetails == null) {
+                    onResult("This subscription is not available in Google Play yet.")
+                } else {
+                    launchResolvedBillingFlow(activity, refreshedOffer, onResult)
+                }
             }
             return
         }
+
+        launchResolvedBillingFlow(activity, offer, onResult)
+    }
+
+    private fun launchResolvedBillingFlow(
+        activity: Activity,
+        offer: SubscriptionOffer,
+        onResult: (String?) -> Unit
+    ) {
+        val productDetails = offer.productDetails ?: run {
+            onResult("This subscription is not available in Google Play yet.")
+            return
+        }
+        val productId = offer.productId
 
         val productParams = BillingFlowParams.ProductDetailsParams.newBuilder()
             .setProductDetails(productDetails)
             .setOfferToken(offer.offerToken)
             .build()
 
-        val activeProPurchase = activePurchases.firstOrNull { it.products.contains(PRODUCT_PREMIUM) }
-        val isUpgradeToSupportive = productId == PRODUCT_SUPPORTIVE && activeProPurchase != null
+        val replacedPurchase = activePurchases.firstOrNull { purchase ->
+            purchase.products.any { it in RECOGNIZED_PRODUCTS && it != productId }
+        }
 
         val billingFlowParamsBuilder = BillingFlowParams.newBuilder()
             .setProductDetailsParamsList(listOf(productParams))
 
-        if (isUpgradeToSupportive) {
+        if (replacedPurchase != null) {
             val updateParams = BillingFlowParams.SubscriptionUpdateParams.newBuilder()
-                .setOldPurchaseToken(activeProPurchase!!.purchaseToken)
+                .setOldPurchaseToken(replacedPurchase.purchaseToken)
                 .setSubscriptionReplacementMode(
-                    BillingFlowParams.SubscriptionUpdateParams.ReplacementMode.CHARGE_PRORATED_PRICE
+                    BillingFlowParams.SubscriptionUpdateParams.ReplacementMode.WITH_TIME_PRORATION
                 )
                 .build()
             billingFlowParamsBuilder.setSubscriptionUpdateParams(updateParams)
@@ -360,6 +395,7 @@ class BillingManager private constructor(private val context: Context) {
 
     private fun applyEntitlement(entitlement: PremiumEntitlement) {
         _entitlement.value = entitlement
+        preferences.lastSeenMembershipTier = entitlement.tier.wireValue
         preferences.isPremiumUser = true
         _isPremium.value = true
     }
@@ -370,12 +406,15 @@ class BillingManager private constructor(private val context: Context) {
             return
         }
         val productId = purchase.products.firstOrNull() ?: return
-        if (productId != PRODUCT_PREMIUM && productId != PRODUCT_SUPPORTIVE) return
+        if (productId !in RECOGNIZED_PRODUCTS) return
 
         runCatching {
             val tier = when (productId) {
-                PRODUCT_PREMIUM -> PremiumTier.PREMIUM
-                PRODUCT_SUPPORTIVE -> PremiumTier.SUPPORTIVE
+                PRODUCT_AD_FREE_MONTHLY,
+                PRODUCT_AD_FREE_YEARLY -> PremiumTier.AD_FREE
+                PRODUCT_SUPPORTER,
+                PRODUCT_SUPPORTER_ALT -> PremiumTier.PREMIUM
+                PRODUCT_LEGACY_CHAMPION -> PremiumTier.SUPPORTIVE
                 else -> PremiumTier.NONE
             }
 
@@ -501,14 +540,17 @@ class BillingManager private constructor(private val context: Context) {
 
     private fun toSubscriptionOffer(productDetails: ProductDetails): SubscriptionOffer? {
         val tier = when (productDetails.productId) {
-            PRODUCT_PREMIUM -> PremiumTier.PREMIUM
-            PRODUCT_SUPPORTIVE -> PremiumTier.SUPPORTIVE
+            PRODUCT_AD_FREE_MONTHLY,
+            PRODUCT_AD_FREE_YEARLY -> PremiumTier.AD_FREE
+            PRODUCT_SUPPORTER,
+            PRODUCT_SUPPORTER_ALT -> PremiumTier.PREMIUM
             else -> return null
         }
         val offers = productDetails.subscriptionOfferDetails.orEmpty()
         if (offers.isEmpty()) return null
 
         val offer = when (tier) {
+            PremiumTier.AD_FREE,
             PremiumTier.PREMIUM,
             PremiumTier.SUPPORTIVE -> {
                 offers.firstOrNull { freePhaseDurationDays(it) == 0 } ?: offers.first()
@@ -516,11 +558,15 @@ class BillingManager private constructor(private val context: Context) {
             PremiumTier.NONE -> return null
         }
         val recurringPhase = recurringPricePhase(offer) ?: offer.pricingPhases.pricingPhaseList.lastOrNull() ?: return null
-        val title = if (tier == PremiumTier.PREMIUM) "Supporter (₹399/mo)" else "Champion (₹899/mo)"
-        val description = if (tier == PremiumTier.PREMIUM) {
-            "Voluntary monthly contribution to support PocketHost relays and development."
-        } else {
-            "Champion contribution to keep PocketHost fast, reliable, and free for all."
+        val title = when (productDetails.productId) {
+            PRODUCT_AD_FREE_MONTHLY -> "Ad-free monthly"
+            PRODUCT_AD_FREE_YEARLY -> "Ad-free yearly"
+            else -> "PocketHost Supporter"
+        }
+        val description = when (productDetails.productId) {
+            PRODUCT_AD_FREE_MONTHLY -> "Remove ads with a flexible monthly plan."
+            PRODUCT_AD_FREE_YEARLY -> "Remove ads for a full year at the best price."
+            else -> "Monthly support that helps fund PocketHost relays and development."
         }
         return SubscriptionOffer(
             productId = productDetails.productId,
@@ -529,9 +575,10 @@ class BillingManager private constructor(private val context: Context) {
             recurringPrice = recurringPhase.formattedPrice,
             tier = tier,
             description = description,
-            freeTrialDays = 0,
             offerToken = offer.offerToken,
-            productDetails = productDetails
+            productDetails = productDetails,
+            priceAmountMicros = recurringPhase.priceAmountMicros,
+            priceCurrencyCode = recurringPhase.priceCurrencyCode
         )
     }
 

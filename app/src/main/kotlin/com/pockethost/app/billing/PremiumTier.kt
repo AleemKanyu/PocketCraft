@@ -2,8 +2,11 @@ package com.pockethost.app.billing
 
 enum class PremiumTier(val wireValue: String) {
     NONE("none"),
+    AD_FREE("ad_free"),
     PREMIUM("premium"),
     SUPPORTIVE("supportive");
+
+    val isAdFree: Boolean get() = this != NONE
 
     companion object {
         fun fromWireValue(value: String?): PremiumTier {
@@ -24,6 +27,7 @@ data class PremiumEntitlement(
 ) {
     val isPremium: Boolean get() = true
     val isSupportive: Boolean get() = true
+    val isAdFree: Boolean get() = tier.isAdFree
 }
 
 data class SubscriptionOffer(
@@ -33,9 +37,10 @@ data class SubscriptionOffer(
     val recurringPrice: String,
     val tier: PremiumTier,
     val description: String,
-    val freeTrialDays: Int = 0,
     val offerToken: String,
-    val productDetails: com.android.billingclient.api.ProductDetails? = null
+    val productDetails: com.android.billingclient.api.ProductDetails? = null,
+    val priceAmountMicros: Long = 0L,
+    val priceCurrencyCode: String = ""
 ) {
     val hasFreeTrial: Boolean get() = false
 }

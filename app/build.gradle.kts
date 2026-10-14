@@ -132,7 +132,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = autoVersionCode
-        versionName = "1.2.10"
+        versionName = "1.2.11"
 
         buildConfigField("Boolean", "IS_EXTERNAL_BUILD", "true")
         buildConfigField("String", "RELAY_PUBLIC_DOMAIN", "\"joinmc.link\"")

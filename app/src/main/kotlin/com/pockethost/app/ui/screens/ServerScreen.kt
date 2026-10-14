@@ -104,6 +104,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.pockethost.app.R
+import com.pockethost.app.billing.PremiumTier
 import com.pockethost.app.data.model.PlayerInfo
 import com.pockethost.app.data.preferences.AppPreferences
 import com.pockethost.app.data.preferences.AppPreferencesStore
@@ -182,19 +183,28 @@ fun ServerScreen(
     val isPremium by billingManager.isPremium.collectAsState()
     val entitlement by billingManager.entitlement.collectAsState()
     var showPremiumBottomSheet by remember { mutableStateOf(false) }
+    var showAnnoyedByAdsNotice by remember { mutableStateOf(false) }
     var showUpgradeCelebrationAnimation by remember { mutableStateOf(false) }
     var hasInitiallyCheckedPremium by remember { mutableStateOf(false) }
 
-    LaunchedEffect(isPremium) {
+    var previousTier by remember { mutableStateOf(entitlement.tier) }
+
+    LaunchedEffect(entitlement.tier) {
         if (!hasInitiallyCheckedPremium) {
             hasInitiallyCheckedPremium = true
+            previousTier = entitlement.tier
             return@LaunchedEffect
         }
-        if (isPremium) {
+        if (entitlement.tier != PremiumTier.NONE && previousTier == PremiumTier.NONE) {
             showUpgradeCelebrationAnimation = true
-        } else {
-            if (currentMobTheme == MobTheme.CUSTOM) {
-                onMobThemeChange(MobTheme.CREEPER)
+        }
+        previousTier = entitlement.tier
+    }
+
+    LaunchedEffect(Unit) {
+        com.pockethost.app.ads.AdManager.adDismissedEvent.collect {
+            if (entitlement.tier == PremiumTier.NONE && !showPremiumBottomSheet) {
+                showAnnoyedByAdsNotice = true
             }
         }
     }
@@ -975,6 +985,16 @@ fun ServerScreen(
                 com.pockethost.app.ui.components.UpgradeCelebrationDialog(
                     entitlement = entitlement,
                     onDismissRequest = { showUpgradeCelebrationAnimation = false }
+                )
+            }
+
+            if (showAnnoyedByAdsNotice) {
+                com.pockethost.app.ui.components.AnnoyedByAdsNotice(
+                    onUpgradeClick = {
+                        showAnnoyedByAdsNotice = false
+                        showPremiumBottomSheet = true
+                    },
+                    onDismiss = { showAnnoyedByAdsNotice = false }
                 )
             }
 

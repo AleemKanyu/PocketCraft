@@ -1765,7 +1765,12 @@ private fun ServerIdentityCard(
             ) {
 
                 if (stateHolder.serverUiState != ServerUiState.IDLE) {
-                    val statusColor = when (stateHolder.status) {
+                    val effectiveStatus = when {
+                        stateHolder.serverUiState == ServerUiState.RUNNING -> ServerStatus.ONLINE
+                        stateHolder.serverUiState == ServerUiState.STARTING && stateHolder.status == ServerStatus.OFFLINE -> ServerStatus.STARTING
+                        else -> stateHolder.status
+                    }
+                    val statusColor = when (effectiveStatus) {
                         ServerStatus.ONLINE -> PocketColors.Online
                         ServerStatus.STARTING, ServerStatus.RESTARTING -> PocketColors.Starting
                         ServerStatus.OFFLINE -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -1775,12 +1780,12 @@ private fun ServerIdentityCard(
                         modifier = Modifier
                             .card3d(
                                 elevation = 4.dp,
-                                borderColor = when (stateHolder.status) {
+                                borderColor = when (effectiveStatus) {
                                     ServerStatus.ONLINE -> PocketColors.Online.copy(alpha = 0.5f)
                                     ServerStatus.STARTING, ServerStatus.RESTARTING -> PocketColors.Starting.copy(alpha = 0.5f)
                                     ServerStatus.OFFLINE -> PocketColors.Offline.copy(alpha = 0.5f)
                                 },
-                                depthColor = when (stateHolder.status) {
+                                depthColor = when (effectiveStatus) {
                                     ServerStatus.ONLINE -> PocketColors.Online.copy(alpha = 0.3f)
                                     ServerStatus.STARTING, ServerStatus.RESTARTING -> PocketColors.Starting.copy(alpha = 0.3f)
                                     ServerStatus.OFFLINE -> PocketColors.Offline.copy(alpha = 0.3f)
@@ -1789,7 +1794,7 @@ private fun ServerIdentityCard(
                                 borderWidth = 1.dp
                             )
                             .clip(RoundedCornerShape(10.dp)),
-                        color = when (stateHolder.status) {
+                        color = when (effectiveStatus) {
                             ServerStatus.ONLINE -> PocketColors.PrimaryMuted
                             ServerStatus.STARTING, ServerStatus.RESTARTING -> PocketColors.Starting.copy(alpha = 0.18f)
                             ServerStatus.OFFLINE -> PocketColors.Offline.copy(alpha = 0.14f)
@@ -1803,8 +1808,8 @@ private fun ServerIdentityCard(
                             // The ripple only plays while the server is starting. Kept running
                             // while online, it redrew the screen every frame for as long as the
                             // server was up, taking CPU from the server itself.
-                            val isServerRunningOrStarting = stateHolder.status == ServerStatus.STARTING ||
-                                stateHolder.status == ServerStatus.RESTARTING
+                            val isServerRunningOrStarting = effectiveStatus == ServerStatus.STARTING ||
+                                effectiveStatus == ServerStatus.RESTARTING
 
                             Box(
                                 modifier = Modifier.size(12.dp),
@@ -1848,7 +1853,7 @@ private fun ServerIdentityCard(
                                         .background(statusColor),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    if (stateHolder.status == ServerStatus.ONLINE) {
+                                    if (effectiveStatus == ServerStatus.ONLINE) {
                                         Box(
                                             modifier = Modifier
                                                 .size(3.dp)
@@ -1860,8 +1865,8 @@ private fun ServerIdentityCard(
                             }
 
                             Text(
-                                text = stateHolder.status.name,
-                                color = when (stateHolder.status) {
+                                text = effectiveStatus.name,
+                                color = when (effectiveStatus) {
                                     ServerStatus.ONLINE -> PocketColors.PrimaryDark
                                     ServerStatus.STARTING, ServerStatus.RESTARTING -> PocketColors.Starting
                                     ServerStatus.OFFLINE -> PocketColors.Offline
@@ -2064,7 +2069,7 @@ private fun ServerIdentityCard(
         val relaySwitching = relayConnecting && stateHolder.relaySwitchInProgress
         val isOfflineMode = !com.pockethost.app.util.NetworkUtils.isOnline(context)
         val internetRelayAddress = when {
-            isOfflineMode -> "Offline Mode (Local Wi-Fi / LAN Only)"
+            isOfflineMode -> "Local Wi-Fi / LAN Only"
             relaySwitching -> "Switching relay connection..."
             // Only call it a *re*connect once the server actually reached ONLINE. isRunning
             // turns true the moment the process launches, so keying off it labelled the very
@@ -2122,13 +2127,26 @@ private fun ServerIdentityCard(
                             letterSpacing = 0.sp
                         )
 
+                        val relayStatusLabel = when {
+                            relaySwitching -> "Relay Switching"
+                            relayConnecting && stateHolder.status == ServerStatus.ONLINE -> "Reconnecting"
+                            relayConnecting -> "Connecting"
+                            relayReady && international -> "International Ready"
+                            relayReady -> "Relay Ready"
+                            stateHolder.tunnelError != null -> "Relay Error"
+                            isOfflineMode -> "LAN Active"
+                            else -> "Local Ready"
+                        }
+                        val relayStatusTone = when {
+                            relayConnecting || relaySwitching -> PocketColors.Starting
+                            relayReady || isOfflineMode || stateHolder.status == ServerStatus.ONLINE -> PocketColors.Online
+                            stateHolder.tunnelError != null -> PocketColors.Offline
+                            else -> PocketColors.Online
+                        }
+
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = when {
-                                relayConnecting -> PocketColors.Starting.copy(alpha = 0.15f)
-                                relayReady -> PocketColors.Online.copy(alpha = 0.15f)
-                                else -> PocketColors.Offline.copy(alpha = 0.15f)
-                            },
+                            color = relayStatusTone.copy(alpha = 0.15f),
                             modifier = Modifier.padding(start = 8.dp)
                         ) {
                             Row(
@@ -2140,31 +2158,15 @@ private fun ServerIdentityCard(
                                     modifier = Modifier
                                         .size(6.dp)
                                         .background(
-                                            when {
-                                                relayConnecting -> PocketColors.Starting
-                                                relayReady -> PocketColors.Online
-                                                else -> PocketColors.Offline
-                                            },
+                                            relayStatusTone,
                                             CircleShape
                                         )
                                 )
                                 Text(
-                                    when {
-                                        relaySwitching -> "Relay Switching"
-                                        relayConnecting && stateHolder.status == ServerStatus.ONLINE -> "Reconnecting"
-                                        relayConnecting -> "Connecting"
-                                        relayReady && international -> "International Ready"
-                                        relayReady -> "Relay Ready"
-                                        stateHolder.tunnelError != null -> "Relay Error"
-                                        else -> "Relay Offline"
-                                    },
+                                    text = relayStatusLabel,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = when {
-                                        relayConnecting -> PocketColors.Starting
-                                        relayReady -> PocketColors.Online
-                                        else -> PocketColors.Offline
-                                    }
+                                    color = relayStatusTone
                                 )
                             }
                         }

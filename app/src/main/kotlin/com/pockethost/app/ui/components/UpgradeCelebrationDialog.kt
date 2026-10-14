@@ -59,13 +59,17 @@ import com.pockethost.app.ui.theme.Monocraft
 import com.pockethost.app.ui.theme.PocketMotion
 import kotlinx.coroutines.launch
 
-private val premiumPerks = listOf(
-    "Custom IP for easy server joining",
-    "Unlimited AFK Bots",
-    "Support for up to 50 players",
-    "More world slots to design & test",
-    "Full live operator chat access",
-    "Custom server theme"
+private val adFreePerks = listOf(
+    "100% ad-free experience across the app",
+    "Instant world pre-generation without rewarded ads",
+    "Clean, uninterrupted server & console management"
+)
+
+private val supporterPerks = listOf(
+    "100% ad-free experience across the app",
+    "Funds high-speed PocketHost relays and development",
+    "Supporter badge and Discord community role",
+    "Priority support and early update previews"
 )
 
 private val headerGradient = listOf(
@@ -155,14 +159,16 @@ fun UpgradeCelebrationDialog(
         dragHandle = { IosDragHandle() },
         modifier = Modifier.fillMaxWidth()
     ) {
-        val isMember = entitlement.tier == PremiumTier.SUPPORTIVE
-        val headline = if (isMember) "WELCOME, MEMBER!" else "WELCOME TO PRO!"
-        val badgeLabel = if (isMember) "MEMBER PLAN ACTIVE" else "PRO PLAN ACTIVE"
+        val isMember = entitlement.tier == PremiumTier.PREMIUM || entitlement.tier == PremiumTier.SUPPORTIVE
+        val headline = if (isMember) "THANK YOU, SUPPORTER!" else "AD-FREE IS ACTIVE!"
+        val badgeLabel = if (isMember) "SUPPORTER PLAN ACTIVE" else "AD-FREE PLAN ACTIVE"
         val subtitle = if (isMember) {
-            "Your Member plan is active and linked to your account. Thank you for supporting PocketCraft."
+            "Your Supporter plan is active and linked to your account. Thank you for helping PocketHost grow."
         } else {
-            "Your Pro subscription is active and linked to your account."
+            "Your ad-free subscription is active and linked to your account."
         }
+        val perksHeader = if (isMember) "SUPPORTER PERKS UNLOCKED" else "WHAT'S INCLUDED"
+        val activePerks = if (isMember) supporterPerks else adFreePerks
 
         Column(
             modifier = Modifier
@@ -322,7 +328,7 @@ fun UpgradeCelebrationDialog(
                 verticalArrangement = Arrangement.spacedBy(13.dp)
             ) {
                 Text(
-                    text = "PRO FEATURES UNLOCKED",
+                    text = perksHeader,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.ExtraBold,
                     fontFamily = Monocraft,
@@ -330,7 +336,7 @@ fun UpgradeCelebrationDialog(
                     color = Color(0xFFAB47BC)
                 )
 
-                premiumPerks.forEachIndexed { index, perk ->
+                activePerks.forEachIndexed { index, perk ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

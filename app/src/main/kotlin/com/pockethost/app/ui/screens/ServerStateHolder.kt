@@ -1180,7 +1180,7 @@ class ServerStateHolder(
     val status: ServerStatus
         get() = when {
             isRestarting -> ServerStatus.RESTARTING
-            isRunning && isJavaServerDone && serverJoinable && !isStarting -> ServerStatus.ONLINE
+            isRunning && (isJavaServerDone || serverJoinable) && !isStarting -> ServerStatus.ONLINE
             isStarting || isRunning -> ServerStatus.STARTING
             else -> ServerStatus.OFFLINE
         }
@@ -2437,8 +2437,26 @@ class ServerStateHolder(
         val processAlive = isServerProcessAlive()
 
         val isRelayPending = tunnelConnecting && publicAddress.isNullOrBlank() && tunnelError == null
-        // Server is truly RUNNING if Java server boot is done and process is alive.
-        if (isJavaServerDone && processAlive) {
+
+        // If the TCP port is accepting connections, the server is definitively running and joinable!
+        if (portOpen) {
+            isJavaServerDone = true
+            serverJoinable = true
+            isRunning = true
+            isStarting = false
+            if (!address.isNullOrBlank() && publicAddress.isNullOrBlank()) {
+                publicAddress = address
+                tunnelConnecting = false
+            }
+            return PersistedRuntimeState(isRunning = true, publicAddress = address)
+        }
+
+        // Server is truly RUNNING if process is alive and Java server was marked done or rawState was RUNNING
+        if (processAlive && (isJavaServerDone || rawState == ServerHostService.RUNTIME_STATE_RUNNING)) {
+            isRunning = true
+            isJavaServerDone = true
+            serverJoinable = true
+            isStarting = false
             if (!address.isNullOrBlank() && publicAddress.isNullOrBlank()) {
                 publicAddress = address
                 tunnelConnecting = false
@@ -2448,34 +2466,17 @@ class ServerStateHolder(
 
         val startingGracePeriod = !isJavaServerDone && (isStarting || (lastStartRequestedRealtime > 0 && SystemClock.elapsedRealtime() - lastStartRequestedRealtime < 120000L))
 
-        if (startingGracePeriod && processAlive) {
+        if (processAlive && (startingGracePeriod || rawState == ServerHostService.RUNTIME_STATE_STARTING || isStarting || rawState.startsWith("STARTING"))) {
             return PersistedRuntimeState(isStarting = true, publicAddress = address)
         }
 
-        if (rawState == ServerHostService.RUNTIME_STATE_RUNNING || isRunning) {
-            if ((portOpen || processAlive) && isJavaServerDone) {
-                return PersistedRuntimeState(isRunning = true, publicAddress = address)
-            }
-            if (startingGracePeriod && processAlive) {
-                return PersistedRuntimeState(isStarting = true, publicAddress = address)
-            }
+        // Only declare offline if the process is actually dead and port is not open
+        if (!processAlive && !portOpen) {
             ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
             return PersistedRuntimeState()
         }
 
-        if (rawState == ServerHostService.RUNTIME_STATE_STARTING || isStarting || rawState.startsWith("STARTING")) {
-            if ((portOpen || processAlive) && isJavaServerDone) {
-                return PersistedRuntimeState(isRunning = true, publicAddress = address)
-            }
-            if (startingGracePeriod && processAlive) {
-                return PersistedRuntimeState(isStarting = true, publicAddress = address)
-            }
-            // Dead state
-            ServerHostService.persistRuntimeState(appContext, versionId, activeWorld, ServerHostService.RUNTIME_STATE_OFFLINE)
-            return PersistedRuntimeState()
-        }
-
-        return PersistedRuntimeState()
+        return PersistedRuntimeState(isRunning = processAlive, publicAddress = address)
     }
 
 

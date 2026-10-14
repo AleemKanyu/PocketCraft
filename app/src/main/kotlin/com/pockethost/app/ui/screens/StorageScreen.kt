@@ -1,6 +1,9 @@
 package com.pockethost.app.ui.screens
 
+import android.content.ContentResolver
 import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -157,6 +160,7 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
         ServerFileManager.getServerDir(context, stateHolder.activeWorld)
     }
 
+    var fileListRevision by remember { mutableIntStateOf(0) }
     var currentDir by remember(root) { mutableStateOf(root) }
     var editingFile by remember { mutableStateOf<File?>(null) }
     var deleteConfirmFile by remember { mutableStateOf<File?>(null) }
@@ -169,7 +173,7 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
         label = "upload_progress"
     )
 
-    val children = remember(currentDir) {
+    val children = remember(currentDir, fileListRevision) {
         currentDir.listFiles()
             ?.sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name.lowercase() })
             .orEmpty()
@@ -183,10 +187,16 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
             uploadProgress = 0
             uploadIndeterminate = false
 
+            var uploadSuccess = false
+            var uploadedFileName = ""
+            var errorMessage: String? = null
+
             runCatching {
-                val inputStream = context.contentResolver.openInputStream(uri) ?: return@runCatching
-                val fileName = uri.path?.substringAfterLast('/') ?: "uploaded_file"
-                val outputFile = File(currentDir, fileName)
+                val resolvedName = queryFileName(context, uri)
+                uploadedFileName = resolvedName
+                val outputFile = File(currentDir, resolvedName)
+                val inputStream = context.contentResolver.openInputStream(uri)
+                    ?: throw java.io.IOException("Cannot read selected file")
                 val totalBytes = context.contentResolver.openAssetFileDescriptor(uri, "r")?.length ?: -1L
                 uploadIndeterminate = totalBytes <= 0L
 
@@ -211,6 +221,10 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                 }
 
                 uploadProgress = 100
+                uploadSuccess = true
+            }.onFailure { e ->
+                errorMessage = e.message ?: "Could not write file"
+                android.util.Log.e("StorageScreen", "File upload failed", e)
             }
 
             val visibleDuration = System.currentTimeMillis() - uploadStartedAt
@@ -221,6 +235,16 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
             isUploading = false
             uploadProgress = 0
             uploadIndeterminate = false
+
+            if (uploadSuccess) {
+                fileListRevision++
+                if (uploadedFileName.equals("server.properties", ignoreCase = true)) {
+                    stateHolder.refreshAll()
+                }
+                Toast.makeText(context, "Uploaded $uploadedFileName successfully", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Upload failed: ${errorMessage ?: "Could not save file"}", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -420,6 +444,7 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
                 initialFile = if (editingFile != root) editingFile else null,
                 isServerRunning = stateHolder.status != ServerStatus.OFFLINE,
                 onFileSaved = { savedFile ->
+                    fileListRevision++
                     if (savedFile.name == "server.properties") {
                         stateHolder.refreshAll()
                     }
@@ -444,8 +469,22 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
             confirmButton = {
                 Button(
                     onClick = {
-                        file.delete()
-                        deleteConfirmFile = null
+                        val fileName = file.name
+                        scope.launch {
+                            val deleted = withContext(Dispatchers.IO) {
+                                file.deleteRecursively()
+                            }
+                            deleteConfirmFile = null
+                            if (deleted) {
+                                fileListRevision++
+                                if (fileName.equals("server.properties", ignoreCase = true)) {
+                                    stateHolder.refreshAll()
+                                }
+                                Toast.makeText(context, "Deleted $fileName", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Failed to delete $fileName", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error
@@ -462,4 +501,20 @@ private fun ServerFilesBrowser(stateHolder: ServerStateHolder) {
         )
     }
 
+}
+
+private fun queryFileName(context: android.content.Context, uri: Uri): String {
+    var result: String? = null
+    if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
+        runCatching {
+            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex != -1 && cursor.moveToFirst()) {
+                    result = cursor.getString(nameIndex)
+                }
+            }
+        }
+    }
+    val fallback = uri.path?.substringAfterLast('/')?.substringAfterLast(':')?.ifBlank { null } ?: "uploaded_file"
+    return (result ?: fallback).replace(File.separatorChar, '_').trim()
 }

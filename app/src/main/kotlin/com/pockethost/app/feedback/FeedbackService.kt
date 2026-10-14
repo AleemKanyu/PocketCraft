@@ -142,8 +142,10 @@ object FeedbackService {
         }.getOrDefault(false)
     }
 
+    const val PLAY_STORE_PACKAGE = "com.pockethost.app"
+
     fun openPlayStore(context: Context): Boolean {
-        val packageName = context.packageName
+        val packageName = PLAY_STORE_PACKAGE
         val playStoreIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$packageName"))
 
         return runCatching {

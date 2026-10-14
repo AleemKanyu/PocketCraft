@@ -93,9 +93,6 @@ import com.pockethost.app.config.RemoteConfigManager
 import com.pockethost.app.R
 import com.pockethost.app.ui.components.BroadcastBanner
 import com.pockethost.app.ui.components.AnnouncementDialog
-import com.pockethost.app.ui.components.SupportUsPopup
-import com.pockethost.app.ads.AdPlacement
-import com.pockethost.app.ads.NativeAdCard
 import com.pockethost.app.ui.components.BroadcastPopup
 import com.pockethost.app.ui.components.NewFeaturesPopup
 import com.pockethost.app.ui.components.DuoButton
@@ -125,6 +122,8 @@ import androidx.compose.material.icons.filled.Restore
 import com.pockethost.app.billing.BillingManager
 import com.pockethost.app.billing.PremiumTier
 import com.pockethost.app.ui.components.PromotionBottomSheet
+import com.pockethost.app.ads.AdPlacement
+import com.pockethost.app.ads.NativeAdCard
 import com.pockethost.app.ui.components.PremiumUpgradeBottomSheet
 import com.pockethost.app.data.model.ServerType
 import com.pockethost.app.server.ServerHostService
@@ -291,14 +290,10 @@ fun PocketHostApp(
                 }
                 preferences.resetProToMemberUpsellTracking(currentTier)
             }
+            PremiumTier.AD_FREE,
             PremiumTier.PREMIUM -> {
                 preferences.resetFreeToProUpsellTracking()
-                if (previousTier != PremiumTier.PREMIUM.wireValue || !preferences.proToMemberUpsellTrackingStarted) {
-                    preferences.proToMemberUpsellTrackingStarted = true
-                    preferences.proToMemberUpsellStartLaunchCount = preferences.appLaunchCount
-                    preferences.proToMemberUpsellLastShownLaunchCount = 0
-                    preferences.proToMemberUpsellShown = false
-                }
+                preferences.resetProToMemberUpsellTracking(currentTier)
             }
             PremiumTier.SUPPORTIVE -> {
                 preferences.resetFreeToProUpsellTracking()
@@ -764,12 +759,8 @@ fun PocketHostApp(
         hasPendingBroadcast
     ) {
         if (screen != Screen.SERVER || !homeScreenReady) return@LaunchedEffect
-        // Someone already supporting the app is not asked again. isPremiumUser cannot tell:
-        // it is true for everyone now that every feature is free.
-        val supportTier = preferences.lastSeenMembershipTier.ifBlank { PremiumTier.NONE.wireValue }
-        if (supportTier == PremiumTier.NONE.wireValue &&
-            SupportUsPopup.isDue(preferences.appLaunchCount, preferences.donationReminderLastShownLaunchCount)
-        ) {
+        val is15thLaunch = preferences.appLaunchCount > 0 && (preferences.appLaunchCount % 15 == 0)
+        if (is15thLaunch && preferences.donationReminderLastShownLaunchCount != preferences.appLaunchCount) {
             pendingDonationReminderDialog = true
         }
     }
@@ -809,10 +800,7 @@ fun PocketHostApp(
             hasPendingBroadcast
         if (hasBlockingPopup) return@LaunchedEffect
         if (popupShownThisLaunch) return@LaunchedEffect
-        popupShownThisLaunch = true
-        preferences.donationReminderLastShownLaunchCount = preferences.appLaunchCount
-        pendingDonationReminderDialog = false
-        showDonationReminderDialog = true
+        // Voluntary donation popups disabled
     }
 
     LaunchedEffect(
@@ -840,6 +828,7 @@ fun PocketHostApp(
         val targetGroup = when (entitlement.tier) {
             PremiumTier.NONE -> "free"
             PremiumTier.PREMIUM -> "pro"
+            PremiumTier.AD_FREE -> null
             else -> null
         }
         if (targetGroup != null) {
@@ -1288,29 +1277,6 @@ fun PocketHostApp(
             broadcast = msg,
             onDismiss = {
                 broadcastViewModel.dismiss(msg.id)
-            }
-        )
-    }
-
-    if (showDonationReminderDialog) {
-        SupportUsPopup.Content(
-            onSupport = {
-                showDonationReminderDialog = false
-                showPremiumUpgradeDialog = true
-            },
-            onDismiss = { showDonationReminderDialog = false }
-        )
-    }
-
-    // showPremiumUpgradeDialog was set by the support reminder and by promotions, but nothing
-    // here ever drew the sheet: the button did nothing, and the flag stayed on, which also
-    // left the system navigation bar in the sheet colour instead of the footer colour.
-    if (showPremiumUpgradeDialog) {
-        com.pockethost.app.ui.components.PremiumUpgradeBottomSheet(
-            onDismissRequest = { showPremiumUpgradeDialog = false },
-            onNavigateToSignUp = {
-                showPremiumUpgradeDialog = false
-                Toast.makeText(context, "Sign in from Settings > Account, then open Support again.", Toast.LENGTH_LONG).show()
             }
         )
     }
@@ -2382,7 +2348,8 @@ private fun openExternalUrl(context: Context, url: String): Boolean {
 }
 
 private fun openPlayStoreListing(context: Context): Boolean {
-    val packageName = context.packageName
+    // The listing id is fixed: test copies carry a package suffix that has no store page.
+    val packageName = FeedbackService.PLAY_STORE_PACKAGE
     val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName")).apply {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
