@@ -282,16 +282,15 @@ fun PocketTopBar(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Support & Donate button with subtle heartbeat pulse and hollow colored outline
-                val heartTransition = rememberInfiniteTransition(label = "topbar_heart_pulse")
-                val heartPulseScale by heartTransition.animateFloat(
-                    initialValue = 1f,
-                    targetValue = 1.08f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(1400, easing = FastOutSlowInEasing),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "heart_pulse_scale"
-                )
+                // A few beats, then rest: a never-ending pulse keeps the whole app
+                // drawing 60 frames a second, which costs battery while hosting.
+                val heartPulse = remember { androidx.compose.animation.core.Animatable(1f) }
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    repeat(3) {
+                        heartPulse.animateTo(1.08f, tween(700, easing = FastOutSlowInEasing))
+                        heartPulse.animateTo(1f, tween(700, easing = FastOutSlowInEasing))
+                    }
+                }
 
                 val showSupportHeart = remember {
                     com.pockethost.app.data.preferences.AppPreferences(context).supportHeartVisibleThisLaunch()
@@ -300,8 +299,8 @@ fun PocketTopBar(
                     modifier = Modifier
                         .size(34.dp)
                         .graphicsLayer {
-                            scaleX = heartPulseScale
-                            scaleY = heartPulseScale
+                            scaleX = heartPulse.value
+                            scaleY = heartPulse.value
                         }
                         .raisedBorder(
                             color = Color(0xFFFF4B72).copy(alpha = 0.55f),

@@ -944,6 +944,13 @@ fun ServerScreen(
                 )
             }
 
+            stateHolder.addressChangeNotice?.let { address ->
+                com.pockethost.app.ui.components.AddressChangedNotice(
+                    address = address,
+                    onDismiss = { stateHolder.dismissAddressChangeNotice() }
+                )
+            }
+
             if (stateHolder.pregenSheetVisible) {
                 com.pockethost.app.ui.components.PregenPopup(stateHolder)
             }

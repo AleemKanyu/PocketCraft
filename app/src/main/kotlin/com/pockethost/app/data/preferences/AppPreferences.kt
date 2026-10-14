@@ -424,6 +424,11 @@ class AppPreferences(context: Context) {
         set(value) = prefs.edit().putBoolean("create_server_tour_shown", value).apply()
 
     /** True once a server on this device has reached Online at least once. */
+    /** The one-time "your address changed" notice for the move to pockethost.online was shown. */
+    var addressChangeNoticeShown: Boolean
+        get() = prefs.getBoolean("address_change_notice_shown_pockethost_online", false)
+        set(value) = prefs.edit().putBoolean("address_change_notice_shown_pockethost_online", value).apply()
+
     var hasServerEverStarted: Boolean
         get() = prefs.getBoolean("has_server_ever_started", false)
         set(value) = prefs.edit().putBoolean("has_server_ever_started", value).apply()

@@ -590,6 +590,19 @@ class ServerStateHolder(
     var pregenSkipFraction by mutableStateOf(0f)
         private set
     private var pregenRequestedRadius = 0
+    /**
+     * Address to show in the one-time "your address changed" notice, or null. Only for people
+     * whose server had been online before this version, whose friends know the old address.
+     */
+    var addressChangeNotice by mutableStateOf<String?>(null)
+        private set
+    private val hadServerOnlineBefore = com.pockethost.app.data.preferences.AppPreferences(context).hasServerEverStarted
+
+    fun dismissAddressChangeNotice() {
+        addressChangeNotice = null
+        com.pockethost.app.data.preferences.AppPreferences(appContext).addressChangeNoticeShown = true
+    }
+
     /** Chunks actually saved in the world's overworld region files, or null until counted. */
     var worldChunkCount by mutableStateOf<Long?>(null)
         private set
@@ -603,12 +616,14 @@ class ServerStateHolder(
     fun refreshWorldChunkCount() {
         if (worldChunkCountJob?.isActive == true) return
         worldChunkCountJob = scope.launch(Dispatchers.IO) {
-            val regionDir = File(
-                File(ServerFileManager.getServerDir(appContext, activeWorld.ifBlank { "world" }), pregenWorldName()),
-                "region"
-            )
+            val worldDir = File(ServerFileManager.getServerDir(appContext, activeWorld.ifBlank { "world" }), pregenWorldName())
+            // Minecraft 26+ keeps the overworld under dimensions/; older versions use region/ directly.
+            val regionDir = listOf(
+                File(worldDir, "dimensions/minecraft/overworld/region"),
+                File(worldDir, "region")
+            ).firstOrNull { dir -> dir.listFiles { file -> file.name.endsWith(".mca") }?.isNotEmpty() == true }
             var total = 0L
-            regionDir.listFiles { file -> file.name.endsWith(".mca") }?.forEach { file ->
+            regionDir?.listFiles { file -> file.name.endsWith(".mca") }?.forEach { file ->
                 runCatching {
                     java.io.RandomAccessFile(file, "r").use { raf ->
                         if (raf.length() < 4096) return@use
@@ -972,6 +987,13 @@ class ServerStateHolder(
                         isRelayDone = true
                         relayFallbackActive = intent.getBooleanExtra(ServerHostService.EXTRA_IS_FALLBACK, false)
                         if (!publicAddress.isNullOrBlank()) {
+                            val newAddress = publicAddress.orEmpty()
+                            if (hadServerOnlineBefore && !usesPlayitTunnel &&
+                                newAddress.contains("pockethost.online") &&
+                                !com.pockethost.app.data.preferences.AppPreferences(appContext).addressChangeNoticeShown
+                            ) {
+                                addressChangeNotice = newAddress
+                            }
                             appendLog("[PocketHost] Internet address: $publicAddress")
                             val addressPrefs = com.pockethost.app.data.preferences.AppPreferences(appContext)
                             if (!usesPlayitTunnel && addressPrefs.customSubdomain.isNullOrBlank()) {
