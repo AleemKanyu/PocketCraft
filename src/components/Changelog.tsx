@@ -11,9 +11,48 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "v1.2.10",
+    date: "Oct 2026",
+    badge: "latest",
+    changes: [
+      { type: "feat", text: "New server address ending in pockethost.online — the app shows your new address once after you update" },
+      { type: "fix", text: "Older Bedrock versions no longer get kicked right after joining" },
+      { type: "fix", text: "Bedrock server list shows ping and player count again" },
+      { type: "fix", text: "Changing a player's game mode works, and the player page shows their real mode" },
+      { type: "fix", text: "World pre-generation shows the true chunk total, including Minecraft 26.x worlds" },
+      { type: "perf", text: "Far less CPU and battery used while hosting — more power left for your server's TPS and ping" },
+    ],
+  },
+  {
+    version: "v1.2.9",
+    date: "Oct 2026",
+    badge: "major",
+    changes: [
+      { type: "feat", text: "Pre-generate your world — build chunks around spawn ahead of time so players explore without lag" },
+      { type: "feat", text: "Live pre-generation timer with chunks built and speed — pause, resume or stop any time" },
+      { type: "feat", text: "Game rules as simple switches — Keep Inventory, One Player Sleep, Mob Damage, Phantoms, Fire Spread and more" },
+      { type: "feat", text: "Custom IP: clear \"already in use\" message and a way to reclaim a name that was yours" },
+      { type: "perf", text: "Smoother app — animated Settings, a chat bubble that stays on screen, tidier home buttons" },
+    ],
+  },
+  {
+    version: "v1.2.4 – v1.2.8",
+    date: "Oct 2026",
+    changes: [
+      { type: "feat", text: "Guided first server — the step-by-step guide starts by itself after the welcome pages" },
+      { type: "feat", text: "Coloured MOTD with & codes, e.g. &aGreen &lBold" },
+      { type: "feat", text: "Import player data from a world backup ZIP or a single .dat file" },
+      { type: "feat", text: "Bedrock players on older game versions (1.9.0 and up) can join" },
+      { type: "feat", text: "Server can start without internet (LAN only) once its files are downloaded" },
+      { type: "fix", text: "Minecraft 26.x worlds, inventories and stats stay safe across restarts" },
+      { type: "fix", text: "Server name, description and photo stay saved; mods you switch off stay off" },
+      { type: "fix", text: "Vanilla servers start cleanly and console commands run instantly" },
+      { type: "fix", text: "Home-screen widget follows the server through start, run and stop" },
+    ],
+  },
+  {
     version: "v1.2.3",
     date: "Sep 2026",
-    badge: "latest",
     changes: [
       { type: "perf", text: "Dramatically faster server startup — boots in seconds, not minutes" },
       { type: "feat", text: "Optimized APK with smaller download size" },
