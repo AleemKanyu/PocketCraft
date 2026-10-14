@@ -806,6 +806,26 @@ object PlayerDataManager {
         fixPlayerGameMode(getPlayerDataFile(context, worldName, playerUuid), mode)
     }
 
+    /** The player's game mode (0 survival, 1 creative, 2 adventure, 3 spectator) from their save file. */
+    fun readPlayerGameMode(file: File): Int? {
+        if (!file.exists()) return null
+        return runCatching {
+            val bytes = java.util.zip.GZIPInputStream(file.inputStream()).use { it.readBytes() }
+            // TAG_Int named "playerGameType", then its 4-byte big-endian value.
+            val marker = byteArrayOf(0x03, 0x00, 0x0E) + "playerGameType".toByteArray()
+            for (i in 0 until bytes.size - marker.size - 4) {
+                if (marker.indices.all { bytes[i + it] == marker[it] }) {
+                    val o = i + marker.size
+                    return@runCatching ((bytes[o].toInt() and 0xFF) shl 24) or
+                        ((bytes[o + 1].toInt() and 0xFF) shl 16) or
+                        ((bytes[o + 2].toInt() and 0xFF) shl 8) or
+                        (bytes[o + 3].toInt() and 0xFF)
+                }
+            }
+            null
+        }.getOrNull()
+    }
+
     fun fixPlayerGameMode(file: File, mode: Int): Boolean {
         if (!file.exists()) return false
         return runCatching {

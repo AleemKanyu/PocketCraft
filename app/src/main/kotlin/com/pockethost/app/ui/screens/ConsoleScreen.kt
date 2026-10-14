@@ -1800,35 +1800,36 @@ private fun ServerIdentityCard(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            val isServerRunningOrStarting = stateHolder.status == ServerStatus.ONLINE ||
-                                stateHolder.status == ServerStatus.STARTING ||
+                            // The ripple only plays while the server is starting. Kept running
+                            // while online, it redrew the screen every frame for as long as the
+                            // server was up, taking CPU from the server itself.
+                            val isServerRunningOrStarting = stateHolder.status == ServerStatus.STARTING ||
                                 stateHolder.status == ServerStatus.RESTARTING
-
-                            val statusRippleTransition = rememberInfiniteTransition(label = "status_ripple")
-                            val rippleScale by statusRippleTransition.animateFloat(
-                                initialValue = 1f,
-                                targetValue = 2.2f,
-                                animationSpec = infiniteRepeatable(
-                                    animation = tween(1500, easing = LinearEasing),
-                                    repeatMode = RepeatMode.Restart
-                                ),
-                                label = "status_ripple_scale"
-                            )
-                            val rippleAlpha by statusRippleTransition.animateFloat(
-                                initialValue = 0.6f,
-                                targetValue = 0f,
-                                animationSpec = infiniteRepeatable(
-                                    animation = tween(1500, easing = LinearEasing),
-                                    repeatMode = RepeatMode.Restart
-                                ),
-                                label = "status_ripple_alpha"
-                            )
 
                             Box(
                                 modifier = Modifier.size(12.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (isServerRunningOrStarting) {
+                                    val statusRippleTransition = rememberInfiniteTransition(label = "status_ripple")
+                                    val rippleScale by statusRippleTransition.animateFloat(
+                                        initialValue = 1f,
+                                        targetValue = 2.2f,
+                                        animationSpec = infiniteRepeatable(
+                                            animation = tween(1500, easing = LinearEasing),
+                                            repeatMode = RepeatMode.Restart
+                                        ),
+                                        label = "status_ripple_scale"
+                                    )
+                                    val rippleAlpha by statusRippleTransition.animateFloat(
+                                        initialValue = 0.6f,
+                                        targetValue = 0f,
+                                        animationSpec = infiniteRepeatable(
+                                            animation = tween(1500, easing = LinearEasing),
+                                            repeatMode = RepeatMode.Restart
+                                        ),
+                                        label = "status_ripple_alpha"
+                                    )
                                     Box(
                                         modifier = Modifier
                                             .size(9.dp)
@@ -2723,16 +2724,21 @@ private fun PremiumHomeButton(
     val widthModifier = Modifier.fillMaxWidth()
 
     val isStartServer = style == PremiumHomeButtonStyle.StartServer && enabled
-    val shimmerTransition = rememberInfiniteTransition(label = "btn_shimmer")
-    val shimmerOffset by shimmerTransition.animateFloat(
-        initialValue = -0.6f,
-        targetValue = 1.6f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2600, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "btn_shimmer_offset"
-    )
+    // Only the Start button shimmers. Every button used to run this endless animation, which
+    // kept the screen working every frame while the server was running and short of CPU.
+    val shimmerOffset = if (isStartServer) {
+        rememberInfiniteTransition(label = "btn_shimmer").animateFloat(
+            initialValue = -0.6f,
+            targetValue = 1.6f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(2600, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "btn_shimmer_offset"
+        )
+    } else {
+        null
+    }
 
     Box(
         modifier = modifier
@@ -2769,7 +2775,7 @@ private fun PremiumHomeButton(
                         .drawWithContent {
                             drawContent()
                             val width = size.width
-                            val x = shimmerOffset * width
+                            val x = (shimmerOffset?.value ?: 0f) * width
                             val shimmerBrush = Brush.linearGradient(
                                 colors = listOf(
                                     Color.White.copy(alpha = 0f),

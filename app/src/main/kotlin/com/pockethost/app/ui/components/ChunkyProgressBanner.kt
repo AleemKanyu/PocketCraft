@@ -80,7 +80,7 @@ fun ChunkyProgressBanner(
                 )
                 if (chunks != null && chunks > 0) {
                     Text(
-                        "${"%,d".format(chunks)} chunks",
+                        "${"%,d".format(chunks)} chunks in world",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = PocketColors.TextSecondary

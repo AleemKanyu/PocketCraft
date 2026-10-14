@@ -627,7 +627,7 @@ fun ServerScreen(
             // Bottom-right corner, level with the chat bubble on the left, clear of the content.
             ChunkyProgressBanner(
                 progress = stateHolder.chunkyProgressPercent.takeIf { !stateHolder.pregenSheetVisible },
-                chunks = stateHolder.pregenProgress?.chunks,
+                chunks = stateHolder.worldChunkCount ?: stateHolder.pregenProgress?.chunks,
                 onClick = { stateHolder.openPregenSheet() },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)

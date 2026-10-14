@@ -168,11 +168,13 @@ private fun Setup(stateHolder: ServerStateHolder) {
         return
     }
 
-    if (built > 0) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            Stat("Chunks built so far", "%,d".format(chunksWithin(built)), Modifier.weight(1f))
-            Stat("Out from spawn", "$built blocks", Modifier.weight(1f))
-        }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Stat(
+            "Chunks in this world",
+            stateHolder.worldChunkCount?.let { "%,d".format(it) } ?: "...",
+            Modifier.weight(1f)
+        )
+        if (built > 0) Stat("Built out from spawn", "$built blocks", Modifier.weight(1f))
     }
 
     Label("How much")
@@ -287,7 +289,22 @@ private fun Running(stateHolder: ServerStateHolder, dismiss: () -> Unit) {
         Stat("Time", clock(elapsed), Modifier.weight(1f))
         Stat("Speed", progress?.let { "${it.chunksPerSecond.toInt()}/s" } ?: "-", Modifier.weight(1f))
     }
-    Stat("Chunks built so far", "%,d".format(progress?.chunks ?: 0), Modifier.fillMaxWidth())
+    // Chunks saved in the world, counted from its files every few seconds, so it includes
+    // what earlier runs and players' exploring made, not just this run.
+    LaunchedEffect(Unit) {
+        while (true) {
+            stateHolder.refreshWorldChunkCount()
+            delay(5_000L)
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Stat("This run", "%,d".format(progress?.chunks ?: 0), Modifier.weight(1f))
+        Stat(
+            "Chunks in this world",
+            stateHolder.worldChunkCount?.let { "%,d".format(it) } ?: "...",
+            Modifier.weight(1f)
+        )
+    }
 
     stateHolder.pregenMessage?.let { Hint(it, warning = true) }
     if (!paused && progress != null && progress.percent / 100f < stateHolder.pregenSkipFraction) {
@@ -316,7 +333,13 @@ private fun Done(stateHolder: ServerStateHolder, dismiss: () -> Unit) {
     val elapsed = stateHolder.pregenStartedAtMs?.let { ((System.currentTimeMillis() - it) / 1000).coerceAtLeast(0) } ?: 0
     Title("World is ready")
     TimerRing(fraction = 1f, paused = false, center = "100%", caption = "done")
-    Hint("Built ${"%,d".format(stateHolder.pregenProgress?.chunks ?: 0)} chunks in ${clock(elapsed)}.")
+    LaunchedEffect(Unit) { stateHolder.refreshWorldChunkCount() }
+    Hint("Checked ${"%,d".format(stateHolder.pregenProgress?.chunks ?: 0)} chunks in ${clock(elapsed)}.")
+    Stat(
+        "Chunks in this world",
+        stateHolder.worldChunkCount?.let { "%,d".format(it) } ?: "...",
+        Modifier.fillMaxWidth()
+    )
     DuoButton(text = "Done", onClick = dismiss)
 }
 

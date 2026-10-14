@@ -161,6 +161,12 @@ fun PlayerDetailScreen(
         }
     }
 
+    // Show the player's real game mode, not a fixed "survival" that reset every time the
+    // page was opened again.
+    LaunchedEffect(player.name, refreshTrigger, onlinePlayer != null) {
+        stateHolder.fetchPlayerGamemode(player)?.let { gamemode = it }
+    }
+
     LaunchedEffect(player.name, stateHolder.versionLabel) {
         val statusSnapshot = withContext(Dispatchers.IO) {
             Triple(

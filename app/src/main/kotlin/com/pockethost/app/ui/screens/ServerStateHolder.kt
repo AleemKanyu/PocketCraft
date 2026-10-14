@@ -590,6 +590,47 @@ class ServerStateHolder(
     var pregenSkipFraction by mutableStateOf(0f)
         private set
     private var pregenRequestedRadius = 0
+    /** Chunks actually saved in the world's overworld region files, or null until counted. */
+    var worldChunkCount by mutableStateOf<Long?>(null)
+        private set
+    private var worldChunkCountJob: Job? = null
+
+    /**
+     * Counts the chunks saved in the world by reading each region file's header: 1024 entries
+     * of 4 bytes, one per chunk slot, non-zero when that chunk exists. Cheap (4 KB per region
+     * file) and exact for whatever is on disk, however the chunks were made.
+     */
+    fun refreshWorldChunkCount() {
+        if (worldChunkCountJob?.isActive == true) return
+        worldChunkCountJob = scope.launch(Dispatchers.IO) {
+            val regionDir = File(
+                File(ServerFileManager.getServerDir(appContext, activeWorld.ifBlank { "world" }), pregenWorldName()),
+                "region"
+            )
+            var total = 0L
+            regionDir.listFiles { file -> file.name.endsWith(".mca") }?.forEach { file ->
+                runCatching {
+                    java.io.RandomAccessFile(file, "r").use { raf ->
+                        if (raf.length() < 4096) return@use
+                        val header = ByteArray(4096)
+                        raf.readFully(header)
+                        for (i in 0 until 1024) {
+                            val o = i * 4
+                            if (header[o].toInt() != 0 || header[o + 1].toInt() != 0 ||
+                                header[o + 2].toInt() != 0 || header[o + 3].toInt() != 0
+                            ) total++
+                        }
+                    }
+                }
+            }
+            withContext(Dispatchers.Main) { worldChunkCount = total }
+        }
+    }
+
+    /** A run was paused because players joined; resume it once the server is empty again. */
+    private var pregenPausedForPlayers = false
+    private var lastPregenAutoPauseMs = 0L
+    private var lastWorldChunkCountMs = 0L
     private val handledPregenFinishLines = mutableSetOf<String>()
     private val handledPregenProgressLines = LinkedHashSet<String>()
     private var pregenRequestedAtMs = 0L
@@ -1940,6 +1981,7 @@ class ServerStateHolder(
         ConsoleParser.parseJoin(cleanLine)?.let { (name, uuid) ->
             if (isRunning && !isStopping) {
                 sendCommand("chunky pause", showOfflineWarning = false)
+                pregenPausedForPlayers = true
                 upsertOnlinePlayer(name = name, uuid = uuid)
                 
                 val now: Long = SystemClock.elapsedRealtime()
@@ -1971,7 +2013,9 @@ class ServerStateHolder(
         }
         ConsoleParser.parseLeave(cleanLine)?.let { name ->
             onlinePlayers.removeAll { it.name.equals(name, ignoreCase = true) }
-            if (onlinePlayers.isEmpty() && isRunning && !isStopping) {
+            // Only resume a run that was paused for players, not one the user paused.
+            if (onlinePlayers.isEmpty() && isRunning && !isStopping && pregenPausedForPlayers) {
+                pregenPausedForPlayers = false
                 sendCommand("chunky continue", showOfflineWarning = false)
             }
         }
@@ -2969,6 +3013,7 @@ class ServerStateHolder(
         // A finish picked up from the console that this screen never started is not a result to show.
         if (pregenFinished && pregenRequestedRadius == 0) resetPregen()
         pregenBuiltRadius = com.pockethost.app.data.preferences.AppPreferences(appContext).pregenBuiltRadius(pregenWorldName())
+        refreshWorldChunkCount()
         pregenSheetVisible = true
     }
 
@@ -3058,6 +3103,20 @@ class ServerStateHolder(
         ConsoleParser.parseChunkyUpdate(line)?.let { update ->
             // A progress line seen before is a console replay, not news.
             if (!handledPregenProgressLines.add(line)) return
+            // Building chunks takes CPU the players need. The join handler pauses runs, but a
+            // player can be online without the app having seen the join (for example after the
+            // app restarted), so any progress while someone is online pauses it again.
+            val nowMs = SystemClock.elapsedRealtime()
+            // Keep the world's chunk total (shown in the progress chip) roughly current.
+            if (nowMs - lastWorldChunkCountMs > 10_000L) {
+                lastWorldChunkCountMs = nowMs
+                refreshWorldChunkCount()
+            }
+            if (onlinePlayers.isNotEmpty() && nowMs - lastPregenAutoPauseMs > 10_000L) {
+                lastPregenAutoPauseMs = nowMs
+                pregenPausedForPlayers = true
+                sendCommand("chunky pause", showOfflineWarning = false)
+            }
             if (handledPregenProgressLines.size > 600) {
                 handledPregenProgressLines.iterator().let { it.next(); it.remove() }
             }
@@ -6655,6 +6714,25 @@ class ServerStateHolder(
         scope.launch(Dispatchers.IO) { changeOfflineGamemode(player, mode) }
     }
 
+    /**
+     * The player's current game mode name, asked from the server while they are online and
+     * read from their save file otherwise. Null when it cannot be found out.
+     */
+    suspend fun fetchPlayerGamemode(player: PlayerInfo): String? = withContext(Dispatchers.IO) {
+        val names = listOf("survival", "creative", "adventure", "spectator")
+        val online = onlinePlayers.any { canonicalPlayerName(it.name) == canonicalPlayerName(player.name) }
+        if (isRunning && online) {
+            val target = """@a[name="${escapeSelectorName(player.name)}",limit=1]"""
+            val response = runCatching { RconClient.sendCommand("data get entity $target playerGameType") }.getOrDefault("")
+            // "<name> has the following entity data: 1"
+            Regex("""entity data:\s*(\d)""").find(response)?.groupValues?.get(1)?.toIntOrNull()
+                ?.let { return@withContext names.getOrNull(it) }
+        }
+        val uuid = player.uuid.ifBlank { return@withContext null }
+        PlayerDataManager.readPlayerGameMode(PlayerDataManager.getPlayerDataFile(appContext, activeWorld, uuid))
+            ?.let { names.getOrNull(it) }
+    }
+
     /** Edits the player's save file; for players who are not on the server right now. */
     private suspend fun changeOfflineGamemode(player: PlayerInfo, mode: String) {
         val uuid = player.uuid
@@ -6696,7 +6774,11 @@ class ServerStateHolder(
             while (isRunning && !isStopping) {
                 delay(3000L)
                 if (!isRunning || isStopping) break
-                if (onlinePlayers.isNotEmpty()) {
+                // The companion plugin already reports every player's ping in the log every few
+                // seconds. Polling over RCON on top of it opened a new server connection per
+                // player every 3 seconds, so only poll when that report has gone quiet.
+                val companionReporting = SystemClock.elapsedRealtime() - lastPingLogReceivedTimeMs < 15_000L
+                if (onlinePlayers.isNotEmpty() && !companionReporting) {
                     runCatching {
                         applyPingUpdatesFromRcon()
                     }
