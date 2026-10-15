@@ -450,7 +450,7 @@ JNIEXPORT jint JNICALL Java_com_pockethost_app_NativeLauncher_launchJVM(
   if (server_type && (strcmp(server_type, "PAPER") == 0 || strcmp(server_type, "PURPUR") == 0)) {
     setenv("JAVA_TOOL_OPTIONS", "-Djava.specification.version=26 -Djava.version=26.0.0 -DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Djava.awt.headless=true", 0);
     setenv("_JAVA_OPTIONS", "-Djava.specification.version=26 -Djava.version=26.0.0 -DPaper.IgnoreJavaVersion=true -Dpaper.ignoreJavaVersion=true -Dpaper.bypass-java-check=true -Dpaper.ignore-java-version=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Djava.awt.headless=true", 0);
-  } else if (server_type && strcmp(server_type, "FABRIC") == 0) {
+  } else if (server_type && (strcmp(server_type, "FABRIC") == 0 || strcmp(server_type, "MODPACK") == 0)) {
     setenv("JAVA_TOOL_OPTIONS", "-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Djava.awt.headless=true", 0);
     setenv("_JAVA_OPTIONS", "-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Djava.awt.headless=true", 0);
   } else if (server_type && strcmp(server_type, "VANILLA") == 0) {

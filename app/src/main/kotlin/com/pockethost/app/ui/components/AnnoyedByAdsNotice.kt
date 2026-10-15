@@ -48,6 +48,7 @@ fun AnnoyedByAdsNotice(
     onUpgradeClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    if (com.pockethost.app.BuildConfig.IS_EXTERNAL_BUILD) return
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 

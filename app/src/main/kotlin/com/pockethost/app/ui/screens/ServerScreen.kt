@@ -202,9 +202,11 @@ fun ServerScreen(
     }
 
     LaunchedEffect(Unit) {
-        com.pockethost.app.ads.AdManager.adDismissedEvent.collect {
-            if (entitlement.tier == PremiumTier.NONE && !showPremiumBottomSheet) {
-                showAnnoyedByAdsNotice = true
+        if (!com.pockethost.app.BuildConfig.IS_EXTERNAL_BUILD) {
+            com.pockethost.app.ads.AdManager.adDismissedEvent.collect {
+                if (entitlement.tier == PremiumTier.NONE && !showPremiumBottomSheet) {
+                    showAnnoyedByAdsNotice = true
+                }
             }
         }
     }
@@ -988,7 +990,7 @@ fun ServerScreen(
                 )
             }
 
-            if (showAnnoyedByAdsNotice) {
+            if (!com.pockethost.app.BuildConfig.IS_EXTERNAL_BUILD && showAnnoyedByAdsNotice) {
                 com.pockethost.app.ui.components.AnnoyedByAdsNotice(
                     onUpgradeClick = {
                         showAnnoyedByAdsNotice = false
@@ -1991,6 +1993,10 @@ private fun serverFailureSummary(
         rawReason.contains("-Djava.home", ignoreCase = true)
 
     return when {
+        "unsupportedclassversion" in combined || "java version" in combined || "has been compiled by a more recent version" in combined -> ServerFailureSummary(
+            reason = "This server build needs a different Java runtime or Minecraft version.",
+            fix = "Select a compatible Minecraft version, or re-import a server build made for this version."
+        )
         "startup timed out" in combined || "startup timeout" in combined -> ServerFailureSummary(
             reason = "The server took too long to start up (exceeded 7 minutes).",
             fix = "Please verify your JRE/Java settings, check the console log for any plugin/mod errors, or try starting again."
@@ -1999,7 +2005,7 @@ private fun serverFailureSummary(
             reason = "The selected world is configured for a modpack, but the modpack has not been installed yet.",
             fix = "Tap Install Modpack on the Home screen, wait for it to finish, then start the server again."
         )
-        "modpack files are missing" in combined || (mentionsModpack && mentionsLaunchTarget) -> ServerFailureSummary(
+        "modpack files are missing" in combined -> ServerFailureSummary(
             reason = "PocketHost could not find the modpack files needed to launch this world.",
             fix = "Re-install the modpack from the Home screen so the missing launch files are restored."
         )
@@ -2026,10 +2032,6 @@ private fun serverFailureSummary(
         "unable to access jarfile" in combined || "invalid or corrupt jar" in combined || ("jar" in combined && "not found" in combined) -> ServerFailureSummary(
             reason = "The server jar is missing, corrupted, or no longer matches this world.",
             fix = "Re-import the server version or modpack from the version card, then start again."
-        )
-        "unsupportedclassversion" in combined || "java version" in combined -> ServerFailureSummary(
-            reason = "This server build needs a different Java runtime or Minecraft version.",
-            fix = "Select a compatible Minecraft version, or re-import a server build made for this version."
         )
         "unknownhost" in combined || "network" in combined || "timed out" in combined || "download" in combined -> ServerFailureSummary(
             reason = "The server needed network access and the request failed.",

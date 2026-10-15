@@ -576,11 +576,24 @@ fun PluginsHubScreen(
                             selectedFilter == ContentFilter.NEWEST -> "Freshly released ${currentTab().label(s).lowercase(Locale.US)}."
                             else -> "Browse online catalog on Modrinth."
                         }
+                        val isNoneFilter = selectedFilter == ContentFilter.NONE
+                        val actionLabel = when {
+                            errorMessage != null && !isDiscoverLoading -> s.hubRetry
+                            isNoneFilter -> "+ Import"
+                            else -> null
+                        }
+                        val onAction: (() -> Unit)? = when {
+                            errorMessage != null && !isDiscoverLoading -> ({ catalogRetryToken++ })
+                            isNoneFilter -> ({
+                                uploadLauncher.launch(if (currentTab().type == PluginManager.ContentType.RESOURCE_PACKS) "application/zip" else "*/*")
+                            })
+                            else -> null
+                        }
                         SectionHeader(
                             title = headerTitle,
                             subtitle = headerSubtitle,
-                            actionLabel = if (errorMessage != null && !isDiscoverLoading) s.hubRetry else null,
-                            onAction = { catalogRetryToken++ }
+                            actionLabel = actionLabel,
+                            onAction = onAction
                         )
                     }
 

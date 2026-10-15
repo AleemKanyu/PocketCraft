@@ -1456,7 +1456,13 @@ object PluginManager {
         val serverDir = ServerFileManager.getServerDirNoCreate(context, worldName)
         if (!serverDir.exists()) return "paper"
         val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
-        val serverType = com.pockethost.app.data.model.ServerType.fromString(props.getProperty("pocketcraft-server-type"))
+        val isModpack = ServerFileManager.isModpackReady(context, worldName) ||
+            props.getProperty("pocketcraft-server-type").equals(com.pockethost.app.data.model.ServerType.MODPACK.name, ignoreCase = true)
+        val serverType = if (isModpack) {
+            com.pockethost.app.data.model.ServerType.MODPACK
+        } else {
+            com.pockethost.app.data.model.ServerType.fromString(props.getProperty("pocketcraft-server-type"))
+        }
         val version = props.getProperty("pocketcraft-game-version").orEmpty()
         return when (serverType) {
             com.pockethost.app.data.model.ServerType.VANILLA -> "vanilla-$version"
@@ -1470,7 +1476,7 @@ object PluginManager {
                     loader.contains("fabric") -> "fabric-$version"
                     loader.contains("neoforge") -> "neoforge-$version"
                     loader.contains("forge") -> "forge-$version"
-                    else -> "modpack-$version"
+                    else -> "fabric-$version"
                 }
             }
         }

@@ -69,12 +69,22 @@ object JreExtractor {
 
     /** Runtime for a given server type and version. */
     fun runtimeForServer(
-        @Suppress("UNUSED_PARAMETER") serverType: com.pockethost.app.data.model.ServerType,
+        serverType: com.pockethost.app.data.model.ServerType,
         versionId: String
-    ): RuntimeSpec = runtimeForVersion(versionId)
+    ): RuntimeSpec {
+        if (serverType == com.pockethost.app.data.model.ServerType.MODPACK) {
+            val minor = parseMinecraftMinor(versionId)
+            return if (minor != null && (minor < 20 || (minor == 20 && !versionId.contains("1.20.5") && !versionId.contains("1.20.6")))) {
+                RUNTIME_JAVA_17
+            } else {
+                RUNTIME_JAVA_25
+            }
+        }
+        return runtimeForVersion(versionId)
+    }
 
     fun runtimeForVersion(versionId: String): RuntimeSpec {
-        val minor = parseMinecraftMinor(versionId) ?: return RUNTIME_JAVA_21
+        val minor = parseMinecraftMinor(versionId) ?: return RUNTIME_JAVA_25
         return when {
             minor >= 26 -> RUNTIME_JAVA_25
             minor in 21..25 -> RUNTIME_JAVA_21

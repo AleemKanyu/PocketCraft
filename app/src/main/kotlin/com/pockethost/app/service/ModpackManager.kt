@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.annotation.VisibleForTesting
+import com.pockethost.app.config.DownloadPolicy
 import com.pockethost.app.setup.JreExtractor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -303,10 +304,71 @@ object ModpackManager {
         worldName: String = modpackId,
         onStatus: (String) -> Unit,
         onProgress: (Int) -> Unit
+    ): Result<Unit> {
+        if (!DownloadPolicy.inAppCodeDownloads) {
+            return Result.failure(
+                IllegalStateException("Direct in-app modpack downloads are disabled for Google Play policy compliance. Please download the modpack file in your browser and import it.")
+            )
+        }
+        val lock = worldInstallLocks.getOrPut(worldName) { Mutex() }
+        if (!lock.tryLock()) {
+            return Result.failure(Exception("A modpack install is already in progress for this world."))
+        }
+        try {
+            return installModpackLocked(context, modpackId, worldName, onStatus, onProgress)
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    private suspend fun installModpackLocked(
+        context: Context,
+        modpackId: String,
+        worldName: String,
+        onStatus: (String) -> Unit,
+        onProgress: (Int) -> Unit
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        Result.failure(
-            IllegalStateException("Direct in-app modpack downloads are disabled for Google Play policy compliance. Please download the modpack file in your browser and import it.")
-        )
+        val serverDir = ServerFileManager.getServerDir(context, worldName)
+        serverDir.mkdirs()
+        val tempPackFile = File(context.cacheDir, "pack_${System.currentTimeMillis()}.mrpack")
+        try {
+            onStatus("Resolving modpack $modpackId...")
+            val resolved = resolveModpack(modpackId)
+            if (resolved.downloadUrl.isBlank()) {
+                return@withContext Result.failure(Exception("Could not find download URL for $modpackId"))
+            }
+
+            onStatus("Downloading modpack package...")
+            blockedRuntimeFileFetch(resolved.downloadUrl, tempPackFile) { percent ->
+                onProgress((percent * 0.2f).toInt().coerceIn(0, 20))
+            }
+
+            if (!isModrinthPackFile(tempPackFile)) {
+                throw Exception("Downloaded file is not a valid Modrinth modpack package.")
+            }
+
+            onStatus("Installing Modrinth modpack...")
+            installModrinthPackFile(
+                context = context,
+                packFile = tempPackFile,
+                serverDir = serverDir,
+                worldName = worldName,
+                modpackId = modpackId,
+                onStatus = onStatus,
+                onProgress = onProgress
+            )
+
+            onProgress(100)
+            onStatus("Modpack installed successfully!")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to install modpack $modpackId", e)
+            Result.failure(e)
+        } finally {
+            if (tempPackFile.exists()) {
+                tempPackFile.delete()
+            }
+        }
     }
 
     suspend fun importModpackZip(
@@ -438,6 +500,7 @@ object ModpackManager {
             props.setProperty("pocketcraft-modpack-name", modpackId)
             props.setProperty("pocketcraft-modpack-loader", detectedLoader)
             props.setProperty("pocketcraft-game-version", detectedVersion)
+            props.setProperty("pocketcraft-modpack-mc-version", detectedVersion)
             ServerPropertiesHelper.saveProperties(serverDir, props)
 
             onStatus("Removing client-only mods for compatibility...")
@@ -561,8 +624,10 @@ object ModpackManager {
                 .firstOrNull { it.optBoolean("primary", false) }
                 ?: files.optJSONObject(0)
                 ?: throw Exception("No downloadable files found")
-            val loader = detectSupportedLoader(latest.optJSONObject("dependencies"))
-            val loaderVersion = latest.optJSONObject("dependencies")?.optString(loader.id) ?: ""
+            val loader = detectSupportedLoaderFromVersion(latest)
+            val loaderVersion = if (latest.opt("dependencies") is JSONObject) {
+                latest.optJSONObject("dependencies")?.optString(loader.id) ?: ""
+            } else ""
 
             ResolvedModpack(
                 downloadUrl = primaryFile.optString("url"),
@@ -583,18 +648,35 @@ object ModpackManager {
             if (!response.isSuccessful) throw Exception("Modrinth API error: ${response.code}")
             val versions = JSONArray(response.body?.string().orEmpty())
             val compatible = findBestSupportedVersion(versions) ?: return ModLoader.UNKNOWN
-            return detectSupportedLoader(compatible.optJSONObject("dependencies"))
+            return detectSupportedLoaderFromVersion(compatible)
         }
     }
 
     private fun findBestSupportedVersion(versions: JSONArray): JSONObject? {
         for (index in 0 until versions.length()) {
             val candidate = versions.optJSONObject(index) ?: continue
-            if (detectSupportedLoader(candidate.optJSONObject("dependencies")) != ModLoader.UNKNOWN) {
+            if (detectSupportedLoaderFromVersion(candidate) != ModLoader.UNKNOWN) {
                 return candidate
             }
         }
         return null
+    }
+
+    private fun detectSupportedLoaderFromVersion(version: JSONObject): ModLoader {
+        val loadersArray = version.optJSONArray("loaders")
+        if (loadersArray != null) {
+            for (i in 0 until loadersArray.length()) {
+                val l = loadersArray.optString(i).lowercase()
+                when {
+                    l.contains("fabric") -> return ModLoader.FABRIC
+                    l.contains("quilt") -> return ModLoader.QUILT
+                    l.contains("neoforge") -> return ModLoader.NEOFORGE
+                    l.contains("forge") -> return ModLoader.FORGE
+                }
+            }
+        }
+        val deps = version.optJSONObject("dependencies")
+        return detectSupportedLoader(deps)
     }
 
     private fun detectSupportedLoader(dependencies: JSONObject?): ModLoader {
@@ -1135,6 +1217,7 @@ object ModpackManager {
         props.setProperty("pocketcraft-server-type", com.pockethost.app.data.model.ServerType.MODPACK.name)
         props.setProperty("pocketcraft-custom-jar-path", modpackId)
         props.setProperty("pocketcraft-game-version", loader.minecraftVersion)
+        props.setProperty("pocketcraft-modpack-mc-version", loader.minecraftVersion)
         props.setProperty("pocketcraft-modpack-id", modpackId)
         props.setProperty("pocketcraft-modpack-name", manifest.name)
         props.setProperty("pocketcraft-modpack-loader", loader.id)

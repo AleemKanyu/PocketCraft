@@ -117,13 +117,17 @@ fun PremiumUpgradeBottomSheet(
     }
 
     LaunchedEffect(Unit) {
-        billingManager.queryAvailableProducts()
+        if (!com.pockethost.app.BuildConfig.IS_EXTERNAL_BUILD) {
+            billingManager.queryAvailableProducts()
+        }
     }
 
     LaunchedEffect(lastMessage) {
-        val message = lastMessage ?: return@LaunchedEffect
-        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-        billingManager.clearMessage()
+        if (!com.pockethost.app.BuildConfig.IS_EXTERNAL_BUILD) {
+            val message = lastMessage ?: return@LaunchedEffect
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            billingManager.clearMessage()
+        }
     }
 
     ModalBottomSheet(
@@ -221,7 +225,11 @@ fun PremiumUpgradeBottomSheet(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "All server features stay free.\nGo ad-free for less than you think.",
+                    text = if (com.pockethost.app.BuildConfig.IS_EXTERNAL_BUILD) {
+                        "All server features stay free.\nHelp keep our server relays and development alive."
+                    } else {
+                        "All server features stay free.\nGo ad-free for less than you think."
+                    },
                     fontSize = 12.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -230,8 +238,24 @@ fun PremiumUpgradeBottomSheet(
                 )
             }
 
+            if (com.pockethost.app.BuildConfig.IS_EXTERNAL_BUILD) {
+                PatreonSupportCard(
+                    onSupportClick = {
+                        val patreonUri = Uri.parse("https://www.patreon.com/cw/pockethost")
+                        val intent = Intent(Intent.ACTION_VIEW, patreonUri)
+                        context.startActivity(intent)
+                    }
+                )
 
-            val isIndia = remember(offers) {
+                Text(
+                    text = "Voluntary contribution via Patreon · cancel your membership anytime",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                )
+            } else {
+                val isIndia = remember(offers) {
                 // 1. Check if any offer returned by Google Play Store is INR
                 val hasInrOffer = offers.any {
                     it.priceCurrencyCode.equals("INR", ignoreCase = true) ||
@@ -952,6 +976,148 @@ fun PremiumUpgradeBottomSheet(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
             )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PatreonSupportCard(
+    onSupportClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                shape = RoundedCornerShape(18.dp)
+            )
+            .border(
+                width = 1.5.dp,
+                brush = Brush.verticalGradient(
+                    listOf(Color(0xFFFF5E5B), Color(0xFFFF424D).copy(alpha = 0.45f))
+                ),
+                shape = RoundedCornerShape(18.dp)
+            )
+            .padding(16.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(Color(0xFFFF424D).copy(alpha = 0.15f), RoundedCornerShape(12.dp))
+                            .border(1.dp, Color(0xFFFF424D).copy(alpha = 0.4f), RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_heart_outline),
+                            contentDescription = null,
+                            tint = Color(0xFFFF424D),
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            text = "Become a Patron",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 15.sp,
+                            fontFamily = Monocraft,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "patreon.com/cw/pockethost",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFFF6978)
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(0xFFFF5E5B), Color(0xFFFF424D))
+                            )
+                        )
+                        .padding(horizontal = 7.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = "PATREON",
+                        color = Color.White,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.5.sp
+                    )
+                }
+            }
+
+            Text(
+                text = "PocketHost is 100% free and open-source. This external build has zero ads and zero locked server features.\n\nYour monthly patronage directly funds our high-speed global relay nodes, covers server bandwidth, and keeps active development alive.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 17.sp
+            )
+
+            HorizontalDivider(
+                modifier = Modifier.fillMaxWidth(),
+                thickness = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+            )
+
+            // Tactile 3D button that pops
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .raisedBorder(
+                        color = Color(0xFFFF858D),
+                        depthColor = Color(0xFF991B1E),
+                        cornerRadius = 23.dp,
+                        borderWidth = 1.5.dp,
+                        depthWidth = 3.5.dp
+                    )
+                    .clip(RoundedCornerShape(23.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFFFF5E5B), Color(0xFFFF424D))
+                        )
+                    )
+                    .clickable { onSupportClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_heart_outline),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "SUPPORT US ON PATREON",
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = ButtonFont,
+                        color = Color.White,
+                        letterSpacing = 0.5.sp
+                    )
+                }
+            }
         }
     }
 }

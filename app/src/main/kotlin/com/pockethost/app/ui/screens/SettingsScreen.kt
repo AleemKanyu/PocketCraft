@@ -300,6 +300,7 @@ fun SettingsScreen(
     var showPremiumBottomSheet by remember { mutableStateOf(false) }
     var checkingForUpdate by remember { mutableStateOf(false) }
     var manualUpdateConfig by remember { mutableStateOf<UpdateConfig?>(null) }
+    var gitHubRelease by remember { mutableStateOf<com.pockethost.app.update.GitHubRelease?>(null) }
 
     val hasUnsavedChanges by remember(currentState, savedState) {
         derivedStateOf {
@@ -1817,7 +1818,7 @@ fun SettingsScreen(
                                     Column {
                                         Text("Support PocketHost", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                         Text(
-                                            "Ad-free access and supporter plans",
+                                            if (com.pockethost.app.BuildConfig.IS_EXTERNAL_BUILD) "Support our independent development on Patreon" else "Ad-free access and supporter plans",
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -1825,14 +1826,18 @@ fun SettingsScreen(
                                 }
 
                                 Text(
-                                    "All server features remain free. Remove ads monthly or yearly, or become a supporter to help fund relays and development.",
+                                    if (com.pockethost.app.BuildConfig.IS_EXTERNAL_BUILD) {
+                                        "All server features remain free. Support us on Patreon to help fund high-speed server relays, bandwidth, and ongoing development."
+                                    } else {
+                                        "All server features remain free. Remove ads monthly or yearly, or become a supporter to help fund relays and development."
+                                    },
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     lineHeight = 16.sp
                                 )
 
                                 DuoButton(
-                                    text = "VIEW AD-FREE & SUPPORTER PLANS",
+                                    text = if (com.pockethost.app.BuildConfig.IS_EXTERNAL_BUILD) "SUPPORT US ON PATREON" else "VIEW AD-FREE & SUPPORTER PLANS",
                                     onClick = { showPremiumBottomSheet = true },
                                     modifier = Modifier.fillMaxWidth(),
                                     minHeight = 42.dp,
@@ -1840,7 +1845,11 @@ fun SettingsScreen(
                                 )
 
                                 Text(
-                                    "Monthly, yearly, and supporter options · Billed via Google Play",
+                                    if (com.pockethost.app.BuildConfig.IS_EXTERNAL_BUILD) {
+                                        "Voluntary contribution via Patreon · Cancel anytime"
+                                    } else {
+                                        "Monthly, yearly, and supporter options · Billed via Google Play"
+                                    },
                                     fontSize = 10.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     textAlign = TextAlign.Center,
@@ -2058,12 +2067,22 @@ fun SettingsScreen(
                                         playHaptic()
                                         scope.launch {
                                             checkingForUpdate = true
-                                            val config = UpdateManager.fetchUpdateConfig(context)
-                                            checkingForUpdate = false
-                                            if (config?.showUpdatePopup == true) {
-                                                manualUpdateConfig = config
+                                            if (BuildConfig.IS_EXTERNAL_BUILD) {
+                                                val release = com.pockethost.app.update.GitHubUpdateChecker.checkForUpdate()
+                                                checkingForUpdate = false
+                                                if (release != null) {
+                                                    gitHubRelease = release
+                                                } else {
+                                                    onMessage("Your app is up to date!")
+                                                }
                                             } else {
-                                                onMessage("Your app is up to date!")
+                                                val config = UpdateManager.fetchUpdateConfig(context)
+                                                checkingForUpdate = false
+                                                if (config?.showUpdatePopup == true) {
+                                                    manualUpdateConfig = config
+                                                } else {
+                                                    onMessage("Your app is up to date!")
+                                                }
                                             }
                                         }
                                     },
@@ -2092,6 +2111,18 @@ fun SettingsScreen(
                 },
                 onDismiss = {
                     manualUpdateConfig = null
+                }
+            )
+        }
+
+        gitHubRelease?.let { release ->
+            com.pockethost.app.ui.components.GitHubUpdatePopup(
+                release = release,
+                onDismiss = {
+                    gitHubRelease = null
+                },
+                onInstallStarted = {
+                    gitHubRelease = null
                 }
             )
         }

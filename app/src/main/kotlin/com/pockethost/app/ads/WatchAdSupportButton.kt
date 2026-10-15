@@ -37,7 +37,7 @@ import com.pockethost.app.ui.theme.ButtonFont
 fun WatchAdSupportButton(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val sdkReady by AdManager.ready.collectAsState()
-    if (!sdkReady || !AdsConfig.isEnabled(context, AdPlacement.REWARDED_SUPPORT)) return
+    if (com.pockethost.app.BuildConfig.IS_EXTERNAL_BUILD || !sdkReady || !AdsConfig.isEnabled(context, AdPlacement.REWARDED_SUPPORT)) return
 
     OutlinedButton(
         onClick = {

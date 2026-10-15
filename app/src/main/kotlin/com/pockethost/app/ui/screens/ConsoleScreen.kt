@@ -3388,12 +3388,8 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
-private fun isLikelyModpackRuntimeId(value: String): Boolean {
-    val trimmed = value.trim()
-    if (trimmed.isBlank()) return false
-    if (trimmed.matches(Regex("""\d+(?:\.\d+){1,3}(?:[-+][A-Za-z0-9_.-]+)?"""))) return false
-    return trimmed.any { it.isLetter() } && trimmed.any { it == '-' || it == '_' }
-}
+private fun isLikelyModpackRuntimeId(value: String): Boolean =
+    ServerFileManager.isLikelyModpackRuntimeId(value)
 
 @Composable
 private fun WorldMapBannerCard(

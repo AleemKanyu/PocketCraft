@@ -44,13 +44,14 @@ object AdsConfig {
 
     /** Master switch, minus supporters and phones too short on memory to spare any for ads. */
     fun adsEnabled(context: Context): Boolean {
+        if (BuildConfig.IS_EXTERNAL_BUILD) return false
         if (!forcedOn && !flag(KEY_ENABLED)) return false
         if (isSupporter(context)) return false
         return hasSpareRam(context)
     }
 
     fun isEnabled(context: Context, placement: AdPlacement): Boolean =
-        adsEnabled(context) && (forcedOn || flag(placement.remoteKey))
+        !BuildConfig.IS_EXTERNAL_BUILD && adsEnabled(context) && (forcedOn || flag(placement.remoteKey))
 
     /**
      * True until Remote Config says otherwise, including before the first fetch: treating

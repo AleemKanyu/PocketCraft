@@ -118,27 +118,78 @@ object ServerPropertiesWriter {
         props["rcon.password"] = com.pockethost.app.network.RconSecret.current()
         props["broadcast-rcon-to-ops"] = "false"
         val existingServerType = props.getProperty("pocketcraft-server-type").orEmpty()
+        val existingLaunchTarget = props.getProperty("pocketcraft-launch-target").orEmpty()
+        val existingLaunchMode = props.getProperty("pocketcraft-launch-mode").orEmpty()
+        val existingModpackId = props.getProperty("pocketcraft-modpack-id").orEmpty()
         val preserveModpackMetadata = existingServerType.equals("MODPACK", ignoreCase = true) &&
-            props.getProperty("pocketcraft-launch-target").orEmpty().isNotBlank()
+            existingLaunchTarget.isNotBlank()
 
-        props["pocketcraft-server-type"] = if (preserveModpackMetadata && !prefs.serverType.equals("MODPACK", ignoreCase = true)) {
-            existingServerType
-        } else {
-            prefs.serverType
+        val isModpack = prefs.serverType.equals("MODPACK", ignoreCase = true) ||
+            (preserveModpackMetadata && prefs.serverType.isBlank())
+
+        props["pocketcraft-server-type"] = if (isModpack) "MODPACK" else prefs.serverType
+
+        if (isModpack) {
+            val mpId = prefs.customJarPath?.takeIf { it.isNotBlank() }
+                ?: existingModpackId.takeIf { it.isNotBlank() }
+                ?: if (com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(prefs.gameVersion)) prefs.gameVersion else null
+            if (!mpId.isNullOrBlank()) {
+                props["pocketcraft-modpack-id"] = mpId
+                props["pocketcraft-custom-jar-path"] = mpId
+            }
+            if (existingLaunchTarget.isNotBlank()) {
+                props["pocketcraft-launch-target"] = existingLaunchTarget
+            }
+            if (existingLaunchMode.isNotBlank()) {
+                props["pocketcraft-launch-mode"] = existingLaunchMode
+            }
         }
-        props["pocketcraft-game-version"] = prefs.gameVersion
+
+        // When server is MODPACK, keep the actual Minecraft version (never overwrite with modpack slug)
+        val existingGameVer = props.getProperty("pocketcraft-game-version").orEmpty().trim()
+        val existingModpackMcVer = props.getProperty("pocketcraft-modpack-mc-version").orEmpty().trim()
+        if (existingModpackMcVer.isNotBlank()) {
+            props["pocketcraft-modpack-mc-version"] = existingModpackMcVer
+        }
+
+        if (isModpack) {
+            val candidateMcVer = if (existingModpackMcVer.isNotBlank() && !com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(existingModpackMcVer)) {
+                existingModpackMcVer
+            } else if (existingGameVer.isNotBlank() && !com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(existingGameVer)) {
+                existingGameVer
+            } else if (prefs.gameVersion.isNotBlank() && !com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(prefs.gameVersion)) {
+                prefs.gameVersion
+            } else {
+                null
+            }
+
+            if (candidateMcVer != null) {
+                props["pocketcraft-game-version"] = candidateMcVer
+                props["pocketcraft-modpack-mc-version"] = candidateMcVer
+            } else if (existingGameVer.isNotBlank()) {
+                props["pocketcraft-game-version"] = existingGameVer
+            } else {
+                props["pocketcraft-game-version"] = prefs.gameVersion
+            }
+        } else {
+            props["pocketcraft-game-version"] = prefs.gameVersion
+        }
+
         props["pocketcraft-join-message-enabled"] = "true"
         props["pocketcraft-join-message-text"] = prefs.joinMessageText.ifBlank { "hosted on PocketHost" }
         props["pocketcraft-join-message-url"] = prefs.joinMessageUrl.ifBlank { "https://discord.gg/7xw3Rd2vs2" }
         prefs.gameRules.writeTo(props)
         if (prefs.customJarPath.isNullOrBlank()) {
-            if (!preserveModpackMetadata) {
+            if (!preserveModpackMetadata && !isModpack) {
                 props.remove("pocketcraft-custom-jar-path")
             }
         } else {
             props["pocketcraft-custom-jar-path"] = prefs.customJarPath
         }
     }
+
+    private fun isLikelyModpackRuntimeId(value: String): Boolean =
+        com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(value)
 
     fun toSnapshot(config: ServerConfig): ServerPrefsSnapshot {
         return ServerPrefsSnapshot(

@@ -393,17 +393,26 @@ fun PocketHostApp(
         if (stateHolder.activeWorld != lastProcessedWorld) {
             val targetServerDir = ServerFileManager.getServerDir(context.applicationContext, stateHolder.activeWorld)
             val targetProps = ServerPropertiesHelper.readProperties(targetServerDir)
-            val rawTargetVersion = targetProps.getProperty("pocketcraft-game-version").orEmpty()
-            val targetVersion = rawTargetVersion.ifBlank {
-                versionId.ifBlank {
-                    AppPreferencesStore.getStoredSelectedVersionFlow(context).first().orEmpty()
-                }
-            }
             val rawTargetType = targetProps.getProperty("pocketcraft-server-type")
                 ?.takeIf { it.isNotBlank() }
                 ?.let(ServerType::fromString)
+            val rawTargetVersion = targetProps.getProperty("pocketcraft-game-version").orEmpty()
+            val isModpack = rawTargetType == ServerType.MODPACK || isLikelyModpackRuntimeId(rawTargetVersion)
+            val detectedMc = if (isModpack) ServerFileManager.detectModpackMinecraftVersion(targetServerDir) else null
+            val targetVersion = if (isModpack) {
+                detectedMc?.takeIf { !isLikelyModpackRuntimeId(it) }
+                    ?: rawTargetVersion.takeIf { !isLikelyModpackRuntimeId(it) && it.isNotBlank() }
+                    ?: versionId.takeIf { !isLikelyModpackRuntimeId(it) && it.isNotBlank() }
+                    ?: "1.21.1"
+            } else {
+                rawTargetVersion.ifBlank {
+                    versionId.ifBlank {
+                        AppPreferencesStore.getStoredSelectedVersionFlow(context).first().orEmpty()
+                    }
+                }
+            }
             val targetType = rawTargetType
-                ?: if (targetVersion.isNotBlank()) selectedServerType else ServerType.PAPER
+                ?: if (isModpack) ServerType.MODPACK else if (targetVersion.isNotBlank()) selectedServerType else ServerType.PAPER
 
             if (targetVersion.isNotBlank() && rawTargetVersion.isBlank()) {
                 val repository = ServerConfigRepository(context).apply {
@@ -415,7 +424,9 @@ fun PocketHostApp(
                         serverType = targetType,
                         gameVersion = targetVersion,
                         customJarPath = if (targetType == ServerType.MODPACK) {
-                            loadedConfig.customJarPath?.takeIf { it.isNotBlank() } ?: targetVersion
+                            loadedConfig.customJarPath?.takeIf { it.isNotBlank() }
+                                ?: rawTargetVersion.takeIf { it.isNotBlank() }
+                                ?: targetVersion
                         } else {
                             null
                         }
@@ -903,18 +914,35 @@ fun PocketHostApp(
             "requestVersionChange version=$selectedVersion current=$versionId"
         )
         selectedServerType = type
-        versionId = selectedVersion
+        val isModpack = type == ServerType.MODPACK || isLikelyModpackRuntimeId(selectedVersion)
+        val serverDir = ServerFileManager.getServerDir(context.applicationContext, stateHolder.activeWorld)
+        val detectedMcVersion = if (isModpack) {
+            ServerFileManager.detectModpackMinecraftVersion(serverDir)
+                ?.takeIf { !isLikelyModpackRuntimeId(it) }
+        } else null
+
+        val effectiveGameVersion = when {
+            isModpack && !isLikelyModpackRuntimeId(selectedVersion) -> selectedVersion
+            isModpack && !detectedMcVersion.isNullOrBlank() -> detectedMcVersion
+            isModpack -> stateHolder.config.gameVersion.takeIf { !isLikelyModpackRuntimeId(it) && it.isNotBlank() } ?: "1.21.1"
+            else -> selectedVersion
+        }
+        val effectiveCustomJar = when {
+            isModpack -> selectedVersion
+            else -> null
+        }
+        versionId = effectiveGameVersion
         scope.launch {
             stateHolder.saveSettings(
                 stateHolder.config.copy(
-                    serverType = type,
-                    gameVersion = selectedVersion,
-                    customJarPath = if (type == ServerType.MODPACK) selectedVersion else null
+                    serverType = if (isModpack) ServerType.MODPACK else type,
+                    gameVersion = effectiveGameVersion,
+                    customJarPath = effectiveCustomJar
                 )
             )
             AppPreferencesStore.setSetupComplete(context, true)
-            AppPreferencesStore.setSelectedServerType(context, type.name)
-            AppPreferencesStore.setSelectedVersion(context, selectedVersion)
+            AppPreferencesStore.setSelectedServerType(context, (if (isModpack) ServerType.MODPACK else type).name)
+            AppPreferencesStore.setSelectedVersion(context, effectiveGameVersion)
             stateHolder.markActiveWorldSetupCompleted()
             transitionTarget = Screen.SERVER
             screen = Screen.LOADING
@@ -946,8 +974,20 @@ fun PocketHostApp(
         } else {
             null
         }
+        val serverDir = ServerFileManager.getServerDir(context.applicationContext, stateHolder.activeWorld)
+        val detectedMcVersion = if (effectiveType == ServerType.MODPACK) {
+            ServerFileManager.detectModpackMinecraftVersion(serverDir)
+                ?.takeIf { !isLikelyModpackRuntimeId(it) }
+        } else null
+
         val effectiveVersion = if (effectiveType == ServerType.MODPACK) {
-            modpackIdForConfig.orEmpty()
+            if (!isLikelyModpackRuntimeId(resolvedVersion)) {
+                resolvedVersion
+            } else if (!detectedMcVersion.isNullOrBlank()) {
+                detectedMcVersion
+            } else {
+                stateHolder.config.gameVersion.takeIf { !isLikelyModpackRuntimeId(it) && it.isNotBlank() } ?: "1.21.1"
+            }
         } else {
             resolvedVersion
         }
@@ -1019,14 +1059,19 @@ fun PocketHostApp(
                     modpackImportProgress = 100
                     modpackImportStatus = "Modpack ready! Configuring server..."
                     val currentConfig = stateHolder.config
+                    val serverDir = ServerFileManager.getServerDir(context.applicationContext, activeWorld)
+                    val detectedMcVersion = ServerFileManager.detectModpackMinecraftVersion(serverDir)
+                        ?.takeIf { !isLikelyModpackRuntimeId(it) }
+                        ?: currentConfig.gameVersion.takeIf { !isLikelyModpackRuntimeId(it) && it.isNotBlank() }
+                        ?: "1.21.1"
                     val newModpackConfig = currentConfig.copy(
                         serverType = ServerType.MODPACK,
-                        gameVersion = modpackId,
+                        gameVersion = detectedMcVersion,
                         customJarPath = modpackId
                     )
                     stateHolder.saveSettings(newModpackConfig)
                     AppPreferencesStore.setSelectedServerType(context, ServerType.MODPACK.name)
-                    AppPreferencesStore.setSelectedVersion(context, modpackId)
+                    AppPreferencesStore.setSelectedVersion(context, detectedMcVersion)
                     downloadedVersions = scanDownloadedRuntimeKeys(context.applicationContext)
                     requestVersionChange(ServerType.MODPACK, modpackId)
                     delay(1_500)
@@ -1987,12 +2032,8 @@ private fun runtimeDownloadKey(type: ServerType, version: String): String {
     return "${type.name}::$version"
 }
 
-private fun isLikelyModpackRuntimeId(value: String): Boolean {
-    val trimmed = value.trim()
-    if (trimmed.isBlank()) return false
-    if (trimmed.matches(Regex("""\d+(?:\.\d+){1,3}(?:[-+][A-Za-z0-9_.-]+)?"""))) return false
-    return trimmed.any { it.isLetter() } && trimmed.any { it == '-' || it == '_' }
-}
+private fun isLikelyModpackRuntimeId(value: String): Boolean =
+    ServerFileManager.isLikelyModpackRuntimeId(value)
 
 @Composable
 private fun ModpackImportProgressCard(

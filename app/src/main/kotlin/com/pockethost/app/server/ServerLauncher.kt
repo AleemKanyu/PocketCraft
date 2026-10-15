@@ -316,9 +316,26 @@ class ServerLauncher(private val context: Context) {
         val forceExternal = prefsForceExternal || deviceProfile.forceExternalJvm
         val preferInProcessJvm = !forceExternal || isFilesdirNoexec(runtime)
 
+        val isModpack = serverType == com.pockethost.app.data.model.ServerType.MODPACK ||
+            ServerFileManager.readLaunchTarget(serverDirFile) != null ||
+            ServerFileManager.isLikelyModpackRuntimeId(versionId)
+        val effectiveMcVersion = if (isModpack) {
+            ServerFileManager.detectModpackMinecraftVersion(serverDirFile)
+                ?: props.getProperty("pocketcraft-game-version")?.takeIf { !ServerFileManager.isLikelyModpackRuntimeId(it) }
+                ?: versionId.takeIf { !ServerFileManager.isLikelyModpackRuntimeId(it) }
+                ?: "1.21.1"
+        } else {
+            versionId
+        }
+        val effectivePreferredRuntime = if (isModpack && JreExtractor.isAtLeast126(effectiveMcVersion)) {
+            JreExtractor.RUNTIME_JAVA_25
+        } else {
+            runtime
+        }
+
         val resolvedRuntime = ensureLaunchableRuntime(
-            versionId = versionId,
-            preferredRuntime = runtime,
+            versionId = effectiveMcVersion,
+            preferredRuntime = effectivePreferredRuntime,
             tmpDir = tmpDir,
             shimDir = shimDir,
             preferInProcessJvm = preferInProcessJvm,
@@ -397,7 +414,7 @@ class ServerLauncher(private val context: Context) {
         onOutput("[PocketHost] JVM memory: mode=$ramModeFromProps, heap=${minRamMb}MB..${maxRamMb}MB, available=${availRam}MB, total=${totalRam}MB")
 
         // Use exec-safe java binary path — falls back to codeCacheDir copy on noexec devices.
-        val isJava26 = resolvedRuntime.id == "java26"
+        val isJava26 = resolvedRuntime.id == "java25" || resolvedRuntime.id == "java26"
         val javaBin = ensureExecSafeJavaBin(context, resolvedRuntime)
         val libjli = File(jrePath, "lib/libjli.so")
         val libjvm = File(jrePath, "lib/server/libjvm.so")
@@ -475,7 +492,7 @@ class ServerLauncher(private val context: Context) {
                                 if (resolvedRuntime.id == "java25" || resolvedRuntime.id == "java26") {
                                     append(" -Djava.specification.version=26 -Djava.version=26.0.0")
                                 }
-                            } else if (serverType == com.pockethost.app.data.model.ServerType.FABRIC) {
+                            } else if (serverType == com.pockethost.app.data.model.ServerType.FABRIC || serverType == com.pockethost.app.data.model.ServerType.MODPACK) {
                                 append("-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Doshi.os.linux.procfs.logwarning=false -Djava.awt.headless=true")
                             } else if (serverType == com.pockethost.app.data.model.ServerType.VANILLA) {
                                 append("-Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Doshi.os.linux.procfs.logwarning=false -Djava.awt.headless=true")
@@ -515,7 +532,7 @@ class ServerLauncher(private val context: Context) {
                                 if (resolvedRuntime.id == "java25" || resolvedRuntime.id == "java26") {
                                     append(" -Djava.specification.version=26 -Djava.version=26.0.0")
                                 }
-                            } else if (serverType == com.pockethost.app.data.model.ServerType.FABRIC) {
+                            } else if (serverType == com.pockethost.app.data.model.ServerType.FABRIC || serverType == com.pockethost.app.data.model.ServerType.MODPACK) {
                                 append("-Dfabric.chunkSystem.workerThreads=2 -Dfabric.chunkSystem.ioThreads=2 -Dnet.minecraft.world.chunk.storage.RegionBasedStorage.sync=false -Dfabric.log.disableAnsi=true -Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Doshi.os.linux.procfs.logwarning=false -Djava.awt.headless=true")
                             } else if (serverType == com.pockethost.app.data.model.ServerType.VANILLA) {
                                 append("-Doshi.os.disabled=true -Doshi.os.linux.allowudev=false -Doshi.os.linux.procfs.logwarning=false -Djava.awt.headless=true")
@@ -626,7 +643,7 @@ class ServerLauncher(private val context: Context) {
         chmodJreRuntime(context, runtime)
         val jreDir = JreExtractor.getJreDir(context, runtime)
 
-        if (runtime.id == "java26") {
+        if (runtime.id == "java25" || runtime.id == "java26") {
             val hasModules = File(jreDir, "lib/modules").exists()
             if (hasModules) {
                 onOutput("[PocketHost] ${runtime.displayName} verified for in-process JVM launch.")
@@ -961,7 +978,10 @@ class ServerLauncher(private val context: Context) {
             }
 
             val gameVerProps = ServerPropertiesHelper.readProperties(File(serverDir))
-            val rawVer = gameVerProps.getProperty("pocketcraft-game-version", "1.21.1")
+            val rawVer = gameVerProps.getProperty("pocketcraft-modpack-mc-version")
+                ?: gameVerProps.getProperty("pocketcraft-game-version")
+                ?: com.pockethost.app.service.ServerFileManager.detectModpackMinecraftVersion(File(serverDir))
+                ?: "1.21.1"
             val mcMinor = com.pockethost.app.setup.JreExtractor.parseMinecraftMinor(rawVer) ?: 21
             if (mcMinor < 17) {
                 add("--add-opens=java.base/java.lang=ALL-UNNAMED")

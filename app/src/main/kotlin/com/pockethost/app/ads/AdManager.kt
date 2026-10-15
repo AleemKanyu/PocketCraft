@@ -101,7 +101,7 @@ object AdManager {
      * on every launch; does nothing when ads are switched off.
      */
     fun start(activity: Activity) {
-        if (started || !AdsConfig.adsEnabled(activity)) return
+        if (started || BuildConfig.IS_EXTERNAL_BUILD || !AdsConfig.adsEnabled(activity)) return
         started = true
 
         val consent = UserMessagingPlatform.getConsentInformation(activity)

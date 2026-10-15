@@ -87,17 +87,77 @@ object ServerFileManager {
         return jar.exists() && jar.length() > expectedMinSize
     }
 
+    fun healModpackFilesIfNeeded(serverDir: File) {
+        if (!serverDir.isDirectory) return
+        val props = ServerPropertiesHelper.readProperties(serverDir)
+        val launchTargetRel = props.getProperty("pocketcraft-launch-target")?.trim().orEmpty()
+        val targetNames = if (launchTargetRel.isNotBlank()) {
+            listOf(launchTargetRel, "fabric-server-launch.jar", "quilt-server-launch.jar")
+        } else {
+            listOf("fabric-server-launch.jar", "quilt-server-launch.jar")
+        }
+
+        val targetJar = targetNames.firstOrNull { File(serverDir, it).let { f -> f.exists() && f.isFile && f.length() > 0L } }
+        if (targetJar == null) {
+            // Check subdirectories (like "world") for misplaced launch target and mods
+            serverDir.listFiles()?.filter { it.isDirectory }?.forEach { subDir ->
+                for (name in targetNames) {
+                    val misplacedJar = File(subDir, name)
+                    if (misplacedJar.exists() && misplacedJar.isFile && misplacedJar.length() > 0L) {
+                        val restoredJar = File(serverDir, name)
+                        android.util.Log.i("ServerFileManager", "Healing misplaced modpack launch jar from ${misplacedJar.absolutePath} to ${restoredJar.absolutePath}")
+                        misplacedJar.copyTo(restoredJar, overwrite = true)
+                        misplacedJar.delete()
+                        persistLaunchTarget(serverDir, LaunchMode.JAR, name)
+                        break
+                    }
+                }
+                val misplacedMods = File(subDir, "mods")
+                val rootMods = File(serverDir, "mods")
+                if (misplacedMods.isDirectory && misplacedMods.listFiles()?.isNotEmpty() == true) {
+                    if (!rootMods.exists()) rootMods.mkdirs()
+                    android.util.Log.i("ServerFileManager", "Healing misplaced mods directory from ${misplacedMods.absolutePath} to ${rootMods.absolutePath}")
+                    misplacedMods.listFiles()?.forEach { modFile ->
+                        val destFile = File(rootMods, modFile.name)
+                        if (!destFile.exists() || destFile.length() == 0L) {
+                            modFile.copyTo(destFile, overwrite = true)
+                        }
+                    }
+                }
+            }
+        }
+
+        val hasLaunchJar = targetJar != null || File(serverDir, "fabric-server-launch.jar").exists() || File(serverDir, "quilt-server-launch.jar").exists()
+        if (hasLaunchJar) {
+            val curType = props.getProperty("pocketcraft-server-type").orEmpty()
+            if (!curType.equals(ServerType.MODPACK.name, ignoreCase = true)) {
+                props.setProperty("pocketcraft-server-type", ServerType.MODPACK.name)
+                ServerPropertiesHelper.saveProperties(serverDir, props)
+            }
+        }
+    }
+
     fun isModpackReady(context: Context, worldName: String, modpackId: String? = null): Boolean {
         val serverDir = getServerDirNoCreate(context, worldName)
         if (!serverDir.isDirectory) return false
+        healModpackFilesIfNeeded(serverDir)
+
         val props = ServerPropertiesHelper.readProperties(serverDir)
-        if (ServerType.fromString(props.getProperty("pocketcraft-server-type")) != ServerType.MODPACK) return false
-        val installedId = props.getProperty("pocketcraft-modpack-id")
+        val rawServerType = props.getProperty("pocketcraft-server-type")
+        val effectiveType = ServerType.fromString(rawServerType)
+        val launchTarget = readLaunchTarget(serverDir)
+        val hasValidLaunchTarget = launchTarget != null && launchTarget.file.exists() && launchTarget.file.isFile && launchTarget.file.length() > 0L
+
+        if (effectiveType != ServerType.MODPACK && !hasValidLaunchTarget) return false
+
+        val installedId = (props.getProperty("pocketcraft-modpack-id")
             ?: props.getProperty("pocketcraft-custom-jar-path")
-            ?: ""
-        if (!modpackId.isNullOrBlank() && installedId != modpackId) return false
-        val launchTarget = readLaunchTarget(serverDir) ?: return false
-        return launchTarget.file.exists() && launchTarget.file.isFile && launchTarget.file.length() > 0L
+            ?: "").trim()
+        val requestedId = modpackId?.trim().orEmpty()
+        if (requestedId.isNotBlank() && installedId.isNotBlank() && !installedId.equals(requestedId, ignoreCase = true)) {
+            return false
+        }
+        return hasValidLaunchTarget
     }
 
     /**
@@ -250,7 +310,7 @@ object ServerFileManager {
         }
     }
 
-    private fun migrateFlatLayoutToNested(serverDir: File, nestedDir: File) {
+    fun migrateFlatLayoutToNested(serverDir: File, nestedDir: File) {
         val skip = setOf("server.properties", "eula.txt", "usercache.json",
             "ops.json", "whitelist.json", "banned-players.json", "banned-ips.json")
         // Anything not listed here is treated as stray world data and moved into the nested world
@@ -270,7 +330,8 @@ object ServerFileManager {
         serverDir.listFiles()?.forEach { file ->
             val name = file.name
             if (name.startsWith("pocketcraft-") || name in skip || name in systemDirs ||
-                name == nestedDir.name || name == launchTargetName
+                name == nestedDir.name || name == launchTargetName ||
+                name.endsWith("-launch.jar", ignoreCase = true)
             ) return@forEach
             val target = File(nestedDir, name)
             if (file.isDirectory) {
@@ -328,6 +389,10 @@ object ServerFileManager {
 
     fun persistLaunchTarget(context: Context, worldName: String, mode: LaunchMode, relativePath: String) {
         val serverDir = getServerDir(context, worldName)
+        persistLaunchTarget(serverDir, mode, relativePath)
+    }
+
+    fun persistLaunchTarget(serverDir: File, mode: LaunchMode, relativePath: String) {
         val props = ServerPropertiesHelper.readProperties(serverDir)
         props.setProperty("pocketcraft-launch-mode", mode.name)
         props.setProperty("pocketcraft-launch-target", relativePath)
@@ -344,8 +409,136 @@ object ServerFileManager {
         val relativePath = props.getProperty("pocketcraft-launch-target")
             ?.trim()
             ?.takeIf { it.isNotBlank() }
-            ?: return null
-        if (relativePath.startsWith("/") || relativePath.contains("..")) return null
-        return LaunchTarget(mode = mode, file = File(serverDir, relativePath))
+        if (relativePath != null && !relativePath.startsWith("/") && !relativePath.contains("..")) {
+            val targetFile = File(serverDir, relativePath)
+            if (targetFile.exists() && targetFile.isFile && targetFile.length() > 0L) {
+                return LaunchTarget(mode = mode, file = targetFile)
+            }
+        }
+
+        // Fallback: check for standard launcher files in server root
+        val fabricJar = File(serverDir, "fabric-server-launch.jar")
+        if (fabricJar.exists() && fabricJar.isFile && fabricJar.length() > 0L) {
+            persistLaunchTarget(serverDir, LaunchMode.JAR, "fabric-server-launch.jar")
+            return LaunchTarget(mode = LaunchMode.JAR, file = fabricJar)
+        }
+        val quiltJar = File(serverDir, "quilt-server-launch.jar")
+        if (quiltJar.exists() && quiltJar.isFile && quiltJar.length() > 0L) {
+            persistLaunchTarget(serverDir, LaunchMode.JAR, "quilt-server-launch.jar")
+            return LaunchTarget(mode = LaunchMode.JAR, file = quiltJar)
+        }
+
+        return null
+    }
+
+    fun isLikelyModpackRuntimeId(value: String): Boolean {
+        val trimmed = value.trim()
+        if (trimmed.isBlank()) return false
+        if (trimmed.first().isLetter()) return true
+        val isMcVersion = trimmed.matches(Regex("""\d+(?:\.\d+)*(?:[-+](?:pre|rc|alpha|beta|snapshot|[a-z0-9_.-]+))?""", RegexOption.IGNORE_CASE))
+        return !isMcVersion
+    }
+
+    fun detectModpackMinecraftVersion(serverDir: File): String? {
+        val props = ServerPropertiesHelper.readProperties(serverDir, persistDefaults = false)
+        val mcVer = props.getProperty("pocketcraft-modpack-mc-version")?.trim()
+        if (!mcVer.isNullOrBlank() && !isLikelyModpackRuntimeId(mcVer)) {
+            return mcVer
+        }
+        val gameVer = props.getProperty("pocketcraft-game-version")?.trim()
+        if (!gameVer.isNullOrBlank() && !isLikelyModpackRuntimeId(gameVer)) {
+            return gameVer
+        }
+
+        // Check server.jar in world directory (Mojang bundler jar)
+        val serverJar = File(serverDir, "server.jar")
+        if (serverJar.exists() && serverJar.isFile) {
+            runCatching {
+                java.util.zip.ZipFile(serverJar).use { zip ->
+                    zip.getEntry("META-INF/versions.list")?.let { entry ->
+                        zip.getInputStream(entry).bufferedReader().useLines { lines ->
+                            for (line in lines) {
+                                val parts = line.split('\t')
+                                if (parts.size >= 2) {
+                                    val v = parts[1].trim()
+                                    if (!v.isNullOrBlank() && !isLikelyModpackRuntimeId(v)) return v
+                                }
+                            }
+                        }
+                    }
+                    zip.getEntry("META-INF/version.json")?.let { entry ->
+                        val text = zip.getInputStream(entry).bufferedReader().readText()
+                        val id = org.json.JSONObject(text).optString("id")?.trim()
+                        if (!id.isNullOrBlank() && !isLikelyModpackRuntimeId(id)) return id
+                    }
+                }
+            }
+        }
+
+        // Check fabric-server-launch.jar or quilt-server-launch.jar
+        val launcherJars = listOf(
+            File(serverDir, "fabric-server-launch.jar"),
+            File(serverDir, "quilt-server-launch.jar"),
+            readLaunchTarget(serverDir)?.file
+        ).filterNotNull().filter { it.exists() && it.isFile }
+
+        for (launchJar in launcherJars) {
+            runCatching {
+                java.util.zip.ZipFile(launchJar).use { zip ->
+                    zip.getEntry("install.properties")?.let { entry ->
+                        val p = java.util.Properties()
+                        zip.getInputStream(entry).use { p.load(it) }
+                        val gv = p.getProperty("game-version")?.trim()
+                        if (!gv.isNullOrBlank() && !isLikelyModpackRuntimeId(gv)) return gv
+                    }
+                    zip.getEntry("fabric-server-launcher.properties")?.let { entry ->
+                        val p = java.util.Properties()
+                        zip.getInputStream(entry).use { p.load(it) }
+                        val sj = p.getProperty("serverJar")?.let { j ->
+                            Regex("""\d+\.\d+(?:\.\d+)?""").find(j)?.value
+                        }
+                        if (!sj.isNullOrBlank()) return sj
+                    }
+                }
+            }
+        }
+
+        // Check fabric-server-launcher.properties on disk
+        val fabricProps = File(serverDir, "fabric-server-launcher.properties")
+        if (fabricProps.exists() && fabricProps.isFile) {
+            runCatching {
+                val p = java.util.Properties()
+                ServerPropertiesHelper.loadInto(fabricProps, p)
+                val ver = p.getProperty("serverJar")?.let { jarName ->
+                    Regex("""\d+\.\d+(?:\.\d+)?""").find(jarName)?.value
+                }
+                if (!ver.isNullOrBlank()) return ver
+            }
+        }
+
+        // Check mod jars in mods/ for minecraft dependency declared in fabric.mod.json
+        val modsDir = File(serverDir, "mods")
+        if (modsDir.isDirectory) {
+            runCatching {
+                modsDir.listFiles()?.filter { it.extension == "jar" }?.take(15)?.forEach { modJar ->
+                    runCatching {
+                        java.util.zip.ZipFile(modJar).use { zip ->
+                            zip.getEntry("fabric.mod.json")?.let { entry ->
+                                val text = zip.getInputStream(entry).bufferedReader().readText()
+                                val json = org.json.JSONObject(text)
+                                val depends = json.optJSONObject("depends")
+                                val mcDep = depends?.optString("minecraft")?.trim()
+                                if (!mcDep.isNullOrBlank()) {
+                                    val extracted = Regex("""\d+\.\d+(?:\.\d+)?""").find(mcDep)?.value
+                                    if (!extracted.isNullOrBlank()) return extracted
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null
     }
 }

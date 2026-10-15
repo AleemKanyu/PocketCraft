@@ -6004,25 +6004,7 @@ class ServerStateHolder(
     }
 
     private fun migrateFlatLayoutToNested(serverDir: File, nestedDir: File) {
-        val skip = setOf("server.properties", "eula.txt", "usercache.json",
-            "ops.json", "whitelist.json", "banned-players.json", "banned-ips.json")
-        val systemDirs = setOf("plugins", "logs", "cache", "jre", "jre-21", "jre-runtime", "jre17", "jre21", "jre25",
-            "config", "libraries", "binaries", "backups", "crash-reports", "bundler", "versions")
-        serverDir.listFiles()?.forEach { file ->
-            val name = file.name
-            val isDimensionDir = name.endsWith("_nether") || name.endsWith("_the_end") ||
-                                 name == "world_nether" || name == "world_the_end" ||
-                                 name == "DIM-1" || name == "DIM1" || name == "nether" || name == "the_end"
-            if (name.startsWith("pocketcraft-") || name in skip || name in systemDirs || name == nestedDir.name || isDimensionDir) return@forEach
-            val target = File(nestedDir, name)
-            if (file.isDirectory) {
-                file.copyRecursively(target, overwrite = true)
-                file.deleteRecursively()
-            } else {
-                file.copyTo(target, overwrite = true)
-                file.delete()
-            }
-        }
+        ServerFileManager.migrateFlatLayoutToNested(serverDir, nestedDir)
     }
 
     private fun generateUniqueWorldName(requestedName: String, existingNames: List<String>): String {

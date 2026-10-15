@@ -488,14 +488,48 @@ class ServerHostService : Service() {
                 setWorldNameOverride(worldName)
             }
             val config = configRepo.loadConfig()
-            // Use versionId as fallback if pocketcraft-game-version was never written
-            val resolvedGameVersion = config.gameVersion.ifBlank { versionId }
-            val runtime = JreExtractor.runtimeForServer(config.serverType, resolvedGameVersion)
             val serverDir = com.pockethost.app.service.ServerFileManager.getServerDir(applicationContext, worldName)
-            val targetFile = com.pockethost.app.service.ServerFileManager.getServerJarFile(applicationContext, resolvedGameVersion, config.serverType)
+            val launchTarget = com.pockethost.app.service.ServerFileManager.readLaunchTarget(serverDir)
+            val isModpack = config.serverType == com.pockethost.app.data.model.ServerType.MODPACK ||
+                launchTarget != null ||
+                com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(config.gameVersion) ||
+                com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(versionId)
+
+            val detectedMcVersion = if (isModpack) {
+                com.pockethost.app.service.ServerFileManager.detectModpackMinecraftVersion(serverDir)
+            } else null
+
+            val resolvedGameVersion = when {
+                isModpack && !detectedMcVersion.isNullOrBlank() && !com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(detectedMcVersion) -> detectedMcVersion
+                !com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(config.gameVersion) && config.gameVersion.isNotBlank() -> config.gameVersion
+                !com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(versionId) && versionId.isNotBlank() -> versionId
+                else -> detectedMcVersion ?: "1.21.1"
+            }
+            val effectiveServerType = if (isModpack) com.pockethost.app.data.model.ServerType.MODPACK else config.serverType
+            val runtime = JreExtractor.runtimeForServer(effectiveServerType, resolvedGameVersion)
+            val targetFile = com.pockethost.app.service.ServerFileManager.getServerJarFile(applicationContext, resolvedGameVersion, effectiveServerType)
             // Ensure parent directory exists before resolveJar tries to write the file
             targetFile.parentFile?.mkdirs()
-            android.util.Log.d("ServerHostService", "[startServer] versionId=$versionId gameVersion=${config.gameVersion} resolvedGameVersion=$resolvedGameVersion serverType=${config.serverType} targetFile=${targetFile.absolutePath} exists=${targetFile.exists()} isDir=${targetFile.isDirectory}")
+
+            if (isModpack && !resolvedGameVersion.isNullOrBlank() && !com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(resolvedGameVersion)) {
+                runCatching {
+                    val p = com.pockethost.app.service.ServerPropertiesHelper.readProperties(serverDir)
+                    var changed = false
+                    if (p.getProperty("pocketcraft-modpack-mc-version").isNullOrBlank()) {
+                        p.setProperty("pocketcraft-modpack-mc-version", resolvedGameVersion)
+                        changed = true
+                    }
+                    if (com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(p.getProperty("pocketcraft-game-version").orEmpty())) {
+                        p.setProperty("pocketcraft-game-version", resolvedGameVersion)
+                        changed = true
+                    }
+                    if (changed) {
+                        com.pockethost.app.service.ServerPropertiesHelper.saveProperties(serverDir, p)
+                    }
+                }
+            }
+
+            android.util.Log.d("ServerHostService", "[startServer] versionId=$versionId gameVersion=${config.gameVersion} resolvedGameVersion=$resolvedGameVersion serverType=${config.serverType} effectiveServerType=$effectiveServerType runtime=${runtime.id} targetFile=${targetFile.absolutePath} exists=${targetFile.exists()} isDir=${targetFile.isDirectory}")
 
             try {
                 val jarFile = prepareRuntimeAndJar(
@@ -1004,9 +1038,12 @@ class ServerHostService : Service() {
         val effectiveCustomJarPath = diskProps.getProperty("pocketcraft-custom-jar-path")
             ?: diskProps.getProperty("pocketcraft-modpack-id")
             ?: config.customJarPath
-        val effectiveGameVersion = diskProps.getProperty("pocketcraft-game-version")
-            ?.takeIf { it.isNotBlank() }
-            ?: resolvedGameVersion
+        val rawDiskVer = diskProps.getProperty("pocketcraft-game-version")
+        val effectiveGameVersion = if (effectiveServerType == com.pockethost.app.data.model.ServerType.MODPACK) {
+            resolvedGameVersion
+        } else {
+            rawDiskVer?.takeIf { it.isNotBlank() } ?: resolvedGameVersion
+        }
 
         updateNotification(ServerStage.EXTRACTING_JRE, force = true)
         val runtimeJob = async { ensureRuntimeExtracted(versionId, runtime) }
@@ -2236,6 +2273,10 @@ class ServerHostService : Service() {
         if (stopReason == "user" || stopInProgress.get() || AppPreferences(applicationContext).isUserStopped) {
             return false
         }
+        if (!serverReadyHandled.get()) {
+            android.util.Log.w("ServerHostService", "Server crashed before becoming ready; skipping auto-recover.")
+            return false
+        }
         val now = SystemClock.elapsedRealtime()
         if (autoRecoverWindowStartMs == 0L || (now - autoRecoverWindowStartMs) > AUTO_RECOVER_WINDOW_MS) {
             autoRecoverWindowStartMs = now
@@ -2542,14 +2583,48 @@ class ServerHostService : Service() {
                 setWorldNameOverride(worldName)
             }
             val config = configRepo.loadConfig()
-            // Use versionId as fallback if pocketcraft-game-version was never written
-            val resolvedGameVersion = config.gameVersion.ifBlank { versionId }
-            val runtime = JreExtractor.runtimeForServer(config.serverType, resolvedGameVersion)
             val serverDir = com.pockethost.app.service.ServerFileManager.getServerDir(applicationContext, worldName)
-            val targetFile = com.pockethost.app.service.ServerFileManager.getServerJarFile(applicationContext, resolvedGameVersion, config.serverType)
+            val launchTarget = com.pockethost.app.service.ServerFileManager.readLaunchTarget(serverDir)
+            val isModpack = config.serverType == com.pockethost.app.data.model.ServerType.MODPACK ||
+                launchTarget != null ||
+                com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(config.gameVersion) ||
+                com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(versionId)
+
+            val detectedMcVersion = if (isModpack) {
+                com.pockethost.app.service.ServerFileManager.detectModpackMinecraftVersion(serverDir)
+            } else null
+
+            val resolvedGameVersion = when {
+                isModpack && !detectedMcVersion.isNullOrBlank() && !com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(detectedMcVersion) -> detectedMcVersion
+                !com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(config.gameVersion) && config.gameVersion.isNotBlank() -> config.gameVersion
+                !com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(versionId) && versionId.isNotBlank() -> versionId
+                else -> detectedMcVersion ?: "1.21.1"
+            }
+            val effectiveServerType = if (isModpack) com.pockethost.app.data.model.ServerType.MODPACK else config.serverType
+            val runtime = JreExtractor.runtimeForServer(effectiveServerType, resolvedGameVersion)
+            val targetFile = com.pockethost.app.service.ServerFileManager.getServerJarFile(applicationContext, resolvedGameVersion, effectiveServerType)
             // Ensure parent directory exists before resolveJar tries to write the file
             targetFile.parentFile?.mkdirs()
-            android.util.Log.d("ServerHostService", "[resumeServer] versionId=$versionId gameVersion=${config.gameVersion} resolvedGameVersion=$resolvedGameVersion serverType=${config.serverType} targetFile=${targetFile.absolutePath} exists=${targetFile.exists()} isDir=${targetFile.isDirectory}")
+
+            if (isModpack && !resolvedGameVersion.isNullOrBlank() && !com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(resolvedGameVersion)) {
+                runCatching {
+                    val p = com.pockethost.app.service.ServerPropertiesHelper.readProperties(serverDir)
+                    var changed = false
+                    if (p.getProperty("pocketcraft-modpack-mc-version").isNullOrBlank()) {
+                        p.setProperty("pocketcraft-modpack-mc-version", resolvedGameVersion)
+                        changed = true
+                    }
+                    if (com.pockethost.app.service.ServerFileManager.isLikelyModpackRuntimeId(p.getProperty("pocketcraft-game-version").orEmpty())) {
+                        p.setProperty("pocketcraft-game-version", resolvedGameVersion)
+                        changed = true
+                    }
+                    if (changed) {
+                        com.pockethost.app.service.ServerPropertiesHelper.saveProperties(serverDir, p)
+                    }
+                }
+            }
+
+            android.util.Log.d("ServerHostService", "[resumeServer] versionId=$versionId gameVersion=${config.gameVersion} resolvedGameVersion=$resolvedGameVersion serverType=${config.serverType} effectiveServerType=$effectiveServerType runtime=${runtime.id} targetFile=${targetFile.absolutePath} exists=${targetFile.exists()} isDir=${targetFile.isDirectory}")
 
             try {
                 val jarFile = prepareRuntimeAndJar(
