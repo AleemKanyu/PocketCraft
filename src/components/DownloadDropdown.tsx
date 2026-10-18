@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Download, ExternalLink, Smartphone } from "lucide-react";
+import { ChevronDown, Download, ExternalLink, Smartphone, Laptop } from "lucide-react";
 import { PlayStoreIcon } from "./ui/PlayStoreIcon";
 import { useTheme } from "../lib/ThemeContext";
 
@@ -190,6 +190,45 @@ export const DownloadDropdown: React.FC<DownloadDropdownProps> = ({
                   }`}
                 >
                   Download standalone package
+                </p>
+              </div>
+            </a>
+
+            {/* Option 3: x86_64 APK for Chromebooks and PC emulators */}
+            <a
+              href="https://github.com/AleemKanyu/PocketCraft/releases/latest/download/PocketHost-x86_64.apk"
+              download="PocketHost-x86_64.apk"
+              onClick={() => setIsOpen(false)}
+              className={`group flex items-center gap-3 p-2.5 transition-all ${
+                isDark
+                  ? "hover:bg-white/[0.06] text-white"
+                  : "hover:bg-black/[0.04] text-black"
+              }`}
+            >
+              <div className="w-9 h-9 rounded-lg bg-black/20 flex items-center justify-center flex-shrink-0 border border-white/10 group-hover:border-[#7FE620]/40 transition-colors">
+                <Laptop className="w-5 h-5 text-[#7FE620]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-bold text-sm tracking-wide group-hover:text-[#7FE620] transition-colors">
+                    Chromebook / PC emulator
+                  </span>
+                  <span
+                    className={`px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider font-bold ${
+                      isDark
+                        ? "bg-white/10 text-white/60"
+                        : "bg-black/5 text-black/60"
+                    }`}
+                  >
+                    x86
+                  </span>
+                </div>
+                <p
+                  className={`text-xs mt-0.5 truncate ${
+                    isDark ? "text-white/50" : "text-black/50"
+                  }`}
+                >
+                  For Intel / AMD devices
                 </p>
               </div>
             </a>

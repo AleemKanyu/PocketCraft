@@ -494,3 +494,22 @@ html.dark .btn-duo-secondary:hover {
     scroll-behavior: auto !important;
   }
 }
+
+/* Reviews: two rows of cards gliding in opposite directions (Reviews.tsx). The track holds the
+   list twice, so moving it by half its width loops without a seam. */
+@keyframes reviews-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.reviews-track {
+  animation: reviews-scroll 60s linear infinite;
+  will-change: transform;
+}
+.reviews-track-reverse {
+  animation: reviews-scroll 70s linear infinite reverse;
+  will-change: transform;
+}
+.reviews-marquee {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+}

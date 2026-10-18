@@ -10,6 +10,7 @@ import { useTheme } from "../lib/ThemeContext";
 import { useLowEndDevice } from "../hooks/useLowEndDevice";
 import { DownloadDropdown } from "../components/DownloadDropdown";
 import Changelog from "../components/Changelog";
+import Reviews from "../components/Reviews";
 import { appSchema, faqSchema } from "../seo/site";
 
 const DownloadIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
@@ -53,6 +54,11 @@ const homeFaqs = [
       "No. PocketHost uses relay networking so you can host without manual router setup in most cases.",
   },
   {
+    question: "Does PocketHost work on Chromebooks or PC emulators?",
+    answer:
+      "Yes. Phones use the normal download. Chromebooks and PC emulators (BlueStacks, Google Play Games on PC and similar) have an Intel or AMD processor, so they need the x86 version, which you can download from this page.",
+  },
+  {
     question: "Will my world be deleted after an update?",
     answer: "No. Updating the app does not remove your worlds. Keep regular backups for safety.",
   },
@@ -82,6 +88,8 @@ const Home = () => {
       </div>
 
       <Screenshots />
+
+      <Reviews />
 
       <ComparisonTable />
 
@@ -194,7 +202,7 @@ const Home = () => {
             transition={{ duration: 0.5, delay: 0.4 }}
             className={`text-sm mb-12 max-w-sm mx-auto ${theme === "dark" ? "text-white/30" : "text-black/50"}`}
           >
-            <strong>Version:</strong> Latest Release | <strong>Minimum Android:</strong> 8.0+ (ARM64)
+            <strong>Version:</strong> Latest Release | <strong>Minimum Android:</strong> 8.0+ (ARM64 phones, x86_64 for Chromebooks)
           </motion.p>
 
           <motion.div
