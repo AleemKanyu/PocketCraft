@@ -12,7 +12,7 @@ const faqs = [
   {
     question: "What is PocketHost?",
     answer:
-      "PocketHost is a free Android app that turns your phone into a Minecraft server. It runs a real PaperMC Java Edition server on the device, lets Bedrock players join through Geyser crossplay, supports plugins, and gives your friends a public address to connect to without port forwarding. You can get it on Google Play or as a direct APK from pockethost.online.",
+      "PocketHost is a free Android app that turns your phone into a Minecraft server. It runs a real PaperMC Java Edition server on the device, lets Bedrock players join through Geyser crossplay, supports plugins, and gives your friends a public address to connect to without port forwarding. You can get it as a direct APK from pockethost.online. Google Play is coming soon.",
   },
   {
     question: "Do I need a PC to run PocketHost?",

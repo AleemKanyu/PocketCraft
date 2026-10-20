@@ -181,20 +181,13 @@ export default function Footer() {
               Download
             </h4>
             <p className="text-white/30 text-sm mb-4 leading-relaxed">
-              Get PocketHost on your Android device via Google Play or direct APK.
+              Get PocketHost on your Android device with the direct APK. Google Play is coming soon.
             </p>
             <div className="flex flex-col gap-2.5">
-              <motion.a
-                href="https://play.google.com/store/apps/details?id=com.pockethost.app"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2.5 px-4 py-2.5 bg-white/10 hover:bg-white/15 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-colors border border-white/10"
-                whileHover={{ scale: 1.03, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <PlayStoreIcon className="w-4 h-4 flex-shrink-0" />
-                Google Play Store
-              </motion.a>
+              <span className="inline-flex items-center gap-2.5 px-4 py-2.5 bg-white/5 text-white/40 text-xs font-bold uppercase tracking-wider rounded-xl border border-white/10 cursor-default">
+                <PlayStoreIcon className="w-4 h-4 flex-shrink-0 opacity-60" />
+                Google Play: coming soon
+              </span>
               <motion.a
                 href="https://github.com/AleemKanyu/PocketCraft/releases/latest/download/PocketHost.apk"
                 download="PocketHost.apk"

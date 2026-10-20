@@ -192,7 +192,7 @@ const Home = () => {
               theme === "dark" ? "text-white/50" : "text-black/60"
             }`}
           >
-            Install directly from Google Play or download the latest release APK for manual installation.
+            Download the latest release APK to install it. Google Play is coming soon.
           </motion.p>
 
           <motion.p

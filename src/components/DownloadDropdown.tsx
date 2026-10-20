@@ -1,22 +1,21 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Smartphone, Laptop } from "lucide-react";
+import { ChevronDown, Smartphone, Laptop, Download } from "lucide-react";
 import { PlayStoreIcon } from "./ui/PlayStoreIcon";
 import { useTheme } from "../lib/ThemeContext";
 
-const PLAY_URL = "https://play.google.com/store/apps/details?id=com.pockethost.app";
 const APK_BASE = "https://github.com/AleemKanyu/PocketCraft/releases/latest/download";
 
 interface DownloadDropdownProps {
   className?: string;
-  /** Kept for existing callers; the main button always says "Get it on Google Play". */
+  /** Kept for existing callers; the main button is the APK download. */
   buttonText?: string;
   align?: "center" | "left" | "right";
   size?: "default" | "sm";
 }
 
 /**
- * The download block: one main Google Play button, and a small "download the APK" link under it
+ * The download block: one main APK button, and a "Google Play: coming soon" note under it
  * that asks which device the APK is for (phone, or Chromebook / PC emulator).
  */
 export const DownloadDropdown: React.FC<DownloadDropdownProps> = ({
@@ -76,38 +75,36 @@ export const DownloadDropdown: React.FC<DownloadDropdownProps> = ({
 
   return (
     <div ref={containerRef} className={`relative inline-flex flex-col gap-2.5 ${itemsAlign} ${className}`}>
-      {/* Main button: Google Play */}
-      <motion.a
-        href={PLAY_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Get PocketHost on Google Play"
-        className={`btn-duo shimmer-btn ${
-          size === "sm" ? "px-5 py-2.5 text-xs" : "px-7 sm:px-10 py-4 text-sm"
-        } uppercase tracking-wider font-bold inline-flex items-center justify-center gap-2.5 w-full shadow-lg hover:shadow-[0_0_30px_rgba(127,230,32,0.35)] transition-all select-none`}
-        whileHover={{ scale: 1.03, y: -2 }}
-        whileTap={{ scale: 0.98 }}
-        transition={{ type: "spring", stiffness: 400 }}
-      >
-        <PlayStoreIcon className={`${size === "sm" ? "w-4 h-4" : "w-5 h-5"} flex-shrink-0`} />
-        <span>Get it on Google Play</span>
-      </motion.a>
-
-      {/* Small link: direct APK, then pick the device type */}
-      <button
+      {/* Main button: direct APK, then pick the device type */}
+      <motion.button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         aria-expanded={isOpen}
         aria-haspopup="true"
-        className={`inline-flex items-center gap-1 text-xs font-semibold underline-offset-4 hover:underline cursor-pointer ${
-          isDark ? "text-white/55 hover:text-[#7FE620]" : "text-black/55 hover:text-[#58A700]"
+        aria-label="Download the PocketHost APK"
+        className={`btn-duo shimmer-btn ${
+          size === "sm" ? "px-5 py-2.5 text-xs" : "px-7 sm:px-10 py-4 text-sm"
+        } uppercase tracking-wider font-bold inline-flex items-center justify-center gap-2.5 w-full shadow-lg hover:shadow-[0_0_30px_rgba(127,230,32,0.35)] transition-all select-none cursor-pointer`}
+        whileHover={{ scale: 1.03, y: -2 }}
+        whileTap={{ scale: 0.98 }}
+        transition={{ type: "spring", stiffness: 400 }}
+      >
+        <Download className={`${size === "sm" ? "w-4 h-4" : "w-5 h-5"} flex-shrink-0`} />
+        <span>Download the APK</span>
+        <motion.span animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }} className="inline-flex">
+          <ChevronDown className="w-4 h-4" />
+        </motion.span>
+      </motion.button>
+
+      {/* Google Play is back soon: shown, but not a link */}
+      <span
+        className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
+          isDark ? "text-white/55" : "text-black/55"
         }`}
       >
-        or download the APK
-        <motion.span animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }} className="inline-flex">
-          <ChevronDown className="w-3.5 h-3.5" />
-        </motion.span>
-      </button>
+        <PlayStoreIcon className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
+        Google Play: coming soon
+      </span>
 
       <AnimatePresence>
         {isOpen && (

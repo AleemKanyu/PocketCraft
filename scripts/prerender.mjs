@@ -97,7 +97,7 @@ const llms = [
   "- Server software: PaperMC for Minecraft Java Edition, with Geyser so Bedrock Edition players (Android, iOS, Windows, Xbox, PlayStation, Switch) can join",
   "- Networking: built-in relay gives a public join address, so no router port forwarding is needed",
   "- Also supports: Bukkit, Spigot and Paper plugins, world backups including Google Drive, an in-app console and player management",
-  `- Get it: Google Play (${server.PLAY_STORE_URL}) or direct APK (${server.APK_URL})`,
+  `- Get it: direct APK (${server.APK_URL}); Google Play is coming soon`,
   `- Support: ${server.SUPPORT_EMAIL}, Discord (${server.DISCORD_URL})`,
   `- Not to be confused with pockethost.io, an unrelated service for hosting PocketBase databases`,
   "",
