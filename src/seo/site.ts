@@ -41,7 +41,7 @@ export const organizationSchema: JsonLd = {
   description:
     "PocketHost makes a free Android app that runs a Minecraft Java Edition server, with Bedrock crossplay, directly on a phone.",
   email: SUPPORT_EMAIL,
-  sameAs: [DISCORD_URL, INSTAGRAM_URL, GITHUB_URL],
+  sameAs: [PLAY_STORE_URL, DISCORD_URL, INSTAGRAM_URL, GITHUB_URL],
 };
 
 export const websiteSchema: JsonLd = {
@@ -68,7 +68,7 @@ export const appSchema: JsonLd = {
   applicationCategory: "UtilitiesApplication",
   applicationSubCategory: "Minecraft server hosting",
   softwareVersion: release.version,
-  installUrl: APK_URL,
+  installUrl: PLAY_STORE_URL,
   downloadUrl: APK_URL,
   offers: {
     "@type": "Offer",
