@@ -12,6 +12,10 @@ const quickLinks = [
   { href: "/blog", label: "Blog" },
   { href: "/roadmap", label: "Roadmap" },
   { href: "/community", label: "Community" },
+  { href: "/free-minecraft-server-hosting", label: "Free Minecraft Server" },
+  { href: "/aternos-alternative", label: "Aternos Alternative" },
+  { href: "/host-minecraft-server-on-android", label: "Host on Android" },
+  { href: "/free-minecraft-server-hosts-compared", label: "Hosts Compared" },
 ];
 
 const legalLinks = [

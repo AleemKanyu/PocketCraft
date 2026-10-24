@@ -5,6 +5,7 @@ import Home from "./pages/Home";
 import NotFound from "./pages/NotFound";
 import { ThemeProvider, useTheme } from "./lib/ThemeContext";
 import { CubicPixelTrail } from "./components/CubicPixelTrail";
+import { landingPages } from "./data/landingPages";
 
 const FAQ = lazy(() => import("./pages/FAQ"));
 const Blog = lazy(() => import("./pages/Blog"));
@@ -15,6 +16,7 @@ const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
 const DeleteAccount = lazy(() => import("./pages/DeleteAccount"));
 const RemoteControlPage = lazy(() => import("./pages/RemoteControlPage"));
+const LandingPage = lazy(() => import("./pages/LandingPage"));
 
 const RouteLoadingFallback = () => (
   <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
@@ -36,6 +38,7 @@ export const pageRoutes = [
   { path: "/terms", element: <Terms /> },
   { path: "/delete-account", element: <DeleteAccount /> },
   { path: "/remote", element: <RemoteControlPage /> },
+  ...landingPages.map((page) => ({ path: page.path, element: <LandingPage path={page.path} /> })),
 ];
 
 function AppRoutes() {

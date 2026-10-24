@@ -75,7 +75,7 @@ const Home = () => {
       }`}
     >
       <SEO
-        title="PocketHost: Free Minecraft Server Hosting on Android"
+        title="PocketHost: Free Minecraft Server Hosting on Android (Aternos Alternative)"
         description="PocketHost is a free Android app that turns your phone into a Minecraft server. Java and Bedrock crossplay, plugins, no port forwarding and no PC needed."
         path="/"
         schema={[appSchema, faqSchema(homeFaqs)]}
