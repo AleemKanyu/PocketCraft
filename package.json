@@ -24,6 +24,7 @@
     "dotenv": "^17.2.3",
     "esbuild": "^0.28.1",
     "express": "^4.21.2",
+    "firebase": "^13.1.0",
     "framer-motion": "^12.36.0",
     "lucide-react": "^0.546.0",
     "react": "^19.0.0",

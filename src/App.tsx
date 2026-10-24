@@ -14,6 +14,7 @@ const Community = lazy(() => import("./pages/Community"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
 const DeleteAccount = lazy(() => import("./pages/DeleteAccount"));
+const RemoteControlPage = lazy(() => import("./pages/RemoteControlPage"));
 
 const RouteLoadingFallback = () => (
   <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
@@ -34,6 +35,7 @@ export const pageRoutes = [
   { path: "/privacy", element: <Privacy /> },
   { path: "/terms", element: <Terms /> },
   { path: "/delete-account", element: <DeleteAccount /> },
+  { path: "/remote", element: <RemoteControlPage /> },
 ];
 
 function AppRoutes() {
