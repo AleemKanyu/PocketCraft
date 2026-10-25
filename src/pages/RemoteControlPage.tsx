@@ -476,9 +476,9 @@ export default function RemoteControlPage() {
                 <button
                   type="button"
                   onClick={() => handleSendCommand("start")}
-                  disabled={isOnline || isStarting || cooldownSeconds > 0 || actionLoading !== null}
+                  disabled={cooldownSeconds > 0 || actionLoading !== null}
                   className={`py-3.5 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg ${
-                    isOnline || isStarting || cooldownSeconds > 0 || actionLoading !== null
+                    cooldownSeconds > 0 || actionLoading !== null
                       ? isDark
                         ? "bg-white/5 text-white/30 border border-white/5 cursor-not-allowed shadow-none"
                         : "bg-black/5 text-black/30 border border-black/5 cursor-not-allowed shadow-none"
@@ -497,9 +497,9 @@ export default function RemoteControlPage() {
                 <button
                   type="button"
                   onClick={() => handleSendCommand("stop")}
-                  disabled={(!isOnline && !isStarting && !isSleeping) || cooldownSeconds > 0 || actionLoading !== null}
+                  disabled={cooldownSeconds > 0 || actionLoading !== null}
                   className={`py-3.5 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg ${
-                    (!isOnline && !isStarting && !isSleeping) || cooldownSeconds > 0 || actionLoading !== null
+                    cooldownSeconds > 0 || actionLoading !== null
                       ? isDark
                         ? "bg-white/5 text-white/30 border border-white/5 cursor-not-allowed shadow-none"
                         : "bg-black/5 text-black/30 border border-black/5 cursor-not-allowed shadow-none"
