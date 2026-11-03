@@ -11,9 +11,78 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
-    version: "v1.2.10",
+    version: "v1.2.19",
     date: "Oct 2026",
     badge: "latest",
+    changes: [
+      { type: "feat", text: "Watch more ads to unlock Remote Control — no 7-day limit, and it works on low-memory phones" },
+      { type: "feat", text: "Back up and restore your worlds after reinstalling the app" },
+      { type: "feat", text: "New Delete Server button, plus one-tap copy for the world seed and the IP / port" },
+      { type: "fix", text: "Stuck at 9%? Downloads now time out with a clear Retry message" },
+      { type: "fix", text: "Broken jar and world files are set aside, never deleted" },
+      { type: "fix", text: "Forge modpack launch fix and duplicate plugin cleanup" },
+    ],
+  },
+  {
+    version: "v1.2.18",
+    date: "Oct 2026",
+    changes: [
+      { type: "feat", text: "New picture guide for setting up the Global network (playit.gg); \"International\" is now called \"Global\"" },
+      { type: "feat", text: "The newest Minecraft versions show up within minutes instead of a day" },
+      { type: "feat", text: "Before starting, the app tells you when a newer Geyser is available so Bedrock players can join" },
+      { type: "fix", text: "Clearer message when a server closes right after starting (no more wrong \"out of memory\")" },
+      { type: "fix", text: "Modpacks now find the right Minecraft version" },
+      { type: "fix", text: "Remote start works reliably after closing the app" },
+    ],
+  },
+  {
+    version: "v1.2.17",
+    date: "Oct 2026",
+    changes: [
+      { type: "fix", text: "Remote Control keeps working after you close the app" },
+      { type: "fix", text: "The app shows the right status if you open it while the server is starting" },
+      { type: "fix", text: "Cleaner Remote Control card and sleep time buttons" },
+    ],
+  },
+  {
+    version: "v1.2.16",
+    date: "Oct 2026",
+    badge: "major",
+    changes: [
+      { type: "feat", text: "Remote Control — start and stop your server from pockethost.online/remote (Premium, or unlock a day per short ad)" },
+      { type: "feat", text: "Starting a server from your 2nd start asks you to watch a short ad; supporters skip it" },
+      { type: "fix", text: "Fabric 1.20 servers that failed to start now run" },
+      { type: "fix", text: "Geyser updated for Bedrock players" },
+      { type: "fix", text: "Sleep mode now stays off when you turn it off" },
+      { type: "fix", text: "Clearer error messages and fewer freezes" },
+    ],
+  },
+  {
+    version: "v1.2.15",
+    date: "Oct 2026",
+    changes: [
+      { type: "feat", text: "Watch tutorial videos right inside the app" },
+      { type: "feat", text: "Server sleeps when nobody plays and wakes when someone joins" },
+      { type: "feat", text: "Pre-generate the world on Fabric and modpacks, with your own radius" },
+      { type: "feat", text: "Get help — send your logs and get a ticket number" },
+      { type: "fix", text: "Fabric servers start on the Minecraft version you picked" },
+      { type: "fix", text: "Clearer error messages when a server can't start, and fewer freezes while it starts" },
+    ],
+  },
+  {
+    version: "v1.2.11 – v1.2.14",
+    date: "Oct 2026",
+    changes: [
+      { type: "feat", text: "Java 25 modpack support, and import of your own mods and modpacks" },
+      { type: "fix", text: "Server storage settings upload and delete correctly" },
+      { type: "fix", text: "Server online status shows the real state" },
+      { type: "fix", text: "Discord, ticket and crash-report fixes" },
+      { type: "feat", text: "Interface polish across the app" },
+    ],
+  },
+  {
+    version: "v1.2.10",
+    date: "Oct 2026",
     changes: [
       { type: "feat", text: "New server address ending in pockethost.online — the app shows your new address once after you update" },
       { type: "fix", text: "Older Bedrock versions no longer get kicked right after joining" },

@@ -513,3 +513,27 @@ html.dark .btn-duo-secondary:hover {
   -webkit-mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
   mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
 }
+
+/* Reviews: cards lift and glow when hovered or focused; the whole row pauses (Reviews.tsx). */
+.review-card {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease, border-color 0.35s ease;
+}
+@media (hover: hover) {
+  .review-card:hover {
+    transform: translateY(-6px) scale(1.02);
+    border-color: rgba(127, 230, 32, 0.55);
+    box-shadow: 0 14px 34px rgba(127, 230, 32, 0.18);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reviews-track,
+  .reviews-track-reverse {
+    animation: none;
+  }
+  .reviews-marquee {
+    overflow-x: auto !important;
+  }
+  .review-card {
+    transition: none;
+  }
+}

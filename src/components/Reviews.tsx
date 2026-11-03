@@ -14,7 +14,7 @@ const Stars = () => (
 
 const ReviewCard = ({ review, isDark }: { review: Review; isDark: boolean }) => (
   <figure
-    className={`w-[300px] md:w-[340px] shrink-0 rounded-2xl border-2 border-b-4 p-5 flex flex-col gap-3 ${
+    className={`review-card w-[300px] md:w-[340px] h-full shrink-0 rounded-2xl border-2 border-b-4 p-5 flex flex-col gap-3 ${
       isDark ? "border-white/10 bg-white/[0.03]" : "border-black/10 bg-white"
     }`}
   >
@@ -38,12 +38,12 @@ const ReviewCard = ({ review, isDark }: { review: Review; isDark: boolean }) => 
 
 /** One row that glides sideways forever; the list is doubled so the loop has no seam. */
 const MarqueeRow = ({ items, reverse, isDark }: { items: Review[]; reverse?: boolean; isDark: boolean }) => (
-  <div className="reviews-marquee group overflow-hidden">
+  <div className="reviews-marquee group overflow-hidden" style={{ touchAction: "pan-y" }}>
     <div
-      className={`flex w-max gap-4 py-2 ${reverse ? "reviews-track-reverse" : "reviews-track"} group-hover:[animation-play-state:paused]`}
+      className={`flex w-max items-stretch gap-4 py-3 ${reverse ? "reviews-track-reverse" : "reviews-track"} group-hover:[animation-play-state:paused]`}
     >
       {[...items, ...items].map((review, i) => (
-        <div key={`${review.name}-${i}`} aria-hidden={i >= items.length ? true : undefined}>
+        <div key={`${review.name}-${i}`} className="flex" aria-hidden={i >= items.length ? true : undefined}>
           <ReviewCard review={review} isDark={isDark} />
         </div>
       ))}
@@ -72,7 +72,13 @@ const Reviews = () => {
         >
           What our players say
         </motion.h2>
-        <p className={`${isDark ? "text-white/50" : "text-black/60"}`}>
+        <motion.p
+          initial={{ opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.45, delay: 0.1 }}
+          className={`${isDark ? "text-white/50" : "text-black/60"}`}
+        >
           Real reviews from PocketHost players on Google Play.{" "}
           <a
             href={PLAY_REVIEWS_URL}
@@ -82,19 +88,39 @@ const Reviews = () => {
           >
             Read them all
           </a>
-        </p>
+        </motion.p>
       </div>
 
       {isLowEnd ? (
         <div className="max-w-6xl mx-auto px-6 flex flex-wrap justify-center gap-4">
-          {reviews.map((review) => (
-            <ReviewCard key={review.name} review={review} isDark={isDark} />
+          {reviews.map((review, i) => (
+            <motion.div
+              key={review.name}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.45, delay: Math.min(i, 6) * 0.06 }}
+            >
+              <ReviewCard review={review} isDark={isDark} />
+            </motion.div>
           ))}
         </div>
       ) : (
         <div className="flex flex-col gap-4">
-          <MarqueeRow items={reviews.slice(0, half)} isDark={isDark} />
-          <MarqueeRow items={reviews.slice(half)} reverse isDark={isDark} />
+          {[
+            { items: reviews.slice(0, half), reverse: false },
+            { items: reviews.slice(half), reverse: true },
+          ].map((row, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 28 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ duration: 0.7, delay: 0.15 + i * 0.18, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <MarqueeRow items={row.items} reverse={row.reverse} isDark={isDark} />
+            </motion.div>
+          ))}
         </div>
       )}
     </section>
