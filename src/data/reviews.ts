@@ -2,7 +2,7 @@
  * Real 5-star reviews from PocketHost's Google Play listing, copied word for word (spelling
  * included). "…" marks a part left out; the only parts left out compare us to other hosts.
  * Source: https://play.google.com/store/apps/details?id=com.pockethost.app (India listing),
- * read 18 Oct 2026. Do not add reviews that are not on the listing.
+ * read 3 Nov 2026 (the 5-star ones among the 30 the listing shows). Do not add reviews that are not on the listing.
  */
 export interface Review {
   name: string;
@@ -66,5 +66,60 @@ export const reviews: Review[] = [
     name: "Debanjan Mondal",
     date: "13 Oct 2026",
     text: "5 star full support",
+  },
+  {
+    name: "Parth Vardhan tiwari",
+    date: "30 Oct 2026",
+    text: "broo!!!! like trust this aap . 100% free . loved it like the best server that I have ever made",
+  },
+  {
+    name: "Zayan 8.d",
+    date: "27 Oct 2026",
+    text: "this is the best …",
+  },
+  {
+    name: "Ahmed Emad",
+    date: "27 Oct 2026",
+    text: "great app honestly and most importantly it's free",
+  },
+  {
+    name: "Ashkan Orak Sousan",
+    date: "26 Oct 2026",
+    text: "I'm so excited for this app",
+  },
+  {
+    name: "Aryaman Amarnath",
+    date: "20 Oct 2026",
+    text: "… It is one of the best hosts if you got a capable phone.",
+  },
+  {
+    name: "kapten Ult",
+    date: "16 Oct 2026",
+    text: "this is PEAK …",
+  },
+  {
+    name: "Samsad",
+    date: "18 Oct 2026",
+    text: "best app ever for minecraft server hosting",
+  },
+  {
+    name: "Joey",
+    date: "18 Oct 2026",
+    text: "This is a hidden gem🤯",
+  },
+  {
+    name: "Samarpan Bhusal",
+    date: "14 Oct 2026",
+    text: "peakkkkk",
+  },
+  {
+    name: "jayshree rajput",
+    date: "27 Sep 2026",
+    text: "Mast Hai 2000 fps wowww",
+  },
+  {
+    name: "Rahul Patel",
+    date: "29 Oct 2026",
+    text: "good",
   },
 ];
