@@ -7,7 +7,7 @@ import { renderHeadHtml, setServerHeadCollector, type HeadData } from "./seo/hea
 import { toIsoDate } from "./seo/site";
 
 export { renderHeadHtml };
-export { SITE_NAME, SITE_TAGLINE, SITE_URL, PLAY_STORE_URL, APK_URL, DISCORD_URL, SUPPORT_EMAIL } from "./seo/site";
+export { SITE_NAME, SITE_TAGLINE, SITE_URL, PLAY_STORE_URL, DISCORD_URL, SUPPORT_EMAIL } from "./seo/site";
 
 export interface PrerenderRoute {
   path: string;

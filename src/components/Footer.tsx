@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Github, Instagram, Download } from "lucide-react";
+import { Github, Instagram } from "lucide-react";
 import { MINECRAFT_ICONS } from "../lib/minecraft-icons";
 import { useTheme } from "../lib/ThemeContext";
 import { PlayStoreIcon } from "./ui/PlayStoreIcon";
@@ -124,12 +124,12 @@ export default function Footer() {
             <h4 className="text-xs font-bold uppercase tracking-widest text-[#7FE620] mb-6">
               Quick Links
             </h4>
-            <ul className="space-y-3">
+            <ul className="space-y-0.5">
               {quickLinks.map((link) => (
                 <li key={link.href}>
                   <Link
                     to={link.href}
-                    className="text-white/40 hover:text-white text-sm transition-colors duration-200 flex items-center gap-2 group"
+                    className="text-white/40 hover:text-white text-sm py-1.5 min-h-[40px] transition-colors duration-200 flex items-center gap-2 group"
                   >
                     <span className="w-0 group-hover:w-2 h-0.5 bg-[#7FE620] transition-all duration-200 rounded-full" />
                     {link.label}
@@ -149,13 +149,13 @@ export default function Footer() {
             <h4 className="text-xs font-bold uppercase tracking-widest text-[#7FE620] mb-6">
               Legal
             </h4>
-            <ul className="space-y-3">
+            <ul className="space-y-0.5">
               {legalLinks.map((link) => (
                 <li key={link.href}>
                   {link.external ? (
                     <a
                       href={link.href}
-                      className="text-white/40 hover:text-white text-sm transition-colors duration-200 flex items-center gap-2 group"
+                      className="text-white/40 hover:text-white text-sm py-1.5 min-h-[40px] transition-colors duration-200 flex items-center gap-2 group"
                     >
                       <span className="w-0 group-hover:w-2 h-0.5 bg-[#7FE620] transition-all duration-200 rounded-full" />
                       {link.label}
@@ -163,7 +163,7 @@ export default function Footer() {
                   ) : (
                     <Link
                       to={link.href}
-                      className="text-white/40 hover:text-white text-sm transition-colors duration-200 flex items-center gap-2 group"
+                      className="text-white/40 hover:text-white text-sm py-1.5 min-h-[40px] transition-colors duration-200 flex items-center gap-2 group"
                     >
                       <span className="w-0 group-hover:w-2 h-0.5 bg-[#7FE620] transition-all duration-200 rounded-full" />
                       {link.label}
@@ -185,7 +185,7 @@ export default function Footer() {
               Download
             </h4>
             <p className="text-white/30 text-sm mb-4 leading-relaxed">
-              Get PocketHost on your Android device via Google Play or direct APK.
+              Get PocketHost on your Android device via Google Play.
             </p>
             <div className="flex flex-col gap-2.5">
               <motion.a
@@ -198,16 +198,6 @@ export default function Footer() {
               >
                 <PlayStoreIcon className="w-4 h-4 flex-shrink-0" />
                 Google Play Store
-              </motion.a>
-              <motion.a
-                href="https://github.com/AleemKanyu/PocketCraft/releases/latest/download/PocketHost.apk"
-                download="PocketHost.apk"
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#7FE620] hover:bg-[#6FD614] text-black text-xs font-bold uppercase tracking-wider rounded-xl transition-colors shadow-[0_4px_0_0_rgba(0,0,0,0.2)]"
-                whileHover={{ scale: 1.03, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <Download className="w-4 h-4 flex-shrink-0" />
-                Download Direct APK
               </motion.a>
               <GooglePreferredSource variant="button" className="w-full mt-1" />
             </div>

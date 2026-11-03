@@ -336,7 +336,7 @@ export default function Screenshots() {
             <button
               key={item.id}
               onClick={() => scrollToIndex(idx)}
-              className={`font-mono text-xs px-3.5 py-2 rounded-sm whitespace-nowrap transition-all duration-200 border flex items-center gap-1.5 ${
+              className={`font-mono text-xs px-3.5 py-3 min-h-[44px] rounded-sm whitespace-nowrap transition-all duration-200 border flex items-center gap-1.5 ${
                 currentIndex === idx
                   ? "bg-[#7FE620] text-black font-bold border-[#7FE620] shadow-[0_0_15px_rgba(127,230,32,0.4)]"
                   : theme === "dark"
@@ -411,7 +411,7 @@ export default function Screenshots() {
               <button
                 key={index}
                 onClick={() => scrollToIndex(index)}
-                className={`rounded-full transition-all duration-300 ${
+                className={`relative rounded-full transition-all duration-300 before:content-[''] before:absolute before:-inset-3 ${
                   currentIndex === index
                     ? "w-8 h-2 bg-[#7FE620] shadow-[0_0_10px_rgba(127,230,32,0.6)]"
                     : theme === "dark"

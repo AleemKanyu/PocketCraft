@@ -192,7 +192,7 @@ const Home = () => {
               theme === "dark" ? "text-white/50" : "text-black/60"
             }`}
           >
-            Install directly from Google Play or download the latest release APK for manual installation.
+            Install PocketHost free from Google Play.
           </motion.p>
 
           <motion.p
@@ -202,7 +202,7 @@ const Home = () => {
             transition={{ duration: 0.5, delay: 0.4 }}
             className={`text-sm mb-12 max-w-sm mx-auto ${theme === "dark" ? "text-white/30" : "text-black/50"}`}
           >
-            <strong>Version:</strong> Latest Release | <strong>Minimum Android:</strong> 8.0+ (ARM64 phones, x86_64 for Chromebooks)
+            <strong>Version:</strong> Latest Release | <strong>Minimum Android:</strong> 8.0+
           </motion.p>
 
           <motion.div

@@ -308,10 +308,10 @@ export const ComparisonTable: React.FC = () => {
             </p>
           </div>
           <a
-            href="#download"
+            href="https://play.google.com/store/apps/details?id=com.pockethost.app" target="_blank" rel="noopener noreferrer"
             className="btn-duo px-6 py-3 text-xs uppercase tracking-wider font-bold whitespace-nowrap shadow-md flex-shrink-0"
           >
-            Download Free APK
+            Get it Free on Google Play
           </a>
         </div>
       </div>

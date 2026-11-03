@@ -8,7 +8,6 @@ export const LOGO_URL = `${SITE_URL}/app-icon-circle-hd.png`;
 export const SUPPORT_EMAIL = "support@pockethost.online";
 
 export const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.pockethost.app";
-export const APK_URL = "https://github.com/AleemKanyu/PocketCraft/releases/latest/download/PocketHost.apk";
 export const DISCORD_URL = "https://discord.com/invite/nc7ceYWVfT";
 export const INSTAGRAM_URL = "https://www.instagram.com/pockethostmc";
 export const GITHUB_URL = "https://github.com/AleemKanyu/PocketCraft";
@@ -69,7 +68,7 @@ export const appSchema: JsonLd = {
   applicationSubCategory: "Minecraft server hosting",
   softwareVersion: release.version,
   installUrl: PLAY_STORE_URL,
-  downloadUrl: APK_URL,
+  downloadUrl: PLAY_STORE_URL,
   offers: {
     "@type": "Offer",
     price: "0",

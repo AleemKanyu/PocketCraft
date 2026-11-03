@@ -56,7 +56,7 @@ export const landingPages: LandingPageData[] = [
       {
         heading: "How to start a free server in 4 steps",
         bullets: [
-          "Install PocketHost from Google Play (or the direct APK on pockethost.online)",
+          "Install PocketHost from Google Play",
           "Create a server and pick a Minecraft version",
           "Tap Start Server",
           "Send the join address to your friends",

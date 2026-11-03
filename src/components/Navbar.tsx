@@ -149,7 +149,7 @@ export default function Navbar() {
           <div className="flex items-center gap-2 md:hidden">
             <motion.button
               onClick={toggleTheme}
-              className={`w-9 h-9 rounded-xl flex items-center justify-center border border-transparent focus:outline-none focus:ring-2 focus:ring-[#7FE620] ${
+              className={`w-11 h-11 rounded-xl flex items-center justify-center border border-transparent focus:outline-none focus:ring-2 focus:ring-[#7FE620] ${
                 theme === "dark"
                   ? "bg-white/10 text-yellow-400"
                   : "bg-black/5 text-gray-700"
@@ -162,7 +162,9 @@ export default function Navbar() {
 
             <button
               onClick={() => setIsOpen(!isOpen)}
-              className={`p-2 ${theme === "dark" ? "text-white" : "text-black"}`}
+              aria-label={isOpen ? "Close menu" : "Open menu"}
+              aria-expanded={isOpen}
+              className={`w-11 h-11 flex items-center justify-center ${theme === "dark" ? "text-white" : "text-black"}`}
             >
               {isOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
@@ -177,7 +179,7 @@ export default function Navbar() {
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.3, ease: "easeInOut" }}
-              className={`md:hidden flex flex-col gap-4 mt-4 pt-4 border-t-2 overflow-hidden ${
+              className={`md:hidden flex flex-col gap-2 mt-4 pt-4 border-t-2 overflow-hidden ${
                 theme === "dark" ? "border-white/5" : "border-black/5"
               }`}
             >
@@ -191,7 +193,7 @@ export default function Navbar() {
                   {link.external ? (
                     <a
                       href={link.href}
-                      className={`block font-bold uppercase tracking-wider text-sm transition-colors ${
+                      className={`block py-2 font-bold uppercase tracking-wider text-sm transition-colors ${
                         theme === "dark"
                           ? "text-white/50 hover:text-[#7FE620]"
                           : "text-black/60 hover:text-[#7FE620]"
@@ -206,7 +208,7 @@ export default function Navbar() {
                         handleNavClick(e, link.href);
                         setIsOpen(false);
                       }}
-                      className={`block font-bold uppercase tracking-wider text-sm transition-colors ${
+                      className={`block py-2 font-bold uppercase tracking-wider text-sm transition-colors ${
                         (location.pathname === link.href ||
                           (link.href === "/#compare" && location.pathname === "/" && location.hash === "#compare") ||
                           (link.href === "/#changelog" && location.pathname === "/" && location.hash === "#changelog"))
