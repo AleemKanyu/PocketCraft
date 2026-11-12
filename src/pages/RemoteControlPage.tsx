@@ -81,8 +81,11 @@ const FIREBASE_CONFIG = {
   appId: "1:52965868712:web:4ee0f09a562ef6d85e6e9d"
 };
 
-// The phone checks in every 12 minutes, so 20 minutes of silence means it really is gone.
-const STALE_AFTER_MS = 20 * 60 * 1000;
+// The phone does not check in on a timer (that would cost a write per phone every few minutes
+// across thousands of users). When the page opens with data older than PING_IF_OLDER_MS it sends
+// one "ping"; the phone answers with one write. No answer within PING_WAIT_MS = phone offline.
+const PING_IF_OLDER_MS = 3 * 60 * 1000;
+const PING_WAIT_MS = 40 * 1000;
 
 let cachedDb: any = null;
 
@@ -150,6 +153,7 @@ export default function RemoteControlPage() {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [visible, setVisible] = useState<boolean>(true);
+  const [pingSentAt, setPingSentAt] = useState<number | null>(null);
   const [playersOpen, setPlayersOpen] = useState<boolean>(false);
   const [tpFrom, setTpFrom] = useState<string | null>(null);
   const [tpTo, setTpTo] = useState<string>("");
@@ -227,9 +231,36 @@ export default function RemoteControlPage() {
 
   // Re-render relative times ("3m ago", uptime) without touching Firestore.
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 15000);
+    const t = setInterval(() => setNow(Date.now()), 5000);
     return () => clearInterval(t);
   }, []);
+
+  // Ask the phone for fresh status once when the page is opened (or shown again) and what we
+  // have is old. One command write here, one session write from the phone.
+  const sessionUpdatedMs = toMillis(session?.updatedAt);
+  const sessionEnabled = session?.enabled !== false && !!session;
+  useEffect(() => {
+    if (!code || !visible || !sessionEnabled) return;
+    const nowMs = Date.now();
+    if (sessionUpdatedMs !== null && nowMs - sessionUpdatedMs < PING_IF_OLDER_MS) return;
+    if (pingSentAt !== null && nowMs - pingSentAt < 60_000) return;
+    setPingSentAt(nowMs);
+    (async () => {
+      try {
+        const db = await getFirestoreDb();
+        const { doc, setDoc, serverTimestamp } = await import("firebase/firestore");
+        await setDoc(doc(db, "remote_commands", code), {
+          cmd: "ping",
+          cmdId: ("p" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36)).slice(0, 36),
+          cmdAt: serverTimestamp()
+        });
+      } catch {
+        // Another visitor pinged in the last minute (rules allow one a minute); their answer
+        // updates this page too.
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, visible, sessionEnabled, sessionUpdatedMs]);
 
   // Cooldown countdown timer
   useEffect(() => {
@@ -291,7 +322,9 @@ export default function RemoteControlPage() {
   }
 
   const lastSeenMs = toMillis(session?.updatedAt);
-  const isStale = lastSeenMs !== null && now - lastSeenMs > STALE_AFTER_MS;
+  const answeredPing = pingSentAt !== null && lastSeenMs !== null && lastSeenMs >= pingSentAt - 5000;
+  const checkingPhone = pingSentAt !== null && !answeredPing && now - pingSentAt <= PING_WAIT_MS;
+  const isStale = pingSentAt !== null && !answeredPing && now - pingSentAt > PING_WAIT_MS;
 
   const serverState = (session?.state || "OFFLINE").toUpperCase();
   const isOnline = serverState === "ONLINE";
@@ -441,7 +474,7 @@ export default function RemoteControlPage() {
               <div className="flex items-center gap-3">
                 <WifiOff className="w-4 h-4 text-amber-500 shrink-0" />
                 <p className="text-xs sm:text-sm">
-                  The owner's phone has not checked in for {lastSeenMs ? formatAgo(lastSeenMs, now).replace(" ago", "") : "a while"}. It may be offline or PocketHost is not running there.
+                  The owner's phone did not answer. It may be offline, or PocketHost is not running there. Last heard from it {lastSeenMs ? formatAgo(lastSeenMs, now) : "a while ago"}.
                 </p>
               </div>
             </div>
@@ -505,8 +538,8 @@ export default function RemoteControlPage() {
                 <div className={`text-right text-xs ${muted}`}>
                   <span className="block uppercase tracking-wider font-medium">Phone</span>
                   <span className="flex items-center gap-1 justify-end mt-1">
-                    <span className={`w-1.5 h-1.5 rounded-full ${isStale ? "bg-amber-500" : "bg-emerald-400 animate-pulse"}`} />
-                    {lastSeenMs ? formatAgo(lastSeenMs, now) : "unknown"}
+                    <span className={`w-1.5 h-1.5 rounded-full ${isStale ? "bg-amber-500" : checkingPhone ? "bg-zinc-400 animate-pulse" : "bg-emerald-400 animate-pulse"}`} />
+                    {checkingPhone ? "checking..." : lastSeenMs ? formatAgo(lastSeenMs, now) : "unknown"}
                   </span>
                 </div>
               </div>
