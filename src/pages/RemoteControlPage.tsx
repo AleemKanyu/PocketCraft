@@ -27,6 +27,7 @@ import {
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { SEO } from "../components/SEO";
+import RemoteAdminPanel from "../components/RemoteAdminPanel";
 import { useTheme } from "../lib/ThemeContext";
 
 interface SessionHealth {
@@ -53,6 +54,8 @@ interface SessionData {
   health?: SessionHealth;
   playerDetails?: PlayerDetail[];
   playerDetailsAt?: any; // Firestore Timestamp
+  // "free" phones obey start/stop only; "premium" phones allow more. Missing = an older app.
+  tier?: "free" | "premium";
 }
 
 interface PlayerDetail {
@@ -144,6 +147,7 @@ export default function RemoteControlPage() {
   const isDark = theme === "dark";
 
   const [code, setCode] = useState<string>("");
+  const [adminKey, setAdminKey] = useState<string>("");
   const [session, setSession] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
@@ -165,7 +169,10 @@ export default function RemoteControlPage() {
     function readCodeFromHash() {
       if (typeof window === "undefined") return;
       const raw = window.location.hash.replace(/^#/, "").trim();
-      setCode(raw);
+      // "#CODE" is the share link. "#CODE.ADMINKEY" is the Premium admin link.
+      const [shareCode, key] = raw.split(".");
+      setCode(shareCode || "");
+      setAdminKey(key || "");
     }
 
     readCodeFromHash();
@@ -336,6 +343,9 @@ export default function RemoteControlPage() {
   const health = session?.health;
   const tps = typeof session?.tpsTenths === "number" ? session.tpsTenths / 10 : null;
   const names = (session?.playerNames || []).filter(Boolean);
+  // A phone on the free plan only obeys start and stop, so the page only offers those.
+  const isFreeTier = session?.tier === "free";
+  const showAdminPanel = !!adminKey && session?.tier === "premium";
 
   const muted = isDark ? "text-white/50" : "text-black/50";
   const tile = `p-3.5 rounded-xl border ${isDark ? "bg-white/[0.03] border-white/10" : "bg-black/[0.02] border-black/10"}`;
@@ -427,7 +437,9 @@ export default function RemoteControlPage() {
                         const match = val.includes("#") ? val.split("#")[1] : val;
                         if (match) {
                           window.location.hash = match;
-                          setCode(match);
+                          const [shareCode, key] = match.split(".");
+                          setCode(shareCode || "");
+                          setAdminKey(key || "");
                         }
                       }}
                     />
@@ -592,7 +604,7 @@ export default function RemoteControlPage() {
               </div>
 
               {/* Online players: names are live; positions are fetched only when opened or refreshed */}
-              {isOnline && (
+              {isOnline && !isFreeTier && (
                 <div className={`${tile} mb-6`}>
                   <button
                     type="button"
@@ -786,8 +798,17 @@ export default function RemoteControlPage() {
                 )}
               </AnimatePresence>
 
+              {adminKey && !showAdminPanel && session && (
+                <div className={`mb-6 p-3.5 rounded-xl border text-xs ${isDark ? "bg-white/[0.03] border-white/10 text-white/60" : "bg-black/[0.02] border-black/10 text-black/60"}`}>
+                  Full control needs PocketHost Premium on the phone. Until then this page can start and stop the server.
+                </div>
+              )}
+              {showAdminPanel && (
+                <RemoteAdminPanel adminKey={adminKey} isDark={isDark} getDb={getFirestoreDb} serverOnline={isOnline} players={names} />
+              )}
+
               {/* Start / Restart / Stop Controls */}
-              <div className="grid grid-cols-3 gap-2.5 sm:gap-3 mb-6">
+              <div className={`grid ${isFreeTier ? "grid-cols-2" : "grid-cols-3"} gap-2.5 sm:gap-3 mb-6`}>
                 <button
                   type="button"
                   onClick={() => handleSendCommand("start")}
@@ -804,6 +825,7 @@ export default function RemoteControlPage() {
                   <span>Start</span>
                 </button>
 
+                {!isFreeTier && (
                 <button
                   type="button"
                   onClick={() => handleSendCommand("restart")}
@@ -824,6 +846,7 @@ export default function RemoteControlPage() {
                   )}
                   <span>Restart</span>
                 </button>
+                )}
 
                 <button
                   type="button"
@@ -877,7 +900,14 @@ export default function RemoteControlPage() {
               <span>Secure Remote Execution</span>
             </div>
             <p>
-              This link can start, stop and restart the server, and shows its status. It cannot edit server files, view the console, access player inventories, or change app settings. PocketHost never exposes internal phone files to the web.
+              {showAdminPanel
+                ? "This is the admin link. It has full control of the server: console, plugins, settings and files. Keep it private, and make a new link in the app if it leaks."
+                : isFreeTier
+                  ? "This link can start and stop the server and shows its status. It cannot edit server files, view the console, or change app settings. Restart, player tools and full control are part of PocketHost Premium."
+                  : "This link can start, stop and restart the server, and shows its status. It cannot edit server files, view the console, access player inventories, or change app settings. PocketHost never exposes internal phone files to the web."}
+            </p>
+            <p className="mt-2 opacity-80">
+              PocketHost is not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.
             </p>
           </div>
         </div>
