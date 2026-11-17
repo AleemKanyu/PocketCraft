@@ -132,6 +132,25 @@ export default function RemoteAdminPanel({ adminKey, isDark, getDb, serverOnline
   const [tab, setTab] = useState<Tab>("console");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Reply | null>(null);
+  // Off switch for item pictures (Mojang's textures): app_config/remote_page { itemIcons: false }
+  // in Firestore turns them into item initials for everyone, with no redeploy.
+  const [iconsOn, setIconsOn] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const db = await getDb();
+        const { doc, getDoc } = await import("firebase/firestore");
+        const snap = await getDoc(doc(db, "app_config", "remote_page"));
+        if (!cancelled && snap.exists() && snap.data()?.itemIcons === false) setIconsOn(false);
+      } catch {
+        // Keep the default when the setting can't be read.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getDb]);
   // Commands wait their turn instead of failing, and go out at least 2 s apart (the Firestore
   // rules reject a closer one). Opening a tab while another command runs used to show an error.
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
@@ -226,7 +245,7 @@ export default function RemoteAdminPanel({ adminKey, isDark, getDb, serverOnline
         {busy && <div className={`mb-3 text-xs ${muted}`}>Waiting for the phone...</div>}
 
         {tab === "console" && <ConsoleTab run={run} input={input} btn={btn} muted={muted} serverOnline={serverOnline} isDark={isDark} setNotice={setNotice} />}
-        {tab === "players" && <PlayersTab run={run} ghost={ghost} muted={muted} isDark={isDark} setNotice={setNotice} players={players} />}
+        {tab === "players" && <PlayersTab run={run} ghost={ghost} muted={muted} isDark={isDark} setNotice={setNotice} players={players} iconsOn={iconsOn} />}
         {tab === "plugins" && <PluginsTab run={run} ghost={ghost} danger={danger} muted={muted} isDark={isDark} setNotice={setNotice} />}
         {tab === "settings" && <SettingsTab run={run} input={input} btn={btn} ghost={ghost} muted={muted} setNotice={setNotice} />}
         {tab === "files" && <FilesTab run={run} input={input} btn={btn} ghost={ghost} muted={muted} isDark={isDark} setNotice={setNotice} />}
@@ -584,7 +603,7 @@ function LocLine({ label, loc, muted, extra }: { label: string; loc: Loc | null;
   );
 }
 
-function PlayersTab({ run, ghost, muted, isDark, setNotice, players }: any) {
+function PlayersTab({ run, ghost, muted, isDark, setNotice, players, iconsOn }: any) {
   const [selected, setSelected] = useState<string | null>(null);
   const [info, setInfo] = useState<PlayerInfo | null>(null);
   const names: string[] = (players || []).filter(Boolean);
@@ -650,7 +669,7 @@ function PlayersTab({ run, ghost, muted, isDark, setNotice, players }: any) {
           </div>
           <div className="min-w-0">
             <div className={`text-[11px] uppercase tracking-wider font-semibold mb-1.5 ${muted}`}>Inventory</div>
-            <McInventory items={info.inv} />
+            <McInventory items={info.inv} iconsOn={iconsOn !== false} />
             <div className={`mt-2 text-[10.5px] leading-snug ${muted}`}>
               Item pictures belong to Mojang. Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.
             </div>
@@ -677,9 +696,13 @@ function initials(id: string): string {
     .join("");
 }
 
-function ItemIcon({ id }: { id: string }) {
+function ItemIcon({ id, iconsOn }: { id: string; iconsOn: boolean }) {
   // items/<id>.png first, then blocks/<id>.png, then the item's initials.
-  const [stage, setStage] = useState(SHOW_ITEM_TEXTURES ? 0 : 2);
+  const [stage, setStage] = useState(SHOW_ITEM_TEXTURES && iconsOn ? 0 : 2);
+  // The off switch is read after the page opens, so react when it turns pictures off.
+  useEffect(() => {
+    if (!iconsOn) setStage(2);
+  }, [iconsOn]);
   if (stage >= 2) {
     return (
       <span style={{ fontSize: "2.6cqw", fontWeight: 800, color: "#3b3b3b", lineHeight: 1 }}>{initials(id)}</span>
@@ -719,12 +742,12 @@ const EMPTY_HINT: Record<number, string> = {
   [-106]: "M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z",
 };
 
-function Slot({ item, hint }: { item?: InvItem; hint?: number }) {
+function Slot({ item, hint, iconsOn = true }: { item?: InvItem; hint?: number; iconsOn?: boolean }) {
   return (
     <div style={SLOT_STYLE} title={item ? `${prettyItem(item.i)}${item.c > 1 ? ` x${item.c}` : ""}` : ""}>
       {item ? (
         <>
-          <ItemIcon id={item.i} />
+          <ItemIcon id={item.i} iconsOn={iconsOn} />
           {item.c > 1 && (
             <span
               style={{
@@ -756,7 +779,7 @@ function Slot({ item, hint }: { item?: InvItem; hint?: number }) {
  * area, three rows of storage and the hotbar. Sizes come from the panel width (container query
  * units), so it fits a phone or a wide screen without scrolling sideways.
  */
-function McInventory({ items }: { items: InvItem[] }) {
+function McInventory({ items, iconsOn = true }: { items: InvItem[]; iconsOn?: boolean }) {
   const at = (n: number) => items.find((it) => it.s === n) || (n === -106 ? items.find((it) => it.s === 40) : undefined);
   const gap = "0.6cqw";
   return (
@@ -779,23 +802,23 @@ function McInventory({ items }: { items: InvItem[] }) {
         {/* Armor column: helmet, chestplate, leggings, boots */}
         {[103, 102, 101, 100].map((n, row) => (
           <div key={n} style={{ gridColumn: 1, gridRow: row < 3 ? row + 1 : 5 }}>
-            <Slot item={at(n)} hint={n} />
+            <Slot item={at(n)} hint={n} iconsOn={iconsOn} />
           </div>
         ))}
         {/* Off hand, beside the boots */}
         <div style={{ gridColumn: 2, gridRow: 5 }}>
-          <Slot item={at(-106)} hint={-106} />
+          <Slot item={at(-106)} hint={-106} iconsOn={iconsOn} />
         </div>
         {/* Storage rows: slots 9-35 */}
         {Array.from({ length: 27 }, (_, k) => (
           <div key={`m${k}`} style={{ gridColumn: 4 + (k % 9), gridRow: 1 + Math.floor(k / 9) }}>
-            <Slot item={at(9 + k)} />
+            <Slot item={at(9 + k)} iconsOn={iconsOn} />
           </div>
         ))}
         {/* Hotbar: slots 0-8 */}
         {Array.from({ length: 9 }, (_, k) => (
           <div key={`h${k}`} style={{ gridColumn: 4 + k, gridRow: 5 }}>
-            <Slot item={at(k)} />
+            <Slot item={at(k)} iconsOn={iconsOn} />
           </div>
         ))}
       </div>
