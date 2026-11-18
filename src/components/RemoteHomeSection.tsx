@@ -3,6 +3,10 @@ import { Link } from "react-router-dom";
 import { Crown, Play, Square, Users, Smartphone, Terminal, Check } from "lucide-react";
 import { useTheme } from "../lib/ThemeContext";
 
+// Off until the app update that lists phones under the account (1.2.27) is live on Google Play.
+// Then set to true and push.
+const ACCOUNT_REMOTE_LIVE = false;
+
 /** Home page: Remote Control from the browser, signed in with the app's Google account (Premium). */
 export default function RemoteHomeSection() {
   const { theme } = useTheme();
@@ -39,12 +43,23 @@ export default function RemoteHomeSection() {
             ))}
           </ul>
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link
-              to="/remote"
-              className="inline-flex items-center justify-center h-12 px-6 rounded-2xl font-bold bg-[#7FE620] text-black hover:bg-[#72d01d] shadow-lg shadow-[#7FE620]/25"
-            >
-              Open Remote Control
-            </Link>
+            {ACCOUNT_REMOTE_LIVE ? (
+              <Link
+                to="/remote"
+                className="inline-flex items-center justify-center h-12 px-6 rounded-2xl font-bold bg-[#7FE620] text-black hover:bg-[#72d01d] shadow-lg shadow-[#7FE620]/25"
+              >
+                Open Remote Control
+              </Link>
+            ) : (
+              <span
+                aria-disabled="true"
+                className={`inline-flex items-center justify-center h-12 px-6 rounded-2xl font-bold cursor-not-allowed select-none ${
+                  isDark ? "bg-white/[0.06] text-white/40" : "bg-black/[0.05] text-black/40"
+                }`}
+              >
+                Coming with the next app update
+              </span>
+            )}
             <span className={`text-xs ${muted}`}>Needs PocketHost Premium.</span>
           </div>
         </motion.div>
