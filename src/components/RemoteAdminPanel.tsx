@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Avatar } from "./remote/Avatar";
 import {
+  Search,
+  Crown,
   Terminal,
   Puzzle,
   SlidersHorizontal,
@@ -40,7 +43,8 @@ async function sendAdmin(
   key: string,
   cmd: string,
   arg?: string,
-  body?: string
+  body?: string,
+  waitMs: number = REPLY_WAIT_MS
 ): Promise<Reply> {
   const db = await getDb();
   const { doc, onSnapshot, setDoc, serverTimestamp } = await import("firebase/firestore");
@@ -66,7 +70,7 @@ async function sendAdmin(
     );
     timer = setTimeout(
       () => finish({ ok: false, msg: "The phone didn't answer. Make sure PocketHost is running and online." }),
-      REPLY_WAIT_MS
+      waitMs
     );
     setDoc(doc(db, "remote_admin_in", key), {
       cmd,
@@ -158,14 +162,14 @@ export default function RemoteAdminPanel({ adminKey, isDark, getDb, serverOnline
   const pendingRef = useRef(0);
 
   const run = useCallback(
-    (cmd: string, arg?: string, body?: string): Promise<Reply> => {
+    (cmd: string, arg?: string, body?: string, waitMs?: number): Promise<Reply> => {
       pendingRef.current += 1;
       setBusy(true);
       const next = queueRef.current.then(async () => {
         const wait = lastSentRef.current + MIN_GAP_MS - Date.now();
         if (wait > 0) await new Promise((r) => setTimeout(r, wait));
         lastSentRef.current = Date.now();
-        return sendAdmin(getDb, adminKey, cmd, arg, body);
+        return sendAdmin(getDb, adminKey, cmd, arg, body, waitMs);
       });
       queueRef.current = next.catch(() => undefined);
       return next.finally(() => {
@@ -205,11 +209,11 @@ export default function RemoteAdminPanel({ adminKey, isDark, getDb, serverOnline
   ];
 
   return (
-    <div className={`mb-6 rounded-xl border ${card}`}>
-      <div className={`px-3.5 pt-3.5 pb-2 text-[11px] uppercase tracking-wider font-semibold ${muted}`}>
-        Premium full control
+    <div className={`rounded-3xl border ${isDark ? "bg-[#141414] border-white/10" : "bg-white border-black/[0.08]"}`}>
+      <div className={`px-5 pt-4 pb-2 flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-bold ${muted}`}>
+        <Crown className="w-3.5 h-3.5 text-amber-500" /> Manage server
       </div>
-      <div className="px-2.5 flex gap-1 overflow-x-auto">
+      <div className={`mx-3 p-1 rounded-2xl flex gap-1 overflow-x-auto ${isDark ? "bg-white/[0.04]" : "bg-black/[0.035]"}`}>
         {tabs.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -218,10 +222,10 @@ export default function RemoteAdminPanel({ adminKey, isDark, getDb, serverOnline
               setTab(id);
               setNotice(null);
             }}
-            className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-1.5 whitespace-nowrap ${
+            className={`flex-1 justify-center px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 whitespace-nowrap transition-all ${
               tab === id
-                ? "bg-[#7FE620]/15 text-[#7FE620]"
-                : isDark ? "text-white/60 hover:bg-white/5" : "text-black/60 hover:bg-black/5"
+                ? isDark ? "bg-[#2a2a2a] text-white shadow-sm" : "bg-white text-black shadow-sm"
+                : isDark ? "text-white/55 hover:text-white" : "text-black/55 hover:text-black"
             }`}
           >
             <Icon className="w-4 h-4" />
@@ -230,7 +234,7 @@ export default function RemoteAdminPanel({ adminKey, isDark, getDb, serverOnline
         ))}
       </div>
 
-      <div className="p-3.5">
+      <div className="p-4 sm:p-5">
         {notice && (
           <div
             className={`mb-3 p-2.5 rounded-lg text-xs border ${
@@ -255,7 +259,7 @@ export default function RemoteAdminPanel({ adminKey, isDark, getDb, serverOnline
   );
 }
 
-type Run = (cmd: string, arg?: string, body?: string) => Promise<Reply>;
+type Run = (cmd: string, arg?: string, body?: string, waitMs?: number) => Promise<Reply>;
 type SetNotice = (r: Reply | null) => void;
 
 function ConsoleTab({ run, input, btn, muted, serverOnline, isDark, setNotice }: any) {
@@ -603,17 +607,68 @@ function LocLine({ label, loc, muted, extra }: { label: string; loc: Loc | null;
   );
 }
 
+interface KnownPlayer {
+  n: string;
+  seen: number;
+  play: number;
+  op: boolean;
+  on: boolean;
+}
+
+function lastSeenText(p: KnownPlayer): string {
+  if (p.on) return "Online now";
+  if (!p.seen) return "Last seen: unknown";
+  const min = Math.max(0, Math.floor((Date.now() - p.seen) / 60000));
+  if (min < 60) return `Last seen ${min}m ago`;
+  const h = Math.floor(min / 60);
+  if (h < 48) return `Last seen ${h}h ago`;
+  return `Last seen ${Math.floor(h / 24)}d ago`;
+}
+
+function playText(sec: number): string {
+  if (!sec) return "";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m played`;
+  return `${Math.floor(min / 60)}h ${min % 60}m played`;
+}
+
 function PlayersTab({ run, ghost, muted, isDark, setNotice, players, iconsOn }: any) {
+  const online: string[] = (players || []).filter(Boolean);
+  const [all, setAll] = useState<KnownPlayer[] | null>(null);
+  const [oldApp, setOldApp] = useState(false);
+  const [filter, setFilter] = useState<"all" | "online">("all");
+  const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const [info, setInfo] = useState<PlayerInfo | null>(null);
-  const names: string[] = (players || []).filter(Boolean);
+  const [info, setInfo] = useState<(PlayerInfo & { offline?: boolean; seen?: number; play?: number }) | null>(null);
+
+  const load = useCallback(async () => {
+    // Older apps don't know this command and never answer: wait 15 s, then show who is online.
+    const r: Reply = await (run as Run)("all_players", undefined, undefined, 15_000);
+    if (r.ok) {
+      setAll(parseJson<KnownPlayer[]>(r.data, []));
+      setOldApp(false);
+    } else {
+      setOldApp(true);
+      setAll(null);
+    }
+  }, [run]);
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const list: KnownPlayer[] = (all ?? online.map((n) => ({ n, seen: Date.now(), play: 0, op: false, on: true })))
+    .map((p) => ({ ...p, on: p.on || online.includes(p.n) }))
+    .filter((p) => (filter === "online" ? p.on : true))
+    .filter((p) => p.n.toLowerCase().includes(query.trim().toLowerCase()))
+    .sort((a, b) => Number(b.on) - Number(a.on) || b.seen - a.seen);
 
   async function open(name: string) {
     setSelected(name);
     setInfo(null);
     const r: Reply = await (run as Run)("player_info", name);
     if (r.ok) {
-      setInfo(parseJson<PlayerInfo | null>(r.data, null));
+      setInfo(parseJson(r.data, null));
       (setNotice as SetNotice)(null);
     } else (setNotice as SetNotice)(r);
   }
@@ -624,58 +679,128 @@ function PlayersTab({ run, ghost, muted, isDark, setNotice, players, iconsOn }: 
     if (r.ok) await open(selected);
   }
 
-  if (names.length === 0) return <div className={`text-sm ${muted}`}>Nobody is online right now.</div>;
-
-  return (
-    <div>
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {names.map((n) => (
-          <button
-            key={n}
-            type="button"
-            onClick={() => void open(n)}
-            className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
-              selected === n ? "bg-[#7FE620]/15 text-[#7FE620] border-[#7FE620]/40" : isDark ? "border-white/10 hover:bg-white/5" : "border-black/10 hover:bg-black/5"
-            }`}
-          >
-            {n}
+  if (selected) {
+    const isOnline = online.includes(selected);
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <button type="button" className={ghost} onClick={() => { setSelected(null); setInfo(null); }}>
+            <ArrowLeft className="w-4 h-4" /> All players
           </button>
-        ))}
-      </div>
-      {selected && !info && <div className={`text-sm ${muted}`}>Loading {selected}...</div>}
-      {info && (
-        <div className="space-y-3">
-          <div className={`p-3 rounded-lg border space-y-1.5 ${isDark ? "border-white/10" : "border-black/10"}`}>
-            <LocLine label="Location now" loc={info.pos} muted={muted} />
-            <LocLine label="Respawn point" loc={info.respawn} muted={muted} extra={info.respawnIsWorldSpawn ? "world spawn" : undefined} />
-            <LocLine label="Last death" loc={info.death} muted={muted} />
-            {typeof info.hp === "number" && (
-              <div className="flex items-center justify-between text-sm">
-                <span className={muted}>Health</span>
-                <span className="text-xs font-semibold">{info.hp} / 20</span>
-              </div>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={ghost} disabled={!info.respawn} onClick={() => void tp("tp_respawn")}>
-              Teleport to respawn point
-            </button>
-            <button type="button" className={ghost} disabled={!info.death} onClick={() => void tp("tp_death")}>
-              Teleport to last death
-            </button>
-            <button type="button" className={ghost} onClick={() => void open(info.name)}>
-              <RefreshCw className="w-4 h-4" />
-            </button>
-          </div>
+          <button type="button" className={ghost} onClick={() => void open(selected)} aria-label="Refresh">
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex items-center gap-3">
+          <Avatar name={selected} size={44} dim={!isOnline} />
           <div className="min-w-0">
-            <div className={`text-[11px] uppercase tracking-wider font-semibold mb-1.5 ${muted}`}>Inventory</div>
-            <McInventory items={info.inv} iconsOn={iconsOn !== false} />
-            <div className={`mt-2 text-[10.5px] leading-snug ${muted}`}>
-              Item pictures belong to Mojang. Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.
+            <div className="font-extrabold text-lg truncate">{selected}</div>
+            <div className={`text-xs ${isOnline ? "text-emerald-500 font-semibold" : muted}`}>
+              {isOnline ? "Online now" : info?.offline ? `Offline · ${lastSeenText({ n: selected, seen: info.seen || 0, play: 0, op: false, on: false }).replace("Last seen", "last seen")}` : "Offline"}
+              {info?.play ? ` · ${playText(info.play)}` : ""}
             </div>
           </div>
         </div>
+        {!info && <div className={`text-sm ${muted}`}>Loading {selected}...</div>}
+        {info && (
+          <>
+            <div className={`p-3.5 rounded-2xl space-y-2 ${isDark ? "bg-white/[0.04]" : "bg-black/[0.03]"}`}>
+              <LocLine label={isOnline ? "Location now" : "Last location"} loc={info.pos} muted={muted} />
+              <LocLine label="Respawn point" loc={info.respawn} muted={muted} extra={info.respawnIsWorldSpawn ? "world spawn" : undefined} />
+              <LocLine label="Last death" loc={info.death} muted={muted} />
+              {typeof info.hp === "number" && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className={muted}>Health</span>
+                  <span className="text-xs font-semibold">{info.hp} / 20</span>
+                </div>
+              )}
+            </div>
+            {isOnline ? (
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className={ghost} disabled={!info.respawn} onClick={() => void tp("tp_respawn")}>
+                  Teleport to respawn point
+                </button>
+                <button type="button" className={ghost} disabled={!info.death} onClick={() => void tp("tp_death")}>
+                  Teleport to last death
+                </button>
+              </div>
+            ) : (
+              <div className={`text-xs ${muted}`}>Teleports work while the player is online.</div>
+            )}
+            <div className="min-w-0">
+              <div className={`text-[11px] uppercase tracking-wider font-semibold mb-1.5 ${muted}`}>
+                Inventory{info.offline ? " (when they left)" : ""}
+              </div>
+              <McInventory items={info.inv} iconsOn={iconsOn !== false} />
+              <div className={`mt-2 text-[10.5px] leading-snug ${muted}`}>
+                Item pictures belong to Mojang. Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  const total = all ? all.length : online.length;
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <div className={`flex-1 min-w-0 flex items-center gap-2 px-3 h-10 rounded-xl border ${isDark ? "border-white/10 bg-white/[0.03]" : "border-black/10 bg-black/[0.02]"}`}>
+          <Search className={`w-4 h-4 shrink-0 ${muted}`} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search players"
+            className="flex-1 min-w-0 bg-transparent outline-none text-sm"
+          />
+        </div>
+        <div className={`flex p-1 rounded-xl text-xs font-semibold ${isDark ? "bg-white/[0.04]" : "bg-black/[0.035]"}`}>
+          {(["all", "online"] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFilter(f)}
+              className={`px-3 py-1.5 rounded-lg ${filter === f ? (isDark ? "bg-[#2a2a2a] text-white" : "bg-white text-black shadow-sm") : muted}`}
+            >
+              {f === "all" ? `All ${total}` : `Online ${online.length}`}
+            </button>
+          ))}
+        </div>
+      </div>
+      {oldApp && (
+        <div className={`mb-3 text-xs ${muted}`}>
+          Showing who is online. Update PocketHost on the phone to see everyone who has ever joined.
+        </div>
       )}
+      {all === null && !oldApp && <div className={`text-sm ${muted}`}>Loading players...</div>}
+      {(all !== null || oldApp) && list.length === 0 && (
+        <div className={`text-sm ${muted}`}>{query ? "No player with that name." : filter === "online" || oldApp ? "Nobody is online right now." : "Nobody has joined this world yet."}</div>
+      )}
+      <div className="space-y-1.5">
+        {list.map((p) => (
+          <button
+            key={p.n}
+            type="button"
+            onClick={() => void open(p.n)}
+            className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${isDark ? "hover:bg-white/[0.05]" : "hover:bg-black/[0.04]"}`}
+          >
+            <span className="relative">
+              <Avatar name={p.n} size={36} dim={!p.on} />
+              {p.on && <span className={`absolute -right-0.5 -bottom-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 ${isDark ? "border-[#141414]" : "border-white"}`} />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1.5 font-semibold text-sm">
+                <span className="truncate">{p.n}</span>
+                {p.op && <span className="shrink-0 text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-600">OP</span>}
+              </span>
+              <span className={`block text-xs truncate ${p.on ? "text-emerald-500" : muted}`}>
+                {lastSeenText(p)}{p.play ? ` · ${playText(p.play)}` : ""}
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

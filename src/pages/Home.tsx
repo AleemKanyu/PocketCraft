@@ -11,6 +11,7 @@ import { useLowEndDevice } from "../hooks/useLowEndDevice";
 import { DownloadDropdown } from "../components/DownloadDropdown";
 import Changelog from "../components/Changelog";
 import Reviews from "../components/Reviews";
+import RemoteHomeSection from "../components/RemoteHomeSection";
 import { appSchema, faqSchema } from "../seo/site";
 
 const DownloadIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
@@ -88,6 +89,8 @@ const Home = () => {
       </div>
 
       <Screenshots />
+
+      <RemoteHomeSection />
 
       <Reviews />
 
