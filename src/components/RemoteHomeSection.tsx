@@ -5,7 +5,7 @@ import { useTheme } from "../lib/ThemeContext";
 
 // Off until the app update that lists phones under the account (1.2.27) is live on Google Play.
 // Then set to true and push.
-const ACCOUNT_REMOTE_LIVE = false;
+const ACCOUNT_REMOTE_LIVE = true;
 
 /** Home page: Remote Control from the browser, signed in with the app's Google account (Premium). */
 export default function RemoteHomeSection() {

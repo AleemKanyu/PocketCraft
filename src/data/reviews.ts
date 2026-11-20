@@ -2,7 +2,7 @@
  * Real 5-star reviews from PocketHost's Google Play listing, copied word for word (spelling
  * included). "…" marks a part left out; the only parts left out compare us to other hosts.
  * Source: https://play.google.com/store/apps/details?id=com.pockethost.app (India listing),
- * read 3 Nov 2026 (the 5-star ones among the 30 the listing shows). Do not add reviews that are not on the listing.
+ * read 3 Nov 2026 and again 20 Nov 2026 (5-star ones only). Do not add reviews that are not on the listing.
  */
 export interface Review {
   name: string;
@@ -14,6 +14,48 @@ export const PLAY_REVIEWS_URL =
   "https://play.google.com/store/apps/details?id=com.pockethost.app&hl=en_IN&gl=IN&showAllReviews=true";
 
 export const reviews: Review[] = [
+  {
+    name: "hadi Gamer yt",
+    date: "9 Nov 2026",
+    text:
+      "Honestly, a 10/10 experience! I've played on this server with 4–5 of my friends, even using Orbital Strike Cannons, and surprisingly, it didn't lag at all! You can create a FREE server just by watching one ad. Literally, just ONE ad! Of course, the developers deserve to earn something too. So if you're looking for free Minecraft server hosting, I genuinely recommend giving this app a try. Trust me, you won't regret it!",
+  },
+  {
+    name: "Ian Rios",
+    date: "7 Nov 2026",
+    text:
+      "This might be one of the greatest projects I've seen released for FREE to the public. The effort and constant work of the developers doesn't go unnoticed—it's truly amazing to see a project like this be constantly improving and in the works for people to enjoy minecraft servers in such an innovative way. This app and community is truly outstanding, it deserves all the praise. I recommend!!! It's amazing!!!",
+  },
+  {
+    name: "Swaraj Koli",
+    date: "12 Nov 2026",
+    text:
+      "best app for java and bedrock servers they show add but that's too small and subscription is also less price, must try",
+  },
+  {
+    name: "Sanidhya Pathak",
+    date: "14 Nov 2026",
+    text:
+      "I like it because I was able to play with my friend and doesn't lag in my game play only downside is my phone",
+  },
+  {
+    name: "RAVI NISHAD",
+    date: "11 Nov 2026",
+    text:
+      "I like this app soo muchh and I just use this hosting app dude i swear it made my life easy",
+  },
+  {
+    name: "Ghanim Raieen",
+    date: "3 Nov 2026",
+    text:
+      "this is best hosting easy setup",
+  },
+  {
+    name: "Sam",
+    date: "15 Nov 2026",
+    text:
+      "really easy to use.",
+  },
   {
     name: "Kartik singh",
     date: "12 Oct 2026",
