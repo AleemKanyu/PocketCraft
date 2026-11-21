@@ -11,6 +11,7 @@ export default function Navbar() {
 
   const links: { href: string; label: string; external?: boolean }[] = [
     { href: "/", label: "Home" },
+    { href: "/pc", label: "PC" },
     { href: "/#compare", label: "Compare" },
     { href: "/#changelog", label: "Changelog" },
     { href: "/faq", label: "FAQ" },
@@ -59,7 +60,7 @@ export default function Navbar() {
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden lg:flex items-center gap-6 xl:gap-8">
             {links.map((link) => {
               if (link.external) {
                 return (
@@ -86,7 +87,7 @@ export default function Navbar() {
                   key={link.href}
                   to={link.href}
                   onClick={(e) => handleNavClick(e, link.href)}
-                  className={`relative font-bold uppercase tracking-wider text-sm transition-colors ${
+                  className={`relative font-bold uppercase tracking-wider text-sm whitespace-nowrap transition-colors ${
                     isCurrent
                       ? "text-[#7FE620]"
                       : theme === "dark"
@@ -94,7 +95,7 @@ export default function Navbar() {
                       : "text-black/60 hover:text-black"
                   }`}
                 >
-                  {link.label}
+                  {link.label}{link.href === "/pc" && <span className="ml-1.5 align-middle rounded bg-[#7FE620] px-1 py-px text-[9px] font-extrabold text-black tracking-normal">NEW</span>}
                   {isCurrent && (
                     <motion.div
                       layoutId="nav-indicator"
@@ -146,7 +147,7 @@ export default function Navbar() {
           </div>
 
           {/* Mobile: Toggle + Menu */}
-          <div className="flex items-center gap-2 md:hidden">
+          <div className="flex items-center gap-2 lg:hidden">
             <motion.button
               onClick={toggleTheme}
               className={`w-11 h-11 rounded-xl flex items-center justify-center border border-transparent focus:outline-none focus:ring-2 focus:ring-[#7FE620] ${
@@ -179,7 +180,7 @@ export default function Navbar() {
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.3, ease: "easeInOut" }}
-              className={`md:hidden flex flex-col gap-2 mt-4 pt-4 border-t-2 overflow-hidden ${
+              className={`lg:hidden flex flex-col gap-2 mt-4 pt-4 border-t-2 overflow-hidden ${
                 theme === "dark" ? "border-white/5" : "border-black/5"
               }`}
             >
@@ -199,7 +200,7 @@ export default function Navbar() {
                           : "text-black/60 hover:text-[#7FE620]"
                       }`}
                     >
-                      {link.label}
+                      {link.label}{link.href === "/pc" && <span className="ml-1.5 align-middle rounded bg-[#7FE620] px-1 py-px text-[9px] font-extrabold text-black tracking-normal">NEW</span>}
                     </a>
                   ) : (
                     <Link
@@ -218,7 +219,7 @@ export default function Navbar() {
                           : "text-black/60 hover:text-black"
                       }`}
                     >
-                      {link.label}
+                      {link.label}{link.href === "/pc" && <span className="ml-1.5 align-middle rounded bg-[#7FE620] px-1 py-px text-[9px] font-extrabold text-black tracking-normal">NEW</span>}
                     </Link>
                   )}
                 </motion.div>

@@ -4,6 +4,7 @@ import { MINECRAFT_ICONS } from "../lib/minecraft-icons";
 import { useTheme } from "../lib/ThemeContext";
 import { useLowEndDevice } from "../hooks/useLowEndDevice";
 import { DownloadDropdown } from "./DownloadDropdown";
+import { PcAnnouncementPill } from "./PcShowcase";
 
 const DownloadIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -215,6 +216,7 @@ export function ModernHero() {
       />
 
       <div className="container relative z-20 px-4 sm:px-6 mx-auto flex flex-col items-center text-center">
+        <PcAnnouncementPill isDark={theme === "dark"} />
         {/* Staggered headline */}
         <motion.h1
           className={`text-3xl sm:text-5xl md:text-7xl leading-[1.18] sm:leading-tight mb-4 sm:mb-6 font-extrabold ${
@@ -272,7 +274,7 @@ export function ModernHero() {
             theme === "dark" ? "text-white/50" : "text-black/60"
           }`}
         >
-          Stop paying $10/month for hosting. Run a real Java Edition server on your Android device with Bedrock crossplay support. No PC. No setup. Just tap and play.
+          Stop paying $10/month for hosting. Run a real Java Edition server on your Android device with Bedrock crossplay support. No setup. Just tap and play. Prefer your computer? Get PocketHost PC.
         </motion.p>
 
         <motion.div

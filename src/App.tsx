@@ -39,7 +39,6 @@ export const pageRoutes = [
   { path: "/terms", element: <Terms /> },
   { path: "/delete-account", element: <DeleteAccount /> },
   { path: "/remote", element: <RemoteControlPage /> },
-  // Not linked anywhere yet and marked noindex: reachable only by its URL.
   { path: "/pc", element: <DesktopPage /> },
   ...landingPages.map((page) => ({ path: page.path, element: <LandingPage path={page.path} /> })),
 ];

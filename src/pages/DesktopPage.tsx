@@ -14,13 +14,16 @@ import {
   Smartphone,
   Terminal,
   Wifi,
+  Wand2,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { SEO } from "../components/SEO";
 import { useTheme } from "../lib/ThemeContext";
 import { PLAY_STORE_URL } from "../seo/site";
+import { WindowFrame } from "../components/PcShowcase";
 import {
+  desktopServerTypes,
   desktopDownloads,
   desktopRelease,
   downloadUrl,
@@ -30,11 +33,15 @@ import {
 } from "../data/desktopRelease";
 
 /**
- * pockethost.online/pc — PocketHost for Windows, macOS and Linux.
- *
- * Not linked from the home page or navigation yet, and marked noindex, so it is only
- * reachable by someone who has the link.
+ * pockethost.online/pc — PocketHost PC for Windows, macOS and Linux.
  */
+
+const SETUP_STEPS = [
+  "Who's playing: PC, phones and consoles, or both",
+  "Pick the software, or keep the recommended one",
+  "Choose memory and how friends join",
+  "Create & start",
+];
 
 const OS_META: Record<DesktopOs, { name: string; icon: typeof Monitor }> = {
   windows: { name: "Windows", icon: Monitor },
@@ -44,9 +51,14 @@ const OS_META: Record<DesktopOs, { name: string; icon: typeof Monitor }> = {
 
 const features = [
   {
+    icon: Wand2,
+    title: "Guided setup",
+    body: "Answer a few plain questions (who's playing, how much memory, how friends join) and your server is ready.",
+  },
+  {
     icon: Server,
-    title: "Java and Bedrock servers",
-    body: "Paper, Purpur, Fabric, Vanilla and more for Java — or a separate native Bedrock server for phones, consoles and Windows Bedrock.",
+    title: "Java and Bedrock",
+    body: "Ten server types: Paper, Forge, NeoForge, Fabric and more for Java, plus Mojang's official Bedrock server.",
   },
   {
     icon: Wifi,
@@ -104,10 +116,9 @@ export default function DesktopPage() {
       }`}
     >
       <SEO
-        title="PocketHost for PC: Windows, macOS and Linux | PocketHost"
-        description="Download PocketHost for PC. Host Minecraft Java and Bedrock servers on your own computer for you and your friends."
+        title="PocketHost PC: Free Minecraft Server Hosting on Windows, macOS & Linux"
+        description="Download PocketHost PC, free. Host Minecraft Java or Bedrock servers on your own computer with a guided setup: Paper, Forge, NeoForge, Fabric, official Bedrock and more."
         path="/pc"
-        noindex
       />
       <Navbar />
 
@@ -122,15 +133,17 @@ export default function DesktopPage() {
                 isDark ? "text-[#7FE620]" : "text-[#4c9a0c]"
               }`}
             >
-              <Laptop className="w-3.5 h-3.5" /> PocketHost for PC · v{desktopRelease.version}
+              <Laptop className="w-3.5 h-3.5" /> PocketHost PC · v{desktopRelease.version}
             </div>
             <div className="mt-5 flex items-center gap-4">
-              <img src="/pc/pockethost-pc-icon.png" alt="PocketHost for PC icon" width={64} height={64} className="w-16 h-16" />
-              <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight">PocketHost for PC</h1>
+              <img src="/pc/pockethost-pc-icon.png" alt="PocketHost PC icon" width={64} height={64} className="w-16 h-16" />
+              <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight leading-[1.05]">
+                PocketHost <span className="bg-gradient-to-r from-[#5fbf12] to-[#7FE620] bg-clip-text text-transparent">PC</span>
+              </h1>
             </div>
             <p className={`mt-4 text-lg ${muted}`}>
-              Host a Minecraft server on your own computer — Java or Bedrock — for you and your friends. Free, no account, and
-              everything it needs (including Java) is downloaded for you.
+              Your Minecraft server, on your own computer. Java or Bedrock, ready in minutes with a guided setup. Free, no
+              account, and everything it needs (including Java) is downloaded for you.
             </p>
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -171,19 +184,8 @@ export default function DesktopPage() {
             )}
           </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className={`rounded-xl border-2 overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.18)] ${card}`}
-          >
-            <img
-              src={isDark ? "/pc/pockethost-pc-dark.webp" : "/pc/pockethost-pc-screenshot.webp"}
-              alt="PocketHost for PC showing a server overview with its join address"
-              width={1600}
-              height={1000}
-              className="w-full h-auto block"
-            />
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}>
+            <WindowFrame src="/pc/pockethost-pc-overview.webp" alt="PocketHost PC showing a server ready to start, with its join address" isDark={isDark} />
           </motion.div>
         </section>
 
@@ -266,13 +268,51 @@ export default function DesktopPage() {
           </div>
         </section>
 
+        {/* Guided setup */}
+        <section className="max-w-5xl mx-auto relative z-10 mt-24 grid md:grid-cols-[1fr_1.15fr] gap-10 items-center">
+          <div>
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">Set up in a minute</h2>
+            <p className={`mt-3 text-lg ${muted}`}>
+              No jargon. The guided setup asks who's playing, picks the right software and memory, gets friends
+              connected, then starts your server.
+            </p>
+            <ol className={`mt-5 space-y-2 text-[0.95rem] ${muted}`}>
+              {SETUP_STEPS.map((step, i) => (
+                <li key={step} className="flex gap-3">
+                  <span className="shrink-0 w-6 h-6 rounded-full bg-[#7FE620] text-black text-xs font-extrabold flex items-center justify-center">{i + 1}</span>
+                  {step}
+                </li>
+              ))}
+            </ol>
+          </div>
+          <WindowFrame src="/pc/pockethost-pc-setup.webp" alt="PocketHost PC guided setup asking who is going to play" isDark={isDark} />
+        </section>
+
+        {/* Server types */}
+        <section className="max-w-5xl mx-auto relative z-10 mt-24">
+          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Every kind of server</h2>
+          <p className={`mt-2 ${muted}`}>Plugins, mods or pure vanilla, for Java Edition and Bedrock Edition.</p>
+          <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {desktopServerTypes.map((t) => (
+              <div key={t.name} className={`rounded-xl border-2 px-4 py-3 ${card}`}>
+                <div className="font-extrabold">{t.name}</div>
+                <div className={`mt-0.5 text-xs ${faint}`}>
+                  <span className={t.edition === "Bedrock" ? "text-[#1CB0F6] font-bold" : isDark ? "text-[#7FE620] font-bold" : "text-[#4c9a0c] font-bold"}>{t.edition}</span>
+                  {" · "}
+                  {t.note}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
         {/* Install notes */}
         <section className="max-w-5xl mx-auto relative z-10 mt-20">
           <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Installing</h2>
           <div className={`mt-4 rounded-xl border-2 p-5 flex gap-3 ${card}`}>
             <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5 text-[#FFB020]" />
             <p className={`text-[0.95rem] ${muted}`}>
-              PocketHost for PC isn't code-signed yet, so Windows and macOS show a warning the first time you open it. That's
+              PocketHost PC isn't code-signed yet, so Windows and macOS show a warning the first time you open it. That's
               expected for a new, independent app — here's how to get past it.
             </p>
           </div>
@@ -284,7 +324,7 @@ export default function DesktopPage() {
               steps={[
                 "Open the downloaded .msi.",
                 "If SmartScreen says “Windows protected your PC”, click More info → Run anyway.",
-                "Launch PocketHost from the Start Menu or desktop shortcut.",
+                "Launch PocketHost PC from the Start Menu or desktop shortcut.",
               ]}
             />
             <InstallStep
@@ -292,7 +332,7 @@ export default function DesktopPage() {
               muted={muted}
               title="macOS"
               steps={[
-                "Open the .dmg and drag PocketHost into Applications.",
+                "Open the .dmg and drag PocketHost PC into Applications.",
                 "Open it once; macOS will block it.",
                 "Go to System Settings → Privacy & Security and click Open Anyway.",
               ]}
@@ -302,9 +342,9 @@ export default function DesktopPage() {
               muted={muted}
               title="Linux"
               steps={[
-                "Debian/Ubuntu: sudo apt install ./PocketHost-*.deb",
-                "Fedora/RHEL: sudo dnf install ./PocketHost-*.rpm",
-                "Find PocketHost in your app menu.",
+                "Debian/Ubuntu: sudo apt install ./PocketHostPC-*.deb",
+                "Fedora/RHEL: sudo dnf install ./PocketHostPC-*.rpm",
+                "Find PocketHost PC in your app menu.",
               ]}
             />
           </div>

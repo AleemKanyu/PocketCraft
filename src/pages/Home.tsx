@@ -12,6 +12,7 @@ import { DownloadDropdown } from "../components/DownloadDropdown";
 import Changelog from "../components/Changelog";
 import Reviews from "../components/Reviews";
 import RemoteHomeSection from "../components/RemoteHomeSection";
+import { PcHomeSection } from "../components/PcShowcase";
 import { appSchema, faqSchema } from "../seo/site";
 
 const DownloadIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
@@ -42,7 +43,7 @@ const homeFaqs = [
   {
     question: "Do I need a PC to use PocketHost?",
     answer:
-      "No. PocketHost is built for Android-first hosting, so you can start and manage your server directly from your phone.",
+      "No. PocketHost runs entirely on your Android phone. If you'd rather host from a computer, PocketHost PC does the same on Windows, macOS and Linux: pockethost.online/pc.",
   },
   {
     question: "Can Bedrock players join my server?",
@@ -83,6 +84,8 @@ const Home = () => {
       />
       <Navbar />
       <ModernHero />
+
+      <PcHomeSection />
 
       <div id="how-it-works">
         <HowItWorks />
