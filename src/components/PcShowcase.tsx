@@ -16,6 +16,7 @@ export function PcAnnouncementPill({ isDark }: { isDark: boolean }) {
       >
         <span className="rounded-full bg-[#7FE620] text-black px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wider">New</span>
         PocketHost is now on PC
+        <span className="rounded-full bg-[#FFB020] text-black px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wider">Beta</span>
         <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
       </Link>
     </motion.div>
@@ -65,7 +66,7 @@ export function PcHomeSection() {
           transition={{ duration: 0.5 }}
         >
           <div className="inline-flex items-center gap-2 rounded-full border border-[#7FE620]/30 bg-[#7FE620]/10 px-3 py-1 text-xs font-extrabold uppercase tracking-[0.18em] text-[#9BF04A]">
-            <Sparkles className="w-3.5 h-3.5" /> New · PocketHost PC
+            <Sparkles className="w-3.5 h-3.5" /> New · PocketHost PC Beta
           </div>
           <h2 className="mt-6 text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-[1.05]">
             Your server.
@@ -83,7 +84,7 @@ export function PcHomeSection() {
             >
               Get PocketHost PC <ArrowRight className="w-5 h-5" />
             </Link>
-            <span className="text-sm text-white/40 font-semibold">Windows · macOS · Linux · Free</span>
+            <span className="text-sm text-white/40 font-semibold">Windows · macOS · Linux · Free · Public beta</span>
           </div>
         </motion.div>
 
