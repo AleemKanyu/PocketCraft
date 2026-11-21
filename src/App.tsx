@@ -16,6 +16,7 @@ const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
 const DeleteAccount = lazy(() => import("./pages/DeleteAccount"));
 const RemoteControlPage = lazy(() => import("./pages/RemoteControlPage"));
+const DesktopPage = lazy(() => import("./pages/DesktopPage"));
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 
 const RouteLoadingFallback = () => (
@@ -38,6 +39,8 @@ export const pageRoutes = [
   { path: "/terms", element: <Terms /> },
   { path: "/delete-account", element: <DeleteAccount /> },
   { path: "/remote", element: <RemoteControlPage /> },
+  // Not linked anywhere yet and marked noindex: reachable only by its URL.
+  { path: "/pc", element: <DesktopPage /> },
   ...landingPages.map((page) => ({ path: page.path, element: <LandingPage path={page.path} /> })),
 ];
 
