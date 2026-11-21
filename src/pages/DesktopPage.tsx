@@ -342,8 +342,10 @@ export default function DesktopPage() {
               muted={muted}
               title="Linux"
               steps={[
+                "Arch: sudo pacman -U PocketHostPC-*.pkg.tar.zst",
                 "Debian/Ubuntu: sudo apt install ./PocketHostPC-*.deb",
                 "Fedora/RHEL: sudo dnf install ./PocketHostPC-*.rpm",
+                "Any distro: extract the .tar.gz and run PocketHostPC/bin/PocketHostPC",
                 "Find PocketHost PC in your app menu.",
               ]}
             />
