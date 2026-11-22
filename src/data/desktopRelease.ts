@@ -14,10 +14,10 @@ export interface DesktopDownload {
 }
 
 export const desktopRelease = {
-  version: "0.5.0-beta",
+  version: "0.5.1-beta",
   /** What people see: PocketHost PC is in beta until 1.0. */
-  display: "0.5 Beta",
-  date: "2026-11-21",
+  display: "0.5.1 Beta",
+  date: "2026-11-22",
   get tag() {
     return `pc-v${this.version}`;
   },
@@ -26,13 +26,13 @@ export const desktopRelease = {
 const fileFor = (platform: string, ext: string) => `PocketHostPC-${desktopRelease.version}-${platform}.${ext}`;
 
 export const desktopDownloads: DesktopDownload[] = [
-  { os: "windows", label: "Windows installer", detail: "Windows 10 and 11, 64-bit (.msi)", file: fileFor("windows-x64", "msi"), sizeMb: 101 },
-  { os: "macos", label: "macOS · Apple Silicon", detail: "M1, M2, M3 and newer Macs (.dmg)", file: fileFor("macos-arm64", "dmg"), sizeMb: 112 },
-  { os: "macos", label: "macOS · Intel", detail: "Intel-based Macs (.dmg)", file: fileFor("macos-x64", "dmg"), sizeMb: 113 },
-  { os: "linux", label: "Linux · Arch", detail: "Arch, Manjaro, EndeavourOS, CachyOS (pacman)", file: fileFor("arch-x86_64", "pkg.tar.zst"), sizeMb: 104 },
-  { os: "linux", label: "Linux · Debian / Ubuntu", detail: "Ubuntu, Debian, Mint, Pop!_OS (.deb)", file: fileFor("linux-amd64", "deb"), sizeMb: 93 },
-  { os: "linux", label: "Linux · Fedora / RHEL", detail: "Fedora, RHEL, openSUSE (.rpm)", file: fileFor("linux-x86_64", "rpm"), sizeMb: 93 },
-  { os: "linux", label: "Linux · Any distro", detail: "Portable .tar.gz, no install needed", file: fileFor("linux-x86_64", "tar.gz"), sizeMb: 106 },
+  { os: "windows", label: "Windows installer", detail: "Windows 10 and 11, 64-bit (.msi)", file: fileFor("windows-x64", "msi"), sizeMb: 103 },
+  { os: "macos", label: "macOS · Apple Silicon", detail: "M1, M2, M3 and newer Macs (.dmg)", file: fileFor("macos-arm64", "dmg"), sizeMb: 114 },
+  { os: "macos", label: "macOS · Intel", detail: "Intel-based Macs (.dmg)", file: fileFor("macos-x64", "dmg"), sizeMb: 115 },
+  { os: "linux", label: "Linux · Arch", detail: "Arch, Manjaro, EndeavourOS, CachyOS (pacman)", file: fileFor("arch-x86_64", "pkg.tar.zst"), sizeMb: 106 },
+  { os: "linux", label: "Linux · Debian / Ubuntu", detail: "Ubuntu, Debian, Mint, Pop!_OS (.deb)", file: fileFor("linux-amd64", "deb"), sizeMb: 95 },
+  { os: "linux", label: "Linux · Fedora / RHEL", detail: "Fedora, RHEL, openSUSE (.rpm)", file: fileFor("linux-x86_64", "rpm"), sizeMb: 95 },
+  { os: "linux", label: "Linux · Any distro", detail: "Portable .tar.gz, no install needed", file: fileFor("linux-x86_64", "tar.gz"), sizeMb: 108 },
 ];
 
 /** Server software PocketHost PC can run, shown on the /pc page. */
