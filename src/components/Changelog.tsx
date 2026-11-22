@@ -11,9 +11,87 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    version: "v1.2.28",
+    date: "Nov 2026",
+    badge: "latest",
+    changes: [
+      { type: "feat", text: "A quick age question on first open sets the right ads and privacy settings" },
+      { type: "feat", text: "Players under 13 get a safe, limited mode: kid-safe ads, no sign-in" },
+      { type: "feat", text: "Analytics is off unless you turn it on; new switches in Settings > Legal Center" },
+      { type: "fix", text: "Choosing a server .jar works again (no more \"invalid file\" loop)" },
+      { type: "fix", text: "Clearer message for Bedrock beta versions" },
+      { type: "perf", text: "Fewer popups after setup and smoother onboarding" },
+    ],
+  },
+  {
+    version: "v1.2.27",
+    date: "Nov 2026",
+    changes: [
+      { type: "feat", text: "Sign in on pockethost.online with Google to control all your servers (Premium)" },
+      { type: "feat", text: "Website admin page lists every player who ever joined, with location and inventory" },
+      { type: "fix", text: "Remote Control turns on reliably (no more \"check internet\")" },
+      { type: "fix", text: "Bedrock players can join again after the Geyser update" },
+      { type: "fix", text: "Messages and settings text no longer get cut off" },
+    ],
+  },
+  {
+    version: "v1.2.26",
+    date: "Nov 2026",
+    changes: [
+      { type: "feat", text: "Player inventories with item pictures" },
+      { type: "feat", text: "All players list: everyone who ever joined, with last seen and play time" },
+      { type: "feat", text: "Much more detailed player stats: movement, mining, mobs, crafting and more" },
+      { type: "fix", text: "The file editor keeps your place while you edit" },
+    ],
+  },
+  {
+    version: "v1.2.25",
+    date: "Nov 2026",
+    changes: [
+      { type: "feat", text: "Remote Control start and stop is free (watch an ad for a day); Premium adds console, plugins, settings, files and player tools" },
+      { type: "feat", text: "See a player's inventory, location, respawn and last death point" },
+      { type: "feat", text: "If a server fails to start, its logs are sent to us with a ticket number" },
+      { type: "fix", text: "Older Bedrock versions can join again" },
+      { type: "fix", text: "Clearer errors for full storage, missing mods and CurseForge client packs" },
+    ],
+  },
+  {
+    version: "v1.2.24",
+    date: "Nov 2026",
+    badge: "major",
+    changes: [
+      { type: "perf", text: "Faster chunk loading that matches your internet speed" },
+      { type: "feat", text: "Build Land While Idle: land near spawn is built while charging" },
+      { type: "feat", text: "Live TPS on the home screen and a web dashboard for players, teleport and restart" },
+      { type: "feat", text: "Bedrock 26.60 players can join" },
+      { type: "feat", text: "Use your own domain; turn plugins on or off, delete or update them" },
+      { type: "fix", text: "Nether/End imports, crossplay switch and world seed fixes" },
+    ],
+  },
+  {
+    version: "v1.2.23",
+    date: "Nov 2026",
+    changes: [
+      { type: "fix", text: "Friends can join over the internet again (new relay servers)" },
+      { type: "feat", text: "New servers start with 10 player slots" },
+      { type: "feat", text: "Turn off sleep mode right from Home while the server sleeps" },
+      { type: "fix", text: "The restore-from-backup card only shows after a reinstall" },
+    ],
+  },
+  {
+    version: "v1.2.20 – v1.2.22",
+    date: "Nov 2026",
+    changes: [
+      { type: "feat", text: "New file manager: search, sort, rename, copy, move, zip/unzip and a viewer with find" },
+      { type: "feat", text: "Open server files in your phone's Files app" },
+      { type: "feat", text: "Crash history shows why a start failed" },
+      { type: "fix", text: "Floodgate linking and game rules stay after a restart" },
+      { type: "fix", text: "Works on new phones with 16 KB memory pages" },
+    ],
+  },
+  {
     version: "v1.2.19",
     date: "Oct 2026",
-    badge: "latest",
     changes: [
       { type: "feat", text: "Watch more ads to unlock Remote Control — no 7-day limit, and it works on low-memory phones" },
       { type: "feat", text: "Back up and restore your worlds after reinstalling the app" },

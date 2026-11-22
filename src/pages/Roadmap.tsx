@@ -48,14 +48,29 @@ const roadmapItems = [
   {
     phase: "Phase 4",
     title: "Advanced Features & Expansion",
-    status: "in_progress",
+    status: "completed",
     items: [
       { text: "World backup to Google Drive", status: "completed" },
       { text: "Advanced world management", status: "completed" },
-      { text: "Server status monitoring", status: "in_progress" },
+      { text: "Server status monitoring (live TPS, crash history)", status: "completed" },
       { text: "Performance tracking tools", status: "completed" },
       { text: "Advanced statistics & tracking", status: "completed" },
+      { text: "Full file manager", status: "completed" },
+      { text: "Remote Control from pockethost.online", status: "completed" },
+      { text: "Player inventories, locations and stats", status: "completed" },
+    ],
+  },
+  {
+    phase: "Phase 5",
+    title: "More Devices & Safer for Everyone",
+    status: "in_progress",
+    items: [
+      { text: "Chromebook and x86 phone support", status: "completed" },
+      { text: "Age-appropriate mode and privacy choices", status: "completed" },
+      { text: "PocketHost PC (public beta)", status: "in_progress" },
       { text: "Server templates & presets", status: "in_progress" },
+      { text: "Bedrock beta versions as soon as Geyser supports them", status: "planned" },
+      { text: "One-tap mods and modpacks", status: "planned" },
     ],
   },
 ];
