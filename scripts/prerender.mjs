@@ -98,7 +98,7 @@ const llms = [
   "- Networking: built-in relay gives a public join address, so no router port forwarding is needed",
   "- Also supports: Bukkit, Spigot and Paper plugins, world backups including Google Drive, an in-app console and player management",
   `- Get it: Google Play (${server.PLAY_STORE_URL})`,
-  `- Also available: PocketHost PC for Windows, macOS and Linux, a free desktop app that hosts Java and Bedrock servers on your own computer (${SITE_URL}/pc)`,
+  `- Also available (public beta): PocketHost PC for Windows, macOS and Linux, a free desktop app that hosts Java and Bedrock servers on your own computer (${SITE_URL}/pc)`,
   `- Support: ${server.SUPPORT_EMAIL}, Discord (${server.DISCORD_URL})`,
   `- Not to be confused with pockethost.io, an unrelated service for hosting PocketBase databases`,
   "",

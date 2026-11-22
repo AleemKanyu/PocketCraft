@@ -20,7 +20,7 @@ import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { SEO } from "../components/SEO";
 import { useTheme } from "../lib/ThemeContext";
-import { PLAY_STORE_URL } from "../seo/site";
+import { DISCORD_URL, PLAY_STORE_URL } from "../seo/site";
 import { WindowFrame } from "../components/PcShowcase";
 import {
   desktopServerTypes,
@@ -116,8 +116,8 @@ export default function DesktopPage() {
       }`}
     >
       <SEO
-        title="PocketHost PC: Free Minecraft Server Hosting on Windows, macOS & Linux"
-        description="Download PocketHost PC, free. Host Minecraft Java or Bedrock servers on your own computer with a guided setup: Paper, Forge, NeoForge, Fabric, official Bedrock and more."
+        title="PocketHost PC (Beta): Free Minecraft Server Hosting on Windows, macOS & Linux"
+        description="Download the PocketHost PC beta, free. Host Minecraft Java or Bedrock servers on your own computer with a guided setup: Paper, Forge, NeoForge, Fabric, official Bedrock and more."
         path="/pc"
       />
       <Navbar />
@@ -133,12 +133,13 @@ export default function DesktopPage() {
                 isDark ? "text-[#7FE620]" : "text-[#4c9a0c]"
               }`}
             >
-              <Laptop className="w-3.5 h-3.5" /> PocketHost PC · v{desktopRelease.version}
+              <Laptop className="w-3.5 h-3.5" /> PocketHost PC · v{desktopRelease.display}
             </div>
             <div className="mt-5 flex items-center gap-4">
               <img src="/pc/pockethost-pc-icon.png" alt="PocketHost PC icon" width={64} height={64} className="w-16 h-16" />
               <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight leading-[1.05]">
                 PocketHost <span className="bg-gradient-to-r from-[#5fbf12] to-[#7FE620] bg-clip-text text-transparent">PC</span>
+                <span className="ml-3 align-middle inline-block rounded-lg bg-[#FFB020] text-black text-sm sm:text-base font-extrabold uppercase tracking-wider px-2.5 py-1">Beta</span>
               </h1>
             </div>
             <p className={`mt-4 text-lg ${muted}`}>
@@ -189,11 +190,23 @@ export default function DesktopPage() {
           </motion.div>
         </section>
 
+        {/* Beta note */}
+        <section className="max-w-5xl mx-auto relative z-10 mt-12">
+          <div className={`rounded-xl border-2 border-[#FFB020]/50 p-4 sm:p-5 flex gap-3 ${isDark ? "bg-[#FFB020]/[0.06]" : "bg-[#FFB020]/[0.08]"}`}>
+            <span className="shrink-0 rounded bg-[#FFB020] text-black text-xs font-extrabold uppercase tracking-wider px-2 py-0.5 h-fit">Beta</span>
+            <p className={`text-[0.95rem] ${muted}`}>
+              PocketHost PC is in public beta. Everything works, but expect rough edges and frequent updates — back up worlds
+              you care about, and tell us about bugs on{" "}
+              <a href={DISCORD_URL} className="text-[#7FE620] font-bold hover:underline">Discord</a>.
+            </p>
+          </div>
+        </section>
+
         {/* Downloads */}
         <section id="downloads" className="max-w-5xl mx-auto relative z-10 mt-20 scroll-mt-28">
           <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Downloads</h2>
           <p className={`mt-2 ${muted}`}>
-            Version {desktopRelease.version} · all files are on{" "}
+            Version {desktopRelease.display} · all files are on{" "}
             <a href={releasePageUrl()} className="text-[#7FE620] font-bold hover:underline inline-flex items-center gap-1">
               GitHub Releases <ExternalLink className="w-3.5 h-3.5" />
             </a>
@@ -342,8 +355,10 @@ export default function DesktopPage() {
               muted={muted}
               title="Linux"
               steps={[
+                "Arch: sudo pacman -U PocketHostPC-*.pkg.tar.zst",
                 "Debian/Ubuntu: sudo apt install ./PocketHostPC-*.deb",
                 "Fedora/RHEL: sudo dnf install ./PocketHostPC-*.rpm",
+                "Any distro: extract the .tar.gz and run PocketHostPC/bin/PocketHostPC",
                 "Find PocketHost PC in your app menu.",
               ]}
             />

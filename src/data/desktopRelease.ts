@@ -14,7 +14,9 @@ export interface DesktopDownload {
 }
 
 export const desktopRelease = {
-  version: "1.2.0",
+  version: "0.5.0-beta",
+  /** What people see: PocketHost PC is in beta until 1.0. */
+  display: "0.5 Beta",
   date: "2026-11-21",
   get tag() {
     return `pc-v${this.version}`;
@@ -25,10 +27,12 @@ const fileFor = (platform: string, ext: string) => `PocketHostPC-${desktopReleas
 
 export const desktopDownloads: DesktopDownload[] = [
   { os: "windows", label: "Windows installer", detail: "Windows 10 and 11, 64-bit (.msi)", file: fileFor("windows-x64", "msi"), sizeMb: 101 },
-  { os: "macos", label: "macOS · Apple Silicon", detail: "M1, M2, M3 and newer Macs (.dmg)", file: fileFor("macos-arm64", "dmg"), sizeMb: 111 },
+  { os: "macos", label: "macOS · Apple Silicon", detail: "M1, M2, M3 and newer Macs (.dmg)", file: fileFor("macos-arm64", "dmg"), sizeMb: 112 },
   { os: "macos", label: "macOS · Intel", detail: "Intel-based Macs (.dmg)", file: fileFor("macos-x64", "dmg"), sizeMb: 113 },
+  { os: "linux", label: "Linux · Arch", detail: "Arch, Manjaro, EndeavourOS, CachyOS (pacman)", file: fileFor("arch-x86_64", "pkg.tar.zst"), sizeMb: 104 },
   { os: "linux", label: "Linux · Debian / Ubuntu", detail: "Ubuntu, Debian, Mint, Pop!_OS (.deb)", file: fileFor("linux-amd64", "deb"), sizeMb: 93 },
   { os: "linux", label: "Linux · Fedora / RHEL", detail: "Fedora, RHEL, openSUSE (.rpm)", file: fileFor("linux-x86_64", "rpm"), sizeMb: 93 },
+  { os: "linux", label: "Linux · Any distro", detail: "Portable .tar.gz, no install needed", file: fileFor("linux-x86_64", "tar.gz"), sizeMb: 106 },
 ];
 
 /** Server software PocketHost PC can run, shown on the /pc page. */

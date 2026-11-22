@@ -95,7 +95,7 @@ export default function Navbar() {
                       : "text-black/60 hover:text-black"
                   }`}
                 >
-                  {link.label}{link.href === "/pc" && <span className="ml-1.5 align-middle rounded bg-[#7FE620] px-1 py-px text-[9px] font-extrabold text-black tracking-normal">NEW</span>}
+                  {link.label}{link.href === "/pc" && <span className="ml-1.5 align-middle rounded bg-[#FFB020] px-1 py-px text-[9px] font-extrabold text-black tracking-normal">BETA</span>}
                   {isCurrent && (
                     <motion.div
                       layoutId="nav-indicator"
@@ -200,7 +200,7 @@ export default function Navbar() {
                           : "text-black/60 hover:text-[#7FE620]"
                       }`}
                     >
-                      {link.label}{link.href === "/pc" && <span className="ml-1.5 align-middle rounded bg-[#7FE620] px-1 py-px text-[9px] font-extrabold text-black tracking-normal">NEW</span>}
+                      {link.label}{link.href === "/pc" && <span className="ml-1.5 align-middle rounded bg-[#FFB020] px-1 py-px text-[9px] font-extrabold text-black tracking-normal">BETA</span>}
                     </a>
                   ) : (
                     <Link
@@ -219,7 +219,7 @@ export default function Navbar() {
                           : "text-black/60 hover:text-black"
                       }`}
                     >
-                      {link.label}{link.href === "/pc" && <span className="ml-1.5 align-middle rounded bg-[#7FE620] px-1 py-px text-[9px] font-extrabold text-black tracking-normal">NEW</span>}
+                      {link.label}{link.href === "/pc" && <span className="ml-1.5 align-middle rounded bg-[#FFB020] px-1 py-px text-[9px] font-extrabold text-black tracking-normal">BETA</span>}
                     </Link>
                   )}
                 </motion.div>
