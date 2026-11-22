@@ -5,6 +5,7 @@ import { MINECRAFT_ICONS } from "../lib/minecraft-icons";
 import { useTheme } from "../lib/ThemeContext";
 import { PlayStoreIcon } from "./ui/PlayStoreIcon";
 import GooglePreferredSource from "./GooglePreferredSource";
+import { openConsentSettings } from "../lib/consent";
 
 const quickLinks = [
   { href: "/", label: "Home" },
@@ -21,6 +22,7 @@ const quickLinks = [
 const legalLinks = [
   { href: "/privacy", label: "Privacy Policy" },
   { href: "/terms", label: "Terms of Service" },
+  { href: "/delete-account", label: "Delete Account" },
   { href: "mailto:support@pockethost.online", label: "Contact Us", external: true },
 ];
 
@@ -171,6 +173,16 @@ export default function Footer() {
                   )}
                 </li>
               ))}
+              <li>
+                <button
+                  type="button"
+                  onClick={openConsentSettings}
+                  className="text-white/40 hover:text-white text-sm py-1.5 min-h-[40px] transition-colors duration-200 flex items-center gap-2 group"
+                >
+                  <span className="w-0 group-hover:w-2 h-0.5 bg-[#7FE620] transition-all duration-200 rounded-full" />
+                  Cookie settings
+                </button>
+              </li>
             </ul>
           </motion.div>
 
@@ -206,6 +218,12 @@ export default function Footer() {
             </p>
           </motion.div>
         </div>
+
+        {/* Required by the Minecraft Usage Guidelines for anything built around the game. */}
+        <p className="text-white/30 text-[11px] leading-relaxed text-center sm:text-left mb-6 max-w-3xl">
+          NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
+          Minecraft is a trademark of Mojang AB. Google Play and the Google Play logo are trademarks of Google LLC.
+        </p>
 
         {/* Bottom bar */}
         <div className="pt-8 border-t border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4">

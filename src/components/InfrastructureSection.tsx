@@ -18,9 +18,9 @@ const infrastructureFeatures = [
   },
   {
     icon: Shield,
-    title: "Enterprise Security",
-    description: "End-to-end encryption and DDoS protection included",
-    detail: "Always protected",
+    title: "Private by Design",
+    description: "Players who join through our relay connect to the relay's address, not your phone's IP",
+    detail: "Your IP stays private",
     gradient: "from-green-400 to-emerald-600",
   },
   {

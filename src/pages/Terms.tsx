@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ScrollText, FileCheck, AlertTriangle, Scale, Gamepad2, Ban, RefreshCw, Mail } from "lucide-react";
+import { ScrollText, FileCheck, AlertTriangle, Scale, Gamepad2, Ban, RefreshCw, Mail, CreditCard, Users } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { SEO } from "../components/SEO";
@@ -12,13 +12,14 @@ const sections = [
     content: [
       "By downloading, installing, or using PocketHost (\"the App\"), you agree to be bound by these Terms of Service (\"Terms\"). If you do not agree to these Terms, do not use the App.",
       "We may update these Terms from time to time. Continued use of the App after changes constitutes acceptance of the updated Terms. We recommend checking this page periodically.",
+      "**Age.** The app asks your age once. If you are under 13, you may use a limited version of PocketHost only with a parent's or guardian's permission: you can host a server and let friends join, but sign-in, accounts, Google Drive backup, Remote Control and push notifications are switched off. If you are under the age of majority where you live, a parent or guardian must agree to these Terms for you and supervise your use, especially when you host a server that other people can join.",
     ],
   },
   {
     icon: Gamepad2,
     title: "2. Service Description",
     content: [
-      "PocketHost is a free Android application that enables users to run a Minecraft Java Edition server (PaperMC) directly on their Android device, with optional Bedrock crossplay support via GeyserMC.",
+      "PocketHost is a free-to-use Android application (with an optional paid Premium plan, see section 4) that enables users to run a Minecraft Java Edition server (PaperMC) directly on their Android device, with optional Bedrock crossplay support via GeyserMC.",
       "The App provides:",
       "• A mobile interface to start, stop, configure, and manage a Minecraft server.",
       "• A relay tunneling service that allows other players to connect to your phone-hosted server without port forwarding.",
@@ -40,8 +41,30 @@ const sections = [
     ],
   },
   {
+    icon: CreditCard,
+    title: "4. Premium, Subscriptions and Refunds",
+    content: [
+      "Hosting a server is free. **PocketHost Premium** is optional and removes ads and adds extra features such as full remote control. It is sold through Google Play as a monthly or yearly subscription, or, where offered, a one-time Lifetime purchase.",
+      "• **Price and billing**: The price, billing period and currency are shown in the app and on the Google Play payment screen before you pay. Google Play charges your Google account.",
+      "• **Automatic renewal**: Monthly and yearly plans renew automatically at the end of each period until you cancel. If the price goes up, Google Play tells you before the new price applies.",
+      "• **Cancelling**: Cancel any time in Google Play → Payments & subscriptions → Subscriptions. Premium stays active until the end of the period you already paid for. Uninstalling the app does not cancel a subscription.",
+      "• **Refunds**: Payments are processed by Google Play, so refunds follow Google Play's refund policy (https://support.google.com/googleplay/answer/2479637). Nothing in these Terms limits any right to a refund or withdrawal that the law where you live gives you.",
+      "• **Watching an ad**: Some features can be unlocked for a limited time by watching a rewarded ad. This is not a purchase and has no cash value.",
+    ],
+  },
+  {
+    icon: Users,
+    title: "5. Your Server, Your Content and Remote Control",
+    content: [
+      "• **Minecraft EULA**: Running a Minecraft server means agreeing to the Minecraft End User License Agreement (https://www.minecraft.net/eula). The app asks you to accept it before your first server starts. You must follow it, including its rules about charging players.",
+      "• **Your content**: Worlds, plugins, mods, skins, chat and files on your server are yours and your players'. You are responsible for having the right to upload and share them, and for what happens on your server. We do not review this content, and it stays on your phone unless you back it up or share it.",
+      "• **Remote Control links**: Anyone who has your Remote Control or admin link can control your server (start and stop it, and with the admin link also use the console, files, players and settings). Keep these links private. Make a new link in the app if one is shared by mistake.",
+      "• **Public servers**: If you open your server to the internet, follow the law and the rules of any platform you advertise it on, and moderate it appropriately.",
+    ],
+  },
+  {
     icon: Scale,
-    title: "4. Intellectual Property",
+    title: "6. Intellectual Property",
     content: [
       "**Minecraft** is a registered trademark of Mojang Studios, a subsidiary of Microsoft Corporation. PocketHost is an **independent, fan-made project** and is:",
       "• NOT affiliated with, endorsed by, or sponsored by Mojang Studios or Microsoft.",
@@ -49,11 +72,12 @@ const sections = [
       "• Built using open-source server software (PaperMC, GeyserMC) under their respective licenses.",
       "PocketHost does not distribute Minecraft client software. Users must own a legitimate copy of Minecraft to connect to servers hosted with PocketHost.",
       "The PocketHost name, logo, and original app interface are the property of the PocketHost team. You may not copy, modify, or redistribute the App without permission.",
+      "**Copyright and takedown requests**: If you believe something in the App, on this website or reachable through our relay service infringes your copyright or trademark, email support@pockethost.online with: what the work is, where it appears (link or details), your contact details, and a statement that you are the owner or authorised to act for them. We will look into it and remove or disable the material where appropriate.",
     ],
   },
   {
     icon: Ban,
-    title: "5. Disclaimers & Limitations",
+    title: "7. Disclaimers & Limitations",
     content: [
       "PocketHost is provided **\"AS IS\"** and **\"AS AVAILABLE\"** without warranties of any kind, either express or implied.",
       "We specifically disclaim:",
@@ -62,11 +86,12 @@ const sections = [
       "• **No liability for third-party plugins.** Plugins you install are created by third-party developers. We are not responsible for bugs, security vulnerabilities, or data collection by plugins.",
       "• **No liability for Minecraft account issues.** If your Minecraft account is affected by hosting or joining servers, that is between you and Mojang/Microsoft.",
       "**Limitation of Liability**: In no event shall PocketHost, its developers, or contributors be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the App.",
+      "Nothing in these Terms excludes or limits liability that cannot be excluded or limited by law, or takes away rights you have as a consumer under the law of the country where you live.",
     ],
   },
   {
     icon: RefreshCw,
-    title: "6. Termination",
+    title: "8. Termination",
     content: [
       "We reserve the right to:",
       "• Block access to the relay tunneling service for users who abuse it.",
@@ -77,7 +102,7 @@ const sections = [
   },
   {
     icon: ScrollText,
-    title: "7. Changes to These Terms",
+    title: "9. Changes to These Terms",
     content: [
       "We may revise these Terms at our discretion. When we make significant changes, we will:",
       "• Update the \"Last Updated\" date at the top of this page.",
@@ -87,7 +112,7 @@ const sections = [
   },
   {
     icon: Mail,
-    title: "8. Contact",
+    title: "10. Contact",
     content: [
       "For questions about these Terms of Service, please contact us:",
       "• **Email**: support@pockethost.online",
@@ -159,7 +184,8 @@ export default function Terms() {
               theme === "dark" ? "text-white/30" : "text-black/40"
             }`}
           >
-            Last updated: <span suppressHydrationWarning>{new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
+            {/* A fixed date: showing today's date would claim the terms change every day. */}
+            Last updated: November 21, 2026
           </motion.p>
         </div>
       </section>

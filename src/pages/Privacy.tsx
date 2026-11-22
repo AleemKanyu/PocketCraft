@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Shield, Eye, Server, Users, Lock, Mail, Megaphone, UserCheck } from "lucide-react";
+import { Shield, Eye, Server, Users, Lock, Mail, Megaphone, UserCheck, Cookie } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { SEO } from "../components/SEO";
@@ -14,7 +14,8 @@ const sections = [
       "• **Account Information (optional)**: You can use the app without an account. If you create one or sign in with Google, we store your email address and an account ID so your custom server address, settings and supporter status follow your account. If you use the web dashboard, your server's status and the commands you send from it are stored with your account.",
       "• **Device Information**: Basic device model and Android version to ensure compatibility and optimize performance.",
       "• **Usage Analytics**: Data about how the app is used (for example server start and stop events), collected through Google Firebase Analytics to improve stability. The app asks whether you allow this before it is switched on.",
-      "• **Crash Reports**: Automatic crash and error reports sent through Firebase Crashlytics to help us fix bugs. These contain technical stack traces and device details, and may include the last lines of your server console.",
+      "• **Crash Reports**: Crash and error reports sent through Firebase Crashlytics, and, when a server fails to start or crashes, a support ticket stored in Google Firestore with the error, your phone model, the app version and the last lines of your server console and log (which can contain player names, chat and IP addresses). You can turn automatic crash reports off in the app under **Settings → Legal Center**; logs are then sent only when you tap Send Logs.",
+      "• **Age Group**: The app asks your age once with a slider, and keeps only your age group (under 13, 13–15, 16–17 or 18+) on your phone, to choose the right ads and privacy settings. Your exact age is not stored or sent.",
       "• **IP Address**: Used by our relay tunnel service to route players to your server, and may appear in short-lived operational logs kept for security and abuse prevention. We do not use it to identify you.",
       "• **Feedback and Support**: Messages, and any log excerpt you choose to attach, when you send feedback or contact support.",
       "• **Supporter Status**: If you support PocketHost through Google Play or Patreon, we record that your account is a supporter. Payments are handled by Google Play or Patreon; we never see your card details.",
@@ -55,8 +56,8 @@ const sections = [
     content: [
       "PocketHost may show ads in some parts of the app to help pay for the relay servers. Ads are provided by **Google AdMob**. Your server, console and players are never interrupted by ads.",
       "• **What AdMob collects**: Your device's advertising ID, your IP address (which gives an approximate location), device and app information, and how you interact with ads. Google and its partners use this to show and measure ads, limit how often you see the same ad, and detect fraud.",
-      "• **Personalised ads**: Where the law allows and where you have agreed, Google may use this data to show ads based on your interests. Otherwise you are shown non-personalised ads.",
-      "• **Your choice in Europe**: If you are in the European Economic Area, the United Kingdom or Switzerland, the app asks for your choice before any ad is requested. You can change or withdraw that choice at any time in the app under **Settings → About → Ad privacy choices**.",
+      "• **Personalised ads**: Where the law allows and where you have agreed, Google may use this data to show ads based on your interests. Otherwise you are shown non-personalised ads. Users under 16 never get personalised ads, and users under 13 get only child-directed, family-safe ads.",
+      "• **Your choice in Europe**: If you are in the European Economic Area, the United Kingdom or Switzerland, the app asks for your choice before any ad is requested. You can change or withdraw that choice at any time in the app under **Settings → Help & Links → Ad privacy choices**.",
       "• **Your advertising ID**: You can reset or delete your advertising ID, or opt out of ad personalisation, in the Google section of your Android settings.",
       "Google's handling of this data is covered by Google's Privacy Policy (https://policies.google.com/privacy). How Google uses data from apps that use its services is explained at https://policies.google.com/technologies/partner-sites.",
     ],
@@ -65,24 +66,36 @@ const sections = [
     icon: UserCheck,
     title: "5. Your Choices and Rights",
     content: [
-      "• **Delete your account**: You can delete your account and the data stored with it at any time in the app under Settings → Account, or at https://pockethost.online/delete-account.",
-      "• **Analytics and ads**: Usage analytics is only switched on if you allow it when the app asks. You can change your ad consent as described in the Advertising section.",
+      "• **Delete your account**: You can delete your account and the data stored with it (account, Google Drive backups made by the app, Remote Control links, custom server addresses) at any time in the app under Settings → User profile → Delete Account, or at https://pockethost.online/delete-account. Support and crash tickets are not linked to your sign-in and the app cannot delete them; email us the ticket number (PC-…) and we delete it.",
+      "• **Analytics and crash reports**: Usage analytics is only switched on if you allow it when the app asks. You can switch analytics and automatic crash reports on or off at any time in the app under Settings → Legal Center. You can change your ad consent as described in the Advertising section.",
       "• **Access and correction**: You can ask us for a copy of the data linked to your account, or ask us to correct it, by contacting us.",
       "Depending on where you live, you may have further rights under laws such as the GDPR, including the right to object to or restrict processing and to lodge a complaint with your local data protection authority.",
     ],
   },
   {
-    icon: Users,
-    title: "6. Children's Privacy",
+    icon: Cookie,
+    id: "cookies",
+    title: "6. Website, Cookies and Local Storage",
     content: [
-      "PocketHost is intended for users aged 13 and over. We do not knowingly collect personal information from children under the age of 13. The app can be used without creating an account.",
+      "pockethost.online does not use advertising or tracking cookies and does not run analytics.",
+      "• **Necessary storage (always on)**: Your light/dark theme choice and your cookie choice are kept in your browser's local storage. If you sign in on the Remote Control page, Google Firebase keeps your sign-in in your browser so you stay signed in. These are needed for the features you ask for, so they do not need consent.",
+      "• **Google fonts and services (only with your consent)**: If you allow it in the cookie banner, the site loads fonts from Google Fonts and Google's Preferred Sources button script from news.google.com. Your browser then contacts Google, which receives your IP address and browser details. Without your consent the site uses your device's own fonts and the button simply opens Google in a new tab.",
+      "• **Minecraft item pictures**: The site shows small Minecraft item pictures loaded from the jsDelivr content network, which receives your IP address to deliver them.",
+      "• **Changing your choice**: Use **Cookie settings** at the bottom of any page. Your choice is stored for 12 months or until you clear your browser's storage.",
+    ],
+  },
+  {
+    icon: Users,
+    title: "7. Children's Privacy",
+    content: [
+      "The app asks for your age once, without suggesting an answer. If you tell us you are under 13, the app runs in a limited mode so that we do not collect personal information from you: only child-directed, non-personalised ads; no analytics, Crashlytics or automatic crash reports; no sign-in of any kind (so no account, Google Drive backup or Remote Control); and no push notifications. Hosting a server and letting friends join through our relay still work; the relay handles players' IP addresses only to route the game, as described above. If you send logs yourself with Send Logs, they are used only to answer you.",
       "If you are a parent or guardian and believe your child has provided personal information to us (e.g., through a support email), please contact us and we will promptly delete it.",
       "Parents should supervise their children's multiplayer gaming activities and ensure appropriate behavior when hosting public servers.",
     ],
   },
   {
     icon: Lock,
-    title: "7. Data Security",
+    title: "8. Data Security",
     content: [
       "We take reasonable measures to protect any data we process:",
       "• Account data is stored with Google Firebase rather than on servers we run ourselves.",
@@ -93,7 +106,7 @@ const sections = [
   },
   {
     icon: Mail,
-    title: "8. Contact Us",
+    title: "9. Contact Us",
     content: [
       "If you have any questions about this Privacy Policy or your data, you can reach us at:",
       "• **Email**: support@pockethost.online",
@@ -165,7 +178,7 @@ export default function Privacy() {
               theme === "dark" ? "text-white/30" : "text-black/40"
             }`}
           >
-            Last updated: October 11, 2026
+            Last updated: November 21, 2026
           </motion.p>
         </div>
       </section>
@@ -178,11 +191,12 @@ export default function Privacy() {
           {sections.map((section, i) => (
             <motion.div
               key={i}
+              id={(section as { id?: string }).id}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-50px" }}
               transition={{ duration: 0.5, delay: i * 0.05 }}
-              className={`mb-12 pb-12 ${
+              className={`mb-12 pb-12 scroll-mt-24 ${
                 i < sections.length - 1
                   ? theme === "dark" ? "border-b border-white/5" : "border-b border-black/5"
                   : ""

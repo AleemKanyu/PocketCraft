@@ -151,6 +151,8 @@ export default function DeleteAccount() {
               Note: Minecraft world data, server configs, and plugin files are
               stored locally on your device and are not held by PocketHost
               servers. Uninstalling the app removes this data from your device.
+              Crash and support tickets (numbered PC-…) are not linked to your
+              account; include their numbers in your request and we delete them too.
             </p>
           </motion.div>
 

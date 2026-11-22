@@ -38,7 +38,7 @@ const homeFaqs = [
   {
     question: "Is PocketHost really 100% free?",
     answer:
-      "Yes, completely free. No credit cards, subscriptions, coin grinding, or paywalls. PocketHost runs locally on your phone rather than costly cloud servers, keeping it free forever.",
+      "Yes, hosting is free. No credit card and no coin grinding: PocketHost runs on your phone rather than costly cloud servers. The free version shows some ads, and an optional Premium plan removes them and adds full remote control, but you never need it to host.",
   },
   {
     question: "Do I need a PC to use PocketHost?",

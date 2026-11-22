@@ -22,7 +22,7 @@ const faqs = [
   {
     question: "How much does PocketHost cost?",
     answer:
-      "PocketHost is 100% free forever. There are no credit cards required, no monthly subscriptions, no coin or credit grinding systems, and no paywalls. You get unlimited player slots, instant server starts with zero queue times, and complete plugin and mod support without paying anything.",
+      "Hosting a server with PocketHost is free: no credit card, no coin or credit grinding, unlimited player slots, instant starts with no queue, and full plugin and mod support. The free version shows some ads. An optional Premium plan (monthly, yearly or, where offered, one-time through Google Play) removes ads and adds full remote control from the website; you never need it to host.",
   },
   {
     question: "Why is PocketHost free? What's the catch?",

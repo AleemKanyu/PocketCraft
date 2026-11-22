@@ -79,7 +79,7 @@ const Reviews = () => {
           transition={{ duration: 0.45, delay: 0.1 }}
           className={`${isDark ? "text-white/50" : "text-black/60"}`}
         >
-          Real reviews from PocketHost players on Google Play.{" "}
+          A selection of real 5-star reviews from PocketHost players on Google Play (some shortened).{" "}
           <a
             href={PLAY_REVIEWS_URL}
             target="_blank"

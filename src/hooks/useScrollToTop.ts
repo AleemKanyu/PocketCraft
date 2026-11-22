@@ -16,9 +16,14 @@ export const useScrollToTop = () => {
         return false;
       };
 
+      // Lazy-loaded pages can take a moment to render the target, so keep trying briefly.
       if (!scrollToTarget()) {
-        const timer = setTimeout(scrollToTarget, 100);
-        return () => clearTimeout(timer);
+        let tries = 0;
+        const timer = setInterval(() => {
+          tries += 1;
+          if (scrollToTarget() || tries >= 20) clearInterval(timer);
+        }, 100);
+        return () => clearInterval(timer);
       }
     } else {
       window.scrollTo(0, 0);

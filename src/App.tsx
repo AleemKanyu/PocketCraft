@@ -5,6 +5,7 @@ import Home from "./pages/Home";
 import NotFound from "./pages/NotFound";
 import { ThemeProvider, useTheme } from "./lib/ThemeContext";
 import { CubicPixelTrail } from "./components/CubicPixelTrail";
+import CookieConsent from "./components/CookieConsent";
 import { landingPages } from "./data/landingPages";
 
 const FAQ = lazy(() => import("./pages/FAQ"));
@@ -64,6 +65,7 @@ function MainLayout() {
     <div className={`relative isolate min-h-screen select-none ${theme === "dark" ? "bg-[#0a0a0a]" : "bg-white"}`}>
       <CubicPixelTrail />
       <AppRoutes />
+      <CookieConsent />
     </div>
   );
 }

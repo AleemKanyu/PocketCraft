@@ -27,21 +27,11 @@
     <link rel="apple-touch-icon" sizes="512x512" href="/app-icon-circle-hd.png" />
     <link rel="manifest" href="/site.webmanifest" />
 
-    <!-- Performance: Preconnect to Font CDNs -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&family=Press+Start+2P&family=Space+Grotesk:wght@500;600;700&display=swap"
-      media="print"
-      onload="this.media='all'"
-    />
-    <noscript>
-      <link
-        rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&family=Press+Start+2P&family=Space+Grotesk:wght@500;600;700&display=swap"
-      />
-    </noscript>
+    <!--
+      Google Fonts and Google's Preferred Sources script are not loaded here: they make the
+      browser contact Google, so src/lib/consent.ts adds them only after the visitor allows
+      "Google fonts and services" in the cookie banner. Until then the system font is used.
+    -->
 
     <style>
       @font-face {
@@ -52,8 +42,6 @@
         font-display: swap;
       }
     </style>
-    <!-- Google Preferred Sources (Search, AI Overviews & Top Stories) -->
-    <script async src="https://news.google.com/swg/js/v1/publisher.js"></script>
   </head>
   <body>
     <div id="root"><!--app-html--></div>
